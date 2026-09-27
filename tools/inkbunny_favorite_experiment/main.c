@@ -268,8 +268,9 @@ int main(int argc, char **argv) {
             fprintf(stderr, "login failed (redirected back to the login page) -- check username/password\n");
             goto cleanup;
         }
+        printf("      login looks successful, redirected to: %s\n", final_url ? final_url : "(unknown)");
+        printf("      response mentions \"%s\": %s\n", username, strstr(page.data, username) ? "yes" : "no");
     }
-    printf("      login looks successful (redirected away from /login.php)\n");
     buffer_free(&page);
 
     {
@@ -285,6 +286,10 @@ int main(int argc, char **argv) {
     if (!global_token) {
         fprintf(stderr, "could not find general-global_token on the submission page -- markup may have "
                         "changed, or the submission id doesn't exist\n");
+        fprintf(stderr, "  debug: page length=%zu, has 'general-global_token' substring=%s, mentions \"%s\"=%s, "
+                        "has 'login.php'=%s\n",
+                page.len, strstr(page.data, "general-global_token") ? "yes" : "no", username,
+                strstr(page.data, username) ? "yes" : "no", strstr(page.data, "login.php") ? "yes" : "no");
         goto cleanup;
     }
     buffer_free(&page);
