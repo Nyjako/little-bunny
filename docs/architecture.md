@@ -58,6 +58,20 @@ Verified against the live API and the official docs while building `libinkbunny`
   only meaningful for transport-level failures (5xx, etc.). "Not found" is signaled by an
   empty result array, not an error.
 
+### Unofficial favorite flow (spike, not adopted yet)
+
+`tools/inkbunny_favorite_experiment` is a standalone, experimental command-line tool
+(built only with `-DBUNNY_BUILD_TOOLS=ON` / `make tools`, not part of the default build)
+that reverse-engineers the website's own favorite/unfavorite flow — confirmed working
+live against <https://inkbunny.net/s/3948160> on 2026-09-28 by inspecting the network
+calls made by the site's own `js82/fav.rev01.js`. It logs in via `login.php` →
+`login_process.php` (cookie-based session, not the API's `sid`), scrapes a page-embedded
+CSRF token (`global_token`), and POSTs to `submissionfav_process.php` with
+`token`/`stars`/`add`/`remove`/`submission_id`. It works, but is HTML-scraping based and
+therefore fragile in a way the documented API isn't. **Not wired into `libinkbunny`** —
+promoting it into the real library/app would need a fresh, explicit decision, since it
+reopens the "official API only" call made in M2.
+
 ## Dependency management
 
 All dependencies are pulled via [CPM](https://github.com/cpm-cmake/CPM.cmake), with one
