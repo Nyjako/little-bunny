@@ -1,0 +1,25 @@
+# Never commit — hardcodes a GPG passphrase, exists only for local commit signing
+scripts/git-commit.sh
+
+# CMake / build outputs
+build/
+build-*/
+cmake-build-*/
+CMakeFiles/
+CMakeCache.txt
+
+# dockcross generated wrapper
+/dockcross
+
+# Editors / OS
+.vscode/
+.idea/
+*.swp
+.DS_Store
+
+# Flutter / Dart (future app/)
+**/.dart_tool/
+**/.flutter-plugins
+**/.flutter-plugins-dependencies
+**/.packages
+app/build/
