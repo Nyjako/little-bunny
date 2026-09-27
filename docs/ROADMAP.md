@@ -16,6 +16,14 @@ this file is the single source of truth for "what's done" across sessions.
   `architecture.md`); only read-only counts/flags and an existing-favorites-list lookup
   (`favs_user_id`) are available.
 
+- [x] **M2.1 — Pools and post relationships**
+  `e621_pool_t` + `e621_get_pool()` (GET `/pools/{id}.json`); `e621_post_t` gained
+  `relationships` (parent_id/has_children/has_active_children/children), confirmed live.
+  `inkbunny_pool_t` gained per-submission left/right sibling navigation
+  (`show_pools=yes`) — Inkbunny has no "list a whole pool" endpoint, only per-submission
+  neighbors, and confirmed via the wiki docs that Inkbunny has **no parent/child concept**
+  at all (only pools), so there's nothing to add there.
+
 - [ ] **M3 — SQLite schema + core DB layer**
   Vendor the sqlite amalgamation via CPM (`DOWNLOAD_ONLY`). Schema for accounts, searches,
   cached posts, seen/unseen state, favorites mirror, downloads, tags stats.

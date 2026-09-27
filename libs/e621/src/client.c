@@ -463,3 +463,23 @@ e621_result_t e621_comment_list(e621_client_t *client, int64_t post_id, e621_com
     cJSON_Delete(json);
     return result;
 }
+
+e621_result_t e621_get_pool(e621_client_t *client, int64_t pool_id, e621_pool_t *out_pool) {
+    if (!client || !out_pool) {
+        return E621_ERR_INVALID_ARG;
+    }
+
+    char path[128];
+    snprintf(path, sizeof(path), "/pools/%lld.json", (long long)pool_id);
+
+    cJSON *json = NULL;
+    e621_result_t result = perform_request(client, BUNNY_HTTP_GET, path, NULL, NULL, &json);
+    if (result != E621_OK) {
+        return result;
+    }
+
+    /* unlike /posts/{id}.json, the pool object is returned directly, not wrapped in {"pool": ...} */
+    result = e621_parse_pool(json, out_pool);
+    cJSON_Delete(json);
+    return result;
+}

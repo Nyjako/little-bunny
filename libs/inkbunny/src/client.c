@@ -310,7 +310,8 @@ inkbunny_result_t inkbunny_get_submissions(inkbunny_client_t *client, const int6
     }
 
     char query[1700];
-    snprintf(query, sizeof(query), "sid=%s&submission_ids=%s&show_description=yes", client->sid, ids_buf);
+    snprintf(query, sizeof(query), "sid=%s&submission_ids=%s&show_description=yes&show_pools=yes", client->sid,
+             ids_buf);
 
     cJSON *json = NULL;
     inkbunny_result_t result = perform_request(client, "/api_submissions.php", query, &json);
