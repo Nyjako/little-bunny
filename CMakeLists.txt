@@ -1,6 +1,11 @@
 cmake_minimum_required(VERSION 3.21)
 project(little-bunny C)
 
+# Some CPM-fetched dependencies (e.g. cJSON) declare an old
+# cmake_minimum_required() that CMake >= 4.0 refuses to honor. Tell CMake to
+# treat those as requiring at least 3.5 rather than failing the configure.
+set(CMAKE_POLICY_VERSION_MINIMUM 3.5)
+
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
@@ -22,7 +27,7 @@ find_package(OpenSSL REQUIRED)
 CPMAddPackage(
   NAME curl
   GITHUB_REPOSITORY curl/curl
-  GIT_TAG curl-8_21_0
+  GIT_TAG curl-8_22_0
   OPTIONS
     "BUILD_CURL_EXE OFF"
     "BUILD_SHARED_LIBS OFF"
