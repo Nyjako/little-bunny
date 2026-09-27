@@ -12,6 +12,7 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 option(BUNNY_BUILD_TESTS "Build unit tests" OFF)
 option(BUNNY_ENABLE_ASAN "Build with AddressSanitizer/UndefinedBehaviorSanitizer" OFF)
+option(BUNNY_BUILD_TOOLS "Build developer/experimental command-line tools (not part of the shipped product)" OFF)
 
 if(BUNNY_ENABLE_ASAN)
   add_compile_options(-fsanitize=address,undefined -fno-omit-frame-pointer)
@@ -71,3 +72,7 @@ endif()
 add_subdirectory(libs/common)
 add_subdirectory(libs/e621)
 add_subdirectory(libs/inkbunny)
+
+if(BUNNY_BUILD_TOOLS)
+  add_subdirectory(tools/inkbunny_favorite_experiment)
+endif()
