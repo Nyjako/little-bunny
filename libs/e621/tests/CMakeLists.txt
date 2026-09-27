@@ -1,0 +1,10 @@
+add_executable(bunny_e621_test_types test_types.c)
+target_include_directories(bunny_e621_test_types PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../src)
+target_link_libraries(bunny_e621_test_types PRIVATE bunny_e621 unity::framework)
+target_compile_definitions(bunny_e621_test_types PRIVATE FIXTURES_DIR="${CMAKE_CURRENT_SOURCE_DIR}/fixtures")
+add_test(NAME bunny_e621_test_types COMMAND bunny_e621_test_types)
+
+add_executable(bunny_e621_test_client test_client.c)
+target_link_libraries(bunny_e621_test_client PRIVATE bunny_e621 unity::framework)
+target_compile_definitions(bunny_e621_test_client PRIVATE FIXTURES_DIR="${CMAKE_CURRENT_SOURCE_DIR}/fixtures")
+add_test(NAME bunny_e621_test_client COMMAND bunny_e621_test_client)
