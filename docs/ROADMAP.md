@@ -8,9 +8,13 @@ this file is the single source of truth for "what's done" across sessions.
   HTTP transport + JSON helpers, complete `libe621` client library (search, get post,
   favorite, vote, comments) with unit tests against a fake transport.
 
-- [ ] **M2 — `libinkbunny`**
-  Session-based login (`api_login.php` → SID), search submissions, submission details,
-  favorites, comments. Reuses `bunny_common` for HTTP/JSON.
+- [x] **M2 — `libinkbunny`**
+  Session-based login (`api_login.php` → SID)/logout, search submissions, submission
+  details (single + batched up to 100 ids). Reuses `bunny_common` for HTTP/JSON. **Does
+  not** implement adding/removing favorites or posting/listing comments — confirmed via
+  the live API and official docs that Inkbunny's API has no endpoints for either (see
+  `architecture.md`); only read-only counts/flags and an existing-favorites-list lookup
+  (`favs_user_id`) are available.
 
 - [ ] **M3 — SQLite schema + core DB layer**
   Vendor the sqlite amalgamation via CPM (`DOWNLOAD_ONLY`). Schema for accounts, searches,
@@ -40,7 +44,10 @@ this file is the single source of truth for "what's done" across sessions.
 - [ ] **M9 — Actions & downloads**
   Single + mass like/favorite/download, commenting, download manager writing to
   `%artist%/%id%.%extension%`, checksum (md5) verification of downloaded files against the
-  site-provided value. Downloads happen client-side, straight from the site CDN.
+  site-provided value. Downloads happen client-side, straight from the site CDN. Favorite
+  and comment actions only apply to e621 — Inkbunny's API doesn't support them (M2); the UI
+  needs to reflect that (e.g. grey out those actions for Inkbunny posts) rather than fail
+  silently.
 
 - [ ] **M10 — Automation & recommendations**
   "Auto-like/auto-favorite on download" setting, most-liked/most-favorited tag stats,
