@@ -7,7 +7,9 @@ LittleBunny is an e621 + Inkbunny viewer/manager with three moving parts.
 1. **Server** (C, CMake, CPM, SQLite, Linux) — owns the sync state. Stores encrypted
    e621/Inkbunny credentials, runs scheduled searches (24h default), tracks seen/unseen
    posts per device, and proxies favorite/vote/comment actions to the sites so any device
-   can trigger them without needing its own site session.
+   can trigger them without needing its own site session. **Inkbunny is the exception**:
+   its API has no favorite/comment write actions at all (see "Inkbunny API constraints"
+   below), so the server can only proxy those for e621.
 2. **Core library** — the site clients, DB layer, and sync engine compiled as a library,
    usable in two modes:
    - **Networked**: the server process links it; GUI clients talk to the server over
@@ -34,6 +36,27 @@ site's API. This is intentional so they can be reused outside this project. Both
 
 The core sync engine (M4) depends on `libe621`/`libinkbunny` plus the DB layer, but those
 site libraries never depend back on the core.
+
+## Inkbunny API constraints (found in M2)
+
+Verified against the live API and the official docs while building `libinkbunny`:
+
+- **No favorite/comment write actions.** Inkbunny's API can tell you a submission's
+  `favorite`/`favorites_count`/`comments_count`, and can list an *existing* favorites list
+  via `favs_user_id`, but there is no endpoint to add/remove a favorite or to post/list
+  comment content. A mature third-party C# wrapper (Athari/InkBunny.Api) doesn't implement
+  either, confirming this isn't just a documentation gap. Decided with the user to only
+  ever use the official API (not reverse-engineer the website's internal AJAX calls), so
+  `libinkbunny` simply doesn't expose those actions. This means the "mass favorite" /
+  "comment on posts" features (M9) only work for e621.
+- **Every numeric and boolean field is JSON-encoded as a string**, e.g. `"submission_id":
+  "12345"`, `"favorite": "f"`. `libinkbunny` parses these leniently (falls back to a real
+  JSON number/bool if that ever changes) via `inkbunny_field_int64()`/`inkbunny_field_bool_tf()`
+  in `libs/inkbunny/src/internal.h`.
+- **API-level errors come back as HTTP 200** with an `error_code`/`error_message` body
+  (e.g. bad login, invalid/expired session id) rather than a non-2xx status. HTTP status is
+  only meaningful for transport-level failures (5xx, etc.). "Not found" is signaled by an
+  empty result array, not an error.
 
 ## Dependency management
 

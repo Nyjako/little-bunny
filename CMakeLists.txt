@@ -70,3 +70,4 @@ endif()
 
 add_subdirectory(libs/common)
 add_subdirectory(libs/e621)
+add_subdirectory(libs/inkbunny)
