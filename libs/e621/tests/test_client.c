@@ -82,7 +82,10 @@ static e621_client_t *make_test_client(bool with_auth) {
     e621_config_t config;
     memset(&config, 0, sizeof(config));
     config.user_agent = "bunny-tests/1.0 (unit tests)";
-    config.min_request_interval_sec = 0; /* no rate-limit delay in tests */
+    /* 0 means "use the built-in ~0.5s default" (see e621_config_t), which would
+     * slow down any test that makes more than one call on the same client --
+     * use a negligible delay instead. */
+    config.min_request_interval_sec = 0.001;
     config.transport = &g_transport;
     if (with_auth) {
         config.username = "tester";
