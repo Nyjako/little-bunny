@@ -48,6 +48,15 @@ typedef struct {
 } e621_tags_t;
 
 typedef struct {
+    bool has_parent;
+    int64_t parent_id;
+    bool has_children;
+    bool has_active_children;
+    int64_t *children;
+    size_t child_count;
+} e621_relationships_t;
+
+typedef struct {
     int64_t id;
     char *created_at;
     e621_file_t file;
@@ -63,6 +72,7 @@ typedef struct {
     int comment_count;
     int64_t *pool_ids;
     size_t pool_count;
+    e621_relationships_t relationships;
 } e621_post_t;
 
 typedef struct {
@@ -83,12 +93,33 @@ typedef struct {
     size_t count;
 } e621_comment_list_t;
 
+typedef enum {
+    E621_POOL_CATEGORY_SERIES,
+    E621_POOL_CATEGORY_COLLECTION,
+    E621_POOL_CATEGORY_UNKNOWN,
+} e621_pool_category_t;
+
+typedef struct {
+    int64_t id;
+    char *name;
+    char *description;
+    char *created_at;
+    char *updated_at;
+    int64_t creator_id;
+    char *creator_name;
+    bool is_active;
+    e621_pool_category_t category;
+    int64_t *post_ids; /* ordered */
+    size_t post_count;
+} e621_pool_t;
+
 void e621_string_list_free(e621_string_list_t *list);
 void e621_file_free(e621_file_t *file);
 void e621_post_free(e621_post_t *post);
 void e621_post_list_free(e621_post_list_t *list);
 void e621_comment_free(e621_comment_t *comment);
 void e621_comment_list_free(e621_comment_list_t *list);
+void e621_pool_free(e621_pool_t *pool);
 
 #ifdef __cplusplus
 }

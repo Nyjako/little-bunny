@@ -39,7 +39,14 @@
         }
       ],
       "pools": [
-        {"pool_id": "42", "name": "Digimon Tributes", "description": "A pool of tribute art.", "count": "5"}
+        {
+          "pool_id": "42",
+          "name": "Digimon Tributes",
+          "description": "A pool of tribute art.",
+          "count": "5",
+          "submission_left_submission_id": "3951894",
+          "submission_right_submission_id": "3956000"
+        }
       ],
       "description": "Time will prove you right.",
       "pools_count": 1,

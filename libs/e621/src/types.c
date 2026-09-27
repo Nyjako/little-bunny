@@ -56,7 +56,7 @@ static e621_result_t parse_string_array(const cJSON *array, e621_string_list_t *
     return E621_OK;
 }
 
-static e621_result_t parse_pool_ids(const cJSON *array, int64_t **out_items, size_t *out_count) {
+static e621_result_t parse_int64_array(const cJSON *array, int64_t **out_items, size_t *out_count) {
     *out_items = NULL;
     *out_count = 0;
 
@@ -127,6 +127,38 @@ static e621_rating_t parse_rating(const char *rating) {
     return E621_RATING_UNKNOWN;
 }
 
+static e621_pool_category_t parse_pool_category(const char *category) {
+    if (!category) {
+        return E621_POOL_CATEGORY_UNKNOWN;
+    }
+    if (strcmp(category, "series") == 0) {
+        return E621_POOL_CATEGORY_SERIES;
+    }
+    if (strcmp(category, "collection") == 0) {
+        return E621_POOL_CATEGORY_COLLECTION;
+    }
+    return E621_POOL_CATEGORY_UNKNOWN;
+}
+
+static void parse_relationships(const cJSON *relationships_obj, e621_relationships_t *out) {
+    memset(out, 0, sizeof(*out));
+    if (!relationships_obj) {
+        return;
+    }
+
+    int64_t parent_id = 0;
+    if (bunny_json_get_int64(relationships_obj, "parent_id", &parent_id) == BUNNY_JSON_OK) {
+        out->has_parent = true;
+        out->parent_id = parent_id;
+    }
+
+    out->has_children = bunny_json_get_bool_or(relationships_obj, "has_children", false);
+    out->has_active_children = bunny_json_get_bool_or(relationships_obj, "has_active_children", false);
+
+    parse_int64_array(cJSON_GetObjectItemCaseSensitive(relationships_obj, "children"), &out->children,
+                       &out->child_count);
+}
+
 e621_result_t e621_parse_post(const cJSON *json, e621_post_t *out) {
     if (!json || !out) {
         return E621_ERR_INVALID_ARG;
@@ -168,7 +200,9 @@ e621_result_t e621_parse_post(const cJSON *json, e621_post_t *out) {
     out->description = dup_or_null(bunny_json_get_string_or(json, "description", NULL));
     out->comment_count = bunny_json_get_int_or(json, "comment_count", 0);
 
-    parse_pool_ids(cJSON_GetObjectItemCaseSensitive(json, "pools"), &out->pool_ids, &out->pool_count);
+    parse_int64_array(cJSON_GetObjectItemCaseSensitive(json, "pools"), &out->pool_ids, &out->pool_count);
+
+    parse_relationships(cJSON_GetObjectItemCaseSensitive(json, "relationships"), &out->relationships);
 
     return E621_OK;
 }
@@ -272,6 +306,36 @@ e621_result_t e621_parse_comment_array(const cJSON *json_array, e621_comment_lis
     return E621_OK;
 }
 
+e621_result_t e621_parse_pool(const cJSON *json, e621_pool_t *out) {
+    if (!json || !out) {
+        return E621_ERR_INVALID_ARG;
+    }
+    memset(out, 0, sizeof(*out));
+
+    int64_t id = 0;
+    if (bunny_json_get_int64(json, "id", &id) != BUNNY_JSON_OK) {
+        return E621_ERR_PARSE;
+    }
+    out->id = id;
+
+    out->name = dup_or_null(bunny_json_get_string_or(json, "name", NULL));
+    out->description = dup_or_null(bunny_json_get_string_or(json, "description", NULL));
+    out->created_at = dup_or_null(bunny_json_get_string_or(json, "created_at", NULL));
+    out->updated_at = dup_or_null(bunny_json_get_string_or(json, "updated_at", NULL));
+
+    int64_t creator_id = 0;
+    bunny_json_get_int64(json, "creator_id", &creator_id);
+    out->creator_id = creator_id;
+
+    out->creator_name = dup_or_null(bunny_json_get_string_or(json, "creator_name", NULL));
+    out->is_active = bunny_json_get_bool_or(json, "is_active", false);
+    out->category = parse_pool_category(bunny_json_get_string_or(json, "category", NULL));
+
+    parse_int64_array(cJSON_GetObjectItemCaseSensitive(json, "post_ids"), &out->post_ids, &out->post_count);
+
+    return E621_OK;
+}
+
 void e621_string_list_free(e621_string_list_t *list) {
     if (!list) {
         return;
@@ -315,7 +379,21 @@ void e621_post_free(e621_post_t *post) {
     e621_string_list_free(&post->sources);
     free(post->description);
     free(post->pool_ids);
+    free(post->relationships.children);
     memset(post, 0, sizeof(*post));
+}
+
+void e621_pool_free(e621_pool_t *pool) {
+    if (!pool) {
+        return;
+    }
+    free(pool->name);
+    free(pool->description);
+    free(pool->created_at);
+    free(pool->updated_at);
+    free(pool->creator_name);
+    free(pool->post_ids);
+    memset(pool, 0, sizeof(*pool));
 }
 
 void e621_post_list_free(e621_post_list_t *list) {

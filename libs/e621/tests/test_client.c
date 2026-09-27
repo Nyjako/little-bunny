@@ -270,6 +270,39 @@ void test_comment_list_success(void) {
     free(fixture);
 }
 
+void test_get_pool_success(void) {
+    e621_client_t *client = make_test_client(false);
+    char *fixture = read_fixture("pool_single.json");
+    TEST_ASSERT_NOT_NULL(fixture);
+    g_state.response_status = 200;
+    g_state.response_body = fixture;
+    g_state.response_body_len = strlen(fixture);
+
+    e621_pool_t pool;
+    e621_result_t result = e621_get_pool(client, 59480, &pool);
+
+    TEST_ASSERT_EQUAL(E621_OK, result);
+    TEST_ASSERT_EQUAL(59480, (int)pool.id);
+    TEST_ASSERT_EQUAL(4, (int)pool.post_count);
+    TEST_ASSERT_NOT_NULL(strstr(g_state.last_url, "/pools/59480.json"));
+
+    e621_pool_free(&pool);
+    e621_client_destroy(client);
+    free(fixture);
+}
+
+void test_get_pool_not_found(void) {
+    e621_client_t *client = make_test_client(false);
+    g_state.response_status = 404;
+
+    e621_pool_t pool;
+    e621_result_t result = e621_get_pool(client, 999999, &pool);
+
+    TEST_ASSERT_EQUAL(E621_ERR_NOT_FOUND, result);
+
+    e621_client_destroy(client);
+}
+
 int main(void) {
     UNITY_BEGIN();
     RUN_TEST(test_search_posts_success);
@@ -283,5 +316,7 @@ int main(void) {
     RUN_TEST(test_favorite_add_sends_auth_header);
     RUN_TEST(test_vote_invalid_score);
     RUN_TEST(test_comment_list_success);
+    RUN_TEST(test_get_pool_success);
+    RUN_TEST(test_get_pool_not_found);
     return UNITY_END();
 }

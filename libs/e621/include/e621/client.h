@@ -57,6 +57,9 @@ e621_result_t e621_comment_create(e621_client_t *client, int64_t post_id, const 
 e621_result_t e621_comment_list(e621_client_t *client, int64_t post_id,
                                  e621_comment_list_t *out_comments);
 
+/* A post's e621_post_t.pool_ids / e621_post_t.relationships give you the ids to pass here. */
+e621_result_t e621_get_pool(e621_client_t *client, int64_t pool_id, e621_pool_t *out_pool);
+
 #ifdef __cplusplus
 }
 #endif

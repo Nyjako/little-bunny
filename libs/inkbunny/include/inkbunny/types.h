@@ -59,6 +59,12 @@ typedef struct {
     char *name;
     char *description;
     int count;
+    /* Adjacent submission ids for navigating this pool from the current
+     * submission; 0 if there's no submission on that side. Inkbunny has no
+     * endpoint to list an entire pool's submissions at once (unlike e621) -
+     * only this per-submission left/right neighbor. */
+    int64_t left_submission_id;
+    int64_t right_submission_id;
 } inkbunny_pool_t;
 
 typedef struct {

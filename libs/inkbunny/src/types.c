@@ -153,6 +153,8 @@ static void parse_pool(const cJSON *obj, inkbunny_pool_t *out) {
     out->name = dup_or_null(bunny_json_get_string_or(obj, "name", NULL));
     out->description = dup_or_null(bunny_json_get_string_or(obj, "description", NULL));
     out->count = inkbunny_field_int(obj, "count", 0);
+    out->left_submission_id = inkbunny_field_int64(obj, "submission_left_submission_id", 0);
+    out->right_submission_id = inkbunny_field_int64(obj, "submission_right_submission_id", 0);
 }
 
 static inkbunny_result_t parse_pool_array(const cJSON *array, inkbunny_pool_list_t *out) {
