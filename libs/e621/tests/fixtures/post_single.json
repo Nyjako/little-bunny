@@ -42,6 +42,12 @@
     "description": "A description of the post.",
     "comment_count": 4,
     "is_favorited": true,
-    "pools": [10, 25]
+    "pools": [10, 25],
+    "relationships": {
+      "parent_id": 999,
+      "has_children": true,
+      "has_active_children": true,
+      "children": [12346, 12347]
+    }
   }
 }
