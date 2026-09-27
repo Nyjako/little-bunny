@@ -53,4 +53,6 @@ this file is the single source of truth for "what's done" across sessions.
 
 - [ ] **M12 — Cross-platform polish**
   Responsive desktop/mobile layout, consistent theming pass, Windows cross-build via
-  dockcross validated end-to-end (server + core), packaging.
+  dockcross validated end-to-end (server + core), packaging. Needs to resolve the OpenSSL-
+  for-mingw gap noted in `architecture.md` — `make windows` configures/builds fine up to
+  the `find_package(OpenSSL REQUIRED)` step today.
