@@ -77,6 +77,8 @@ void test_parse_submission_full(void) {
 
     TEST_ASSERT_EQUAL(1, (int)submission.pools.count);
     TEST_ASSERT_EQUAL_STRING("Digimon Tributes", submission.pools.items[0].name);
+    TEST_ASSERT_EQUAL(3951894, (int)submission.pools.items[0].left_submission_id);
+    TEST_ASSERT_EQUAL(3956000, (int)submission.pools.items[0].right_submission_id);
 
     TEST_ASSERT_EQUAL(1, (int)submission.content_ratings.count);
     TEST_ASSERT_EQUAL_STRING("Nudity", submission.content_ratings.items[0].name);

@@ -63,6 +63,13 @@ void test_parse_post_full(void) {
     TEST_ASSERT_EQUAL(2, (int)post.pool_count);
     TEST_ASSERT_EQUAL(10, (int)post.pool_ids[0]);
 
+    TEST_ASSERT_TRUE(post.relationships.has_parent);
+    TEST_ASSERT_EQUAL(999, (int)post.relationships.parent_id);
+    TEST_ASSERT_TRUE(post.relationships.has_children);
+    TEST_ASSERT_TRUE(post.relationships.has_active_children);
+    TEST_ASSERT_EQUAL(2, (int)post.relationships.child_count);
+    TEST_ASSERT_EQUAL(12346, (int)post.relationships.children[0]);
+
     e621_post_free(&post);
     cJSON_Delete(root);
     free(content);
@@ -125,6 +132,70 @@ void test_parse_comment_array_success(void) {
     free(content);
 }
 
+void test_parse_post_no_parent_when_relationships_absent(void) {
+    cJSON *obj = cJSON_Parse("{\"id\": 1}");
+    TEST_ASSERT_NOT_NULL(obj);
+
+    e621_post_t post;
+    e621_result_t result = e621_parse_post(obj, &post);
+    TEST_ASSERT_EQUAL(E621_OK, result);
+    TEST_ASSERT_FALSE(post.relationships.has_parent);
+    TEST_ASSERT_FALSE(post.relationships.has_children);
+    TEST_ASSERT_EQUAL(0, (int)post.relationships.child_count);
+
+    e621_post_free(&post);
+    cJSON_Delete(obj);
+}
+
+void test_parse_post_null_parent_id_means_no_parent(void) {
+    cJSON *obj = cJSON_Parse("{\"id\": 1, \"relationships\": {\"parent_id\": null, \"has_children\": false}}");
+    TEST_ASSERT_NOT_NULL(obj);
+
+    e621_post_t post;
+    e621_result_t result = e621_parse_post(obj, &post);
+    TEST_ASSERT_EQUAL(E621_OK, result);
+    TEST_ASSERT_FALSE(post.relationships.has_parent);
+
+    e621_post_free(&post);
+    cJSON_Delete(obj);
+}
+
+void test_parse_pool_full(void) {
+    char *content = read_fixture("pool_single.json");
+    TEST_ASSERT_NOT_NULL(content);
+
+    cJSON *root = cJSON_Parse(content);
+    TEST_ASSERT_NOT_NULL(root);
+
+    e621_pool_t pool;
+    e621_result_t result = e621_parse_pool(root, &pool);
+    TEST_ASSERT_EQUAL(E621_OK, result);
+
+    TEST_ASSERT_EQUAL(59480, (int)pool.id);
+    TEST_ASSERT_EQUAL_STRING("Anubis_Tests_his_Anubites", pool.name);
+    TEST_ASSERT_EQUAL_STRING("Sneakyphox", pool.creator_name);
+    TEST_ASSERT_FALSE(pool.is_active);
+    TEST_ASSERT_EQUAL(E621_POOL_CATEGORY_SERIES, pool.category);
+    TEST_ASSERT_EQUAL(4, (int)pool.post_count);
+    TEST_ASSERT_EQUAL(6738526, (int)pool.post_ids[0]);
+    TEST_ASSERT_EQUAL(6738554, (int)pool.post_ids[3]);
+
+    e621_pool_free(&pool);
+    cJSON_Delete(root);
+    free(content);
+}
+
+void test_parse_pool_missing_id_fails(void) {
+    cJSON *obj = cJSON_Parse("{\"name\": \"no id here\"}");
+    TEST_ASSERT_NOT_NULL(obj);
+
+    e621_pool_t pool;
+    e621_result_t result = e621_parse_pool(obj, &pool);
+    TEST_ASSERT_EQUAL(E621_ERR_PARSE, result);
+
+    cJSON_Delete(obj);
+}
+
 void test_parse_post_lenient_on_malformed_tag_category(void) {
     /* "general" isn't an array here; parsing should still succeed with an
      * empty general list rather than failing the whole post. */
@@ -147,6 +218,10 @@ int main(void) {
     RUN_TEST(test_parse_post_array_success);
     RUN_TEST(test_parse_post_array_propagates_item_error);
     RUN_TEST(test_parse_comment_array_success);
+    RUN_TEST(test_parse_post_no_parent_when_relationships_absent);
+    RUN_TEST(test_parse_post_null_parent_id_means_no_parent);
+    RUN_TEST(test_parse_pool_full);
+    RUN_TEST(test_parse_pool_missing_id_fails);
     RUN_TEST(test_parse_post_lenient_on_malformed_tag_category);
     return UNITY_END();
 }
