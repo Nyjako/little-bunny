@@ -66,6 +66,16 @@ the `make windows` target. This produces a statically-linked Windows build witho
 a Windows machine or MinGW installed on the host. This does not apply to the Flutter GUI,
 which has its own native Windows build via the Flutter SDK.
 
+**Known gap (as of M1):** the `windows-static-x64` dockcross image's MXE toolchain doesn't
+ship a prebuilt OpenSSL for the `x86_64-w64-mingw32.static` target, so `find_package(OpenSSL
+REQUIRED)` fails during a cross-configure out of the box. MXE can build its own `openssl`
+package (`make openssl` inside `/usr/src/mxe`), but that needs network access to MXE's
+package mirrors from inside the container, which wasn't available when this was tried.
+Getting `make windows` fully green is deferred to M12 — options to try then: build MXE's
+`openssl` package with network access available, point `OPENSSL_ROOT_DIR` at a prebuilt
+Windows OpenSSL, or swap curl's TLS backend for something with less cross-compilation
+friction (e.g. schannel, Windows' native TLS, only for the Windows target).
+
 ## Roadmap
 
 See [ROADMAP.md](./ROADMAP.md) for the full milestone breakdown and current progress.
