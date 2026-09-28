@@ -66,9 +66,13 @@ own `add_library(sqlite3 STATIC ...)` target around the downloaded `sqlite3.c`.
 ## Core sync engine (M4)
 
 `bunny_core` (`libs/core`) is the first library that links `bunny_db` together with the
-site clients (`libe621`/`libinkbunny` — pulled in as M4.2/M4.3 add sync and the action
-queue), matching the "Components" description above. It exposes a `bunny_core_t` handle
-that wraps a `bunny_db_t`.
+site clients `libe621`/`libinkbunny` (`bunny_e621`/`bunny_inkbunny` linked `PRIVATE`, since
+`bunny_core`'s public API never exposes `e621_client_t`/`inkbunny_client_t`), matching the
+"Components" description above. It exposes a `bunny_core_t` handle that wraps a
+`bunny_db_t`, and takes a `bunny_core_config_t` at `bunny_core_open()` (db path, user
+agent, and optional injectable HTTP transports per site — mirroring `e621_config_t`/
+`inkbunny_config_t`'s own pattern, and for the same reason: it's what makes
+`bunny_core_sync_due_searches()` testable without real network calls).
 
 **Credential storage is intentionally plain, not encrypted.** The original plan for M4.1
 was a single-passphrase "vault" (AES-256-GCM, PBKDF2 key derivation) that would double as
@@ -89,6 +93,30 @@ access behind an interactive passphrase would make the server unable to sync whi
 - **Client↔server authentication** ("a safe way to connect to server") is also out of scope
   here — it's M5's job (see the Roadmap), since it only exists once there's an actual
   server process for clients to authenticate against.
+
+**Scheduled search sync (M4.2)**: `bunny_core_sync_due_searches()` (`libs/core/src/sync.c`)
+is the only place `bunny_core` builds e621/Inkbunny clients. A search is "due" when
+`last_run_at` is `NULL` or more than `interval_hours` old — computed in C via
+`strptime`/`timegm` against the stored ISO-8601 timestamp (POSIX, not standard C11; needs
+`_DEFAULT_SOURCE`/`_XOPEN_SOURCE` defined before any header include, since this project
+targets Linux natively and cross-compiles via dockcross rather than aiming for strict
+standard-C portability). One search failing to sync (network error, no Inkbunny guest
+access, etc.) doesn't block the others or fail the whole call — it's simply left due and
+retried on the next call, matching the "no retry scheduling in M4" stance also used by the
+action queue (M4.3). Mapping notes:
+- e621's 8 tag categories (`general`/`artist`/`copyright`/`character`/`species`/`invalid`/
+  `lore`/`meta`) are flattened into the single flat tag array `bunny_db_post_upsert_t`
+  expects; multiple `tags.artist` values are joined into one string for the `artist` column
+  (e621 posts can have collabs) since the schema only has room for one.
+- Inkbunny's search endpoint doesn't return `description` or `keywords` (Inkbunny only
+  populates those via `inkbunny_get_submission(s)`, per `libs/inkbunny/include/inkbunny/
+  types.h`) — those columns are simply left unset from a sync pass; nothing currently
+  re-fetches full submission details to backfill them.
+
+`bunny_core_search_create/delete/list/list_posts` were added alongside the sync engine as
+thin `bunny_db` pass-throughs (same pattern as the M4.1 account wrappers) — `bunny_core` is
+the single entry point every app uses (standalone FFI or networked server), so it has to
+expose search CRUD even though the sync engine itself only ever reads searches.
 
 ## Inkbunny API constraints (found in M2)
 

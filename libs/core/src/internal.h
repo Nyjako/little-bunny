@@ -8,6 +8,10 @@
 struct bunny_core
 {
     bunny_db_t *db;
+    char *user_agent;
+    const bunny_http_transport_t *e621_transport;
+    const bunny_http_transport_t *inkbunny_transport;
+    double min_request_interval_sec;
 };
 
 static inline bunny_core_result_t bunny_core_map_db_result(bunny_db_result_t result)

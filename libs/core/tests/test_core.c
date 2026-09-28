@@ -1,12 +1,19 @@
 #include "unity.h"
 
+#include <string.h>
+
 #include "bunny_core/core.h"
 
 static bunny_core_t *g_core;
 
 void setUp(void)
 {
-    bunny_core_result_t result = bunny_core_open(":memory:", &g_core);
+    bunny_core_config_t config;
+    memset(&config, 0, sizeof(config));
+    config.db_path = ":memory:";
+    config.user_agent = "bunny-tests/1.0 (unit tests)";
+
+    bunny_core_result_t result = bunny_core_open(&config, &g_core);
     TEST_ASSERT_EQUAL(BUNNY_CORE_OK, result);
     TEST_ASSERT_NOT_NULL(g_core);
 }
