@@ -3,7 +3,7 @@ RELEASE_DIR ?= build-release
 WINDOWS_DIR ?= build-windows
 TOOLS_DIR ?= build-tools
 
-SOURCES := $(shell find libs tools -name '*.c' -o -name '*.h')
+SOURCES := $(shell find libs tools server -name '*.c' -o -name '*.h')
 
 .PHONY: build test release clean dockcross windows tools format format-check
 

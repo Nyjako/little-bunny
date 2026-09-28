@@ -98,7 +98,29 @@ this file is the single source of truth for "what's done" across sessions.
 
 - [ ] **M5 — C server**
   Exposes the core over HTTP/JSON (embeddable HTTP server library pulled via CPM). Auth
-  between GUI clients and the server. Runs on Linux.
+  between GUI clients and the server. Runs on Linux. Delivered as three sub-milestones,
+  M5.1–M5.3 below.
+
+- [x] **M5.1 — Server skeleton: HTTP library, TLS, auth, config**
+  New top-level `server/` executable (`bunny_server`), sibling to `libs/`/`tools/`.
+  Vendored [civetweb](https://github.com/civetweb/civetweb) via CPM for HTTP/HTTPS
+  (`CIVETWEB_ENABLE_ASAN OFF` — it enables its own sanitizers by default in Debug builds,
+  independent of and conflicting with `BUNNY_ENABLE_ASAN`). Config comes from environment
+  variables (`BUNNY_SERVER_PORT/DATA_DIR/USER_AGENT/POLL_INTERVAL_SEC`); the default data
+  dir finally adopts GOBLIN's `appdirs.h` (flagged as a good fit back in M3/M4, unused
+  until now). Auth is a single shared bearer token, generated once (`OpenSSL RAND_bytes`,
+  32 bytes hex) and stored in the data dir; every route but `/health` must present it via
+  `Authorization: Bearer`. **The server generates its own self-signed TLS certificate**
+  (OpenSSL `EVP_PKEY`/`X509`, ~10yr validity) and terminates HTTPS itself — the deployment
+  target (a remote host, no reverse proxy, no manual cert management) has no CA or domain
+  name to lean on, so **M7's GUI must pin the certificate's fingerprint** rather than
+  validate it against the system trust store, same trust-on-first-use shape as SSH host
+  keys. `auth_token`, `server.pem`, and the SQLite DB file (plaintext credentials, per
+  M4.1) are all written/chmod'd `0600`. A single mutex in `server_context_t` serializes
+  every `bunny_core_*` call, since civetweb's worker-thread pool (and M5.3's scheduler
+  thread) mean `bunny_core`/`bunny_db` — never designed for concurrent access — now have
+  more than one caller. See `docs/architecture.md`'s "C server (M5)" section for the full
+  writeup.
 
 - [ ] **M6 — Flutter app skeleton**
   App shell, FFI bindings to the core for standalone mode, HTTP client for networked mode,

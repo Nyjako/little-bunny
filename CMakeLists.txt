@@ -96,6 +96,21 @@ if(GOBLIN_ADDED)
   target_include_directories(goblin INTERFACE ${GOBLIN_SOURCE_DIR}/include)
 endif()
 
+# M5's server embeds civetweb for HTTP/HTTPS; it links OpenSSL directly
+# (no dlopen-at-runtime) since OpenSSL is already a required dependency above.
+CPMAddPackage(
+  NAME civetweb
+  GITHUB_REPOSITORY civetweb/civetweb
+  GIT_TAG v1.16
+  OPTIONS
+    "CIVETWEB_ENABLE_CXX OFF"
+    "CIVETWEB_BUILD_TESTING OFF"
+    "CIVETWEB_ENABLE_SSL ON"
+    "CIVETWEB_ENABLE_SSL_DYNAMIC_LOADING OFF"
+    "CIVETWEB_ENABLE_ASAN OFF" # civetweb's own on-by-default-in-Debug sanitizer; our BUNNY_ENABLE_ASAN covers our own code
+    "BUILD_SHARED_LIBS OFF"
+)
+
 if(BUNNY_BUILD_TESTS)
   enable_testing()
   CPMAddPackage(
@@ -110,6 +125,7 @@ add_subdirectory(libs/e621)
 add_subdirectory(libs/inkbunny)
 add_subdirectory(libs/db)
 add_subdirectory(libs/core)
+add_subdirectory(server)
 
 if(BUNNY_BUILD_TOOLS)
   add_subdirectory(tools/inkbunny_favorite_experiment)
