@@ -373,6 +373,52 @@ M6).
   different curl TLS backend). Linux desktop, this environment's only build-verifiable
   desktop target, builds and runs correctly.
 
+**Networked mode / HTTP (M6.3)**: `lib/repository/http_bunny_repository.dart` implements
+`BunnyRepository` against the exact REST surface documented in "C server (M5)" above, using
+`package:http`'s `IOClient` wrapping a `dart:io HttpClient`.
+
+- **Certificate pinning.** The server's certificate is self-signed with no CA (see the TLS
+  section above), so normal certificate-chain validation can't apply. `HttpBunnyRepository`'s
+  `badCertificateCallback` computes the SHA-256 hash of the presented certificate's DER bytes
+  (`X509Certificate.der`) and compares it against a fingerprint supplied to the constructor —
+  accept only on an exact match (case-insensitive, colons optional), reject otherwise. The
+  hash comparison itself is a standalone top-level function (`matchesPinnedFingerprint`,
+  `@visibleForTesting`) taking raw bytes rather than an `X509Certificate`, since that type has
+  no public constructor and can only come from a real TLS handshake — this keeps the actual
+  pinning logic testable with synthetic byte arrays, no real handshake needed. Verified both
+  ways against a real running `bunny_server` instance: a matching fingerprint completes the
+  handshake and reaches real data, a wrong one fails with `CERTIFICATE_VERIFY_FAILED`.
+- **Server API gap found and fixed.** `GET /accounts/{site}` (`server/src/routes_accounts.c`)
+  originally returned only `{"site", "username"}`, but `BunnyAccount` (M6.1) mirrors
+  `bunny_db_account_t` 1:1 and requires `id`/`created_at` too — the FFI implementation gets
+  these for free from the DB struct, but the HTTP implementation had nothing to map them
+  from. Fixed by extending the route to also return `id` and `created_at` (small, additive,
+  backward-compatible — the existing M5.2 integration test asserts on substrings, not exact
+  JSON equality, so it wasn't broken; a new assertion for the two fields was added to it).
+  Chosen over dropping the fields from `BunnyAccount` (the alternative, mirroring how
+  `secret` was already dropped for the same "keep both implementations identical" reason)
+  since nothing in `BunnyRepository` uses `account.id` as a lookup key the way `BunnySearch`/
+  `BunnyPost` ids are used, so there was no correctness reason to remove real data the DB
+  already has.
+- **Testability.** `HttpBunnyRepository.withClient` is a `@visibleForTesting` named
+  constructor that injects an arbitrary `http.Client` (fakes the transport, not the business
+  logic, same philosophy as every C library's own tests) — `app/test/repository/
+  http_bunny_repository_test.dart` uses `package:http/testing.dart`'s `MockClient` with
+  canned JSON, asserting on request method/path/headers/body and response mapping for every
+  method, plus JSON and non-JSON error-body handling. No real network in the automated suite.
+- **Repository switch point.** `lib/repository/bunny_repository_factory.dart` is the actual
+  "one repository interface" deliverable the M6 roadmap entry describes: a sealed
+  `BunnyRepositoryConfig` (`StandaloneConfig`/`NetworkedConfig`) and a `createBunnyRepository`
+  factory that returns a `BunnyRepository`, so `main.dart` and every screen only ever depend
+  on the interface, never on which implementation is active. `main.dart` threads the result
+  through a `BunnyRepositoryScope` `InheritedWidget` rather than a new state-management
+  dependency — M6 has no settings UI yet to let the user choose a mode (that's M7), so it
+  currently just defaults to standalone/`:memory:`.
+- **Manual end-to-end verification.** Beyond the fake-transport unit tests, `HttpBunnyRepository`
+  was run against a real `bunny_server` process (real self-signed cert, real auth token, real
+  SQLite-backed data) to confirm account/search CRUD, cert-pinning accept/reject, and the
+  sync/queue endpoints all work over an actual TLS connection, not just canned responses.
+
 ## Inkbunny API constraints (found in M2)
 
 Verified against the live API and the official docs while building `libinkbunny`:
