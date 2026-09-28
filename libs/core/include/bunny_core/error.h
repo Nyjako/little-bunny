@@ -11,6 +11,7 @@ typedef enum
     BUNNY_CORE_ERR_INVALID_ARG,
     BUNNY_CORE_ERR_NOT_FOUND,
     BUNNY_CORE_ERR_DB,
+    BUNNY_CORE_ERR_SITE, /* an e621/Inkbunny client call failed (network, auth, ...) */
     BUNNY_CORE_ERR_UNKNOWN,
 } bunny_core_result_t;
 
