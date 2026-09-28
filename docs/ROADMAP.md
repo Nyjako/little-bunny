@@ -43,6 +43,12 @@ this file is the single source of truth for "what's done" across sessions.
   to build on. Tested against a real `:memory:` SQLite database (no fixtures/fake transport
   needed — SQLite itself is the test double), clean under `-DBUNNY_ENABLE_ASAN=ON`.
 
+- [x] **M3.1 — Tag autocomplete**
+  `bunny_db_tag_autocomplete(db, site, prefix, limit)`: per-site, prefix-matched, ordered
+  by how many cached posts carry the tag (most-used first). Pure read on top of M3's
+  schema — tags are already collected as a side effect of `bunny_db_post_upsert`. Feeds
+  M8's search-box autocomplete for both e621 and Inkbunny.
+
 - [ ] **M4 — Core sync engine**
   Encrypted credential storage, scheduled searches (24h default, configurable), seen/unseen
   tracking, an action queue that proxies favorite/vote/comment calls to the sites.
@@ -62,7 +68,7 @@ this file is the single source of truth for "what's done" across sessions.
 - [ ] **M8 — Browse & search UI**
   Manage saved searches, post grid/list with unseen markers, post detail view with full
   metadata, viewers for supported formats (image/video/webm/gif; Flash/SWF intentionally
-  unsupported).
+  unsupported). Tag autocomplete in the search box uses `bunny_db_tag_autocomplete` (M3.1).
 
 - [ ] **M9 — Actions & downloads**
   Single + mass like/favorite/download, commenting, download manager writing to
