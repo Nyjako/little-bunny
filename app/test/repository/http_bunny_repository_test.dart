@@ -50,6 +50,22 @@ void main() {
       }),
     );
 
+    test('verifyAccount sends the right request and succeeds on 200', () async {
+      respond = (_) => http.Response(jsonEncode({'ok': true}), 200);
+
+      await buildRepository().verifyAccount(BunnySite.e621, 'someuser', 'somesecret');
+
+      expect(capturedMethod, 'POST');
+      expect(capturedUri.path, '/accounts/verify');
+      expect(jsonDecode(capturedBody), {'site': 'e621', 'username': 'someuser', 'secret': 'somesecret'});
+    });
+
+    test('verifyAccount throws BunnyRepositoryException when the site rejects it', () async {
+      respond = (_) => http.Response(jsonEncode({'error': 'an e621/Inkbunny client call failed (network, auth, ...)'}), 502);
+
+      await expectLater(buildRepository().verifyAccount(BunnySite.e621, 'someuser', 'wrongsecret'), throwsA(isA<BunnyRepositoryException>()));
+    });
+
     test('setAccount sends the right request and succeeds on 200', () async {
       respond = (_) => http.Response(jsonEncode({'ok': true}), 200);
 

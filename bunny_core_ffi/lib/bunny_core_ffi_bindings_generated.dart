@@ -315,6 +315,47 @@ class BunnyCoreFfiBindings {
   late final _bunny_core_account_delete = _bunny_core_account_deletePtr
       .asFunction<int Function(ffi.Pointer<bunny_core_t>, int)>();
 
+  /// Tests username/secret against the real site without persisting anything --
+  /// builds a throwaway client (never touches bunny_db, unlike the three
+  /// functions above). e621 has no dedicated login endpoint (auth is per-request
+  /// Basic auth), so this makes one real authenticated call
+  /// (e621_list_favorites) and checks it doesn't fail; Inkbunny has an explicit
+  /// login call, used directly. Returns BUNNY_CORE_ERR_SITE if the site rejected
+  /// the credentials or the request otherwise failed (network, etc.) -- use
+  /// bunny_core_result_to_string for a message, same as every other site-facing
+  /// function here.
+  bunny_core_result_t bunny_core_account_verify(
+    ffi.Pointer<bunny_core_t> core,
+    bunny_db_site_t site,
+    ffi.Pointer<ffi.Char> username,
+    ffi.Pointer<ffi.Char> secret,
+  ) {
+    return bunny_core_result_t.fromValue(
+      _bunny_core_account_verify(core, site.value, username, secret),
+    );
+  }
+
+  late final _bunny_core_account_verifyPtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.UnsignedInt Function(
+            ffi.Pointer<bunny_core_t>,
+            ffi.UnsignedInt,
+            ffi.Pointer<ffi.Char>,
+            ffi.Pointer<ffi.Char>,
+          )
+        >
+      >('bunny_core_account_verify');
+  late final _bunny_core_account_verify = _bunny_core_account_verifyPtr
+      .asFunction<
+        int Function(
+          ffi.Pointer<bunny_core_t>,
+          int,
+          ffi.Pointer<ffi.Char>,
+          ffi.Pointer<ffi.Char>,
+        )
+      >();
+
   /// --- Searches -----------------------------------------------------------------
   /// Thin pass-throughs to bunny_db's search CRUD: bunny_core is the single
   /// entry point apps use (standalone FFI or networked server), so it needs to

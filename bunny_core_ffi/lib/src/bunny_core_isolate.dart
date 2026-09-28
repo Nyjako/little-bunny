@@ -130,6 +130,14 @@ class _DeleteAccountRequest extends _Request {
   const _DeleteAccountRequest(this.site);
 }
 
+class _VerifyAccountRequest extends _Request {
+  final String site;
+  final String username;
+  final String secret;
+
+  const _VerifyAccountRequest(this.site, this.username, this.secret);
+}
+
 class _CreateSearchRequest extends _Request {
   final String site;
   final String label;
@@ -292,6 +300,9 @@ Object? _dispatch(Pointer<bunny_core_t>? core, _Request request, void Function(P
       case _DeleteAccountRequest r:
         _check(_bindings.bunny_core_account_delete(c, _siteFromWire(r.site)));
         return null;
+      case _VerifyAccountRequest r:
+        _check(_bindings.bunny_core_account_verify(c, _siteFromWire(r.site), r.username.toNativeUtf8(allocator: arena).cast(), r.secret.toNativeUtf8(allocator: arena).cast()));
+        return null;
       case _CreateSearchRequest r:
         final outId = arena<Int64>();
         _check(_bindings.bunny_core_search_create(c, _siteFromWire(r.site), r.label.toNativeUtf8(allocator: arena).cast(), r.query.toNativeUtf8(allocator: arena).cast(), r.intervalHours, outId));
@@ -408,6 +419,8 @@ class BunnyCoreNative {
   Future<Map<String, Object?>?> getAccount(String site) => _send<Map<String, Object?>?>(_GetAccountRequest(site));
 
   Future<void> deleteAccount(String site) => _send<void>(_DeleteAccountRequest(site));
+
+  Future<void> verifyAccount(String site, String username, String secret) => _send<void>(_VerifyAccountRequest(site, username, secret));
 
   Future<int> createSearch(String site, String label, String query, int intervalHours) => _send<int>(_CreateSearchRequest(site, label, query, intervalHours));
 

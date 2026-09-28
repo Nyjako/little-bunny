@@ -85,6 +85,18 @@ void main() {
     await expectLater(native.queueFavoriteAdd(1, -1), throwsA(isA<BunnyCoreNativeException>()));
   });
 
+  test('verifyAccount rejects bogus e621 credentials', () async {
+    // bunny_core_ffi_open never exposes a fake-transport override (unlike
+    // libs/core's own tests) -- standalone mode always talks to the real
+    // site. bunny_core_account_verify's actual success/failure logic is
+    // already thoroughly covered against fake transports in
+    // libs/core/tests/test_sync.c; this only proves the Dart<->native
+    // plumbing reaches bunny_core_account_verify and surfaces its failure,
+    // via one real (but fast, deterministic) request e621 will always
+    // reject.
+    await expectLater(native.verifyAccount('e621', 'definitely-not-a-real-user', 'definitely-not-a-real-key'), throwsA(isA<BunnyCoreNativeException>()));
+  });
+
   test('operations before open throw', () async {
     final unopened = BunnyCoreNative();
 

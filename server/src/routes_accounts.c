@@ -71,6 +71,39 @@ static int handle_get_account(struct mg_connection *conn, server_context_t *ctx,
     return status;
 }
 
+static int handle_post_verify(struct mg_connection *conn, server_context_t *ctx)
+{
+    cJSON *body = server_json_read_request_body(conn);
+    if (!body) {
+        return server_json_respond_error(conn, BUNNY_CORE_ERR_INVALID_ARG);
+    }
+
+    const char *site_text = NULL;
+    const char *username = NULL;
+    const char *secret = NULL;
+    bunny_db_site_t site;
+    bool valid = bunny_json_get_string(body, "site", &site_text) == BUNNY_JSON_OK && server_route_parse_site(site_text, &site) && bunny_json_get_string(body, "username", &username) == BUNNY_JSON_OK && bunny_json_get_string(body, "secret", &secret) == BUNNY_JSON_OK;
+    if (!valid) {
+        cJSON_Delete(body);
+        return server_json_respond_error(conn, BUNNY_CORE_ERR_INVALID_ARG);
+    }
+
+    pthread_mutex_lock(&ctx->core_mutex);
+    bunny_core_result_t result = bunny_core_account_verify(ctx->core, site, username, secret);
+    pthread_mutex_unlock(&ctx->core_mutex);
+    cJSON_Delete(body);
+
+    if (result != BUNNY_CORE_OK) {
+        return server_json_respond_error(conn, result);
+    }
+
+    cJSON *response = cJSON_CreateObject();
+    cJSON_AddBoolToObject(response, "ok", true);
+    int status = server_json_respond(conn, 200, response);
+    cJSON_Delete(response);
+    return status;
+}
+
 static int handle_delete_account(struct mg_connection *conn, server_context_t *ctx, const char *site_text)
 {
     bunny_db_site_t site;
@@ -104,6 +137,9 @@ static int accounts_handler(struct mg_connection *conn, void *cbdata)
     const char *method = info->request_method;
     const char *site_text = server_route_sub_path(info->local_uri, "/accounts");
 
+    if (strcmp(method, "POST") == 0 && site_text && strcmp(site_text, "verify") == 0) {
+        return handle_post_verify(conn, ctx);
+    }
     if (strcmp(method, "POST") == 0 && !site_text) {
         return handle_post_accounts(conn, ctx);
     }
