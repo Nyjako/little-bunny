@@ -34,9 +34,14 @@ this file is the single source of truth for "what's done" across sessions.
   `architecture.md`. `tools/inkbunny_favorite_experiment` is now a thin CLI over these
   functions for manual testing. Commenting still has no path, official or unofficial.
 
-- [ ] **M3 — SQLite schema + core DB layer**
-  Vendor the sqlite amalgamation via CPM (`DOWNLOAD_ONLY`). Schema for accounts, searches,
-  cached posts, seen/unseen state, favorites mirror, downloads, tags stats.
+- [x] **M3 — SQLite schema + core DB layer**
+  Vendored the sqlite amalgamation via CPM (`DOWNLOAD_ONLY` + URL/hash, since it has no
+  CMake-ready repo). New `bunny_db` library (`libs/db`): schema for accounts (credential
+  encryption itself is M4's job), searches, cached posts + normalized tags, search-result
+  membership, seen state, a favorites mirror, downloads, plus a `bunny_db_top_favorited_tags()`
+  query feeding M10's recommendation feature. CRUD API covers what M4's sync engine needs
+  to build on. Tested against a real `:memory:` SQLite database (no fixtures/fake transport
+  needed — SQLite itself is the test double), clean under `-DBUNNY_ENABLE_ASAN=ON`.
 
 - [ ] **M4 — Core sync engine**
   Encrypted credential storage, scheduled searches (24h default, configurable), seen/unseen
