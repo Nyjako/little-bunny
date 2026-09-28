@@ -277,6 +277,35 @@ done issuing `bunny_core_*` calls before civetweb's workers and the core itself 
 down. `main.c`'s `SIGINT`/`SIGTERM` handling (from M5.1) needed no changes; it already just
 calls `server_app_stop()`, which now also tears down the scheduler.
 
+## Flutter app (M6)
+
+`app/` is the Flutter GUI (desktop + mobile, per the Components section above). Managed via
+[fvm](https://fvm.app/) — always run `fvm flutter ...`/`fvm dart ...`, not the bare
+commands, since the SDK version is pinned in `app/.fvmrc` (Flutter 3.44.0 / Dart 3.12.0) for
+reproducibility. **Only Linux desktop and Android are build-verifiable in the dev
+environment this was built in** — Windows/macOS/iOS have no local toolchain there, so those
+platforms are scaffolded (present in `--platforms=...`) but unverified until built somewhere
+with the right toolchain.
+
+**Repository pattern (M6.1)**: `lib/repository/bunny_repository.dart` defines `abstract
+interface class BunnyRepository`, the single seam between the UI and the two ways this app
+can reach `bunny_core`'s functionality:
+- **Standalone**: FFI directly into `bunny_core` (M6.2, `bunny_core_ffi/`).
+- **Networked**: HTTPS against a `bunny_server` instance (M6.3), the exact same REST
+  surface documented in "C server (M5)" above.
+
+`lib/repository/bunny_models.dart` has the plain Dart mirrors of `bunny_db_account_t`/
+`search_t`/`post_t`/the two stats structs (`BunnyAccount`, `BunnySearch`, `BunnyPost`,
+`BunnySyncStats`, `BunnyQueueStats`) plus a `BunnySite` enum with `toWireString`/
+`fromWireString` (`'e621'`/`'inkbunny'`, matching `bunny_db_site_to_string`'s own output --
+reused as-is for the M6.3 HTTP implementation's JSON encoding). `BunnyAccount` deliberately
+**omits the secret** even though the FFI side technically has local access to it: the
+server's `GET /accounts/{site}` never returns it (M5.2), so for the two `BunnyRepository`
+implementations to stay behaviorally identical — the entire point of having one interface —
+the FFI implementation must drop it too when mapping its local `bunny_db_account_t` to this
+model. `getAccount()` returns `null` for "not found" (an expected, ordinary outcome) rather
+than throwing; `BunnyRepositoryException` is reserved for actual failures.
+
 ## Inkbunny API constraints (found in M2)
 
 Verified against the live API and the official docs while building `libinkbunny`:
