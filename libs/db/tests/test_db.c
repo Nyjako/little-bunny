@@ -1,0 +1,316 @@
+#include "unity.h"
+
+#include <string.h>
+
+#include "bunny_db/db.h"
+
+static bunny_db_t *g_db;
+
+void setUp(void) {
+    bunny_db_result_t result = bunny_db_open(":memory:", &g_db);
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, result);
+    TEST_ASSERT_NOT_NULL(g_db);
+}
+
+void tearDown(void) {
+    bunny_db_close(g_db);
+    g_db = NULL;
+}
+
+void test_open_close(void) {
+    /* setUp/tearDown already exercise this; just confirm double-close is safe. */
+    bunny_db_close(NULL);
+}
+
+void test_search_create_and_list(void) {
+    int64_t id = 0;
+    bunny_db_result_t result = bunny_db_search_create(g_db, BUNNY_DB_SITE_E621, "wolves", "wolf rating:s", 12, &id);
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, result);
+    TEST_ASSERT_TRUE(id > 0);
+
+    bunny_db_search_list_t list;
+    result = bunny_db_search_list(g_db, &list);
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, result);
+    TEST_ASSERT_EQUAL(1, (int)list.count);
+    TEST_ASSERT_EQUAL(id, list.items[0].id);
+    TEST_ASSERT_EQUAL(BUNNY_DB_SITE_E621, list.items[0].site);
+    TEST_ASSERT_EQUAL_STRING("wolves", list.items[0].label);
+    TEST_ASSERT_EQUAL_STRING("wolf rating:s", list.items[0].query);
+    TEST_ASSERT_EQUAL(12, list.items[0].interval_hours);
+    TEST_ASSERT_NULL(list.items[0].last_run_at);
+
+    bunny_db_search_list_free(&list);
+}
+
+void test_search_default_interval(void) {
+    int64_t id = 0;
+    bunny_db_result_t result = bunny_db_search_create(g_db, BUNNY_DB_SITE_INKBUNNY, "cats", "cat", 0, &id);
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, result);
+
+    bunny_db_search_list_t list;
+    bunny_db_search_list(g_db, &list);
+    TEST_ASSERT_EQUAL(24, list.items[0].interval_hours);
+    bunny_db_search_list_free(&list);
+}
+
+void test_search_delete(void) {
+    int64_t id = 0;
+    bunny_db_search_create(g_db, BUNNY_DB_SITE_E621, "temp", "temp", 24, &id);
+
+    bunny_db_result_t result = bunny_db_search_delete(g_db, id);
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, result);
+
+    bunny_db_search_list_t list;
+    bunny_db_search_list(g_db, &list);
+    TEST_ASSERT_EQUAL(0, (int)list.count);
+    bunny_db_search_list_free(&list);
+}
+
+void test_search_touch_last_run(void) {
+    int64_t id = 0;
+    bunny_db_search_create(g_db, BUNNY_DB_SITE_E621, "temp", "temp", 24, &id);
+
+    bunny_db_result_t result = bunny_db_search_touch_last_run(g_db, id);
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, result);
+
+    bunny_db_search_list_t list;
+    bunny_db_search_list(g_db, &list);
+    TEST_ASSERT_NOT_NULL(list.items[0].last_run_at);
+    bunny_db_search_list_free(&list);
+}
+
+static void make_test_post(bunny_db_post_upsert_t *post, int64_t external_id, int score) {
+    memset(post, 0, sizeof(*post));
+    post->site = BUNNY_DB_SITE_E621;
+    post->external_id = external_id;
+    post->artist = "someartist";
+    post->title = NULL;
+    post->description = "a test post";
+    post->rating = "s";
+    post->score = score;
+    post->fav_count = 5;
+    post->comment_count = 1;
+    post->file_url = "https://example.com/file.jpg";
+    post->file_ext = "jpg";
+    post->file_md5 = "abc123";
+    post->preview_url = "https://example.com/preview.jpg";
+    post->width = 1920;
+    post->height = 1080;
+    post->created_at_site = "2026-01-01T00:00:00Z";
+}
+
+void test_post_upsert_and_get(void) {
+    const char *tags[] = {"forest", "wolf"};
+    bunny_db_post_upsert_t post;
+    make_test_post(&post, 111, 10);
+    post.tags = tags;
+    post.tag_count = 2;
+
+    int64_t id = 0;
+    bunny_db_result_t result = bunny_db_post_upsert(g_db, &post, &id);
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, result);
+    TEST_ASSERT_TRUE(id > 0);
+
+    bunny_db_post_t fetched;
+    result = bunny_db_post_get(g_db, BUNNY_DB_SITE_E621, 111, &fetched);
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, result);
+    TEST_ASSERT_EQUAL(id, fetched.id);
+    TEST_ASSERT_EQUAL_STRING("someartist", fetched.artist);
+    TEST_ASSERT_NULL(fetched.title);
+    TEST_ASSERT_EQUAL_STRING("abc123", fetched.file_md5);
+    TEST_ASSERT_EQUAL(10, fetched.score);
+    TEST_ASSERT_FALSE(fetched.is_seen);
+    TEST_ASSERT_FALSE(fetched.is_favorited);
+
+    bunny_db_post_free(&fetched);
+}
+
+void test_post_upsert_updates_existing_row(void) {
+    bunny_db_post_upsert_t post;
+    make_test_post(&post, 222, 1);
+
+    int64_t first_id = 0;
+    bunny_db_post_upsert(g_db, &post, &first_id);
+
+    post.score = 99;
+    int64_t second_id = 0;
+    bunny_db_result_t result = bunny_db_post_upsert(g_db, &post, &second_id);
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, result);
+    TEST_ASSERT_EQUAL(first_id, second_id);
+
+    bunny_db_post_t fetched;
+    bunny_db_post_get(g_db, BUNNY_DB_SITE_E621, 222, &fetched);
+    TEST_ASSERT_EQUAL(99, fetched.score);
+    bunny_db_post_free(&fetched);
+}
+
+void test_post_get_not_found(void) {
+    bunny_db_post_t fetched;
+    bunny_db_result_t result = bunny_db_post_get(g_db, BUNNY_DB_SITE_E621, 999999, &fetched);
+    TEST_ASSERT_EQUAL(BUNNY_DB_ERR_NOT_FOUND, result);
+}
+
+void test_seen_state(void) {
+    bunny_db_post_upsert_t post1;
+    bunny_db_post_upsert_t post2;
+    make_test_post(&post1, 301, 1);
+    make_test_post(&post2, 302, 1);
+    int64_t id1 = 0;
+    int64_t id2 = 0;
+    bunny_db_post_upsert(g_db, &post1, &id1);
+    bunny_db_post_upsert(g_db, &post2, &id2);
+
+    int64_t unseen = -1;
+    bunny_db_count_unseen(g_db, &unseen);
+    TEST_ASSERT_EQUAL(2, (int)unseen);
+
+    bunny_db_result_t result = bunny_db_post_mark_seen(g_db, id1);
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, result);
+
+    bunny_db_count_unseen(g_db, &unseen);
+    TEST_ASSERT_EQUAL(1, (int)unseen);
+
+    bunny_db_post_t fetched;
+    bunny_db_post_get(g_db, BUNNY_DB_SITE_E621, 301, &fetched);
+    TEST_ASSERT_TRUE(fetched.is_seen);
+    bunny_db_post_free(&fetched);
+
+    bunny_db_post_get(g_db, BUNNY_DB_SITE_E621, 302, &fetched);
+    TEST_ASSERT_FALSE(fetched.is_seen);
+    bunny_db_post_free(&fetched);
+}
+
+void test_favorite_add_remove_list(void) {
+    bunny_db_post_upsert_t post;
+    make_test_post(&post, 401, 1);
+    int64_t id = 0;
+    bunny_db_post_upsert(g_db, &post, &id);
+
+    bunny_db_result_t result = bunny_db_favorite_add(g_db, id, 2);
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, result);
+
+    bunny_db_post_t fetched;
+    bunny_db_post_get(g_db, BUNNY_DB_SITE_E621, 401, &fetched);
+    TEST_ASSERT_TRUE(fetched.is_favorited);
+    bunny_db_post_free(&fetched);
+
+    bunny_db_post_list_t favorites;
+    result = bunny_db_favorite_list(g_db, &favorites);
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, result);
+    TEST_ASSERT_EQUAL(1, (int)favorites.count);
+    TEST_ASSERT_EQUAL(id, favorites.items[0].id);
+    bunny_db_post_list_free(&favorites);
+
+    result = bunny_db_favorite_remove(g_db, id);
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, result);
+
+    bunny_db_favorite_list(g_db, &favorites);
+    TEST_ASSERT_EQUAL(0, (int)favorites.count);
+    bunny_db_post_list_free(&favorites);
+}
+
+void test_search_results_and_list_posts(void) {
+    int64_t search_id = 0;
+    bunny_db_search_create(g_db, BUNNY_DB_SITE_E621, "wolves", "wolf", 24, &search_id);
+
+    bunny_db_post_upsert_t post1;
+    bunny_db_post_upsert_t post2;
+    make_test_post(&post1, 501, 1);
+    make_test_post(&post2, 502, 1);
+    int64_t id1 = 0;
+    int64_t id2 = 0;
+    bunny_db_post_upsert(g_db, &post1, &id1);
+    bunny_db_post_upsert(g_db, &post2, &id2);
+
+    bunny_db_search_add_result(g_db, search_id, id1);
+    bunny_db_search_add_result(g_db, search_id, id2);
+    /* re-adding the same pair should be a no-op, not an error */
+    bunny_db_result_t result = bunny_db_search_add_result(g_db, search_id, id1);
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, result);
+
+    bunny_db_post_list_t all_results;
+    result = bunny_db_search_list_posts(g_db, search_id, false, &all_results);
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, result);
+    TEST_ASSERT_EQUAL(2, (int)all_results.count);
+    bunny_db_post_list_free(&all_results);
+
+    bunny_db_post_mark_seen(g_db, id1);
+
+    bunny_db_post_list_t unseen_results;
+    result = bunny_db_search_list_posts(g_db, search_id, true, &unseen_results);
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, result);
+    TEST_ASSERT_EQUAL(1, (int)unseen_results.count);
+    TEST_ASSERT_EQUAL(id2, unseen_results.items[0].id);
+    bunny_db_post_list_free(&unseen_results);
+}
+
+void test_download_record_and_list(void) {
+    bunny_db_post_upsert_t post;
+    make_test_post(&post, 601, 1);
+    int64_t id = 0;
+    bunny_db_post_upsert(g_db, &post, &id);
+
+    int64_t download_id = 0;
+    bunny_db_result_t result =
+        bunny_db_download_record(g_db, id, "/downloads/someartist/601.jpg", "abc123", true, &download_id);
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, result);
+    TEST_ASSERT_TRUE(download_id > 0);
+
+    bunny_db_download_list_t downloads;
+    result = bunny_db_download_list_for_post(g_db, id, &downloads);
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, result);
+    TEST_ASSERT_EQUAL(1, (int)downloads.count);
+    TEST_ASSERT_EQUAL_STRING("/downloads/someartist/601.jpg", downloads.items[0].file_path);
+    TEST_ASSERT_EQUAL_STRING("abc123", downloads.items[0].checksum_md5);
+    TEST_ASSERT_TRUE(downloads.items[0].checksum_verified);
+    bunny_db_download_list_free(&downloads);
+}
+
+void test_top_favorited_tags(void) {
+    const char *tags1[] = {"wolf", "forest"};
+    const char *tags2[] = {"wolf", "meadow"};
+
+    bunny_db_post_upsert_t post1;
+    bunny_db_post_upsert_t post2;
+    make_test_post(&post1, 701, 1);
+    make_test_post(&post2, 702, 1);
+    post1.tags = tags1;
+    post1.tag_count = 2;
+    post2.tags = tags2;
+    post2.tag_count = 2;
+
+    int64_t id1 = 0;
+    int64_t id2 = 0;
+    bunny_db_post_upsert(g_db, &post1, &id1);
+    bunny_db_post_upsert(g_db, &post2, &id2);
+
+    bunny_db_favorite_add(g_db, id1, -1);
+    bunny_db_favorite_add(g_db, id2, -1);
+
+    bunny_db_tag_stat_list_t stats;
+    bunny_db_result_t result = bunny_db_top_favorited_tags(g_db, 10, &stats);
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, result);
+    TEST_ASSERT_EQUAL(3, (int)stats.count); /* wolf, forest, meadow */
+    TEST_ASSERT_EQUAL_STRING("wolf", stats.items[0].name);
+    TEST_ASSERT_EQUAL(2, stats.items[0].count);
+
+    bunny_db_tag_stat_list_free(&stats);
+}
+
+int main(void) {
+    UNITY_BEGIN();
+    RUN_TEST(test_open_close);
+    RUN_TEST(test_search_create_and_list);
+    RUN_TEST(test_search_default_interval);
+    RUN_TEST(test_search_delete);
+    RUN_TEST(test_search_touch_last_run);
+    RUN_TEST(test_post_upsert_and_get);
+    RUN_TEST(test_post_upsert_updates_existing_row);
+    RUN_TEST(test_post_get_not_found);
+    RUN_TEST(test_seen_state);
+    RUN_TEST(test_favorite_add_remove_list);
+    RUN_TEST(test_search_results_and_list_posts);
+    RUN_TEST(test_download_record_and_list);
+    RUN_TEST(test_top_favorited_tags);
+    return UNITY_END();
+}

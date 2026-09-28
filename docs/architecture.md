@@ -37,6 +37,34 @@ site's API. This is intentional so they can be reused outside this project. Both
 The core sync engine (M4) depends on `libe621`/`libinkbunny` plus the DB layer, but those
 site libraries never depend back on the core.
 
+## Database layer (M3)
+
+`bunny_db` (`libs/db`) wraps SQLite behind an opaque `bunny_db_t` handle and a CRUD API
+per concern (`bunny_db_search_*`, `bunny_db_post_*`, `bunny_db_favorite_*`,
+`bunny_db_download_*`, `bunny_db_top_favorited_tags`). Nothing outside `libs/db/src`
+touches `sqlite3.h` directly. Schema (`libs/db/src/schema.h`) is a single idempotent
+`CREATE TABLE IF NOT EXISTS ...` block applied on every `bunny_db_open()`, covering
+accounts, searches, a post cache with normalized `tags`/`post_tags` tables (so tag-based
+queries like the top-favorited-tags stat don't need to parse JSON at query time),
+search-result membership, seen state, a favorites mirror, and downloads. `accounts.
+secret_encrypted` is a placeholder column — the actual encryption is M4's job; M3 only
+needed the column to exist so the schema doesn't need a breaking migration later.
+
+Posts are cached via **upsert** keyed on `(site, external_id)`: re-fetching a post updates
+the existing row (and replaces its tag associations) rather than duplicating it, so the
+sync engine (M4) can call this on every poll without needing to check "have I seen this
+post before" itself.
+
+Unlike `libe621`/`libinkbunny`, `bunny_db`'s tests don't use a fake/injectable transport —
+they open a real `:memory:` SQLite database and exercise the actual CRUD API against it.
+SQLite itself is the test double here; there's no meaningful way to fake a database layer
+and still test the SQL.
+
+SQLite is vendored differently from the other CPM dependencies: it has no CMake-ready
+GitHub repo, so `CPMAddPackage` fetches the official amalgamation zip directly by URL (with
+a `URL_HASH` pin) with `DOWNLOAD_ONLY YES`, and the top-level `CMakeLists.txt` defines its
+own `add_library(sqlite3 STATIC ...)` target around the downloaded `sqlite3.c`.
+
 ## Inkbunny API constraints (found in M2)
 
 Verified against the live API and the official docs while building `libinkbunny`:
