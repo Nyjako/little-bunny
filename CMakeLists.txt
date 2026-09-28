@@ -10,9 +10,21 @@ set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
+# bunny_core_ffi/ (M6.2) links this whole project's static libs into a shared
+# library for Dart FFI to dlopen. Linking a non-PIC static archive into a
+# shared object fails ("recompile with -fPIC") because externally-visible
+# symbols must be position-independent so other DSOs can preempt them. Set
+# this globally (before any targets/CPM packages are created) rather than
+# per-target, since the FFI plugin pulls in this project's entire dependency
+# chain (bunny_core, bunny_db, sqlite3, curl, cJSON, ...). No-op on
+# Windows/MSVC; harmless for the existing executable targets (PIE executables
+# already imply PIC object code on Linux).
+set(CMAKE_POSITION_INDEPENDENT_CODE ON)
+
 option(BUNNY_BUILD_TESTS "Build unit tests" OFF)
 option(BUNNY_ENABLE_ASAN "Build with AddressSanitizer/UndefinedBehaviorSanitizer" OFF)
 option(BUNNY_BUILD_TOOLS "Build developer/experimental command-line tools (not part of the shipped product)" OFF)
+option(BUNNY_BUILD_SERVER "Build the C server (civetweb, requires network to fetch). OFF for the Flutter FFI plugin's build (bunny_core_ffi/), which only needs libs/." ON)
 
 if(BUNNY_ENABLE_ASAN)
   add_compile_options(-fsanitize=address,undefined -fno-omit-frame-pointer)
@@ -98,18 +110,22 @@ endif()
 
 # M5's server embeds civetweb for HTTP/HTTPS; it links OpenSSL directly
 # (no dlopen-at-runtime) since OpenSSL is already a required dependency above.
-CPMAddPackage(
-  NAME civetweb
-  GITHUB_REPOSITORY civetweb/civetweb
-  GIT_TAG v1.16
-  OPTIONS
-    "CIVETWEB_ENABLE_CXX OFF"
-    "CIVETWEB_BUILD_TESTING OFF"
-    "CIVETWEB_ENABLE_SSL ON"
-    "CIVETWEB_ENABLE_SSL_DYNAMIC_LOADING OFF"
-    "CIVETWEB_ENABLE_ASAN OFF" # civetweb's own on-by-default-in-Debug sanitizer; our BUNNY_ENABLE_ASAN covers our own code
-    "BUILD_SHARED_LIBS OFF"
-)
+# Gated behind BUNNY_BUILD_SERVER so the Flutter FFI plugin's build
+# (bunny_core_ffi/, which only needs libs/) doesn't fetch/build it at all.
+if(BUNNY_BUILD_SERVER)
+  CPMAddPackage(
+    NAME civetweb
+    GITHUB_REPOSITORY civetweb/civetweb
+    GIT_TAG v1.16
+    OPTIONS
+      "CIVETWEB_ENABLE_CXX OFF"
+      "CIVETWEB_BUILD_TESTING OFF"
+      "CIVETWEB_ENABLE_SSL ON"
+      "CIVETWEB_ENABLE_SSL_DYNAMIC_LOADING OFF"
+      "CIVETWEB_ENABLE_ASAN OFF" # civetweb's own on-by-default-in-Debug sanitizer; our BUNNY_ENABLE_ASAN covers our own code
+      "BUILD_SHARED_LIBS OFF"
+  )
+endif()
 
 if(BUNNY_BUILD_TESTS)
   enable_testing()
@@ -125,7 +141,9 @@ add_subdirectory(libs/e621)
 add_subdirectory(libs/inkbunny)
 add_subdirectory(libs/db)
 add_subdirectory(libs/core)
-add_subdirectory(server)
+if(BUNNY_BUILD_SERVER)
+  add_subdirectory(server)
+endif()
 
 if(BUNNY_BUILD_TOOLS)
   add_subdirectory(tools/inkbunny_favorite_experiment)

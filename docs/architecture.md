@@ -306,6 +306,73 @@ the FFI implementation must drop it too when mapping its local `bunny_db_account
 model. `getAccount()` returns `null` for "not found" (an expected, ordinary outcome) rather
 than throwing; `BunnyRepositoryException` is reserved for actual failures.
 
+**Standalone mode / FFI (M6.2)**: `bunny_core_ffi/` is a Flutter FFI plugin (the `plugin_ffi`
+template — now deprecated by Flutter in favor of `package_ffi`'s native-assets/build-hooks
+system, kept here deliberately since this project's whole-CMake-project reuse approach below
+doesn't map onto that newer mechanism; revisiting this is a separate future task, not part of
+M6).
+
+- **Build reuse, not duplication.** `bunny_core_ffi/src/CMakeLists.txt` pulls in the entire
+  top-level CMake project (`bunny_core` and its whole dependency chain — `bunny_db`,
+  `bunny_e621`, `bunny_inkbunny`, `bunny_common`, plus CPM-fetched `sqlite3`/`curl`/`cjson`/
+  `goblin`) via `add_subdirectory(... EXCLUDE_FROM_ALL)` instead of a second, parallel build
+  definition. `EXCLUDE_FROM_ALL` keeps the reused project's targets buildable without
+  pulling its third-party dependencies' own `install()` rules (e.g. cJSON's) into the
+  default install set — those try to write to `/usr/local/include` and fail without root
+  when Flutter's own `cmake --install` step runs. The new top-level `BUNNY_BUILD_SERVER`
+  option (default `ON`) gates both `add_subdirectory(server)` and the civetweb
+  `CPMAddPackage` call, since this plugin's build only needs `libs/`, not the C server.
+  Flutter builds plugins through a symlink
+  (`.../flutter/ephemeral/.plugin_symlinks/bunny_core_ffi`), so the subdirectory path is
+  resolved with `get_filename_component(... REALPATH)` first to avoid walking up through the
+  symlink's apparent location instead of the real one.
+- **Whole-archive linking.** `bunny_core_ffi.c` itself never calls a `bunny_core_*`/
+  `bunny_db_*` function directly — Dart looks every one of them up by name via
+  `DynamicLibrary.lookup` at runtime — so a plain `target_link_libraries` would only pull the
+  `.o` files an actual caller references, leaving none of `bunny_core`'s real object code (or
+  the symbols Dart needs) in the resulting shared library at all. Fixed by force-linking
+  `bunny_core`/`bunny_db` with `-Wl,--whole-archive`/`-Wl,--no-whole-archive` (GNU ld/lld:
+  Linux, Android, MinGW), `-Wl,-force_load` (Apple), or `/WHOLEARCHIVE:` (MSVC).
+- **Position-independent code.** Linking a non-PIC static archive into a shared library fails
+  at link time (`relocation ... can not be used when making a shared object; recompile with
+  -fPIC`) because externally-visible symbols in a `.so` must be position-independent so other
+  DSOs can preempt them — a requirement the existing executable targets (server, tools)
+  never had. Fixed with a project-wide `set(CMAKE_POSITION_INDEPENDENT_CODE ON)` near the top
+  of the top-level `CMakeLists.txt` (before any targets/CPM packages are created), rather
+  than per-target, since the FFI plugin pulls in the whole dependency chain. No-op on
+  Windows/MSVC; harmless for the executables (PIE executables already imply PIC object code
+  on Linux) — confirmed via a full `make clean && make test` regression run (11/11 passing).
+- **Bindings.** `ffigen` (`dart run ffigen --config ffigen.yaml`) generates
+  `lib/bunny_core_ffi_bindings_generated.dart` directly from `bunny_core`'s and `bunny_db`'s
+  public headers — they're already plain, simple C, so no hand-written glue is needed beyond
+  a near-empty `bunny_core_ffi.c`/`.h` (just a version-string export, required by the
+  template's own build plumbing).
+- **Dedicated background isolate.** Every `bunny_core_*` call does real work (SQLite I/O, and
+  for sync/queue, real network I/O), so none of it may run on Flutter's main isolate without
+  blocking UI frames. `lib/src/bunny_core_isolate.dart` routes every operation through one
+  isolate, spawned once and kept alive for the app's lifetime via a `SendPort`/`ReceivePort`
+  request/response protocol (mirroring Flutter's own `plugin_ffi` template's long-running-call
+  example). That isolate is the only thing that ever touches the single `bunny_core_t*`
+  handle, so there's never concurrent native access to worry about — the FFI equivalent of
+  M5's `core_mutex` solution to the same underlying problem. `package:ffi`'s `using()` arena
+  handles native memory cleanup (`Utf8` marshalling) automatically per call.
+  `lib/repository/ffi_bunny_repository.dart` implements `BunnyRepository` on top of
+  `BunnyCoreNative`, mapping its `Map<String, Object?>` results to the M6.1 model classes and
+  translating `BunnyCoreNativeException` into `BunnyRepositoryException`.
+- **Testing.** Both `bunny_core_ffi/test/` and `app/test/repository/ffi_bunny_repository_test.dart`
+  run against the real compiled shared library (`:memory:`-backed) rather than a mock —
+  `flutter test` doesn't build a plugin's native code for the host automatically the way
+  `flutter build`/`run` does, so the library must be built once first (either via a real
+  `flutter build linux`, or a standalone `cmake -S bunny_core_ffi/src -B <dir> && cmake
+  --build <dir>`) with its directory on `LD_LIBRARY_PATH` when running the tests.
+- **Known gap:** Android's NDK ships no prebuilt OpenSSL, so `fvm flutter build apk` fails at
+  the CMake configure step (`find_package(OpenSSL REQUIRED)` in the reused top-level
+  `CMakeLists.txt`) — confirmed by direct reproduction of the Gradle/CMake invocation. Same
+  class of problem as the Windows cross-compilation gap above, deferred to the same milestone
+  (M12) for the same reason (needs a prebuilt/self-built OpenSSL for the target, or a
+  different curl TLS backend). Linux desktop, this environment's only build-verifiable
+  desktop target, builds and runs correctly.
+
 ## Inkbunny API constraints (found in M2)
 
 Verified against the live API and the official docs while building `libinkbunny`:

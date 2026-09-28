@@ -107,7 +107,13 @@ foreach(bundled_library ${PLUGIN_BUNDLED_LIBRARIES})
 endforeach(bundled_library)
 
 # Copy the native assets provided by the build.dart from all packages.
+# NOTE (little-bunny): this project has no native-assets/build-hook packages
+# (bunny_core_ffi uses the older plugin_ffi CMake mechanism instead), so
+# nothing ever creates this directory -- install(DIRECTORY) below fails on a
+# missing source dir, so make sure it exists first (installing it empty is
+# harmless).
 set(NATIVE_ASSETS_DIR "${PROJECT_BUILD_DIR}native_assets/linux/")
+file(MAKE_DIRECTORY "${NATIVE_ASSETS_DIR}")
 install(DIRECTORY "${NATIVE_ASSETS_DIR}"
    DESTINATION "${INSTALL_BUNDLE_LIB_DIR}"
    COMPONENT Runtime)
