@@ -41,14 +41,14 @@ site libraries never depend back on the core.
 
 Verified against the live API and the official docs while building `libinkbunny`:
 
-- **No favorite/comment write actions.** Inkbunny's API can tell you a submission's
-  `favorite`/`favorites_count`/`comments_count`, and can list an *existing* favorites list
-  via `favs_user_id`, but there is no endpoint to add/remove a favorite or to post/list
-  comment content. A mature third-party C# wrapper (Athari/InkBunny.Api) doesn't implement
-  either, confirming this isn't just a documentation gap. Decided with the user to only
-  ever use the official API (not reverse-engineer the website's internal AJAX calls), so
-  `libinkbunny` simply doesn't expose those actions. This means the "mass favorite" /
-  "comment on posts" features (M9) only work for e621.
+- **No favorite/comment write actions in the official API.** Inkbunny's API can tell you a
+  submission's `favorite`/`favorites_count`/`comments_count`, and can list an *existing*
+  favorites list via `favs_user_id`, but there is no endpoint to add/remove a favorite or
+  to post/list comment content. A mature third-party C# wrapper (Athari/InkBunny.Api)
+  doesn't implement either, confirming this isn't just a documentation gap. Favoriting was
+  later added anyway via an unofficial, HTML-scraping-based route — see "Unofficial
+  favorite flow" below — but **commenting still has no path at all**, official or
+  otherwise, so the "comment on posts" feature (M9) only works for e621.
 - **Every numeric and boolean field is JSON-encoded as a string**, e.g. `"submission_id":
   "12345"`, `"favorite": "f"`. `libinkbunny` parses these leniently (falls back to a real
   JSON number/bool if that ever changes) via `inkbunny_field_int64()`/`inkbunny_field_bool_tf()`
@@ -57,6 +57,39 @@ Verified against the live API and the official docs while building `libinkbunny`
   (e.g. bad login, invalid/expired session id) rather than a non-2xx status. HTTP status is
   only meaningful for transport-level failures (5xx, etc.). "Not found" is signaled by an
   empty result array, not an error.
+
+### Unofficial favorite flow (promoted into libinkbunny)
+
+`inkbunny/unofficial_favorites.h` (`inkbunny_website_login`, `inkbunny_favorite_add`,
+`inkbunny_favorite_remove`) reverse-engineers the website's own favorite/unfavorite flow,
+since the documented API has no equivalent (see "Inkbunny API constraints" above).
+Confirmed working live against a real account and submission on 2026-09-28 by inspecting
+the network calls the site's own `js82/fav.rev01.js` makes, then re-verified after being
+folded into the library. It logs in via `login.php` → `login_process.php` (a cookie-based
+website session, entirely separate from `inkbunny_login()`'s API `sid`), scrapes a
+page-embedded CSRF token (`global_token`), and POSTs to `submissionfav_process.php` with
+`token`/`stars`/`add`/`remove`/`submission_id`.
+
+This was a deliberate, explicit reversal of the "official API only" decision from M2,
+made after the user asked to test the website flow directly and confirmed it worked
+end-to-end (add and remove) against their own account. Unlike the rest of this library,
+these functions:
+- depend on exact HTML markup Inkbunny could change at any time — already proven fragile
+  once: the site mixes single- and double-quoted HTML attributes across its own pages
+  (`login.php`'s CSRF token is double-quoted, the submission page's `global_token` is
+  single-quoted), which broke the first extraction attempt until the parser was made
+  quote-agnostic;
+- always make real network calls via a client-owned persistent `CURL*`
+  (`inkbunny_client_t.website_curl` in `libs/inkbunny/src/internal.h`) so their cookie jar
+  survives across the login → scrape → POST sequence — there's no injectable-transport
+  fixture-based unit test for them, only manual/live verification;
+- need their own login (`inkbunny_website_login`) in addition to `inkbunny_login()` if the
+  same client is also doing search/get_submission calls, since the two auth mechanisms
+  are unrelated.
+
+`tools/inkbunny_favorite_experiment` (built only with `-DBUNNY_BUILD_TOOLS=ON` / `make
+tools`) is now a thin CLI over these three functions, kept around for manual testing
+against a real account.
 
 ## Dependency management
 
