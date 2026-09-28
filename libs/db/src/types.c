@@ -3,7 +3,8 @@
 #include <stdlib.h>
 #include <string.h>
 
-const char *bunny_db_site_to_string(bunny_db_site_t site) {
+const char *bunny_db_site_to_string(bunny_db_site_t site)
+{
     switch (site) {
         case BUNNY_DB_SITE_E621:
             return "e621";
@@ -14,7 +15,8 @@ const char *bunny_db_site_to_string(bunny_db_site_t site) {
     }
 }
 
-void bunny_db_search_free(bunny_db_search_t *search) {
+void bunny_db_search_free(bunny_db_search_t *search)
+{
     if (!search) {
         return;
     }
@@ -25,7 +27,8 @@ void bunny_db_search_free(bunny_db_search_t *search) {
     memset(search, 0, sizeof(*search));
 }
 
-void bunny_db_search_list_free(bunny_db_search_list_t *list) {
+void bunny_db_search_list_free(bunny_db_search_list_t *list)
+{
     if (!list) {
         return;
     }
@@ -37,7 +40,8 @@ void bunny_db_search_list_free(bunny_db_search_list_t *list) {
     list->count = 0;
 }
 
-void bunny_db_post_free(bunny_db_post_t *post) {
+void bunny_db_post_free(bunny_db_post_t *post)
+{
     if (!post) {
         return;
     }
@@ -54,7 +58,8 @@ void bunny_db_post_free(bunny_db_post_t *post) {
     memset(post, 0, sizeof(*post));
 }
 
-void bunny_db_post_list_free(bunny_db_post_list_t *list) {
+void bunny_db_post_list_free(bunny_db_post_list_t *list)
+{
     if (!list) {
         return;
     }
@@ -66,7 +71,8 @@ void bunny_db_post_list_free(bunny_db_post_list_t *list) {
     list->count = 0;
 }
 
-void bunny_db_tag_stat_free(bunny_db_tag_stat_t *stat) {
+void bunny_db_tag_stat_free(bunny_db_tag_stat_t *stat)
+{
     if (!stat) {
         return;
     }
@@ -74,7 +80,8 @@ void bunny_db_tag_stat_free(bunny_db_tag_stat_t *stat) {
     memset(stat, 0, sizeof(*stat));
 }
 
-void bunny_db_tag_stat_list_free(bunny_db_tag_stat_list_t *list) {
+void bunny_db_tag_stat_list_free(bunny_db_tag_stat_list_t *list)
+{
     if (!list) {
         return;
     }
@@ -86,7 +93,8 @@ void bunny_db_tag_stat_list_free(bunny_db_tag_stat_list_t *list) {
     list->count = 0;
 }
 
-void bunny_db_download_free(bunny_db_download_t *download) {
+void bunny_db_download_free(bunny_db_download_t *download)
+{
     if (!download) {
         return;
     }
@@ -96,7 +104,8 @@ void bunny_db_download_free(bunny_db_download_t *download) {
     memset(download, 0, sizeof(*download));
 }
 
-void bunny_db_download_list_free(bunny_db_download_list_t *list) {
+void bunny_db_download_list_free(bunny_db_download_list_t *list)
+{
     if (!list) {
         return;
     }

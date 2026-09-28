@@ -5,7 +5,8 @@
 #include "internal.h"
 #include "schema.h"
 
-bunny_db_result_t bunny_db_open(const char *path, bunny_db_t **out_db) {
+bunny_db_result_t bunny_db_open(const char *path, bunny_db_t **out_db)
+{
     if (!path || !out_db) {
         return BUNNY_DB_ERR_INVALID_ARG;
     }
@@ -36,7 +37,8 @@ bunny_db_result_t bunny_db_open(const char *path, bunny_db_t **out_db) {
     return BUNNY_DB_OK;
 }
 
-void bunny_db_close(bunny_db_t *db) {
+void bunny_db_close(bunny_db_t *db)
+{
     if (!db) {
         return;
     }

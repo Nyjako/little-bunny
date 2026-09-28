@@ -5,11 +5,13 @@
 
 #include "internal.h"
 
-static char *dup_or_null(const char *s) {
+static char *dup_or_null(const char *s)
+{
     return s ? strdup(s) : NULL;
 }
 
-static void parse_file(const cJSON *file_obj, inkbunny_file_t *out) {
+static void parse_file(const cJSON *file_obj, inkbunny_file_t *out)
+{
     memset(out, 0, sizeof(*out));
     if (!file_obj) {
         return;
@@ -26,7 +28,8 @@ static void parse_file(const cJSON *file_obj, inkbunny_file_t *out) {
     out->order = inkbunny_field_int(file_obj, "submission_file_order", 0);
 }
 
-static inkbunny_result_t parse_file_array(const cJSON *array, inkbunny_file_list_t *out) {
+static inkbunny_result_t parse_file_array(const cJSON *array, inkbunny_file_list_t *out)
+{
     out->items = NULL;
     out->count = 0;
     if (!array) {
@@ -48,7 +51,8 @@ static inkbunny_result_t parse_file_array(const cJSON *array, inkbunny_file_list
 
     size_t i = 0;
     const cJSON *item;
-    cJSON_ArrayForEach(item, array) {
+    cJSON_ArrayForEach(item, array)
+    {
         parse_file(item, &items[i]);
         i++;
     }
@@ -58,7 +62,8 @@ static inkbunny_result_t parse_file_array(const cJSON *array, inkbunny_file_list
     return INKBUNNY_OK;
 }
 
-static void parse_keyword(const cJSON *obj, inkbunny_keyword_t *out) {
+static void parse_keyword(const cJSON *obj, inkbunny_keyword_t *out)
+{
     memset(out, 0, sizeof(*out));
     if (!obj) {
         return;
@@ -69,7 +74,8 @@ static void parse_keyword(const cJSON *obj, inkbunny_keyword_t *out) {
     out->submissions_count = inkbunny_field_int(obj, "submissions_count", 0);
 }
 
-static inkbunny_result_t parse_keyword_array(const cJSON *array, inkbunny_keyword_list_t *out) {
+static inkbunny_result_t parse_keyword_array(const cJSON *array, inkbunny_keyword_list_t *out)
+{
     out->items = NULL;
     out->count = 0;
     if (!array) {
@@ -91,7 +97,8 @@ static inkbunny_result_t parse_keyword_array(const cJSON *array, inkbunny_keywor
 
     size_t i = 0;
     const cJSON *item;
-    cJSON_ArrayForEach(item, array) {
+    cJSON_ArrayForEach(item, array)
+    {
         parse_keyword(item, &items[i]);
         i++;
     }
@@ -101,7 +108,8 @@ static inkbunny_result_t parse_keyword_array(const cJSON *array, inkbunny_keywor
     return INKBUNNY_OK;
 }
 
-static void parse_content_rating(const cJSON *obj, inkbunny_content_rating_t *out) {
+static void parse_content_rating(const cJSON *obj, inkbunny_content_rating_t *out)
+{
     memset(out, 0, sizeof(*out));
     if (!obj) {
         return;
@@ -112,7 +120,8 @@ static void parse_content_rating(const cJSON *obj, inkbunny_content_rating_t *ou
     out->rating_id = inkbunny_field_int(obj, "rating_id", 0);
 }
 
-static inkbunny_result_t parse_content_rating_array(const cJSON *array, inkbunny_content_rating_list_t *out) {
+static inkbunny_result_t parse_content_rating_array(const cJSON *array, inkbunny_content_rating_list_t *out)
+{
     out->items = NULL;
     out->count = 0;
     if (!array) {
@@ -134,7 +143,8 @@ static inkbunny_result_t parse_content_rating_array(const cJSON *array, inkbunny
 
     size_t i = 0;
     const cJSON *item;
-    cJSON_ArrayForEach(item, array) {
+    cJSON_ArrayForEach(item, array)
+    {
         parse_content_rating(item, &items[i]);
         i++;
     }
@@ -144,7 +154,8 @@ static inkbunny_result_t parse_content_rating_array(const cJSON *array, inkbunny
     return INKBUNNY_OK;
 }
 
-static void parse_pool(const cJSON *obj, inkbunny_pool_t *out) {
+static void parse_pool(const cJSON *obj, inkbunny_pool_t *out)
+{
     memset(out, 0, sizeof(*out));
     if (!obj) {
         return;
@@ -157,7 +168,8 @@ static void parse_pool(const cJSON *obj, inkbunny_pool_t *out) {
     out->right_submission_id = inkbunny_field_int64(obj, "submission_right_submission_id", 0);
 }
 
-static inkbunny_result_t parse_pool_array(const cJSON *array, inkbunny_pool_list_t *out) {
+static inkbunny_result_t parse_pool_array(const cJSON *array, inkbunny_pool_list_t *out)
+{
     out->items = NULL;
     out->count = 0;
     if (!array) {
@@ -179,7 +191,8 @@ static inkbunny_result_t parse_pool_array(const cJSON *array, inkbunny_pool_list
 
     size_t i = 0;
     const cJSON *item;
-    cJSON_ArrayForEach(item, array) {
+    cJSON_ArrayForEach(item, array)
+    {
         parse_pool(item, &items[i]);
         i++;
     }
@@ -189,7 +202,8 @@ static inkbunny_result_t parse_pool_array(const cJSON *array, inkbunny_pool_list
     return INKBUNNY_OK;
 }
 
-inkbunny_result_t inkbunny_parse_submission(const cJSON *json, inkbunny_submission_t *out) {
+inkbunny_result_t inkbunny_parse_submission(const cJSON *json, inkbunny_submission_t *out)
+{
     if (!json || !out) {
         return INKBUNNY_ERR_INVALID_ARG;
     }
@@ -225,7 +239,8 @@ inkbunny_result_t inkbunny_parse_submission(const cJSON *json, inkbunny_submissi
     return INKBUNNY_OK;
 }
 
-inkbunny_result_t inkbunny_parse_submission_array(const cJSON *json_array, inkbunny_submission_list_t *out) {
+inkbunny_result_t inkbunny_parse_submission_array(const cJSON *json_array, inkbunny_submission_list_t *out)
+{
     if (!json_array || !out) {
         return INKBUNNY_ERR_INVALID_ARG;
     }
@@ -246,7 +261,8 @@ inkbunny_result_t inkbunny_parse_submission_array(const cJSON *json_array, inkbu
 
     size_t i = 0;
     const cJSON *item;
-    cJSON_ArrayForEach(item, json_array) {
+    cJSON_ArrayForEach(item, json_array)
+    {
         inkbunny_result_t result = inkbunny_parse_submission(item, &items[i]);
         if (result != INKBUNNY_OK) {
             for (size_t j = 0; j < i; j++) {
@@ -263,7 +279,8 @@ inkbunny_result_t inkbunny_parse_submission_array(const cJSON *json_array, inkbu
     return INKBUNNY_OK;
 }
 
-void inkbunny_file_free(inkbunny_file_t *file) {
+void inkbunny_file_free(inkbunny_file_t *file)
+{
     if (!file) {
         return;
     }
@@ -276,7 +293,8 @@ void inkbunny_file_free(inkbunny_file_t *file) {
     memset(file, 0, sizeof(*file));
 }
 
-void inkbunny_file_list_free(inkbunny_file_list_t *list) {
+void inkbunny_file_list_free(inkbunny_file_list_t *list)
+{
     if (!list) {
         return;
     }
@@ -288,7 +306,8 @@ void inkbunny_file_list_free(inkbunny_file_list_t *list) {
     list->count = 0;
 }
 
-void inkbunny_keyword_free(inkbunny_keyword_t *keyword) {
+void inkbunny_keyword_free(inkbunny_keyword_t *keyword)
+{
     if (!keyword) {
         return;
     }
@@ -296,7 +315,8 @@ void inkbunny_keyword_free(inkbunny_keyword_t *keyword) {
     memset(keyword, 0, sizeof(*keyword));
 }
 
-void inkbunny_keyword_list_free(inkbunny_keyword_list_t *list) {
+void inkbunny_keyword_list_free(inkbunny_keyword_list_t *list)
+{
     if (!list) {
         return;
     }
@@ -308,7 +328,8 @@ void inkbunny_keyword_list_free(inkbunny_keyword_list_t *list) {
     list->count = 0;
 }
 
-void inkbunny_content_rating_free(inkbunny_content_rating_t *rating) {
+void inkbunny_content_rating_free(inkbunny_content_rating_t *rating)
+{
     if (!rating) {
         return;
     }
@@ -317,7 +338,8 @@ void inkbunny_content_rating_free(inkbunny_content_rating_t *rating) {
     memset(rating, 0, sizeof(*rating));
 }
 
-void inkbunny_content_rating_list_free(inkbunny_content_rating_list_t *list) {
+void inkbunny_content_rating_list_free(inkbunny_content_rating_list_t *list)
+{
     if (!list) {
         return;
     }
@@ -329,7 +351,8 @@ void inkbunny_content_rating_list_free(inkbunny_content_rating_list_t *list) {
     list->count = 0;
 }
 
-void inkbunny_pool_free(inkbunny_pool_t *pool) {
+void inkbunny_pool_free(inkbunny_pool_t *pool)
+{
     if (!pool) {
         return;
     }
@@ -338,7 +361,8 @@ void inkbunny_pool_free(inkbunny_pool_t *pool) {
     memset(pool, 0, sizeof(*pool));
 }
 
-void inkbunny_pool_list_free(inkbunny_pool_list_t *list) {
+void inkbunny_pool_list_free(inkbunny_pool_list_t *list)
+{
     if (!list) {
         return;
     }
@@ -350,7 +374,8 @@ void inkbunny_pool_list_free(inkbunny_pool_list_t *list) {
     list->count = 0;
 }
 
-void inkbunny_submission_free(inkbunny_submission_t *submission) {
+void inkbunny_submission_free(inkbunny_submission_t *submission)
+{
     if (!submission) {
         return;
     }
@@ -368,7 +393,8 @@ void inkbunny_submission_free(inkbunny_submission_t *submission) {
     memset(submission, 0, sizeof(*submission));
 }
 
-void inkbunny_submission_list_free(inkbunny_submission_list_t *list) {
+void inkbunny_submission_list_free(inkbunny_submission_list_t *list)
+{
     if (!list) {
         return;
     }

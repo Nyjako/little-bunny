@@ -5,13 +5,12 @@
 
 #include "internal.h"
 
-bunny_db_result_t bunny_db_download_record(bunny_db_t *db, int64_t post_id, const char *file_path,
-                                            const char *checksum_md5, bool verified, int64_t *out_id) {
+bunny_db_result_t bunny_db_download_record(bunny_db_t *db, int64_t post_id, const char *file_path, const char *checksum_md5, bool verified, int64_t *out_id)
+{
     if (!db || !file_path) {
         return BUNNY_DB_ERR_INVALID_ARG;
     }
-    const char *sql =
-        "INSERT INTO downloads (post_id, file_path, checksum_md5, checksum_verified) VALUES (?, ?, ?, ?);";
+    const char *sql = "INSERT INTO downloads (post_id, file_path, checksum_md5, checksum_verified) VALUES (?, ?, ?, ?);";
     sqlite3_stmt *stmt = NULL;
     if (sqlite3_prepare_v2(db->handle, sql, -1, &stmt, NULL) != SQLITE_OK) {
         return BUNNY_DB_ERR_QUERY_FAILED;
@@ -32,7 +31,8 @@ bunny_db_result_t bunny_db_download_record(bunny_db_t *db, int64_t post_id, cons
     return BUNNY_DB_OK;
 }
 
-static void fill_download_from_row(sqlite3_stmt *stmt, bunny_db_download_t *out) {
+static void fill_download_from_row(sqlite3_stmt *stmt, bunny_db_download_t *out)
+{
     out->id = sqlite3_column_int64(stmt, 0);
     out->post_id = sqlite3_column_int64(stmt, 1);
     out->file_path = bunny_db_column_text_dup(stmt, 2);
@@ -41,15 +41,15 @@ static void fill_download_from_row(sqlite3_stmt *stmt, bunny_db_download_t *out)
     out->downloaded_at = bunny_db_column_text_dup(stmt, 5);
 }
 
-bunny_db_result_t bunny_db_download_list_for_post(bunny_db_t *db, int64_t post_id,
-                                                   bunny_db_download_list_t *out_list) {
+bunny_db_result_t bunny_db_download_list_for_post(bunny_db_t *db, int64_t post_id, bunny_db_download_list_t *out_list)
+{
     if (!db || !out_list) {
         return BUNNY_DB_ERR_INVALID_ARG;
     }
     memset(out_list, 0, sizeof(*out_list));
 
     const char *sql = "SELECT id, post_id, file_path, checksum_md5, checksum_verified, downloaded_at "
-                       "FROM downloads WHERE post_id = ? ORDER BY downloaded_at DESC;";
+                      "FROM downloads WHERE post_id = ? ORDER BY downloaded_at DESC;";
     sqlite3_stmt *stmt = NULL;
     if (sqlite3_prepare_v2(db->handle, sql, -1, &stmt, NULL) != SQLITE_OK) {
         return BUNNY_DB_ERR_QUERY_FAILED;

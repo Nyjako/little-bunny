@@ -5,12 +5,13 @@
 
 #include "internal.h"
 
-bunny_db_result_t bunny_db_favorite_add(bunny_db_t *db, int64_t post_id, int stars) {
+bunny_db_result_t bunny_db_favorite_add(bunny_db_t *db, int64_t post_id, int stars)
+{
     if (!db) {
         return BUNNY_DB_ERR_INVALID_ARG;
     }
     const char *sql = "INSERT INTO favorites (post_id, stars) VALUES (?, ?) "
-                       "ON CONFLICT(post_id) DO UPDATE SET stars = excluded.stars;";
+                      "ON CONFLICT(post_id) DO UPDATE SET stars = excluded.stars;";
     sqlite3_stmt *stmt = NULL;
     if (sqlite3_prepare_v2(db->handle, sql, -1, &stmt, NULL) != SQLITE_OK) {
         return BUNNY_DB_ERR_QUERY_FAILED;
@@ -26,7 +27,8 @@ bunny_db_result_t bunny_db_favorite_add(bunny_db_t *db, int64_t post_id, int sta
     return rc == SQLITE_DONE ? BUNNY_DB_OK : bunny_db_sqlite_rc_to_result(rc);
 }
 
-bunny_db_result_t bunny_db_favorite_remove(bunny_db_t *db, int64_t post_id) {
+bunny_db_result_t bunny_db_favorite_remove(bunny_db_t *db, int64_t post_id)
+{
     if (!db) {
         return BUNNY_DB_ERR_INVALID_ARG;
     }
@@ -41,15 +43,15 @@ bunny_db_result_t bunny_db_favorite_remove(bunny_db_t *db, int64_t post_id) {
     return rc == SQLITE_DONE ? BUNNY_DB_OK : bunny_db_sqlite_rc_to_result(rc);
 }
 
-bunny_db_result_t bunny_db_favorite_list(bunny_db_t *db, bunny_db_post_list_t *out_list) {
+bunny_db_result_t bunny_db_favorite_list(bunny_db_t *db, bunny_db_post_list_t *out_list)
+{
     if (!db || !out_list) {
         return BUNNY_DB_ERR_INVALID_ARG;
     }
     memset(out_list, 0, sizeof(*out_list));
 
-    const char *sql = "SELECT " BUNNY_DB_POST_SELECT_COLUMNS BUNNY_DB_POST_SELECT_FROM_JOIN
-                       "WHERE fav.post_id IS NOT NULL "
-                       "ORDER BY fav.favorited_at DESC;";
+    const char *sql = "SELECT " BUNNY_DB_POST_SELECT_COLUMNS BUNNY_DB_POST_SELECT_FROM_JOIN "WHERE fav.post_id IS NOT NULL "
+                      "ORDER BY fav.favorited_at DESC;";
     sqlite3_stmt *stmt = NULL;
     if (sqlite3_prepare_v2(db->handle, sql, -1, &stmt, NULL) != SQLITE_OK) {
         return BUNNY_DB_ERR_QUERY_FAILED;

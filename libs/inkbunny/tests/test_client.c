@@ -6,7 +6,8 @@
 
 #include "inkbunny/client.h"
 
-typedef struct {
+typedef struct
+{
     long response_status;
     char *response_body; /* not owned; caller manages lifecycle */
     size_t response_body_len;
@@ -19,8 +20,8 @@ typedef struct {
 static fake_transport_state_t g_state;
 static bunny_http_transport_t g_transport;
 
-static bunny_http_result_t fake_send(void *user_data, const bunny_http_request_t *request,
-                                      bunny_http_response_t *out_response) {
+static bunny_http_result_t fake_send(void *user_data, const bunny_http_request_t *request, bunny_http_response_t *out_response)
+{
     fake_transport_state_t *state = (fake_transport_state_t *)user_data;
 
     state->last_method = request->method;
@@ -42,7 +43,8 @@ static bunny_http_result_t fake_send(void *user_data, const bunny_http_request_t
     return BUNNY_HTTP_OK;
 }
 
-static char *read_fixture(const char *filename) {
+static char *read_fixture(const char *filename)
+{
     char path[512];
     snprintf(path, sizeof(path), "%s/%s", FIXTURES_DIR, filename);
 
@@ -69,7 +71,8 @@ static char *read_fixture(const char *filename) {
     return buf;
 }
 
-static inkbunny_client_t *make_test_client(void) {
+static inkbunny_client_t *make_test_client(void)
+{
     inkbunny_config_t config;
     memset(&config, 0, sizeof(config));
     /* 0 means "use the built-in ~0.5s default" (see inkbunny_config_t), which
@@ -82,7 +85,8 @@ static inkbunny_client_t *make_test_client(void) {
 
 /* Logs the test client in against the fixture-backed fake transport, then
  * resets the fake state's response fields so the next call can set its own. */
-static void login_test_client(inkbunny_client_t *client, char **out_fixture_to_free) {
+static void login_test_client(inkbunny_client_t *client, char **out_fixture_to_free)
+{
     char *fixture = read_fixture("login_success.json");
     TEST_ASSERT_NOT_NULL(fixture);
     g_state.response_status = 200;
@@ -95,16 +99,19 @@ static void login_test_client(inkbunny_client_t *client, char **out_fixture_to_f
     *out_fixture_to_free = fixture;
 }
 
-void setUp(void) {
+void setUp(void)
+{
     memset(&g_state, 0, sizeof(g_state));
     g_state.forced_result = BUNNY_HTTP_OK;
     g_transport.send = fake_send;
     g_transport.user_data = &g_state;
 }
 
-void tearDown(void) {}
+void tearDown(void)
+{}
 
-void test_login_success(void) {
+void test_login_success(void)
+{
     inkbunny_client_t *client = make_test_client();
     TEST_ASSERT_NOT_NULL(client);
 
@@ -118,7 +125,8 @@ void test_login_success(void) {
     inkbunny_client_destroy(client);
 }
 
-void test_login_failure(void) {
+void test_login_failure(void)
+{
     inkbunny_client_t *client = make_test_client();
     char *fixture = read_fixture("login_failure.json");
     TEST_ASSERT_NOT_NULL(fixture);
@@ -134,7 +142,8 @@ void test_login_failure(void) {
     inkbunny_client_destroy(client);
 }
 
-void test_search_requires_login(void) {
+void test_search_requires_login(void)
+{
     inkbunny_client_t *client = make_test_client();
 
     inkbunny_submission_list_t list;
@@ -145,7 +154,8 @@ void test_search_requires_login(void) {
     inkbunny_client_destroy(client);
 }
 
-void test_search_success(void) {
+void test_search_success(void)
+{
     inkbunny_client_t *client = make_test_client();
     char *login_fixture = NULL;
     login_test_client(client, &login_fixture);
@@ -175,7 +185,8 @@ void test_search_success(void) {
     inkbunny_client_destroy(client);
 }
 
-void test_get_submission_success(void) {
+void test_get_submission_success(void)
+{
     inkbunny_client_t *client = make_test_client();
     char *login_fixture = NULL;
     login_test_client(client, &login_fixture);
@@ -201,7 +212,8 @@ void test_get_submission_success(void) {
     inkbunny_client_destroy(client);
 }
 
-void test_get_submission_not_found(void) {
+void test_get_submission_not_found(void)
+{
     inkbunny_client_t *client = make_test_client();
     char *login_fixture = NULL;
     login_test_client(client, &login_fixture);
@@ -221,7 +233,8 @@ void test_get_submission_not_found(void) {
     inkbunny_client_destroy(client);
 }
 
-void test_get_submissions_too_many_ids(void) {
+void test_get_submissions_too_many_ids(void)
+{
     inkbunny_client_t *client = make_test_client();
     char *login_fixture = NULL;
     login_test_client(client, &login_fixture);
@@ -240,7 +253,8 @@ void test_get_submissions_too_many_ids(void) {
     inkbunny_client_destroy(client);
 }
 
-void test_search_network_error(void) {
+void test_search_network_error(void)
+{
     inkbunny_client_t *client = make_test_client();
     char *login_fixture = NULL;
     login_test_client(client, &login_fixture);
@@ -256,7 +270,8 @@ void test_search_network_error(void) {
     inkbunny_client_destroy(client);
 }
 
-void test_search_server_error(void) {
+void test_search_server_error(void)
+{
     inkbunny_client_t *client = make_test_client();
     char *login_fixture = NULL;
     login_test_client(client, &login_fixture);
@@ -273,7 +288,8 @@ void test_search_server_error(void) {
     inkbunny_client_destroy(client);
 }
 
-void test_search_malformed_json(void) {
+void test_search_malformed_json(void)
+{
     inkbunny_client_t *client = make_test_client();
     char *login_fixture = NULL;
     login_test_client(client, &login_fixture);
@@ -293,7 +309,8 @@ void test_search_malformed_json(void) {
     inkbunny_client_destroy(client);
 }
 
-void test_logout_clears_session(void) {
+void test_logout_clears_session(void)
+{
     inkbunny_client_t *client = make_test_client();
     char *login_fixture = NULL;
     login_test_client(client, &login_fixture);
@@ -316,7 +333,8 @@ void test_logout_clears_session(void) {
     inkbunny_client_destroy(client);
 }
 
-int main(void) {
+int main(void)
+{
     UNITY_BEGIN();
     RUN_TEST(test_login_success);
     RUN_TEST(test_login_failure);

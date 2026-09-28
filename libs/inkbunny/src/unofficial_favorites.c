@@ -10,12 +10,14 @@
 
 #include "internal.h"
 
-typedef struct {
+typedef struct
+{
     char *data;
     size_t len;
 } buffer_t;
 
-static size_t write_cb(char *ptr, size_t size, size_t nmemb, void *userdata) {
+static size_t write_cb(char *ptr, size_t size, size_t nmemb, void *userdata)
+{
     buffer_t *buf = (buffer_t *)userdata;
     size_t add = size * nmemb;
     char *new_data = realloc(buf->data, buf->len + add + 1);
@@ -29,7 +31,8 @@ static size_t write_cb(char *ptr, size_t size, size_t nmemb, void *userdata) {
     return add;
 }
 
-static void buffer_free(buffer_t *buf) {
+static void buffer_free(buffer_t *buf)
+{
     free(buf->data);
     buf->data = NULL;
     buf->len = 0;
@@ -42,7 +45,8 @@ static void buffer_free(buffer_t *buf) {
  * live - login.php's CSRF token is double-quoted, the submission page's
  * global_token input is single-quoted), so this matches whichever quote
  * character actually follows "value=". Returns NULL if not found. */
-static char *extract_input_value(const char *html, const char *anchor) {
+static char *extract_input_value(const char *html, const char *anchor)
+{
     const char *match = strstr(html, anchor);
     if (!match) {
         return NULL;
@@ -91,7 +95,8 @@ static char *extract_input_value(const char *html, const char *anchor) {
     return result;
 }
 
-static bool http_get(CURL *curl, const char *url, buffer_t *out) {
+static bool http_get(CURL *curl, const char *url, buffer_t *out)
+{
     memset(out, 0, sizeof(*out));
     curl_easy_setopt(curl, CURLOPT_URL, url);
     curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
@@ -101,8 +106,8 @@ static bool http_get(CURL *curl, const char *url, buffer_t *out) {
     return curl_easy_perform(curl) == CURLE_OK;
 }
 
-static bool http_post_form(CURL *curl, const char *url, const char *body, bool want_json_header,
-                            buffer_t *out) {
+static bool http_post_form(CURL *curl, const char *url, const char *body, bool want_json_header, buffer_t *out)
+{
     memset(out, 0, sizeof(*out));
     curl_easy_setopt(curl, CURLOPT_URL, url);
     curl_easy_setopt(curl, CURLOPT_POST, 1L);
@@ -122,7 +127,8 @@ static bool http_post_form(CURL *curl, const char *url, const char *body, bool w
     return res == CURLE_OK;
 }
 
-static CURL *ensure_website_curl(inkbunny_client_t *client) {
+static CURL *ensure_website_curl(inkbunny_client_t *client)
+{
     if (!client->website_curl) {
         client->website_curl = curl_easy_init();
         if (client->website_curl) {
@@ -135,7 +141,8 @@ static CURL *ensure_website_curl(inkbunny_client_t *client) {
     return client->website_curl;
 }
 
-inkbunny_result_t inkbunny_website_login(inkbunny_client_t *client, const char *username, const char *password) {
+inkbunny_result_t inkbunny_website_login(inkbunny_client_t *client, const char *username, const char *password)
+{
     if (!client || !username || !password) {
         return INKBUNNY_ERR_INVALID_ARG;
     }
@@ -173,15 +180,13 @@ inkbunny_result_t inkbunny_website_login(inkbunny_client_t *client, const char *
     }
 
     {
-        size_t needed = strlen("token=&username=&password=") + strlen(encoded_login_token) +
-                         strlen(encoded_user) + strlen(encoded_pass) + 1;
+        size_t needed = strlen("token=&username=&password=") + strlen(encoded_login_token) + strlen(encoded_user) + strlen(encoded_pass) + 1;
         login_body = malloc(needed);
         if (!login_body) {
             result = INKBUNNY_ERR_UNKNOWN;
             goto cleanup;
         }
-        snprintf(login_body, needed, "token=%s&username=%s&password=%s", encoded_login_token, encoded_user,
-                 encoded_pass);
+        snprintf(login_body, needed, "token=%s&username=%s&password=%s", encoded_login_token, encoded_user, encoded_pass);
     }
 
     if (!http_post_form(curl, "https://inkbunny.net/login_process.php", login_body, false, &page)) {
@@ -210,8 +215,8 @@ cleanup:
     return result;
 }
 
-static inkbunny_result_t favorite_process(inkbunny_client_t *client, int64_t submission_id, bool is_add,
-                                           int stars) {
+static inkbunny_result_t favorite_process(inkbunny_client_t *client, int64_t submission_id, bool is_add, int stars)
+{
     if (!client) {
         return INKBUNNY_ERR_INVALID_ARG;
     }
@@ -249,15 +254,13 @@ static inkbunny_result_t favorite_process(inkbunny_client_t *client, int64_t sub
     {
         char stars_str[4];
         snprintf(stars_str, sizeof(stars_str), "%d", is_add ? stars : 0);
-        size_t needed = strlen("token=&stars=&add=false&remove=false&submission_id=") +
-                         strlen(encoded_global_token) + strlen(stars_str) + 32;
+        size_t needed = strlen("token=&stars=&add=false&remove=false&submission_id=") + strlen(encoded_global_token) + strlen(stars_str) + 32;
         fav_body = malloc(needed);
         if (!fav_body) {
             result = INKBUNNY_ERR_UNKNOWN;
             goto cleanup;
         }
-        snprintf(fav_body, needed, "token=%s&stars=%s&add=%s&remove=%s&submission_id=%lld", encoded_global_token,
-                 stars_str, is_add ? "true" : "false", is_add ? "false" : "true", (long long)submission_id);
+        snprintf(fav_body, needed, "token=%s&stars=%s&add=%s&remove=%s&submission_id=%lld", encoded_global_token, stars_str, is_add ? "true" : "false", is_add ? "false" : "true", (long long)submission_id);
     }
 
     if (!http_post_form(curl, "https://inkbunny.net/submissionfav_process.php", fav_body, true, &page)) {
@@ -290,8 +293,7 @@ static inkbunny_result_t favorite_process(inkbunny_client_t *client, int64_t sub
             goto cleanup;
         }
         cJSON *success = cJSON_GetObjectItemCaseSensitive(parsed, "success");
-        result =
-            (cJSON_IsString(success) && strcmp(success->valuestring, "yes") == 0) ? INKBUNNY_OK : INKBUNNY_ERR_UNKNOWN;
+        result = (cJSON_IsString(success) && strcmp(success->valuestring, "yes") == 0) ? INKBUNNY_OK : INKBUNNY_ERR_UNKNOWN;
         cJSON_Delete(parsed);
     }
 
@@ -303,13 +305,15 @@ cleanup:
     return result;
 }
 
-inkbunny_result_t inkbunny_favorite_add(inkbunny_client_t *client, int64_t submission_id, int stars) {
+inkbunny_result_t inkbunny_favorite_add(inkbunny_client_t *client, int64_t submission_id, int stars)
+{
     if (stars != 1 && stars != 2 && stars != 3) {
         return INKBUNNY_ERR_INVALID_ARG;
     }
     return favorite_process(client, submission_id, true, stars);
 }
 
-inkbunny_result_t inkbunny_favorite_remove(inkbunny_client_t *client, int64_t submission_id) {
+inkbunny_result_t inkbunny_favorite_remove(inkbunny_client_t *client, int64_t submission_id)
+{
     return favorite_process(client, submission_id, false, 0);
 }

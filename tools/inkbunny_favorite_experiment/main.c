@@ -20,7 +20,8 @@
 #include <termios.h>
 #include <unistd.h>
 
-static void read_password(char *buf, size_t buf_size) {
+static void read_password(char *buf, size_t buf_size)
+{
     struct termios oldt;
     struct termios newt;
     tcgetattr(STDIN_FILENO, &oldt);
@@ -43,7 +44,8 @@ static void read_password(char *buf, size_t buf_size) {
     printf("\n");
 }
 
-int main(int argc, char **argv) {
+int main(int argc, char **argv)
+{
     if (argc < 4) {
         fprintf(stderr,
                 "usage: %s <username> <submission_id> <add|remove> [stars=1-3]\n"
@@ -94,8 +96,7 @@ int main(int argc, char **argv) {
     }
 
     if (result == INKBUNNY_OK) {
-        printf("Success: submission %lld is now %s\n", (long long)submission_id,
-               is_add ? "favorited" : "un-favorited");
+        printf("Success: submission %lld is now %s\n", (long long)submission_id, is_add ? "favorited" : "un-favorited");
     } else {
         fprintf(stderr, "failed: %s\n", inkbunny_result_to_string(result));
     }

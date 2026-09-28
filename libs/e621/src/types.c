@@ -5,11 +5,13 @@
 
 #include "internal.h"
 
-static char *dup_or_null(const char *s) {
+static char *dup_or_null(const char *s)
+{
     return s ? strdup(s) : NULL;
 }
 
-static e621_result_t parse_string_array(const cJSON *array, e621_string_list_t *out) {
+static e621_result_t parse_string_array(const cJSON *array, e621_string_list_t *out)
+{
     out->items = NULL;
     out->count = 0;
 
@@ -32,7 +34,8 @@ static e621_result_t parse_string_array(const cJSON *array, e621_string_list_t *
 
     size_t i = 0;
     const cJSON *item;
-    cJSON_ArrayForEach(item, array) {
+    cJSON_ArrayForEach(item, array)
+    {
         if (!cJSON_IsString(item) || !item->valuestring) {
             for (size_t j = 0; j < i; j++) {
                 free(items[j]);
@@ -56,7 +59,8 @@ static e621_result_t parse_string_array(const cJSON *array, e621_string_list_t *
     return E621_OK;
 }
 
-static e621_result_t parse_int64_array(const cJSON *array, int64_t **out_items, size_t *out_count) {
+static e621_result_t parse_int64_array(const cJSON *array, int64_t **out_items, size_t *out_count)
+{
     *out_items = NULL;
     *out_count = 0;
 
@@ -76,7 +80,8 @@ static e621_result_t parse_int64_array(const cJSON *array, int64_t **out_items, 
 
     size_t i = 0;
     const cJSON *item;
-    cJSON_ArrayForEach(item, array) {
+    cJSON_ArrayForEach(item, array)
+    {
         if (!cJSON_IsNumber(item)) {
             free(items);
             return E621_ERR_PARSE;
@@ -89,7 +94,8 @@ static e621_result_t parse_int64_array(const cJSON *array, int64_t **out_items, 
     return E621_OK;
 }
 
-static void parse_file(const cJSON *file_obj, e621_file_t *out) {
+static void parse_file(const cJSON *file_obj, e621_file_t *out)
+{
     memset(out, 0, sizeof(*out));
     if (!file_obj) {
         return;
@@ -105,13 +111,15 @@ static void parse_file(const cJSON *file_obj, e621_file_t *out) {
     out->size = size;
 }
 
-static void parse_score(const cJSON *score_obj, e621_score_t *out) {
+static void parse_score(const cJSON *score_obj, e621_score_t *out)
+{
     out->up = bunny_json_get_int_or(score_obj, "up", 0);
     out->down = bunny_json_get_int_or(score_obj, "down", 0);
     out->total = bunny_json_get_int_or(score_obj, "total", 0);
 }
 
-static e621_rating_t parse_rating(const char *rating) {
+static e621_rating_t parse_rating(const char *rating)
+{
     if (!rating) {
         return E621_RATING_UNKNOWN;
     }
@@ -127,7 +135,8 @@ static e621_rating_t parse_rating(const char *rating) {
     return E621_RATING_UNKNOWN;
 }
 
-static e621_pool_category_t parse_pool_category(const char *category) {
+static e621_pool_category_t parse_pool_category(const char *category)
+{
     if (!category) {
         return E621_POOL_CATEGORY_UNKNOWN;
     }
@@ -140,7 +149,8 @@ static e621_pool_category_t parse_pool_category(const char *category) {
     return E621_POOL_CATEGORY_UNKNOWN;
 }
 
-static void parse_relationships(const cJSON *relationships_obj, e621_relationships_t *out) {
+static void parse_relationships(const cJSON *relationships_obj, e621_relationships_t *out)
+{
     memset(out, 0, sizeof(*out));
     if (!relationships_obj) {
         return;
@@ -155,11 +165,11 @@ static void parse_relationships(const cJSON *relationships_obj, e621_relationshi
     out->has_children = bunny_json_get_bool_or(relationships_obj, "has_children", false);
     out->has_active_children = bunny_json_get_bool_or(relationships_obj, "has_active_children", false);
 
-    parse_int64_array(cJSON_GetObjectItemCaseSensitive(relationships_obj, "children"), &out->children,
-                       &out->child_count);
+    parse_int64_array(cJSON_GetObjectItemCaseSensitive(relationships_obj, "children"), &out->children, &out->child_count);
 }
 
-e621_result_t e621_parse_post(const cJSON *json, e621_post_t *out) {
+e621_result_t e621_parse_post(const cJSON *json, e621_post_t *out)
+{
     if (!json || !out) {
         return E621_ERR_INVALID_ARG;
     }
@@ -207,7 +217,8 @@ e621_result_t e621_parse_post(const cJSON *json, e621_post_t *out) {
     return E621_OK;
 }
 
-e621_result_t e621_parse_post_array(const cJSON *json_array, e621_post_list_t *out) {
+e621_result_t e621_parse_post_array(const cJSON *json_array, e621_post_list_t *out)
+{
     if (!json_array || !out) {
         return E621_ERR_INVALID_ARG;
     }
@@ -228,7 +239,8 @@ e621_result_t e621_parse_post_array(const cJSON *json_array, e621_post_list_t *o
 
     size_t i = 0;
     const cJSON *item;
-    cJSON_ArrayForEach(item, json_array) {
+    cJSON_ArrayForEach(item, json_array)
+    {
         e621_result_t result = e621_parse_post(item, &items[i]);
         if (result != E621_OK) {
             for (size_t j = 0; j < i; j++) {
@@ -245,7 +257,8 @@ e621_result_t e621_parse_post_array(const cJSON *json_array, e621_post_list_t *o
     return E621_OK;
 }
 
-e621_result_t e621_parse_comment(const cJSON *json, e621_comment_t *out) {
+e621_result_t e621_parse_comment(const cJSON *json, e621_comment_t *out)
+{
     if (!json || !out) {
         return E621_ERR_INVALID_ARG;
     }
@@ -268,7 +281,8 @@ e621_result_t e621_parse_comment(const cJSON *json, e621_comment_t *out) {
     return E621_OK;
 }
 
-e621_result_t e621_parse_comment_array(const cJSON *json_array, e621_comment_list_t *out) {
+e621_result_t e621_parse_comment_array(const cJSON *json_array, e621_comment_list_t *out)
+{
     if (!json_array || !out) {
         return E621_ERR_INVALID_ARG;
     }
@@ -289,7 +303,8 @@ e621_result_t e621_parse_comment_array(const cJSON *json_array, e621_comment_lis
 
     size_t i = 0;
     const cJSON *item;
-    cJSON_ArrayForEach(item, json_array) {
+    cJSON_ArrayForEach(item, json_array)
+    {
         e621_result_t result = e621_parse_comment(item, &items[i]);
         if (result != E621_OK) {
             for (size_t j = 0; j < i; j++) {
@@ -306,7 +321,8 @@ e621_result_t e621_parse_comment_array(const cJSON *json_array, e621_comment_lis
     return E621_OK;
 }
 
-e621_result_t e621_parse_pool(const cJSON *json, e621_pool_t *out) {
+e621_result_t e621_parse_pool(const cJSON *json, e621_pool_t *out)
+{
     if (!json || !out) {
         return E621_ERR_INVALID_ARG;
     }
@@ -336,7 +352,8 @@ e621_result_t e621_parse_pool(const cJSON *json, e621_pool_t *out) {
     return E621_OK;
 }
 
-void e621_string_list_free(e621_string_list_t *list) {
+void e621_string_list_free(e621_string_list_t *list)
+{
     if (!list) {
         return;
     }
@@ -348,7 +365,8 @@ void e621_string_list_free(e621_string_list_t *list) {
     list->count = 0;
 }
 
-void e621_file_free(e621_file_t *file) {
+void e621_file_free(e621_file_t *file)
+{
     if (!file) {
         return;
     }
@@ -360,7 +378,8 @@ void e621_file_free(e621_file_t *file) {
     file->md5 = NULL;
 }
 
-void e621_post_free(e621_post_t *post) {
+void e621_post_free(e621_post_t *post)
+{
     if (!post) {
         return;
     }
@@ -383,7 +402,8 @@ void e621_post_free(e621_post_t *post) {
     memset(post, 0, sizeof(*post));
 }
 
-void e621_pool_free(e621_pool_t *pool) {
+void e621_pool_free(e621_pool_t *pool)
+{
     if (!pool) {
         return;
     }
@@ -396,7 +416,8 @@ void e621_pool_free(e621_pool_t *pool) {
     memset(pool, 0, sizeof(*pool));
 }
 
-void e621_post_list_free(e621_post_list_t *list) {
+void e621_post_list_free(e621_post_list_t *list)
+{
     if (!list) {
         return;
     }
@@ -408,7 +429,8 @@ void e621_post_list_free(e621_post_list_t *list) {
     list->count = 0;
 }
 
-void e621_comment_free(e621_comment_t *comment) {
+void e621_comment_free(e621_comment_t *comment)
+{
     if (!comment) {
         return;
     }
@@ -418,7 +440,8 @@ void e621_comment_free(e621_comment_t *comment) {
     memset(comment, 0, sizeof(*comment));
 }
 
-void e621_comment_list_free(e621_comment_list_t *list) {
+void e621_comment_list_free(e621_comment_list_t *list)
+{
     if (!list) {
         return;
     }

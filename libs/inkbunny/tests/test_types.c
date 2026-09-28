@@ -6,10 +6,13 @@
 
 #include "internal.h"
 
-void setUp(void) {}
-void tearDown(void) {}
+void setUp(void)
+{}
+void tearDown(void)
+{}
 
-static char *read_fixture(const char *filename) {
+static char *read_fixture(const char *filename)
+{
     char path[512];
     snprintf(path, sizeof(path), "%s/%s", FIXTURES_DIR, filename);
 
@@ -36,7 +39,8 @@ static char *read_fixture(const char *filename) {
     return buf;
 }
 
-void test_parse_submission_full(void) {
+void test_parse_submission_full(void)
+{
     char *content = read_fixture("submission_full.json");
     TEST_ASSERT_NOT_NULL(content);
 
@@ -89,7 +93,8 @@ void test_parse_submission_full(void) {
     free(content);
 }
 
-void test_parse_submission_missing_id_fails(void) {
+void test_parse_submission_missing_id_fails(void)
+{
     cJSON *obj = cJSON_Parse("{\"title\": \"no id here\"}");
     TEST_ASSERT_NOT_NULL(obj);
 
@@ -100,7 +105,8 @@ void test_parse_submission_missing_id_fails(void) {
     cJSON_Delete(obj);
 }
 
-void test_parse_submission_array_success(void) {
+void test_parse_submission_array_success(void)
+{
     char *content = read_fixture("search_response.json");
     TEST_ASSERT_NOT_NULL(content);
     cJSON *root = cJSON_Parse(content);
@@ -120,7 +126,8 @@ void test_parse_submission_array_success(void) {
     free(content);
 }
 
-void test_parse_submission_array_propagates_item_error(void) {
+void test_parse_submission_array_propagates_item_error(void)
+{
     cJSON *array = cJSON_Parse("[{\"submission_id\": \"1\"}, {\"title\": \"no id\"}]");
     TEST_ASSERT_NOT_NULL(array);
 
@@ -131,7 +138,8 @@ void test_parse_submission_array_propagates_item_error(void) {
     cJSON_Delete(array);
 }
 
-void test_parse_submission_lenient_on_malformed_keywords(void) {
+void test_parse_submission_lenient_on_malformed_keywords(void)
+{
     /* "keywords" isn't an array here; parsing should still succeed with an
      * empty keyword list rather than failing the whole submission. */
     cJSON *obj = cJSON_Parse("{\"submission_id\": \"1\", \"keywords\": \"not-an-array\"}");
@@ -146,7 +154,8 @@ void test_parse_submission_lenient_on_malformed_keywords(void) {
     cJSON_Delete(obj);
 }
 
-int main(void) {
+int main(void)
+{
     UNITY_BEGIN();
     RUN_TEST(test_parse_submission_full);
     RUN_TEST(test_parse_submission_missing_id_fails);

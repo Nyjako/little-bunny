@@ -7,7 +7,8 @@
 
 #include "e621/client.h"
 
-typedef struct {
+typedef struct
+{
     long response_status;
     char *response_body; /* not owned; caller manages lifecycle */
     size_t response_body_len;
@@ -21,8 +22,8 @@ typedef struct {
 static fake_transport_state_t g_state;
 static bunny_http_transport_t g_transport;
 
-static bunny_http_result_t fake_send(void *user_data, const bunny_http_request_t *request,
-                                      bunny_http_response_t *out_response) {
+static bunny_http_result_t fake_send(void *user_data, const bunny_http_request_t *request, bunny_http_response_t *out_response)
+{
     fake_transport_state_t *state = (fake_transport_state_t *)user_data;
 
     state->last_method = request->method;
@@ -51,7 +52,8 @@ static bunny_http_result_t fake_send(void *user_data, const bunny_http_request_t
     return BUNNY_HTTP_OK;
 }
 
-static char *read_fixture(const char *filename) {
+static char *read_fixture(const char *filename)
+{
     char path[512];
     snprintf(path, sizeof(path), "%s/%s", FIXTURES_DIR, filename);
 
@@ -78,7 +80,8 @@ static char *read_fixture(const char *filename) {
     return buf;
 }
 
-static e621_client_t *make_test_client(bool with_auth) {
+static e621_client_t *make_test_client(bool with_auth)
+{
     e621_config_t config;
     memset(&config, 0, sizeof(config));
     config.user_agent = "bunny-tests/1.0 (unit tests)";
@@ -94,16 +97,19 @@ static e621_client_t *make_test_client(bool with_auth) {
     return e621_client_create(&config);
 }
 
-void setUp(void) {
+void setUp(void)
+{
     memset(&g_state, 0, sizeof(g_state));
     g_state.forced_result = BUNNY_HTTP_OK;
     g_transport.send = fake_send;
     g_transport.user_data = &g_state;
 }
 
-void tearDown(void) {}
+void tearDown(void)
+{}
 
-void test_search_posts_success(void) {
+void test_search_posts_success(void)
+{
     e621_client_t *client = make_test_client(false);
     TEST_ASSERT_NOT_NULL(client);
 
@@ -126,7 +132,8 @@ void test_search_posts_success(void) {
     free(fixture);
 }
 
-void test_get_post_success(void) {
+void test_get_post_success(void)
+{
     e621_client_t *client = make_test_client(false);
 
     char *fixture = read_fixture("post_single.json");
@@ -149,7 +156,8 @@ void test_get_post_success(void) {
     free(fixture);
 }
 
-void test_get_post_not_found(void) {
+void test_get_post_not_found(void)
+{
     e621_client_t *client = make_test_client(false);
     g_state.response_status = 404;
 
@@ -161,7 +169,8 @@ void test_get_post_not_found(void) {
     e621_client_destroy(client);
 }
 
-void test_search_posts_auth_error(void) {
+void test_search_posts_auth_error(void)
+{
     e621_client_t *client = make_test_client(false);
     g_state.response_status = 401;
 
@@ -173,7 +182,8 @@ void test_search_posts_auth_error(void) {
     e621_client_destroy(client);
 }
 
-void test_search_posts_rate_limited(void) {
+void test_search_posts_rate_limited(void)
+{
     e621_client_t *client = make_test_client(false);
     g_state.response_status = 429;
 
@@ -185,7 +195,8 @@ void test_search_posts_rate_limited(void) {
     e621_client_destroy(client);
 }
 
-void test_search_posts_malformed_json(void) {
+void test_search_posts_malformed_json(void)
+{
     e621_client_t *client = make_test_client(false);
     char *body = strdup("{ this is not valid json ");
     g_state.response_status = 200;
@@ -201,7 +212,8 @@ void test_search_posts_malformed_json(void) {
     e621_client_destroy(client);
 }
 
-void test_search_posts_network_error(void) {
+void test_search_posts_network_error(void)
+{
     e621_client_t *client = make_test_client(false);
     g_state.forced_result = BUNNY_HTTP_ERR_NETWORK;
 
@@ -213,7 +225,8 @@ void test_search_posts_network_error(void) {
     e621_client_destroy(client);
 }
 
-void test_favorite_add_requires_auth(void) {
+void test_favorite_add_requires_auth(void)
+{
     e621_client_t *client = make_test_client(false);
 
     e621_result_t result = e621_favorite_add(client, 123);
@@ -223,7 +236,8 @@ void test_favorite_add_requires_auth(void) {
     e621_client_destroy(client);
 }
 
-void test_favorite_add_sends_auth_header(void) {
+void test_favorite_add_sends_auth_header(void)
+{
     e621_client_t *client = make_test_client(true);
     char *body = strdup("{}");
     g_state.response_status = 200;
@@ -240,7 +254,8 @@ void test_favorite_add_sends_auth_header(void) {
     e621_client_destroy(client);
 }
 
-void test_vote_invalid_score(void) {
+void test_vote_invalid_score(void)
+{
     e621_client_t *client = make_test_client(true);
 
     e621_result_t result = e621_vote(client, 123, 5, false);
@@ -250,7 +265,8 @@ void test_vote_invalid_score(void) {
     e621_client_destroy(client);
 }
 
-void test_comment_list_success(void) {
+void test_comment_list_success(void)
+{
     e621_client_t *client = make_test_client(false);
     char *fixture = read_fixture("comments_list.json");
     TEST_ASSERT_NOT_NULL(fixture);
@@ -270,7 +286,8 @@ void test_comment_list_success(void) {
     free(fixture);
 }
 
-void test_get_pool_success(void) {
+void test_get_pool_success(void)
+{
     e621_client_t *client = make_test_client(false);
     char *fixture = read_fixture("pool_single.json");
     TEST_ASSERT_NOT_NULL(fixture);
@@ -291,7 +308,8 @@ void test_get_pool_success(void) {
     free(fixture);
 }
 
-void test_get_pool_not_found(void) {
+void test_get_pool_not_found(void)
+{
     e621_client_t *client = make_test_client(false);
     g_state.response_status = 404;
 
@@ -303,7 +321,8 @@ void test_get_pool_not_found(void) {
     e621_client_destroy(client);
 }
 
-int main(void) {
+int main(void)
+{
     UNITY_BEGIN();
     RUN_TEST(test_search_posts_success);
     RUN_TEST(test_get_post_success);

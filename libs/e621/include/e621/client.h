@@ -14,7 +14,8 @@ extern "C" {
 
 typedef struct e621_client e621_client_t;
 
-typedef struct {
+typedef struct
+{
     const char *base_url;   /* NULL => "https://e621.net" */
     const char *user_agent; /* required by e621's API etiquette; e.g. "LittleBunny/0.1 (by yourname)" */
     const char *username;   /* optional; required for authenticated calls (favorite/vote/comment) */
@@ -32,8 +33,7 @@ typedef struct {
 e621_client_t *e621_client_create(const e621_config_t *config);
 void e621_client_destroy(e621_client_t *client);
 
-e621_result_t e621_search_posts(e621_client_t *client, const char *tags, int page, int limit,
-                                 e621_post_list_t *out_posts);
+e621_result_t e621_search_posts(e621_client_t *client, const char *tags, int page, int limit, e621_post_list_t *out_posts);
 
 e621_result_t e621_get_post(e621_client_t *client, int64_t post_id, e621_post_t *out_post);
 
@@ -47,15 +47,12 @@ e621_result_t e621_vote(e621_client_t *client, int64_t post_id, int score, bool 
 /* user_id is e621's numeric account id (as a string), NOT a username -
  * that's what the favorites.json endpoint takes. Pass NULL to list the
  * authenticated client's own favorites. */
-e621_result_t e621_list_favorites(e621_client_t *client, const char *user_id, int page,
-                                   e621_post_list_t *out_posts);
+e621_result_t e621_list_favorites(e621_client_t *client, const char *user_id, int page, e621_post_list_t *out_posts);
 
 /* Requires username/api_key on the client config unless anonymous is true. */
-e621_result_t e621_comment_create(e621_client_t *client, int64_t post_id, const char *body,
-                                   bool anonymous, e621_comment_t *out_comment);
+e621_result_t e621_comment_create(e621_client_t *client, int64_t post_id, const char *body, bool anonymous, e621_comment_t *out_comment);
 
-e621_result_t e621_comment_list(e621_client_t *client, int64_t post_id,
-                                 e621_comment_list_t *out_comments);
+e621_result_t e621_comment_list(e621_client_t *client, int64_t post_id, e621_comment_list_t *out_comments);
 
 /* A post's e621_post_t.pool_ids / e621_post_t.relationships give you the ids to pass here. */
 e621_result_t e621_get_pool(e621_client_t *client, int64_t pool_id, e621_pool_t *out_pool);

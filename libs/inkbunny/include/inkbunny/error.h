@@ -5,7 +5,8 @@
 extern "C" {
 #endif
 
-typedef enum {
+typedef enum
+{
     INKBUNNY_OK = 0,
     INKBUNNY_ERR_INVALID_ARG,
     INKBUNNY_ERR_NETWORK,

@@ -9,7 +9,8 @@
 
 #include "internal.h"
 
-struct e621_client {
+struct e621_client
+{
     char *base_url;
     char *user_agent;
     char *username;
@@ -20,7 +21,8 @@ struct e621_client {
     bool has_last_request_time;
 };
 
-static char *url_encode(const char *value) {
+static char *url_encode(const char *value)
+{
     if (!value) {
         return strdup("");
     }
@@ -43,7 +45,8 @@ static char *url_encode(const char *value) {
     return out;
 }
 
-static char *base64_encode(const unsigned char *data, size_t len) {
+static char *base64_encode(const unsigned char *data, size_t len)
+{
     static const char table[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
     size_t out_len = 4 * ((len + 2) / 3);
     char *out = malloc(out_len + 1);
@@ -75,7 +78,8 @@ static char *base64_encode(const unsigned char *data, size_t len) {
     return out;
 }
 
-static char *build_basic_auth_header(const char *username, const char *api_key) {
+static char *build_basic_auth_header(const char *username, const char *api_key)
+{
     size_t combined_len = strlen(username) + 1 + strlen(api_key);
     char *combined = malloc(combined_len + 1);
     if (!combined) {
@@ -98,7 +102,8 @@ static char *build_basic_auth_header(const char *username, const char *api_key) 
     return header;
 }
 
-static void rate_limit_wait(e621_client_t *client) {
+static void rate_limit_wait(e621_client_t *client)
+{
     if (client->min_request_interval_sec <= 0) {
         return;
     }
@@ -107,8 +112,7 @@ static void rate_limit_wait(e621_client_t *client) {
     clock_gettime(CLOCK_MONOTONIC, &now);
 
     if (client->has_last_request_time) {
-        double elapsed = (double)(now.tv_sec - client->last_request_time.tv_sec) +
-                          (double)(now.tv_nsec - client->last_request_time.tv_nsec) / 1e9;
+        double elapsed = (double)(now.tv_sec - client->last_request_time.tv_sec) + (double)(now.tv_nsec - client->last_request_time.tv_nsec) / 1e9;
         double remaining = client->min_request_interval_sec - elapsed;
         if (remaining > 0) {
             struct timespec sleep_time;
@@ -122,7 +126,8 @@ static void rate_limit_wait(e621_client_t *client) {
     client->has_last_request_time = true;
 }
 
-static e621_result_t status_to_result(long status) {
+static e621_result_t status_to_result(long status)
+{
     if (status >= 200 && status < 300) {
         return E621_OK;
     }
@@ -144,9 +149,8 @@ static e621_result_t status_to_result(long status) {
 /* query_or_null is appended to the URL as "?...", already encoded by the caller.
  * body_or_null, if present, is sent as a application/x-www-form-urlencoded body.
  * out_json, if non-NULL, receives the parsed response body on E621_OK (caller owns it). */
-static e621_result_t perform_request(e621_client_t *client, bunny_http_method_t method,
-                                      const char *path, const char *query_or_null,
-                                      const char *body_or_null, cJSON **out_json) {
+static e621_result_t perform_request(e621_client_t *client, bunny_http_method_t method, const char *path, const char *query_or_null, const char *body_or_null, cJSON **out_json)
+{
     if (!client) {
         return E621_ERR_INVALID_ARG;
     }
@@ -221,7 +225,8 @@ static e621_result_t perform_request(e621_client_t *client, bunny_http_method_t 
     return result;
 }
 
-e621_client_t *e621_client_create(const e621_config_t *config) {
+e621_client_t *e621_client_create(const e621_config_t *config)
+{
     if (!config || !config->user_agent) {
         return NULL;
     }
@@ -236,8 +241,7 @@ e621_client_t *e621_client_create(const e621_config_t *config) {
     client->user_agent = strdup(config->user_agent);
     client->username = config->username ? strdup(config->username) : NULL;
     client->api_key = config->api_key ? strdup(config->api_key) : NULL;
-    client->min_request_interval_sec =
-        config->min_request_interval_sec > 0 ? config->min_request_interval_sec : 0.5;
+    client->min_request_interval_sec = config->min_request_interval_sec > 0 ? config->min_request_interval_sec : 0.5;
     client->transport = config->transport ? *config->transport : bunny_http_curl_transport();
     client->has_last_request_time = false;
 
@@ -249,7 +253,8 @@ e621_client_t *e621_client_create(const e621_config_t *config) {
     return client;
 }
 
-void e621_client_destroy(e621_client_t *client) {
+void e621_client_destroy(e621_client_t *client)
+{
     if (!client) {
         return;
     }
@@ -260,8 +265,8 @@ void e621_client_destroy(e621_client_t *client) {
     free(client);
 }
 
-e621_result_t e621_search_posts(e621_client_t *client, const char *tags, int page, int limit,
-                                 e621_post_list_t *out_posts) {
+e621_result_t e621_search_posts(e621_client_t *client, const char *tags, int page, int limit, e621_post_list_t *out_posts)
+{
     if (!client || !out_posts) {
         return E621_ERR_INVALID_ARG;
     }
@@ -272,8 +277,7 @@ e621_result_t e621_search_posts(e621_client_t *client, const char *tags, int pag
     }
 
     char query[1600];
-    snprintf(query, sizeof(query), "tags=%s&page=%d&limit=%d", encoded_tags, page > 0 ? page : 1,
-             limit > 0 ? limit : 75);
+    snprintf(query, sizeof(query), "tags=%s&page=%d&limit=%d", encoded_tags, page > 0 ? page : 1, limit > 0 ? limit : 75);
     free(encoded_tags);
 
     cJSON *json = NULL;
@@ -293,7 +297,8 @@ e621_result_t e621_search_posts(e621_client_t *client, const char *tags, int pag
     return result;
 }
 
-e621_result_t e621_get_post(e621_client_t *client, int64_t post_id, e621_post_t *out_post) {
+e621_result_t e621_get_post(e621_client_t *client, int64_t post_id, e621_post_t *out_post)
+{
     if (!client || !out_post) {
         return E621_ERR_INVALID_ARG;
     }
@@ -318,7 +323,8 @@ e621_result_t e621_get_post(e621_client_t *client, int64_t post_id, e621_post_t 
     return result;
 }
 
-e621_result_t e621_favorite_add(e621_client_t *client, int64_t post_id) {
+e621_result_t e621_favorite_add(e621_client_t *client, int64_t post_id)
+{
     if (!client) {
         return E621_ERR_INVALID_ARG;
     }
@@ -332,7 +338,8 @@ e621_result_t e621_favorite_add(e621_client_t *client, int64_t post_id) {
     return perform_request(client, BUNNY_HTTP_POST, "/favorites.json", NULL, body, NULL);
 }
 
-e621_result_t e621_favorite_remove(e621_client_t *client, int64_t post_id) {
+e621_result_t e621_favorite_remove(e621_client_t *client, int64_t post_id)
+{
     if (!client) {
         return E621_ERR_INVALID_ARG;
     }
@@ -346,7 +353,8 @@ e621_result_t e621_favorite_remove(e621_client_t *client, int64_t post_id) {
     return perform_request(client, BUNNY_HTTP_DELETE, path, NULL, NULL, NULL);
 }
 
-e621_result_t e621_vote(e621_client_t *client, int64_t post_id, int score, bool no_unvote) {
+e621_result_t e621_vote(e621_client_t *client, int64_t post_id, int score, bool no_unvote)
+{
     if (!client) {
         return E621_ERR_INVALID_ARG;
     }
@@ -366,8 +374,8 @@ e621_result_t e621_vote(e621_client_t *client, int64_t post_id, int score, bool 
     return perform_request(client, BUNNY_HTTP_POST, path, NULL, body, NULL);
 }
 
-e621_result_t e621_list_favorites(e621_client_t *client, const char *user_id, int page,
-                                   e621_post_list_t *out_posts) {
+e621_result_t e621_list_favorites(e621_client_t *client, const char *user_id, int page, e621_post_list_t *out_posts)
+{
     if (!client || !out_posts) {
         return E621_ERR_INVALID_ARG;
     }
@@ -396,8 +404,8 @@ e621_result_t e621_list_favorites(e621_client_t *client, const char *user_id, in
     return result;
 }
 
-e621_result_t e621_comment_create(e621_client_t *client, int64_t post_id, const char *body,
-                                   bool anonymous, e621_comment_t *out_comment) {
+e621_result_t e621_comment_create(e621_client_t *client, int64_t post_id, const char *body, bool anonymous, e621_comment_t *out_comment)
+{
     if (!client || !body) {
         return E621_ERR_INVALID_ARG;
     }
@@ -410,20 +418,17 @@ e621_result_t e621_comment_create(e621_client_t *client, int64_t post_id, const 
         return E621_ERR_UNKNOWN;
     }
 
-    size_t needed = strlen("comment[post_id]=&comment[body]=&comment[anonymous]=false") + 24 +
-                     strlen(encoded_body) + 1;
+    size_t needed = strlen("comment[post_id]=&comment[body]=&comment[anonymous]=false") + 24 + strlen(encoded_body) + 1;
     char *form_body = malloc(needed);
     if (!form_body) {
         free(encoded_body);
         return E621_ERR_UNKNOWN;
     }
-    snprintf(form_body, needed, "comment[post_id]=%lld&comment[body]=%s&comment[anonymous]=%s",
-             (long long)post_id, encoded_body, anonymous ? "true" : "false");
+    snprintf(form_body, needed, "comment[post_id]=%lld&comment[body]=%s&comment[anonymous]=%s", (long long)post_id, encoded_body, anonymous ? "true" : "false");
     free(encoded_body);
 
     cJSON *json = NULL;
-    e621_result_t result =
-        perform_request(client, BUNNY_HTTP_POST, "/comments.json", NULL, form_body, out_comment ? &json : NULL);
+    e621_result_t result = perform_request(client, BUNNY_HTTP_POST, "/comments.json", NULL, form_body, out_comment ? &json : NULL);
     free(form_body);
     if (result != E621_OK) {
         return result;
@@ -440,7 +445,8 @@ e621_result_t e621_comment_create(e621_client_t *client, int64_t post_id, const 
     return result;
 }
 
-e621_result_t e621_comment_list(e621_client_t *client, int64_t post_id, e621_comment_list_t *out_comments) {
+e621_result_t e621_comment_list(e621_client_t *client, int64_t post_id, e621_comment_list_t *out_comments)
+{
     if (!client || !out_comments) {
         return E621_ERR_INVALID_ARG;
     }
@@ -464,7 +470,8 @@ e621_result_t e621_comment_list(e621_client_t *client, int64_t post_id, e621_com
     return result;
 }
 
-e621_result_t e621_get_pool(e621_client_t *client, int64_t pool_id, e621_pool_t *out_pool) {
+e621_result_t e621_get_pool(e621_client_t *client, int64_t pool_id, e621_pool_t *out_pool)
+{
     if (!client || !out_pool) {
         return E621_ERR_INVALID_ARG;
     }

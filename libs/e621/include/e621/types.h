@@ -9,34 +9,39 @@
 extern "C" {
 #endif
 
-typedef enum {
+typedef enum
+{
     E621_RATING_SAFE,
     E621_RATING_QUESTIONABLE,
     E621_RATING_EXPLICIT,
     E621_RATING_UNKNOWN,
 } e621_rating_t;
 
-typedef struct {
-    char *url;    /* may be NULL if the site didn't provide one (e.g. no sample) */
-    char *ext;    /* may be NULL */
-    char *md5;    /* may be NULL; only ever set on the main "file" variant */
+typedef struct
+{
+    char *url; /* may be NULL if the site didn't provide one (e.g. no sample) */
+    char *ext; /* may be NULL */
+    char *md5; /* may be NULL; only ever set on the main "file" variant */
     int width;
     int height;
     int64_t size; /* bytes; 0 if unknown */
 } e621_file_t;
 
-typedef struct {
+typedef struct
+{
     int up;
     int down;
     int total;
 } e621_score_t;
 
-typedef struct {
+typedef struct
+{
     char **items;
     size_t count;
 } e621_string_list_t;
 
-typedef struct {
+typedef struct
+{
     e621_string_list_t general;
     e621_string_list_t artist;
     e621_string_list_t copyright;
@@ -47,7 +52,8 @@ typedef struct {
     e621_string_list_t meta;
 } e621_tags_t;
 
-typedef struct {
+typedef struct
+{
     bool has_parent;
     int64_t parent_id;
     bool has_children;
@@ -56,7 +62,8 @@ typedef struct {
     size_t child_count;
 } e621_relationships_t;
 
-typedef struct {
+typedef struct
+{
     int64_t id;
     char *created_at;
     e621_file_t file;
@@ -75,12 +82,14 @@ typedef struct {
     e621_relationships_t relationships;
 } e621_post_t;
 
-typedef struct {
+typedef struct
+{
     e621_post_t *items;
     size_t count;
 } e621_post_list_t;
 
-typedef struct {
+typedef struct
+{
     int64_t id;
     int64_t post_id;
     char *creator_name;
@@ -88,18 +97,21 @@ typedef struct {
     char *created_at;
 } e621_comment_t;
 
-typedef struct {
+typedef struct
+{
     e621_comment_t *items;
     size_t count;
 } e621_comment_list_t;
 
-typedef enum {
+typedef enum
+{
     E621_POOL_CATEGORY_SERIES,
     E621_POOL_CATEGORY_COLLECTION,
     E621_POOL_CATEGORY_UNKNOWN,
 } e621_pool_category_t;
 
-typedef struct {
+typedef struct
+{
     int64_t id;
     char *name;
     char *description;
