@@ -221,6 +221,46 @@ this is a personal, low-traffic server, not something that needs fine-grained lo
 `/health` (no auth) returns `200 {"status":"ok"}` and exists mainly to smoke-test that the
 HTTPS listener and cert came up correctly.
 
+**REST surface (M5.2)**: `server/src/routes_accounts.c`/`routes_searches.c`/
+`routes_queue.c` — one file per resource, matching `bunny_db`'s own per-concern file split
+(`libs/db/src/{accounts,searches,...}.c`). Each registers a single civetweb handler at a
+resource's URI prefix (`mg_set_request_handler`, e.g. `/accounts`) and dispatches internally
+on HTTP method + sub-path, since civetweb's prefix matching means `/accounts` already
+matches `/accounts/e621` — there's no per-route wildcard registration API to lean on
+instead. `server/src/route_utils.c` centralizes the resulting parsing (`server_route_sub_path`,
+`server_route_parse_id[_with_suffix]`, `server_route_parse_site`) so each route file isn't
+re-deriving its own path-splitting logic. `server/src/json_helpers.c` centralizes request-body
+JSON parsing (`server_json_read_request_body`, size-capped at 64KB) and response writing
+(`server_json_respond`/`server_json_respond_error`, the latter mapping `bunny_core_result_t`
+to an HTTP status: 400/`ERR_INVALID_ARG`, 404/`ERR_NOT_FOUND`, 502/`ERR_SITE`,
+500/anything else). Queue-action routes (`POST /posts/{id}/favorite|vote|comment`) respond
+`202 Accepted`, not `200` — they only enqueue (`bunny_core_queue_*`), matching that the
+action hasn't actually run against the site yet. `GET /accounts/{site}` never echoes
+`secret` back, only `username` — the whole point of the account endpoints is to store a
+credential, not redisplay it.
+
+`server_app_start()`/`server_app_stop()` (`server/src/app.c`) hold everything `main.c` used
+to do directly (load/generate the auth token and TLS cert, open `bunny_core`, start
+civetweb, register every route) behind two calls taking a `bunny_core_config_t` and a data
+dir. This exists because `main.c`'s original inline version couldn't be exercised by tests
+without either re-implementing the wiring or spawning the built `bunny_server` binary as a
+subprocess; factoring it out means `server/tests/test_integration.c` links the exact same
+code (`bunny_server_lib`, a static library both `bunny_server` and the test suite link) and
+drives it with real HTTPS requests over libcurl, injecting a fake `e621_transport` into the
+`bunny_core_config_t` so a full account→search→sync→favorite→process flow never touches
+the real network. This is the same "real behavior over fakes where practical" testing
+philosophy `bunny_db` uses (real `:memory:` SQLite) applied one layer up: a real civetweb
+instance, a real `bunny_core`, a real (in-memory) database, only the outermost HTTP call to
+e621 faked.
+
+A real bug surfaced during manual testing of this milestone: queuing an action against a
+post id that doesn't exist hit `action_queue`'s `post_id` foreign-key constraint and
+surfaced as a `500 database error`, which is misleading — it's the caller's fault (a bad
+id), not the server's. Fixed at the source: `bunny_core_map_db_result`
+(`libs/core/src/internal.h`) now maps `BUNNY_DB_ERR_CONSTRAINT` to
+`BUNNY_CORE_ERR_INVALID_ARG`, so every `bunny_core` API gets the correct client-error
+classification for constraint violations, not just this one route.
+
 ## Inkbunny API constraints (found in M2)
 
 Verified against the live API and the official docs while building `libinkbunny`:
