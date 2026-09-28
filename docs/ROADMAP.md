@@ -165,6 +165,22 @@ this file is the single source of truth for "what's done" across sessions.
 - [ ] **M6 — Flutter app skeleton**
   App shell, FFI bindings to the core for standalone mode, HTTP client for networked mode,
   both behind one repository interface so the UI layer doesn't care which is active.
+  Delivered as three sub-milestones, M6.1–M6.3 below. Managed via `fvm` (`fvm flutter ...`,
+  not bare `flutter`) — Flutter 3.44.0 / Dart 3.12.0, pinned in `app/.fvmrc`.
+
+- [x] **M6.1 — App shell + repository interface**
+  `app/` scaffolded via `fvm flutter create` (platforms: linux, android, windows, macos,
+  ios — only Linux desktop and Android are build-verifiable in this environment, the rest
+  have no local toolchain). Boots to a placeholder screen, no real UI yet (that's M7+).
+  `lib/repository/bunny_repository.dart`: an `abstract interface class BunnyRepository`
+  mirroring `bunny_core`'s public API 1:1 (same shape as the M5 REST surface) — account
+  CRUD, search CRUD + listing a search's posts, sync/queue-process triggers, and the four
+  queue-favorite/vote/comment actions. `lib/repository/bunny_models.dart`: plain Dart
+  classes mirroring `bunny_db_account_t`/`search_t`/`post_t` and the two stats structs —
+  `BunnyAccount` deliberately omits the secret field (the server's `GET /accounts/{site}`
+  never returns it, so the future FFI implementation won't either, keeping both
+  implementations behaviorally identical). No implementations yet — M6.2 (FFI) and M6.3
+  (HTTP) each land independently against this stable interface.
 
 - [ ] **M7 — Auth & app-lock UI**
   Site login screens (e621 username/API key, Inkbunny username/password), app-lock via
