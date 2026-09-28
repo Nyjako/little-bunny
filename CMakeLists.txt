@@ -60,6 +60,28 @@ CPMAddPackage(
     "BUILD_SHARED_LIBS OFF"
 )
 
+# SQLite ships as a zip (sqlite3.c/sqlite3.h), not a CMake-ready repo, so it's
+# fetched by URL and built as our own static library target.
+CPMAddPackage(
+  NAME sqlite3
+  URL https://www.sqlite.org/2026/sqlite-amalgamation-3530400.zip
+  URL_HASH SHA3_256=628a44cfe82c66aed1ccbbe85a562d2e33ebe64b3288981ed76285612227934e
+  DOWNLOAD_ONLY YES
+)
+
+if(sqlite3_ADDED)
+  add_library(sqlite3 STATIC ${sqlite3_SOURCE_DIR}/sqlite3.c)
+  target_include_directories(sqlite3 PUBLIC ${sqlite3_SOURCE_DIR})
+  target_compile_definitions(sqlite3 PUBLIC
+    SQLITE_DQS=0
+    SQLITE_OMIT_LOAD_EXTENSION
+    SQLITE_OMIT_DEPRECATED
+  )
+  if(NOT WIN32)
+    target_link_libraries(sqlite3 PUBLIC pthread m)
+  endif()
+endif()
+
 if(BUNNY_BUILD_TESTS)
   enable_testing()
   CPMAddPackage(
@@ -72,6 +94,7 @@ endif()
 add_subdirectory(libs/common)
 add_subdirectory(libs/e621)
 add_subdirectory(libs/inkbunny)
+add_subdirectory(libs/db)
 
 if(BUNNY_BUILD_TOOLS)
   add_subdirectory(tools/inkbunny_favorite_experiment)
