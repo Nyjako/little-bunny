@@ -162,7 +162,7 @@ this file is the single source of truth for "what's done" across sessions.
   no explicit `/sync` call needed, followed by a graceful shutdown (exit code 0) on
   `SIGTERM`.
 
-- [ ] **M6 — Flutter app skeleton**
+- [x] **M6 — Flutter app skeleton**
   App shell, FFI bindings to the core for standalone mode, HTTP client for networked mode,
   both behind one repository interface so the UI layer doesn't care which is active.
   Delivered as three sub-milestones, M6.1–M6.3 below. Managed via `fvm` (`fvm flutter ...`,
@@ -205,6 +205,26 @@ this file is the single source of truth for "what's done" across sessions.
   reproduction, same class of problem as the existing Windows gap, deferred to M12
   alongside it. Linux desktop (this environment's only build-verifiable desktop target)
   builds and runs correctly.
+
+- [x] **M6.3 — HTTP client + networked-mode repository, wired together**
+  `lib/repository/http_bunny_repository.dart` implements `BunnyRepository` against the M5
+  REST API (`docs/architecture.md`'s "C server (M5)" section) using `package:http`'s
+  `IOClient` wrapping a `dart:io HttpClient` with a `badCertificateCallback` that pins the
+  server's self-signed certificate by SHA-256 fingerprint (no CA to validate against
+  otherwise). While building this, found and fixed a real gap: the server's
+  `GET /accounts/{site}` only ever returned `site`/`username`, not `id`/`created_at`, even
+  though `BunnyAccount` (M6.1) mirrors `bunny_db_account_t` 1:1 and requires both —
+  extended `server/src/routes_accounts.c` to return them too (small, additive,
+  backward-compatible; verified via `make test`, 11/11 still passing, plus a new assertion
+  in the M5.2 integration test). `lib/repository/bunny_repository_factory.dart` is the
+  actual "one repository interface" switch point the roadmap describes: a sealed
+  `BunnyRepositoryConfig` (`StandaloneConfig`/`NetworkedConfig`) plus a
+  `createBunnyRepository` factory, so `main.dart` only ever depends on the abstract
+  `BunnyRepository` interface, never on which implementation is active. `main.dart` wires
+  this through a `BunnyRepositoryScope` `InheritedWidget` (defaulting to standalone/
+  `:memory:` until M7 adds real settings). Verified end-to-end against a real running
+  `bunny_server` instance over a real TLS connection (account/search CRUD, cert-pinning
+  accept/reject) in addition to the fake-transport unit tests.
 
 - [ ] **M7 — Auth & app-lock UI**
   Site login screens (e621 username/API key, Inkbunny username/password), app-lock via

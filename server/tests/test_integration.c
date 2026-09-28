@@ -168,7 +168,9 @@ void test_full_account_search_sync_favorite_flow(void)
 
     status = do_request("GET", "/accounts/e621", NULL, &response, true, NULL);
     TEST_ASSERT_EQUAL(200, status);
+    TEST_ASSERT_NOT_NULL(strstr(response.data, "\"id\":1"));
     TEST_ASSERT_NOT_NULL(strstr(response.data, "\"username\":\"tester\""));
+    TEST_ASSERT_NOT_NULL(strstr(response.data, "\"created_at\":"));
     TEST_ASSERT_NULL(strstr(response.data, "testkey")); /* secret must never be echoed back */
     free(response.data);
     memset(&response, 0, sizeof(response));
