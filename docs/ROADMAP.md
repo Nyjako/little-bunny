@@ -278,6 +278,21 @@ this file is the single source of truth for "what's done" across sessions.
   `bunny_server` instance: correct config connects, a wrong token is rejected with 401, a
   wrong certificate fingerprint fails the TLS handshake outright.
 
+- [x] **M7.3 — Site login screens**
+  `AccountsScreen` (`app/lib/screens/`) replaces M6's placeholder home page: lists both
+  sites via `BunnyRepository.getAccount`, showing "Not connected" or "Logged in as
+  {username}" with a remove action (confirmation dialog first, since deleting an account is
+  destructive from the UI's perspective). Tapping an unconfigured site opens
+  `LoginFormScreen` — e621 asks for username + API key, Inkbunny for username + password
+  (obscured) — which calls M7.1's `verifyAccount` before `setAccount`, showing the
+  exception's message inline on rejection without ever saving bad credentials. Tested with
+  a hand-written `FakeBunnyRepository` (`app/test/fakes/`) implementing only the account
+  methods these two screens actually use — no mocking framework, matching the project's
+  established "fake the dependency, not the business logic" style throughout M1–M7.
+  `verifyAccount`/`setAccount`/`deleteAccount`'s underlying behavior against real sites/a
+  real server was already verified in M7.1; these tests only cover the UI's own orchestration
+  (which state renders what, error display, confirmation flow).
+
 - [ ] **M8 — Browse & search UI**
   Manage saved searches, post grid/list with unseen markers, post detail view with full
   metadata, viewers for supported formats (image/video/webm/gif; Flash/SWF intentionally

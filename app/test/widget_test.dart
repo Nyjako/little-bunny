@@ -20,16 +20,23 @@ class _FakeSecretStore implements SecretStore {
 }
 
 void main() {
-  testWidgets('app boots straight to the placeholder home page when already configured', (WidgetTester tester) async {
+  testWidgets('app boots straight to the accounts screen when already configured', (WidgetTester tester) async {
     SharedPreferences.setMockInitialValues({'repository_mode': 'networked', 'repository_server_url': 'https://localhost:9443'});
     final settingsStore = RepositorySettingsStore(_FakeSecretStore({'repository_bearer_token': 'test-token', 'repository_cert_fingerprint': '00' * 32}));
 
     await tester.pumpWidget(LittleBunnyApp(settingsStore: settingsStore));
-    await tester.pumpAndSettle();
+    // Not pumpAndSettle(): AccountsScreen's own getAccount calls go through a
+    // real HttpBunnyRepository against an unreachable localhost:9443 here,
+    // which never cleanly "settles" under TestWidgetsFlutterBinding. Two
+    // pumps are enough to get past settingsStore.load() (fakes only, no real
+    // I/O) and render AccountsScreen's Scaffold/AppBar, which doesn't wait
+    // on that future -- its own behavior with real account data is covered
+    // by accounts_screen_test.dart against a fake repository instead.
+    await tester.pump();
+    await tester.pump();
 
-    expect(find.text('LittleBunny'), findsOneWidget);
-    expect(find.text('App shell (M6) -- no screens yet.'), findsOneWidget);
-    expect(find.text('Active repository: HttpBunnyRepository'), findsOneWidget);
+    expect(find.text('Accounts'), findsOneWidget);
+    expect(find.text('Set up LittleBunny'), findsNothing);
   });
 
   testWidgets('app shows the setup screen on first launch (no persisted config)', (WidgetTester tester) async {
