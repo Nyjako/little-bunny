@@ -312,6 +312,120 @@ void test_top_favorited_tags(void)
     bunny_db_tag_stat_list_free(&stats);
 }
 
+void test_tag_autocomplete_prefix_match(void)
+{
+    const char *tags1[] = {"wolf"};
+    const char *tags2[] = {"wolfhound"};
+    const char *tags3[] = {"cat"};
+
+    bunny_db_post_upsert_t post1;
+    bunny_db_post_upsert_t post2;
+    bunny_db_post_upsert_t post3;
+    make_test_post(&post1, 801, 1);
+    make_test_post(&post2, 802, 1);
+    make_test_post(&post3, 803, 1);
+    post1.tags = tags1;
+    post1.tag_count = 1;
+    post2.tags = tags2;
+    post2.tag_count = 1;
+    post3.tags = tags3;
+    post3.tag_count = 1;
+    bunny_db_post_upsert(g_db, &post1, NULL);
+    bunny_db_post_upsert(g_db, &post2, NULL);
+    bunny_db_post_upsert(g_db, &post3, NULL);
+
+    bunny_db_tag_stat_list_t results;
+    bunny_db_result_t result = bunny_db_tag_autocomplete(g_db, BUNNY_DB_SITE_E621, "wolf", 10, &results);
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, result);
+    TEST_ASSERT_EQUAL(2, (int)results.count);
+    bunny_db_tag_stat_list_free(&results);
+}
+
+void test_tag_autocomplete_orders_by_usage_then_name(void)
+{
+    const char *tags_a[] = {"aardvark"};
+    const char *tags_b[] = {"antelope"};
+
+    bunny_db_post_upsert_t post1;
+    bunny_db_post_upsert_t post2;
+    bunny_db_post_upsert_t post3;
+    make_test_post(&post1, 811, 1);
+    make_test_post(&post2, 812, 1);
+    make_test_post(&post3, 813, 1);
+    post1.tags = tags_a;
+    post1.tag_count = 1;
+    post2.tags = tags_b;
+    post2.tag_count = 1;
+    post3.tags = tags_b;
+    post3.tag_count = 1;
+    bunny_db_post_upsert(g_db, &post1, NULL); /* aardvark: 1 post */
+    bunny_db_post_upsert(g_db, &post2, NULL); /* antelope: 2 posts */
+    bunny_db_post_upsert(g_db, &post3, NULL);
+
+    bunny_db_tag_stat_list_t results;
+    bunny_db_result_t result = bunny_db_tag_autocomplete(g_db, BUNNY_DB_SITE_E621, "a", 10, &results);
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, result);
+    TEST_ASSERT_EQUAL(2, (int)results.count);
+    TEST_ASSERT_EQUAL_STRING("antelope", results.items[0].name); /* more posts wins, despite sorting after "aardvark" alphabetically */
+    TEST_ASSERT_EQUAL(2, results.items[0].count);
+    TEST_ASSERT_EQUAL_STRING("aardvark", results.items[1].name);
+    bunny_db_tag_stat_list_free(&results);
+}
+
+void test_tag_autocomplete_is_per_site(void)
+{
+    const char *tags[] = {"shared_tag_name"};
+
+    bunny_db_post_upsert_t post1;
+    bunny_db_post_upsert_t post2;
+    make_test_post(&post1, 821, 1);
+    make_test_post(&post2, 822, 1);
+    post1.tags = tags;
+    post1.tag_count = 1;
+    post2.site = BUNNY_DB_SITE_INKBUNNY;
+    post2.tags = tags;
+    post2.tag_count = 1;
+    bunny_db_post_upsert(g_db, &post1, NULL);
+    bunny_db_post_upsert(g_db, &post2, NULL);
+
+    bunny_db_tag_stat_list_t e621_results;
+    bunny_db_tag_autocomplete(g_db, BUNNY_DB_SITE_E621, "shared", 10, &e621_results);
+    TEST_ASSERT_EQUAL(1, (int)e621_results.count);
+    bunny_db_tag_stat_list_free(&e621_results);
+
+    bunny_db_tag_stat_list_t inkbunny_results;
+    bunny_db_tag_autocomplete(g_db, BUNNY_DB_SITE_INKBUNNY, "shared", 10, &inkbunny_results);
+    TEST_ASSERT_EQUAL(1, (int)inkbunny_results.count);
+    bunny_db_tag_stat_list_free(&inkbunny_results);
+}
+
+void test_tag_autocomplete_escapes_literal_underscore(void)
+{
+    /* "_" is a SQL LIKE wildcard for "any single character" -- a literal
+     * underscore in the prefix must not match unrelated tags like
+     * "digitalXmedia" the way an unescaped LIKE pattern would. */
+    const char *tags1[] = {"digital_media"};
+    const char *tags2[] = {"digitalXmedia"};
+
+    bunny_db_post_upsert_t post1;
+    bunny_db_post_upsert_t post2;
+    make_test_post(&post1, 831, 1);
+    make_test_post(&post2, 832, 1);
+    post1.tags = tags1;
+    post1.tag_count = 1;
+    post2.tags = tags2;
+    post2.tag_count = 1;
+    bunny_db_post_upsert(g_db, &post1, NULL);
+    bunny_db_post_upsert(g_db, &post2, NULL);
+
+    bunny_db_tag_stat_list_t results;
+    bunny_db_result_t result = bunny_db_tag_autocomplete(g_db, BUNNY_DB_SITE_E621, "digital_", 10, &results);
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, result);
+    TEST_ASSERT_EQUAL(1, (int)results.count);
+    TEST_ASSERT_EQUAL_STRING("digital_media", results.items[0].name);
+    bunny_db_tag_stat_list_free(&results);
+}
+
 int main(void)
 {
     UNITY_BEGIN();
@@ -328,5 +442,9 @@ int main(void)
     RUN_TEST(test_search_results_and_list_posts);
     RUN_TEST(test_download_record_and_list);
     RUN_TEST(test_top_favorited_tags);
+    RUN_TEST(test_tag_autocomplete_prefix_match);
+    RUN_TEST(test_tag_autocomplete_orders_by_usage_then_name);
+    RUN_TEST(test_tag_autocomplete_is_per_site);
+    RUN_TEST(test_tag_autocomplete_escapes_literal_underscore);
     return UNITY_END();
 }
