@@ -38,7 +38,7 @@ int main(void)
     core_config.db_path = db_path;
     core_config.user_agent = config->user_agent;
 
-    server_app_t *app = server_app_start(&core_config, config->data_dir, config->port);
+    server_app_t *app = server_app_start(&core_config, config->data_dir, config->port, config->poll_interval_sec);
     free(db_path);
     if (!app) {
         fprintf(stderr, "failed to start server\n");

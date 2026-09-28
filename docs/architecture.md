@@ -212,8 +212,8 @@ That combination — remote, no proxy, no manual certs — drove two decisions:
 
 **Concurrency**: `bunny_core` and `bunny_db` were built assuming a single caller (every
 prior milestone's tests and tools were single-threaded). civetweb runs a worker-thread pool
-by default, and M5.3 adds a background scheduler thread — two potential concurrent callers
-into the same `bunny_core_t`/`sqlite3*` where there used to be at most one. Fix: a single
+by default, and the M5.3 scheduler thread (below) is a second concurrent caller into the
+same `bunny_core_t`/`sqlite3*` where there used to be at most one. Fix: a single
 `pthread_mutex_t` in `server_context_t` (`server/src/context.h`) that every route handler
 and the scheduler must lock around their `bunny_core_*` calls. Coarse-grained on purpose —
 this is a personal, low-traffic server, not something that needs fine-grained locking.
@@ -260,6 +260,22 @@ id), not the server's. Fixed at the source: `bunny_core_map_db_result`
 (`libs/core/src/internal.h`) now maps `BUNNY_DB_ERR_CONSTRAINT` to
 `BUNNY_CORE_ERR_INVALID_ARG`, so every `bunny_core` API gets the correct client-error
 classification for constraint violations, not just this one route.
+
+**Background scheduler (M5.3)**: `server/src/scheduler.c`'s `server_scheduler_start/stop()`
+run a `pthread` that loops sleep(`poll_interval_sec`) → `bunny_core_sync_due_searches` →
+`bunny_core_process_queue` → repeat, locking the same `core_mutex` as every route handler.
+It sleeps in 1-second increments (checking a stop flag each time) rather than one long
+`sleep(poll_interval_sec)`, so `server_app_stop()` can join it within about a second instead
+of waiting out the full interval. `poll_interval_sec <= 0` disables it entirely — the
+integration test suite (`server/tests/test_integration.c`) uses this for every test except
+one, since a background pass firing mid-test would race (and consume) the fake transport's
+single canned response before the test's own explicit `/sync` call gets to it; the one
+exception test runs with a 1-second interval specifically to exercise the real thread.
+`server_app_start()`/`server_app_stop()` (`server/src/app.c`) own the scheduler's lifecycle
+alongside civetweb and `bunny_core` — on shutdown the scheduler is stopped *first*, so it's
+done issuing `bunny_core_*` calls before civetweb's workers and the core itself are torn
+down. `main.c`'s `SIGINT`/`SIGTERM` handling (from M5.1) needed no changes; it already just
+calls `server_app_stop()`, which now also tears down the scheduler.
 
 ## Inkbunny API constraints (found in M2)
 

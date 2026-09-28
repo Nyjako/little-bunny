@@ -5,6 +5,7 @@
 #include <civetweb.h>
 
 #include "context.h"
+#include "scheduler.h"
 
 typedef struct
 {
@@ -13,15 +14,18 @@ typedef struct
     server_auth_t *auth;
     char *cert_path;
     bunny_core_t *core;
+    server_scheduler_t scheduler;
 } server_app_t;
 
-/* Wires up a full server (bunny_core, auth token, TLS cert, all routes) and
- * starts listening on `port`. `data_dir` holds the auth token and TLS cert
- * (generated if missing); `core_config` is passed to bunny_core_open as-is,
- * so its db_path is independent of data_dir -- callers needing test
- * isolation can pass ":memory:" there while still using a real data_dir for
- * the token/cert. Returns NULL on failure. */
-server_app_t *server_app_start(const bunny_core_config_t *core_config, const char *data_dir, int port);
+/* Wires up a full server (bunny_core, auth token, TLS cert, all routes, and
+ * the background scheduler) and starts listening on `port`. `data_dir` holds
+ * the auth token and TLS cert (generated if missing); `core_config` is
+ * passed to bunny_core_open as-is, so its db_path is independent of
+ * data_dir -- callers needing test isolation can pass ":memory:" there while
+ * still using a real data_dir for the token/cert. `poll_interval_sec <= 0`
+ * disables the scheduler (see server_scheduler_start). Returns NULL on
+ * failure. */
+server_app_t *server_app_start(const bunny_core_config_t *core_config, const char *data_dir, int port, int poll_interval_sec);
 
 /* The loaded/generated auth token, for callers (e.g. tests) that need to
  * authenticate against the app they just started. */
