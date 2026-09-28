@@ -133,6 +133,14 @@ class HttpBunnyRepository implements BunnyRepository {
   List<Map<String, Object?>> _decodeList(http.Response response) => (jsonDecode(response.body) as List).cast<Map<String, Object?>>();
 
   @override
+  Future<void> verifyAccount(BunnySite site, String username, String secret) async {
+    final response = await _client.post(_uri('/accounts/verify'), headers: _headers, body: jsonEncode({'site': site.toWireString(), 'username': username, 'secret': secret}));
+    if (response.statusCode != 200) {
+      _throwError(response);
+    }
+  }
+
+  @override
   Future<void> setAccount(BunnySite site, String username, String secret) async {
     final response = await _client.post(_uri('/accounts'), headers: _headers, body: jsonEncode({'site': site.toWireString(), 'username': username, 'secret': secret}));
     if (response.statusCode != 200) {

@@ -230,7 +230,33 @@ this file is the single source of truth for "what's done" across sessions.
   Site login screens (e621 username/API key, Inkbunny username/password), app-lock via
   password/PIN/fingerprint. App-lock is a per-device, client-side setting, not tied to
   server-side credential storage (M4.1) — each device/app instance can use a different
-  mechanism (e.g. password on desktop, fingerprint + PIN fallback on mobile).
+  mechanism (e.g. password on desktop, fingerprint + PIN fallback on mobile). Delivered as
+  four sub-milestones, M7.1–M7.4 below (larger than a typical milestone: it also needed a
+  settings/connection-setup screen and real credential verification, neither of which
+  existed after M6).
+
+- [x] **M7.1 — Account verification (C core → FFI → HTTP → repository interface)**
+  `bunny_core_account_verify` (new, `libs/core/src/verify.c`) tests username/secret against
+  the real site without touching `bunny_db` — e621 has no dedicated login endpoint (auth is
+  per-request Basic auth), so this makes one real authenticated call
+  (`e621_list_favorites(client, NULL, ...)`, the authenticated client's own favorites) and
+  checks it doesn't fail; Inkbunny already has an explicit `inkbunny_login` primitive, used
+  directly. Both map any failure to the existing `BUNNY_CORE_ERR_SITE` — no new
+  error-handling convention. Threaded all the way up: `bunny_core_ffi`'s isolate protocol,
+  a new `POST /accounts/verify` server route (reusing the exact existing
+  `server_json_respond_error` convention, so a rejected credential is the same 502 +
+  generic message every other site failure already produces), and
+  `BunnyRepository.verifyAccount` (throws `BunnyRepositoryException` on rejection — every
+  other write-style method on this interface already just throws on failure, so this
+  matches that shape rather than introducing a new "meaningful non-exceptional failure"
+  case). Tested with fake transports at the C level (both sites, success + failure,
+  `libs/core/tests/test_sync.c`), a fake `http.Client` for `HttpBunnyRepository`, and
+  against the real compiled FFI library for `FfiBunnyRepository` — the FFI/HTTP-layer
+  *failure*-path tests deliberately use bogus credentials against the real e621 API (real
+  network, not a fake transport), since `bunny_core_ffi_open`'s public config has no
+  transport-injection point the way the C library's own tests do; e621 rejecting fake
+  Basic-auth credentials is fast and deterministic regardless of test-environment network
+  conditions.
 
 - [ ] **M8 — Browse & search UI**
   Manage saved searches, post grid/list with unseen markers, post detail view with full
