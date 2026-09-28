@@ -5,7 +5,8 @@
 extern "C" {
 #endif
 
-typedef enum {
+typedef enum
+{
     BUNNY_DB_OK = 0,
     BUNNY_DB_ERR_INVALID_ARG,
     BUNNY_DB_ERR_OPEN_FAILED,

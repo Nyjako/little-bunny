@@ -19,6 +19,9 @@ target_include_directories(bunny_db
 target_link_libraries(bunny_db
     PRIVATE
         sqlite3
+        # only needed for goblin_copy_cstr (see internal.h) -- bunny_db has
+        # no other reason to depend on bunny_common's HTTP/JSON layer.
+        bunny_common
 )
 
 if(BUNNY_BUILD_TESTS)

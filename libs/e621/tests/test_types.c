@@ -6,10 +6,13 @@
 
 #include "internal.h"
 
-void setUp(void) {}
-void tearDown(void) {}
+void setUp(void)
+{}
+void tearDown(void)
+{}
 
-static char *read_fixture(const char *filename) {
+static char *read_fixture(const char *filename)
+{
     char path[512];
     snprintf(path, sizeof(path), "%s/%s", FIXTURES_DIR, filename);
 
@@ -36,7 +39,8 @@ static char *read_fixture(const char *filename) {
     return buf;
 }
 
-void test_parse_post_full(void) {
+void test_parse_post_full(void)
+{
     char *content = read_fixture("post_single.json");
     TEST_ASSERT_NOT_NULL(content);
 
@@ -75,7 +79,8 @@ void test_parse_post_full(void) {
     free(content);
 }
 
-void test_parse_post_missing_id_fails(void) {
+void test_parse_post_missing_id_fails(void)
+{
     cJSON *obj = cJSON_Parse("{\"created_at\": \"now\"}");
     TEST_ASSERT_NOT_NULL(obj);
 
@@ -86,7 +91,8 @@ void test_parse_post_missing_id_fails(void) {
     cJSON_Delete(obj);
 }
 
-void test_parse_post_array_success(void) {
+void test_parse_post_array_success(void)
+{
     char *content = read_fixture("posts_search.json");
     TEST_ASSERT_NOT_NULL(content);
     cJSON *root = cJSON_Parse(content);
@@ -104,7 +110,8 @@ void test_parse_post_array_success(void) {
     free(content);
 }
 
-void test_parse_post_array_propagates_item_error(void) {
+void test_parse_post_array_propagates_item_error(void)
+{
     cJSON *array = cJSON_Parse("[{\"id\": 1}, {\"no_id\": true}]");
     TEST_ASSERT_NOT_NULL(array);
 
@@ -115,7 +122,8 @@ void test_parse_post_array_propagates_item_error(void) {
     cJSON_Delete(array);
 }
 
-void test_parse_comment_array_success(void) {
+void test_parse_comment_array_success(void)
+{
     char *content = read_fixture("comments_list.json");
     TEST_ASSERT_NOT_NULL(content);
     cJSON *array = cJSON_Parse(content);
@@ -132,7 +140,8 @@ void test_parse_comment_array_success(void) {
     free(content);
 }
 
-void test_parse_post_no_parent_when_relationships_absent(void) {
+void test_parse_post_no_parent_when_relationships_absent(void)
+{
     cJSON *obj = cJSON_Parse("{\"id\": 1}");
     TEST_ASSERT_NOT_NULL(obj);
 
@@ -147,7 +156,8 @@ void test_parse_post_no_parent_when_relationships_absent(void) {
     cJSON_Delete(obj);
 }
 
-void test_parse_post_null_parent_id_means_no_parent(void) {
+void test_parse_post_null_parent_id_means_no_parent(void)
+{
     cJSON *obj = cJSON_Parse("{\"id\": 1, \"relationships\": {\"parent_id\": null, \"has_children\": false}}");
     TEST_ASSERT_NOT_NULL(obj);
 
@@ -160,7 +170,8 @@ void test_parse_post_null_parent_id_means_no_parent(void) {
     cJSON_Delete(obj);
 }
 
-void test_parse_pool_full(void) {
+void test_parse_pool_full(void)
+{
     char *content = read_fixture("pool_single.json");
     TEST_ASSERT_NOT_NULL(content);
 
@@ -185,7 +196,8 @@ void test_parse_pool_full(void) {
     free(content);
 }
 
-void test_parse_pool_missing_id_fails(void) {
+void test_parse_pool_missing_id_fails(void)
+{
     cJSON *obj = cJSON_Parse("{\"name\": \"no id here\"}");
     TEST_ASSERT_NOT_NULL(obj);
 
@@ -196,7 +208,8 @@ void test_parse_pool_missing_id_fails(void) {
     cJSON_Delete(obj);
 }
 
-void test_parse_post_lenient_on_malformed_tag_category(void) {
+void test_parse_post_lenient_on_malformed_tag_category(void)
+{
     /* "general" isn't an array here; parsing should still succeed with an
      * empty general list rather than failing the whole post. */
     cJSON *obj = cJSON_Parse("{\"id\": 1, \"tags\": {\"general\": \"not-an-array\"}}");
@@ -211,7 +224,8 @@ void test_parse_post_lenient_on_malformed_tag_category(void) {
     cJSON_Delete(obj);
 }
 
-int main(void) {
+int main(void)
+{
     UNITY_BEGIN();
     RUN_TEST(test_parse_post_full);
     RUN_TEST(test_parse_post_missing_id_fails);

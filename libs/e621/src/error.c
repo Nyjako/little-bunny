@@ -1,6 +1,7 @@
 #include "e621/error.h"
 
-const char *e621_result_to_string(e621_result_t result) {
+const char *e621_result_to_string(e621_result_t result)
+{
     switch (result) {
         case E621_OK:
             return "ok";

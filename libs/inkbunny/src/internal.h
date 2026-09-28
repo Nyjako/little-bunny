@@ -3,6 +3,8 @@
 
 #include <bunny_common/http.h>
 #include <bunny_common/json.h>
+#include <goblin/cstr.h>
+
 #include <ctype.h>
 #include <curl/curl.h>
 #include <stdint.h>
@@ -17,7 +19,8 @@
 /* Shared between client.c (owns lifecycle + the official API calls) and
  * unofficial_favorites.c (uses website_curl for the website-session-based
  * favorite/unfavorite flow -- see inkbunny/unofficial_favorites.h). */
-struct inkbunny_client {
+struct inkbunny_client
+{
     char *base_url;
     char *sid;
     int64_t user_id;
@@ -41,7 +44,8 @@ inkbunny_result_t inkbunny_parse_submission_array(const cJSON *json_array, inkbu
  * and every boolean as the string "t" or "f", confirmed against the live API. These
  * helpers tolerate a real JSON number/bool too, in case that ever changes.
  */
-static inline int64_t inkbunny_field_int64(const cJSON *object, const char *key, int64_t default_value) {
+static inline int64_t inkbunny_field_int64(const cJSON *object, const char *key, int64_t default_value)
+{
     if (!object || !cJSON_IsObject(object)) {
         return default_value;
     }
@@ -58,11 +62,13 @@ static inline int64_t inkbunny_field_int64(const cJSON *object, const char *key,
     return default_value;
 }
 
-static inline int inkbunny_field_int(const cJSON *object, const char *key, int default_value) {
+static inline int inkbunny_field_int(const cJSON *object, const char *key, int default_value)
+{
     return (int)inkbunny_field_int64(object, key, default_value);
 }
 
-static inline bool inkbunny_field_bool_tf(const cJSON *object, const char *key, bool default_value) {
+static inline bool inkbunny_field_bool_tf(const cJSON *object, const char *key, bool default_value)
+{
     const char *value = bunny_json_get_string_or(object, key, NULL);
     if (!value) {
         return default_value;
@@ -78,9 +84,10 @@ static inline bool inkbunny_field_bool_tf(const cJSON *object, const char *key, 
 
 /* Shared between client.c (official API query strings) and
  * unofficial_favorites.c (website form bodies). */
-static inline char *inkbunny_url_encode(const char *value) {
+static inline char *inkbunny_url_encode(const char *value)
+{
     if (!value) {
-        return strdup("");
+        return goblin_copy_cstr("");
     }
     size_t len = strlen(value);
     char *out = malloc(len * 3 + 1);
