@@ -101,6 +101,41 @@ typedef struct
     size_t count;
 } bunny_db_download_list_t;
 
+typedef enum
+{
+    BUNNY_DB_ACTION_FAVORITE_ADD,
+    BUNNY_DB_ACTION_FAVORITE_REMOVE,
+    BUNNY_DB_ACTION_VOTE,
+    BUNNY_DB_ACTION_COMMENT,
+} bunny_db_action_type_t;
+
+const char *bunny_db_action_type_to_string(bunny_db_action_type_t action_type);
+
+typedef enum
+{
+    BUNNY_DB_ACTION_STATUS_PENDING,
+    BUNNY_DB_ACTION_STATUS_DONE,
+    BUNNY_DB_ACTION_STATUS_FAILED,
+} bunny_db_action_status_t;
+
+typedef struct
+{
+    int64_t id;
+    int64_t post_id;
+    bunny_db_action_type_t action_type;
+    char *payload; /* may be NULL; action-specific data, opaque to bunny_db */
+    bunny_db_action_status_t status;
+    char *created_at;
+    char *attempted_at;  /* may be NULL if still pending */
+    char *error_message; /* may be NULL */
+} bunny_db_action_t;
+
+typedef struct
+{
+    bunny_db_action_t *items;
+    size_t count;
+} bunny_db_action_list_t;
+
 void bunny_db_account_free(bunny_db_account_t *account);
 void bunny_db_search_free(bunny_db_search_t *search);
 void bunny_db_search_list_free(bunny_db_search_list_t *list);
@@ -110,6 +145,8 @@ void bunny_db_tag_stat_free(bunny_db_tag_stat_t *stat);
 void bunny_db_tag_stat_list_free(bunny_db_tag_stat_list_t *list);
 void bunny_db_download_free(bunny_db_download_t *download);
 void bunny_db_download_list_free(bunny_db_download_list_t *list);
+void bunny_db_action_free(bunny_db_action_t *action);
+void bunny_db_action_list_free(bunny_db_action_list_t *list);
 
 #ifdef __cplusplus
 }

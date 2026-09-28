@@ -8,6 +8,7 @@ add_library(bunny_db STATIC
     src/favorites.c
     src/downloads.c
     src/stats.c
+    src/action_queue.c
 )
 
 target_include_directories(bunny_db

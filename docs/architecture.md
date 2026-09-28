@@ -95,7 +95,10 @@ access behind an interactive passphrase would make the server unable to sync whi
   server process for clients to authenticate against.
 
 **Scheduled search sync (M4.2)**: `bunny_core_sync_due_searches()` (`libs/core/src/sync.c`)
-is the only place `bunny_core` builds e621/Inkbunny clients. A search is "due" when
+builds e621/Inkbunny clients via `bunny_core_build_e621_client`/`build_inkbunny_client`
+(`libs/core/src/site_clients.c` — factored out during M4.3 once the action queue needed the
+exact same "build a client using the stored account, or guest/anonymous" logic). A search
+is "due" when
 `last_run_at` is `NULL` or more than `interval_hours` old — computed in C via
 `strptime`/`timegm` against the stored ISO-8601 timestamp (POSIX, not standard C11; needs
 `_DEFAULT_SOURCE`/`_XOPEN_SOURCE` defined before any header include, since this project
@@ -117,6 +120,45 @@ action queue (M4.3). Mapping notes:
 thin `bunny_db` pass-throughs (same pattern as the M4.1 account wrappers) — `bunny_core` is
 the single entry point every app uses (standalone FFI or networked server), so it has to
 expose search CRUD even though the sync engine itself only ever reads searches.
+
+**Action queue (M4.3)**: `bunny_core_queue_favorite_add/remove/vote/comment()`
+(`libs/core/src/queue.c`) enqueue into a new `action_queue` table (`bunny_db_action_queue_*`,
+`libs/db/src/action_queue.c`) — fast, no network. `bunny_core_process_queue()` later drains
+every `pending` row: resolves its local `post_id` to `(site, external_id)` via the new
+`bunny_db_post_get_by_id` (the queue only ever has the local id, matching
+`bunny_db_favorite_add`/`bunny_db_download_record`'s own convention — there was previously
+no way to look a post up by local id alone, only by `(site, external_id)`), builds a client
+for that site, calls the matching e621/Inkbunny function, updates the local favorites
+mirror (`bunny_db_favorite_add/remove`) on success, and marks the row `done` or `failed`
+with an error message. e621 actions reuse one client across the whole pass; Inkbunny
+actions don't, since the unofficial favorite route needs a per-client website session
+login anyway (see below) and there's no meaningful reuse to be had.
+
+Action-specific data (a vote's `score`/`no_unvote`, a comment's `body`/`anonymous`, a
+favorite's optional `stars`) is stored in the row's `payload` column as a small JSON blob,
+built and read with cJSON directly (`libs/core/src/queue.c` — already a transitive
+dependency of `bunny_core` through `bunny_common`, so no new dependency was needed).
+`bunny_db` itself never parses `payload`; it's opaque storage as far as that layer is
+concerned.
+
+Two real constraints shape what the queue can actually do for Inkbunny:
+- **No vote or comment API at all** (see "Inkbunny API constraints" below) — queuing one
+  against an Inkbunny post is accepted (the queue doesn't know a post's site until it's
+  processed) but always fails immediately when processed, with a clear error, rather than
+  attempting anything.
+- **Favoriting needs a real account, not guest.** `inkbunny_website_login()` (the
+  unofficial route's own login, separate from `inkbunny_login()`) takes no anonymous mode
+  — if no Inkbunny account is configured, a queued Inkbunny favorite action fails
+  immediately (no network call attempted) with a clear error rather than trying and
+  failing at the site. This also means, per the unofficial-favorites doc comment in
+  `libs/inkbunny/include/inkbunny/unofficial_favorites.h`, that **Inkbunny favorite actions
+  have no automated test coverage** — that route has no injectable transport (it needs a
+  real persistent cookie-jar session), only manual/live verification, same as M2.2.
+
+`bunny_core_build_e621_client`/`build_inkbunny_client` (`libs/core/src/site_clients.c`) were
+factored out of M4.2's sync code specifically so the queue could reuse the exact same
+"build a client using the stored account, or guest/anonymous" logic instead of duplicating
+it.
 
 ## Inkbunny API constraints (found in M2)
 

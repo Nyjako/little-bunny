@@ -3,7 +3,9 @@ add_library(bunny_core STATIC
     src/error.c
     src/accounts.c
     src/searches.c
+    src/site_clients.c
     src/sync.c
+    src/queue.c
 )
 
 target_include_directories(bunny_core

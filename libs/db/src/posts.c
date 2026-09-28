@@ -161,6 +161,31 @@ bunny_db_result_t bunny_db_post_get(bunny_db_t *db, bunny_db_site_t site, int64_
     return BUNNY_DB_OK;
 }
 
+bunny_db_result_t bunny_db_post_get_by_id(bunny_db_t *db, int64_t post_id, bunny_db_post_t *out_post)
+{
+    if (!db || !out_post) {
+        return BUNNY_DB_ERR_INVALID_ARG;
+    }
+
+    const char *sql = "SELECT " BUNNY_DB_POST_SELECT_COLUMNS BUNNY_DB_POST_SELECT_FROM_JOIN "WHERE p.id = ?;";
+    sqlite3_stmt *stmt = NULL;
+    if (sqlite3_prepare_v2(db->handle, sql, -1, &stmt, NULL) != SQLITE_OK) {
+        return BUNNY_DB_ERR_QUERY_FAILED;
+    }
+    sqlite3_bind_int64(stmt, 1, post_id);
+
+    int rc = sqlite3_step(stmt);
+    if (rc != SQLITE_ROW) {
+        sqlite3_finalize(stmt);
+        return rc == SQLITE_DONE ? BUNNY_DB_ERR_NOT_FOUND : bunny_db_sqlite_rc_to_result(rc);
+    }
+
+    memset(out_post, 0, sizeof(*out_post));
+    bunny_db_fill_post_from_row(stmt, out_post);
+    sqlite3_finalize(stmt);
+    return BUNNY_DB_OK;
+}
+
 bunny_db_result_t bunny_db_search_add_result(bunny_db_t *db, int64_t search_id, int64_t post_id)
 {
     if (!db) {
