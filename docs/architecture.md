@@ -500,6 +500,42 @@ premature before M8's real navigation needs are known.
   bearer token is rejected with a real 401, and a wrong certificate fingerprint fails the TLS
   handshake itself (`CERTIFICATE_VERIFY_FAILED`) before any request is even sent.
 
+**Site login screens (M7.3)**: `AccountsScreen` (`app/lib/screens/accounts_screen.dart`)
+replaces the M6 placeholder as the app's real home page — it lists both `BunnySite`s via
+`BunnyRepository.getAccount`, showing each as "Not connected" or "Logged in as
+{username}" with a remove action gated by a confirmation dialog. Tapping an unconfigured
+site opens `LoginFormScreen`, whose only per-site difference is field labels/obscuring
+(e621: username + API key; Inkbunny: username + password, obscured) — it calls M7.1's
+`verifyAccount` before `setAccount`, so a rejected credential never gets persisted and its
+`BunnyRepositoryException.message` is shown inline instead.
+
+- **Testing seam**: `app/test/fakes/fake_bunny_repository.dart` is a hand-written
+  `BunnyRepository` fake implementing only the four account methods these two screens
+  actually call (everything else throws `UnimplementedError`, since nothing under test
+  reaches it) — no mocking framework, matching the project's "fake the dependency, not the
+  business logic" style used throughout M1–M7. `verifyAccount`/`setAccount`/`deleteAccount`'s
+  actual behavior against real sites/a real server is already covered by M7.1; these tests
+  only need to prove the UI's own orchestration (state → rendering, error display, confirm
+  dialog wiring) is correct.
+- **A real bug these tests caught**: `AccountsScreen._refresh`'s original
+  `setState(() => _accountsFuture = _loadAccounts())` is an arrow function whose body is an
+  assignment expression — and a Dart assignment expression evaluates to the *assigned
+  value*, so the closure itself returned a `Future` even though nothing was `async`/`await`ed.
+  Flutter's `setState` asserts against exactly this (it can't safely rebuild before an
+  unawaited Future completes). Fixed by switching to a block body
+  (`setState(() { _accountsFuture = _loadAccounts(); })`), which returns `void` instead.
+- **`BunnyRepositoryScope` moved out of `main.dart`** into its own
+  `app/lib/bunny_repository_scope.dart` once `AccountsScreen` needed to reference it — keeps
+  `main.dart` and `screens/accounts_screen.dart` from importing each other circularly.
+- **Widget-test network caveat**: `flutter test`'s `TestWidgetsFlutterBinding` intercepts
+  every `HttpClient` request and returns them immediately (status 400, no real socket) —
+  but the resulting Future chain inside a real `HttpBunnyRepository` (used in
+  `test/widget_test.dart`'s "already configured" case, pointed at an intentionally
+  unreachable `localhost`) never converges through `pumpAndSettle()`'s idle-check. Fixed by
+  pumping a bounded, fixed number of frames instead — enough to get past the (fake-backed,
+  non-networked) settings load and render `AccountsScreen`'s `Scaffold`/`AppBar`, which
+  doesn't itself wait on the account-loading future to appear.
+
 ## Inkbunny API constraints (found in M2)
 
 Verified against the live API and the official docs while building `libinkbunny`:
