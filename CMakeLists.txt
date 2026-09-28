@@ -82,6 +82,20 @@ if(sqlite3_ADDED)
   endif()
 endif()
 
+# Header-only, so no build step of its own -- just its include/ dir on an
+# INTERFACE target. Pinned to a commit since GOBLIN has no tags yet.
+CPMAddPackage(
+  NAME GOBLIN
+  GITHUB_REPOSITORY Nyjako/GOBLIN
+  GIT_TAG fb4141baf198bc49f7d77da8d2d7a6e8ae7df03a
+  DOWNLOAD_ONLY YES
+)
+
+if(GOBLIN_ADDED)
+  add_library(goblin INTERFACE)
+  target_include_directories(goblin INTERFACE ${GOBLIN_SOURCE_DIR}/include)
+endif()
+
 if(BUNNY_BUILD_TESTS)
   enable_testing()
   CPMAddPackage(

@@ -1,7 +1,9 @@
 #ifndef BUNNY_DB_INTERNAL_H
 #define BUNNY_DB_INTERNAL_H
 
+#include <goblin/cstr.h>
 #include <sqlite3.h>
+
 #include <stdlib.h>
 #include <string.h>
 
@@ -28,14 +30,14 @@ static inline bunny_db_result_t bunny_db_sqlite_rc_to_result(int rc)
 
 static inline char *bunny_db_dup_or_null(const char *s)
 {
-    return s ? strdup(s) : NULL;
+    return s ? goblin_copy_cstr(s) : NULL;
 }
 
 /* Duplicates the TEXT column at `col` (or NULL if the column is SQL NULL). */
 static inline char *bunny_db_column_text_dup(sqlite3_stmt *stmt, int col)
 {
     const unsigned char *text = sqlite3_column_text(stmt, col);
-    return text ? strdup((const char *)text) : NULL;
+    return text ? goblin_copy_cstr((const char *)text) : NULL;
 }
 
 static inline bunny_db_site_t bunny_db_site_from_text(const char *text)

@@ -3,6 +3,8 @@
 
 #include <bunny_common/http.h>
 #include <bunny_common/json.h>
+#include <goblin/cstr.h>
+
 #include <ctype.h>
 #include <curl/curl.h>
 #include <stdint.h>
@@ -85,7 +87,7 @@ static inline bool inkbunny_field_bool_tf(const cJSON *object, const char *key, 
 static inline char *inkbunny_url_encode(const char *value)
 {
     if (!value) {
-        return strdup("");
+        return goblin_copy_cstr("");
     }
     size_t len = strlen(value);
     char *out = malloc(len * 3 + 1);
