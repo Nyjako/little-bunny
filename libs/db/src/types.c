@@ -1,0 +1,109 @@
+#include "bunny_db/types.h"
+
+#include <stdlib.h>
+#include <string.h>
+
+const char *bunny_db_site_to_string(bunny_db_site_t site) {
+    switch (site) {
+        case BUNNY_DB_SITE_E621:
+            return "e621";
+        case BUNNY_DB_SITE_INKBUNNY:
+            return "inkbunny";
+        default:
+            return "e621";
+    }
+}
+
+void bunny_db_search_free(bunny_db_search_t *search) {
+    if (!search) {
+        return;
+    }
+    free(search->label);
+    free(search->query);
+    free(search->created_at);
+    free(search->last_run_at);
+    memset(search, 0, sizeof(*search));
+}
+
+void bunny_db_search_list_free(bunny_db_search_list_t *list) {
+    if (!list) {
+        return;
+    }
+    for (size_t i = 0; i < list->count; i++) {
+        bunny_db_search_free(&list->items[i]);
+    }
+    free(list->items);
+    list->items = NULL;
+    list->count = 0;
+}
+
+void bunny_db_post_free(bunny_db_post_t *post) {
+    if (!post) {
+        return;
+    }
+    free(post->artist);
+    free(post->title);
+    free(post->description);
+    free(post->rating);
+    free(post->file_url);
+    free(post->file_ext);
+    free(post->file_md5);
+    free(post->preview_url);
+    free(post->created_at_site);
+    free(post->cached_at);
+    memset(post, 0, sizeof(*post));
+}
+
+void bunny_db_post_list_free(bunny_db_post_list_t *list) {
+    if (!list) {
+        return;
+    }
+    for (size_t i = 0; i < list->count; i++) {
+        bunny_db_post_free(&list->items[i]);
+    }
+    free(list->items);
+    list->items = NULL;
+    list->count = 0;
+}
+
+void bunny_db_tag_stat_free(bunny_db_tag_stat_t *stat) {
+    if (!stat) {
+        return;
+    }
+    free(stat->name);
+    memset(stat, 0, sizeof(*stat));
+}
+
+void bunny_db_tag_stat_list_free(bunny_db_tag_stat_list_t *list) {
+    if (!list) {
+        return;
+    }
+    for (size_t i = 0; i < list->count; i++) {
+        bunny_db_tag_stat_free(&list->items[i]);
+    }
+    free(list->items);
+    list->items = NULL;
+    list->count = 0;
+}
+
+void bunny_db_download_free(bunny_db_download_t *download) {
+    if (!download) {
+        return;
+    }
+    free(download->file_path);
+    free(download->checksum_md5);
+    free(download->downloaded_at);
+    memset(download, 0, sizeof(*download));
+}
+
+void bunny_db_download_list_free(bunny_db_download_list_t *list) {
+    if (!list) {
+        return;
+    }
+    for (size_t i = 0; i < list->count; i++) {
+        bunny_db_download_free(&list->items[i]);
+    }
+    free(list->items);
+    list->items = NULL;
+    list->count = 0;
+}
