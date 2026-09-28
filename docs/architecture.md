@@ -457,6 +457,49 @@ underlying accept/reject *logic* itself is already thoroughly covered with fake 
 at the C level (`libs/core/tests/test_sync.c`, both sites, both outcomes) — the FFI/HTTP
 layers only need to prove their own plumbing reaches it.
 
+**Settings & connection setup (M7.2)**: `main.dart`'s `LittleBunnyApp` no longer hardcodes a
+`:memory:` standalone repository — it's now a small stateful root that loads a persisted
+`BunnyRepositoryConfig` on boot via `app/lib/settings/RepositorySettingsStore`, falling back
+to `SetupScreen` (`app/lib/screens/`) on first launch (no config saved yet). Plain
+`StatefulWidget`/`setState` handles this root-level branching; a routing package would be
+premature before M8's real navigation needs are known.
+
+- **Storage split by sensitivity.** `RepositorySettingsStore` keeps non-secret bookkeeping
+  (active mode, server URL) in `shared_preferences`, and the networked mode's bearer
+  token/cert fingerprint behind a small `SecretStore` interface
+  (`app/lib/settings/secret_store.dart`) — real implementation
+  `FlutterSecureStorageSecretStore`, backed by OS-native encryption (Android Keystore, Linux
+  libsecret via a running secret-service daemon). The interface exists purely for testability
+  (an in-memory fake in tests) since there's no real secure-storage backend under `flutter
+  test`. **Dependency to be aware of**: the Linux backend needs a real secret-service
+  provider running (gnome-keyring, KWallet, or similar) — confirmed present and responding in
+  this project's dev environment via a live D-Bus ping to `org.freedesktop.secrets`, but a
+  genuinely headless box (no D-Bus session, no keyring daemon) has no documented graceful
+  fallback in the package itself.
+- **Standalone mode's db path is never persisted.** It's resolved fresh each launch via
+  `path_provider`'s `getApplicationSupportDirectory()` — the Dart-side equivalent of
+  GOBLIN's `appdirs.h` used server-side (M5.1) — joined with a fixed filename. Recomputing
+  it is cheap and avoids a stale absolute path surviving something like an app reinstall to
+  a different location.
+- **App-lock secret storage (design decision, ahead of M7.4)**: when the app-lock PIN/
+  password is added, it goes into `SecretStore` directly (compared by string equality at
+  unlock time), not a hand-rolled salt+hash — `flutter_secure_storage` already encrypts
+  values at rest via the OS-native mechanism, so layering custom hashing on top would just
+  be extra bespoke crypto code for a feature that's a local device UI gate, not data-at-rest
+  protection.
+- **Connection check reuses `HttpBunnyRepository`, not `GET /health`.** `SetupScreen`'s
+  networked-mode form validates the entered server URL/token/fingerprint with
+  `checkServerConnection` (`app/lib/settings/server_connection_check.dart`) before saving
+  anything — a throwaway `HttpBunnyRepository.listSearches()` call. `/health` needs no auth
+  (see "C server (M5)" above), so it would only prove the server and certificate are
+  reachable, never catch a wrong bearer token; `listSearches` is a lightweight authenticated
+  read that exercises both checks in one real request. Not a `BunnyRepository` interface
+  method — a connection health check isn't meaningful for standalone/FFI mode.
+- **Manual end-to-end verification**: run against a real `bunny_server` instance (same
+  throwaway-server approach as M6.3's check) — correct config connects successfully, a wrong
+  bearer token is rejected with a real 401, and a wrong certificate fingerprint fails the TLS
+  handshake itself (`CERTIFICATE_VERIFY_FAILED`) before any request is even sent.
+
 ## Inkbunny API constraints (found in M2)
 
 Verified against the live API and the official docs while building `libinkbunny`:
