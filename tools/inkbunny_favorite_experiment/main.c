@@ -62,15 +62,15 @@ static void buffer_free(buffer_t *buf) {
     buf->len = 0;
 }
 
-/* Finds `attr="attr_value"` (e.g. name="token" or id="general-global_token"),
- * then returns a copy of the nearest value="..." within the same <input ...>
- * tag (checked in both directions, since attribute order varies between the
- * two tokens this tool needs). Returns NULL if not found. */
-static char *extract_input_value(const char *html, const char *attr, const char *attr_value) {
-    char needle[160];
-    snprintf(needle, sizeof(needle), "%s=\"%s\"", attr, attr_value);
-
-    const char *match = strstr(html, needle);
+/* Finds `anchor` verbatim (e.g. name="token", or just general-global_token
+ * without assuming which attribute holds it), then returns a copy of the
+ * nearest value=... within the same tag. Quote-agnostic: Inkbunny mixes
+ * single- and double-quoted attributes across pages (confirmed live - the
+ * login form uses double quotes, the submission page's global_token input
+ * uses single quotes), so this accepts either and matches on whichever
+ * quote character actually follows "value=". Returns NULL if not found. */
+static char *extract_input_value(const char *html, const char *anchor) {
+    const char *match = strstr(html, anchor);
     if (!match) {
         return NULL;
     }
@@ -84,15 +84,27 @@ static char *extract_input_value(const char *html, const char *attr, const char 
         return NULL;
     }
 
-    const char *value_marker = "value=\"";
-    const char *value_pos = strstr(tag_start, value_marker);
-    if (!value_pos || value_pos > tag_end) {
+    const char *value_marker = "value=";
+    size_t marker_len = strlen(value_marker);
+    const char *value_pos = NULL;
+    for (const char *p = tag_start; p + marker_len < tag_end; p++) {
+        if (strncmp(p, value_marker, marker_len) == 0) {
+            value_pos = p + marker_len;
+            break;
+        }
+    }
+    if (!value_pos || value_pos >= tag_end) {
         return NULL;
     }
-    value_pos += strlen(value_marker);
 
-    const char *end = strchr(value_pos, '"');
-    if (!end) {
+    char quote = *value_pos;
+    if (quote != '"' && quote != '\'') {
+        return NULL;
+    }
+    value_pos++;
+
+    const char *end = strchr(value_pos, quote);
+    if (!end || end > tag_end) {
         return NULL;
     }
 
@@ -227,7 +239,7 @@ int main(int argc, char **argv) {
         fprintf(stderr, "failed to fetch the login page\n");
         goto cleanup;
     }
-    login_token = extract_input_value(page.data, "name", "token");
+    login_token = extract_input_value(page.data, "name=\"token\"");
     if (!login_token) {
         fprintf(stderr, "could not find the login form's CSRF token -- page markup may have changed\n");
         goto cleanup;
@@ -282,7 +294,7 @@ int main(int argc, char **argv) {
             goto cleanup;
         }
     }
-    global_token = extract_input_value(page.data, "id", "general-global_token");
+    global_token = extract_input_value(page.data, "general-global_token");
     if (!global_token) {
         fprintf(stderr, "could not find general-global_token on the submission page -- markup may have "
                         "changed, or the submission id doesn't exist\n");
