@@ -38,6 +38,10 @@ dependencies:
   bunny_core_ffi:
     path: ../bunny_core_ffi
 
+  http: ^1.2.0
+  crypto: ^3.0.0
+  meta: ^1.15.0
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

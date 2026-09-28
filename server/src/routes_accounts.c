@@ -60,8 +60,10 @@ static int handle_get_account(struct mg_connection *conn, server_context_t *ctx,
     }
 
     cJSON *response = cJSON_CreateObject();
+    cJSON_AddNumberToObject(response, "id", (double)account.id);
     cJSON_AddStringToObject(response, "site", bunny_db_site_to_string(account.site));
     cJSON_AddStringToObject(response, "username", account.username);
+    cJSON_AddStringToObject(response, "created_at", account.created_at);
     bunny_db_account_free(&account);
 
     int status = server_json_respond(conn, 200, response);
