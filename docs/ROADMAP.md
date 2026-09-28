@@ -258,6 +258,26 @@ this file is the single source of truth for "what's done" across sessions.
   Basic-auth credentials is fast and deterministic regardless of test-environment network
   conditions.
 
+- [x] **M7.2 — Settings & connection setup**
+  `app/lib/settings/`: `RepositorySettingsStore` persists which `BunnyRepositoryConfig` is
+  active across restarts — non-secret bookkeeping (mode, server URL) via
+  `shared_preferences`; the networked mode's bearer token and cert fingerprint via a small
+  `SecretStore` interface (real backend `flutter_secure_storage`, OS-native encryption —
+  Android Keystore, Linux libsecret through a running secret-service daemon). Standalone
+  mode's db path is never persisted; it's resolved fresh each launch via `path_provider`'s
+  `getApplicationSupportDirectory()`, the Dart equivalent of GOBLIN's `appdirs.h` used
+  server-side. `SetupScreen` (`app/lib/screens/`) is shown on first launch (no persisted
+  config yet): pick standalone or fill in networked mode's server URL/token/fingerprint,
+  which gets a real authenticated connectivity check (`checkServerConnection`, a throwaway
+  `HttpBunnyRepository.listSearches()` call — deliberately not a bare `GET /health`, since
+  that needs no auth and would never catch a wrong bearer token) before anything is
+  persisted. `main.dart`'s `LittleBunnyApp` is now a small stateful root that loads the
+  persisted config on boot, falls back to `SetupScreen` if none exists, and otherwise
+  proceeds straight to the same placeholder home page as before — plain `StatefulWidget`/
+  `setState`, no new state-management dependency. Verified against a real running
+  `bunny_server` instance: correct config connects, a wrong token is rejected with 401, a
+  wrong certificate fingerprint fails the TLS handshake outright.
+
 - [ ] **M8 — Browse & search UI**
   Manage saved searches, post grid/list with unseen markers, post detail view with full
   metadata, viewers for supported formats (image/video/webm/gif; Flash/SWF intentionally
