@@ -122,6 +122,27 @@ this file is the single source of truth for "what's done" across sessions.
   more than one caller. See `docs/architecture.md`'s "C server (M5)" section for the full
   writeup.
 
+- [x] **M5.2 — REST routes over `bunny_core`**
+  Full REST surface: `POST/GET/DELETE /accounts[/{site}]` (never echoes `secret` back),
+  `POST/GET/DELETE /searches[/{id}]` + `GET /searches/{id}/posts?unseen_only=`,
+  `POST/DELETE /posts/{id}/favorite`, `POST /posts/{id}/vote`, `POST /posts/{id}/comment`
+  (all three queue actions respond `202 Accepted`, matching that they're enqueued, not
+  processed), `POST /sync` and `POST /queue/process` (manual triggers, ahead of M5.3's
+  scheduler). Route handlers live one file per resource
+  (`routes_accounts.c`/`routes_searches.c`/`routes_queue.c`), matching `bunny_db`'s
+  per-concern split; `json_helpers.c` centralizes request-body parsing and
+  `bunny_core_result_t` → HTTP status mapping (400/404/502/500), and `route_utils.c`
+  centralizes path-segment/id/site parsing so civetweb's prefix-matching URIs (`/a` also
+  matches `/a/b`) don't need re-deriving per route. `main.c`'s startup logic was factored
+  into `server_app_start()`/`server_app_stop()` (`server/src/app.c`, backing a new
+  `bunny_server_lib` static library `bunny_server` and the test suite both link) so tests
+  can drive a real, fully-wired server instead of re-implementing its wiring or spawning
+  the built executable. Also fixed a real bug found via manual testing: a SQL foreign-key
+  violation (e.g. queuing an action against a nonexistent post id) was surfacing as a 500
+  "database error" instead of 400 — `bunny_core_map_db_result` now maps
+  `BUNNY_DB_ERR_CONSTRAINT` to `BUNNY_CORE_ERR_INVALID_ARG`, since a constraint violation
+  from bad caller input isn't a server-side fault.
+
 - [ ] **M6 — Flutter app skeleton**
   App shell, FFI bindings to the core for standalone mode, HTTP client for networked mode,
   both behind one repository interface so the UI layer doesn't care which is active.
