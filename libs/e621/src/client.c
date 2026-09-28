@@ -1,5 +1,7 @@
 #include "e621/client.h"
 
+#include <goblin/cstr.h>
+
 #include <ctype.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -24,7 +26,7 @@ struct e621_client
 static char *url_encode(const char *value)
 {
     if (!value) {
-        return strdup("");
+        return goblin_copy_cstr("");
     }
     size_t len = strlen(value);
     char *out = malloc(len * 3 + 1);
@@ -237,10 +239,10 @@ e621_client_t *e621_client_create(const e621_config_t *config)
     }
 
     const char *base_url = config->base_url ? config->base_url : "https://e621.net";
-    client->base_url = strdup(base_url);
-    client->user_agent = strdup(config->user_agent);
-    client->username = config->username ? strdup(config->username) : NULL;
-    client->api_key = config->api_key ? strdup(config->api_key) : NULL;
+    client->base_url = goblin_copy_cstr(base_url);
+    client->user_agent = goblin_copy_cstr(config->user_agent);
+    client->username = config->username ? goblin_copy_cstr(config->username) : NULL;
+    client->api_key = config->api_key ? goblin_copy_cstr(config->api_key) : NULL;
     client->min_request_interval_sec = config->min_request_interval_sec > 0 ? config->min_request_interval_sec : 0.5;
     client->transport = config->transport ? *config->transport : bunny_http_curl_transport();
     client->has_last_request_time = false;

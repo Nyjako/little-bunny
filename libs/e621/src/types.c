@@ -1,5 +1,7 @@
 #include "e621/types.h"
 
+#include <goblin/cstr.h>
+
 #include <stdlib.h>
 #include <string.h>
 
@@ -7,7 +9,7 @@
 
 static char *dup_or_null(const char *s)
 {
-    return s ? strdup(s) : NULL;
+    return s ? goblin_copy_cstr(s) : NULL;
 }
 
 static e621_result_t parse_string_array(const cJSON *array, e621_string_list_t *out)
@@ -43,7 +45,7 @@ static e621_result_t parse_string_array(const cJSON *array, e621_string_list_t *
             free(items);
             return E621_ERR_PARSE;
         }
-        items[i] = strdup(item->valuestring);
+        items[i] = goblin_copy_cstr(item->valuestring);
         if (!items[i]) {
             for (size_t j = 0; j < i; j++) {
                 free(items[j]);

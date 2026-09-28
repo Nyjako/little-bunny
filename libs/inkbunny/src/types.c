@@ -7,7 +7,7 @@
 
 static char *dup_or_null(const char *s)
 {
-    return s ? strdup(s) : NULL;
+    return s ? goblin_copy_cstr(s) : NULL;
 }
 
 static void parse_file(const cJSON *file_obj, inkbunny_file_t *out)

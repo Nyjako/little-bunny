@@ -115,7 +115,7 @@ inkbunny_client_t *inkbunny_client_create(const inkbunny_config_t *config)
     }
 
     const char *base_url = (config && config->base_url) ? config->base_url : "https://inkbunny.net";
-    client->base_url = strdup(base_url);
+    client->base_url = goblin_copy_cstr(base_url);
     client->min_request_interval_sec = (config && config->min_request_interval_sec > 0) ? config->min_request_interval_sec : 0.5;
     client->transport = (config && config->transport) ? *config->transport : bunny_http_curl_transport();
     client->has_last_request_time = false;
@@ -172,7 +172,7 @@ inkbunny_result_t inkbunny_login(inkbunny_client_t *client, const char *username
         return INKBUNNY_ERR_PARSE;
     }
 
-    char *sid_copy = strdup(sid);
+    char *sid_copy = goblin_copy_cstr(sid);
     if (!sid_copy) {
         cJSON_Delete(json);
         return INKBUNNY_ERR_UNKNOWN;

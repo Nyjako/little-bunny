@@ -119,6 +119,42 @@ these functions:
 tools`) is now a thin CLI over these three functions, kept around for manual testing
 against a real account.
 
+## Code style
+
+Enforced via `.clang-format` at the repo root (`make format` / `make format-check`):
+Allman braces (opening `{` on its own line) for functions, structs, classes, enums, and
+unions; attached K&R braces for `if`/loops/`switch`/`extern "C"` blocks; 4-space indent, no
+tabs; no line-wrapping (prefer long lines). `snake_case` for variables/functions,
+`UPPER_SNAKE_CASE` for constants — C structs/typedefs stay `snake_case_t`, `PascalCase` is
+reserved for actual C++ classes (none exist in this project yet). These rules are also
+saved globally (`~/.claude/CLAUDE.md`) for future projects.
+
+## GOBLIN (shared C utilities)
+
+[GOBLIN](https://github.com/Nyjako/GOBLIN) is the user's personal header-only C utility
+collection ("small, useful, header-only, easy to read"). Vendored via CPM like everything
+else, pinned to a commit (it has no tags yet), as an `INTERFACE` library (`goblin`) whose
+only job is exposing its `include/` directory — it has no build step of its own.
+
+Currently used:
+- **`dyn_array.h`**'s `GOBLIN_DYN_ARRAY_DECL` macro (all-`static inline`, so declaring it
+  in multiple `.c` files is safe — no ODR risk) replaces the hand-rolled realloc-doubling
+  growable-array loops in `libs/db/src/{searches,posts,favorites,downloads,stats}.c`. Not
+  used in `libs/e621`/`libs/inkbunny`'s array parsing, since those sizes are known upfront
+  from `cJSON_GetArraySize` (`calloc` directly, no need to grow).
+- **`cstr.h`'s `goblin_copy_cstr`** replaces `strdup` throughout `libs/e621`,
+  `libs/inkbunny`, and `libs/db` — `strdup` isn't standard C (POSIX and MSVC each expose it
+  differently), which matters for this project's Windows cross-build goal (M12). Unlike
+  `dyn_array.h`, `cstr.h` needs its implementation compiled exactly once across the whole
+  link graph (`#define GOBLIN_CSTR_IMPLEMENTATION`); `libs/common/src/goblin_impl.c` is
+  that single instantiation point, since `bunny_common` is already a shared dependency of
+  the site libraries. `bunny_db` gained a new dependency on `bunny_common` purely to reach
+  this symbol (it has no other reason to need it).
+
+Good future fits, not adopted yet because nothing needs them: `appdirs.h` (cross-platform
+data/config/cache directories) for M4's default DB path, and `fileio.h`'s `goblin_mkdir`
+for M9's per-artist download directories.
+
 ## Dependency management
 
 All dependencies are pulled via [CPM](https://github.com/cpm-cmake/CPM.cmake), with one
@@ -129,8 +165,8 @@ for security issues) via CPM is impractical. It must be installed on the build m
 (e.g. `libssl-dev` / `openssl-devel`).
 
 Everything else — `curl` (HTTP client), `cJSON` (JSON parsing), `Unity` (C unit test
-framework), and later the sqlite amalgamation and an embeddable HTTP server library — is
-fetched and built from source via CPM, pinned to specific versions/tags.
+framework), `GOBLIN` (shared C utilities, see above), and the sqlite amalgamation — is
+fetched and built from source via CPM, pinned to specific versions/tags/commits.
 
 ## Testing philosophy
 
