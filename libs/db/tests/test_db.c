@@ -6,23 +6,27 @@
 
 static bunny_db_t *g_db;
 
-void setUp(void) {
+void setUp(void)
+{
     bunny_db_result_t result = bunny_db_open(":memory:", &g_db);
     TEST_ASSERT_EQUAL(BUNNY_DB_OK, result);
     TEST_ASSERT_NOT_NULL(g_db);
 }
 
-void tearDown(void) {
+void tearDown(void)
+{
     bunny_db_close(g_db);
     g_db = NULL;
 }
 
-void test_open_close(void) {
+void test_open_close(void)
+{
     /* setUp/tearDown already exercise this; just confirm double-close is safe. */
     bunny_db_close(NULL);
 }
 
-void test_search_create_and_list(void) {
+void test_search_create_and_list(void)
+{
     int64_t id = 0;
     bunny_db_result_t result = bunny_db_search_create(g_db, BUNNY_DB_SITE_E621, "wolves", "wolf rating:s", 12, &id);
     TEST_ASSERT_EQUAL(BUNNY_DB_OK, result);
@@ -42,7 +46,8 @@ void test_search_create_and_list(void) {
     bunny_db_search_list_free(&list);
 }
 
-void test_search_default_interval(void) {
+void test_search_default_interval(void)
+{
     int64_t id = 0;
     bunny_db_result_t result = bunny_db_search_create(g_db, BUNNY_DB_SITE_INKBUNNY, "cats", "cat", 0, &id);
     TEST_ASSERT_EQUAL(BUNNY_DB_OK, result);
@@ -53,7 +58,8 @@ void test_search_default_interval(void) {
     bunny_db_search_list_free(&list);
 }
 
-void test_search_delete(void) {
+void test_search_delete(void)
+{
     int64_t id = 0;
     bunny_db_search_create(g_db, BUNNY_DB_SITE_E621, "temp", "temp", 24, &id);
 
@@ -66,7 +72,8 @@ void test_search_delete(void) {
     bunny_db_search_list_free(&list);
 }
 
-void test_search_touch_last_run(void) {
+void test_search_touch_last_run(void)
+{
     int64_t id = 0;
     bunny_db_search_create(g_db, BUNNY_DB_SITE_E621, "temp", "temp", 24, &id);
 
@@ -79,7 +86,8 @@ void test_search_touch_last_run(void) {
     bunny_db_search_list_free(&list);
 }
 
-static void make_test_post(bunny_db_post_upsert_t *post, int64_t external_id, int score) {
+static void make_test_post(bunny_db_post_upsert_t *post, int64_t external_id, int score)
+{
     memset(post, 0, sizeof(*post));
     post->site = BUNNY_DB_SITE_E621;
     post->external_id = external_id;
@@ -99,7 +107,8 @@ static void make_test_post(bunny_db_post_upsert_t *post, int64_t external_id, in
     post->created_at_site = "2026-01-01T00:00:00Z";
 }
 
-void test_post_upsert_and_get(void) {
+void test_post_upsert_and_get(void)
+{
     const char *tags[] = {"forest", "wolf"};
     bunny_db_post_upsert_t post;
     make_test_post(&post, 111, 10);
@@ -125,7 +134,8 @@ void test_post_upsert_and_get(void) {
     bunny_db_post_free(&fetched);
 }
 
-void test_post_upsert_updates_existing_row(void) {
+void test_post_upsert_updates_existing_row(void)
+{
     bunny_db_post_upsert_t post;
     make_test_post(&post, 222, 1);
 
@@ -144,13 +154,15 @@ void test_post_upsert_updates_existing_row(void) {
     bunny_db_post_free(&fetched);
 }
 
-void test_post_get_not_found(void) {
+void test_post_get_not_found(void)
+{
     bunny_db_post_t fetched;
     bunny_db_result_t result = bunny_db_post_get(g_db, BUNNY_DB_SITE_E621, 999999, &fetched);
     TEST_ASSERT_EQUAL(BUNNY_DB_ERR_NOT_FOUND, result);
 }
 
-void test_seen_state(void) {
+void test_seen_state(void)
+{
     bunny_db_post_upsert_t post1;
     bunny_db_post_upsert_t post2;
     make_test_post(&post1, 301, 1);
@@ -180,7 +192,8 @@ void test_seen_state(void) {
     bunny_db_post_free(&fetched);
 }
 
-void test_favorite_add_remove_list(void) {
+void test_favorite_add_remove_list(void)
+{
     bunny_db_post_upsert_t post;
     make_test_post(&post, 401, 1);
     int64_t id = 0;
@@ -209,7 +222,8 @@ void test_favorite_add_remove_list(void) {
     bunny_db_post_list_free(&favorites);
 }
 
-void test_search_results_and_list_posts(void) {
+void test_search_results_and_list_posts(void)
+{
     int64_t search_id = 0;
     bunny_db_search_create(g_db, BUNNY_DB_SITE_E621, "wolves", "wolf", 24, &search_id);
 
@@ -244,15 +258,15 @@ void test_search_results_and_list_posts(void) {
     bunny_db_post_list_free(&unseen_results);
 }
 
-void test_download_record_and_list(void) {
+void test_download_record_and_list(void)
+{
     bunny_db_post_upsert_t post;
     make_test_post(&post, 601, 1);
     int64_t id = 0;
     bunny_db_post_upsert(g_db, &post, &id);
 
     int64_t download_id = 0;
-    bunny_db_result_t result =
-        bunny_db_download_record(g_db, id, "/downloads/someartist/601.jpg", "abc123", true, &download_id);
+    bunny_db_result_t result = bunny_db_download_record(g_db, id, "/downloads/someartist/601.jpg", "abc123", true, &download_id);
     TEST_ASSERT_EQUAL(BUNNY_DB_OK, result);
     TEST_ASSERT_TRUE(download_id > 0);
 
@@ -266,7 +280,8 @@ void test_download_record_and_list(void) {
     bunny_db_download_list_free(&downloads);
 }
 
-void test_top_favorited_tags(void) {
+void test_top_favorited_tags(void)
+{
     const char *tags1[] = {"wolf", "forest"};
     const char *tags2[] = {"wolf", "meadow"};
 
@@ -297,7 +312,8 @@ void test_top_favorited_tags(void) {
     bunny_db_tag_stat_list_free(&stats);
 }
 
-int main(void) {
+int main(void)
+{
     UNITY_BEGIN();
     RUN_TEST(test_open_close);
     RUN_TEST(test_search_create_and_list);

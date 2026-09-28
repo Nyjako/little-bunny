@@ -5,7 +5,8 @@
 extern "C" {
 #endif
 
-typedef enum {
+typedef enum
+{
     E621_OK = 0,
     E621_ERR_INVALID_ARG,
     E621_ERR_NETWORK,

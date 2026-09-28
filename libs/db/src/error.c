@@ -1,6 +1,7 @@
 #include "bunny_db/error.h"
 
-const char *bunny_db_result_to_string(bunny_db_result_t result) {
+const char *bunny_db_result_to_string(bunny_db_result_t result)
+{
     switch (result) {
         case BUNNY_DB_OK:
             return "ok";

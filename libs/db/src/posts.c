@@ -1,27 +1,31 @@
 #include "bunny_db/db.h"
 
+#include <goblin/dyn_array.h>
+
 #include <stdlib.h>
 #include <string.h>
 
 #include "internal.h"
 
-bunny_db_result_t bunny_db_post_upsert(bunny_db_t *db, const bunny_db_post_upsert_t *post, int64_t *out_id) {
+GOBLIN_DYN_ARRAY_DECL(bunny_db_post, bunny_db_post_t)
+
+bunny_db_result_t bunny_db_post_upsert(bunny_db_t *db, const bunny_db_post_upsert_t *post, int64_t *out_id)
+{
     if (!db || !post) {
         return BUNNY_DB_ERR_INVALID_ARG;
     }
 
-    const char *sql =
-        "INSERT INTO posts (site, external_id, artist, title, description, rating, score, fav_count, "
-        "comment_count, file_url, file_ext, file_md5, preview_url, width, height, created_at_site) "
-        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) "
-        "ON CONFLICT(site, external_id) DO UPDATE SET "
-        "  artist = excluded.artist, title = excluded.title, description = excluded.description, "
-        "  rating = excluded.rating, score = excluded.score, fav_count = excluded.fav_count, "
-        "  comment_count = excluded.comment_count, file_url = excluded.file_url, file_ext = excluded.file_ext, "
-        "  file_md5 = excluded.file_md5, preview_url = excluded.preview_url, width = excluded.width, "
-        "  height = excluded.height, created_at_site = excluded.created_at_site, "
-        "  cached_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') "
-        "RETURNING id;";
+    const char *sql = "INSERT INTO posts (site, external_id, artist, title, description, rating, score, fav_count, "
+                      "comment_count, file_url, file_ext, file_md5, preview_url, width, height, created_at_site) "
+                      "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) "
+                      "ON CONFLICT(site, external_id) DO UPDATE SET "
+                      "  artist = excluded.artist, title = excluded.title, description = excluded.description, "
+                      "  rating = excluded.rating, score = excluded.score, fav_count = excluded.fav_count, "
+                      "  comment_count = excluded.comment_count, file_url = excluded.file_url, file_ext = excluded.file_ext, "
+                      "  file_md5 = excluded.file_md5, preview_url = excluded.preview_url, width = excluded.width, "
+                      "  height = excluded.height, created_at_site = excluded.created_at_site, "
+                      "  cached_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') "
+                      "RETURNING id;";
 
     sqlite3_stmt *stmt = NULL;
     if (sqlite3_prepare_v2(db->handle, sql, -1, &stmt, NULL) != SQLITE_OK) {
@@ -74,8 +78,8 @@ bunny_db_result_t bunny_db_post_upsert(bunny_db_t *db, const bunny_db_post_upser
         }
 
         const char *tag_sql = "INSERT INTO tags (site, name) VALUES (?, ?) "
-                               "ON CONFLICT(site, name) DO UPDATE SET name = excluded.name "
-                               "RETURNING id;";
+                              "ON CONFLICT(site, name) DO UPDATE SET name = excluded.name "
+                              "RETURNING id;";
         sqlite3_stmt *tag_stmt = NULL;
         if (sqlite3_prepare_v2(db->handle, tag_sql, -1, &tag_stmt, NULL) != SQLITE_OK) {
             continue;
@@ -107,7 +111,8 @@ bunny_db_result_t bunny_db_post_upsert(bunny_db_t *db, const bunny_db_post_upser
     return BUNNY_DB_OK;
 }
 
-void bunny_db_fill_post_from_row(sqlite3_stmt *stmt, bunny_db_post_t *out) {
+void bunny_db_fill_post_from_row(sqlite3_stmt *stmt, bunny_db_post_t *out)
+{
     out->id = sqlite3_column_int64(stmt, 0);
     out->site = bunny_db_site_from_text((const char *)sqlite3_column_text(stmt, 1));
     out->external_id = sqlite3_column_int64(stmt, 2);
@@ -130,14 +135,13 @@ void bunny_db_fill_post_from_row(sqlite3_stmt *stmt, bunny_db_post_t *out) {
     out->is_favorited = sqlite3_column_int(stmt, 19) != 0;
 }
 
-bunny_db_result_t bunny_db_post_get(bunny_db_t *db, bunny_db_site_t site, int64_t external_id,
-                                     bunny_db_post_t *out_post) {
+bunny_db_result_t bunny_db_post_get(bunny_db_t *db, bunny_db_site_t site, int64_t external_id, bunny_db_post_t *out_post)
+{
     if (!db || !out_post) {
         return BUNNY_DB_ERR_INVALID_ARG;
     }
 
-    const char *sql = "SELECT " BUNNY_DB_POST_SELECT_COLUMNS BUNNY_DB_POST_SELECT_FROM_JOIN
-                       "WHERE p.site = ? AND p.external_id = ?;";
+    const char *sql = "SELECT " BUNNY_DB_POST_SELECT_COLUMNS BUNNY_DB_POST_SELECT_FROM_JOIN "WHERE p.site = ? AND p.external_id = ?;";
     sqlite3_stmt *stmt = NULL;
     if (sqlite3_prepare_v2(db->handle, sql, -1, &stmt, NULL) != SQLITE_OK) {
         return BUNNY_DB_ERR_QUERY_FAILED;
@@ -157,7 +161,8 @@ bunny_db_result_t bunny_db_post_get(bunny_db_t *db, bunny_db_site_t site, int64_
     return BUNNY_DB_OK;
 }
 
-bunny_db_result_t bunny_db_search_add_result(bunny_db_t *db, int64_t search_id, int64_t post_id) {
+bunny_db_result_t bunny_db_search_add_result(bunny_db_t *db, int64_t search_id, int64_t post_id)
+{
     if (!db) {
         return BUNNY_DB_ERR_INVALID_ARG;
     }
@@ -173,21 +178,19 @@ bunny_db_result_t bunny_db_search_add_result(bunny_db_t *db, int64_t search_id, 
     return rc == SQLITE_DONE ? BUNNY_DB_OK : bunny_db_sqlite_rc_to_result(rc);
 }
 
-bunny_db_result_t bunny_db_search_list_posts(bunny_db_t *db, int64_t search_id, bool unseen_only,
-                                              bunny_db_post_list_t *out_list) {
+bunny_db_result_t bunny_db_search_list_posts(bunny_db_t *db, int64_t search_id, bool unseen_only, bunny_db_post_list_t *out_list)
+{
     if (!db || !out_list) {
         return BUNNY_DB_ERR_INVALID_ARG;
     }
     memset(out_list, 0, sizeof(*out_list));
 
-    const char *sql_seen = "SELECT " BUNNY_DB_POST_SELECT_COLUMNS BUNNY_DB_POST_SELECT_FROM_JOIN
-                            "JOIN search_results sr ON sr.post_id = p.id "
-                            "WHERE sr.search_id = ? "
-                            "ORDER BY sr.found_at DESC;";
-    const char *sql_unseen = "SELECT " BUNNY_DB_POST_SELECT_COLUMNS BUNNY_DB_POST_SELECT_FROM_JOIN
-                              "JOIN search_results sr ON sr.post_id = p.id "
-                              "WHERE sr.search_id = ? AND seen.post_id IS NULL "
-                              "ORDER BY sr.found_at DESC;";
+    const char *sql_seen = "SELECT " BUNNY_DB_POST_SELECT_COLUMNS BUNNY_DB_POST_SELECT_FROM_JOIN "JOIN search_results sr ON sr.post_id = p.id "
+                           "WHERE sr.search_id = ? "
+                           "ORDER BY sr.found_at DESC;";
+    const char *sql_unseen = "SELECT " BUNNY_DB_POST_SELECT_COLUMNS BUNNY_DB_POST_SELECT_FROM_JOIN "JOIN search_results sr ON sr.post_id = p.id "
+                             "WHERE sr.search_id = ? AND seen.post_id IS NULL "
+                             "ORDER BY sr.found_at DESC;";
 
     const char *sql = unseen_only ? sql_unseen : sql_seen;
     sqlite3_stmt *stmt = NULL;
@@ -196,44 +199,41 @@ bunny_db_result_t bunny_db_search_list_posts(bunny_db_t *db, int64_t search_id, 
     }
     sqlite3_bind_int64(stmt, 1, search_id);
 
-    size_t capacity = 0;
-    size_t count = 0;
-    bunny_db_post_t *items = NULL;
+    bunny_db_post_array arr;
+    bunny_db_post_array_init(&arr);
+
     int rc;
     while ((rc = sqlite3_step(stmt)) == SQLITE_ROW) {
-        if (count == capacity) {
-            capacity = capacity == 0 ? 16 : capacity * 2;
-            bunny_db_post_t *new_items = realloc(items, capacity * sizeof(bunny_db_post_t));
-            if (!new_items) {
-                sqlite3_finalize(stmt);
-                for (size_t i = 0; i < count; i++) {
-                    bunny_db_post_free(&items[i]);
-                }
-                free(items);
-                return BUNNY_DB_ERR_UNKNOWN;
+        bunny_db_post_t item;
+        memset(&item, 0, sizeof(item));
+        bunny_db_fill_post_from_row(stmt, &item);
+        if (!bunny_db_post_array_push(&arr, item)) {
+            sqlite3_finalize(stmt);
+            bunny_db_post_free(&item);
+            for (size_t i = 0; i < arr.count; i++) {
+                bunny_db_post_free(&arr.items[i]);
             }
-            items = new_items;
+            bunny_db_post_array_free(&arr);
+            return BUNNY_DB_ERR_UNKNOWN;
         }
-        memset(&items[count], 0, sizeof(items[count]));
-        bunny_db_fill_post_from_row(stmt, &items[count]);
-        count++;
     }
     sqlite3_finalize(stmt);
 
     if (rc != SQLITE_DONE) {
-        for (size_t i = 0; i < count; i++) {
-            bunny_db_post_free(&items[i]);
+        for (size_t i = 0; i < arr.count; i++) {
+            bunny_db_post_free(&arr.items[i]);
         }
-        free(items);
+        bunny_db_post_array_free(&arr);
         return bunny_db_sqlite_rc_to_result(rc);
     }
 
-    out_list->items = items;
-    out_list->count = count;
+    out_list->items = arr.items;
+    out_list->count = arr.count;
     return BUNNY_DB_OK;
 }
 
-bunny_db_result_t bunny_db_post_mark_seen(bunny_db_t *db, int64_t post_id) {
+bunny_db_result_t bunny_db_post_mark_seen(bunny_db_t *db, int64_t post_id)
+{
     if (!db) {
         return BUNNY_DB_ERR_INVALID_ARG;
     }
@@ -248,12 +248,12 @@ bunny_db_result_t bunny_db_post_mark_seen(bunny_db_t *db, int64_t post_id) {
     return rc == SQLITE_DONE ? BUNNY_DB_OK : bunny_db_sqlite_rc_to_result(rc);
 }
 
-bunny_db_result_t bunny_db_count_unseen(bunny_db_t *db, int64_t *out_count) {
+bunny_db_result_t bunny_db_count_unseen(bunny_db_t *db, int64_t *out_count)
+{
     if (!db || !out_count) {
         return BUNNY_DB_ERR_INVALID_ARG;
     }
-    const char *sql =
-        "SELECT COUNT(*) FROM posts p LEFT JOIN seen_posts s ON s.post_id = p.id WHERE s.post_id IS NULL;";
+    const char *sql = "SELECT COUNT(*) FROM posts p LEFT JOIN seen_posts s ON s.post_id = p.id WHERE s.post_id IS NULL;";
     sqlite3_stmt *stmt = NULL;
     if (sqlite3_prepare_v2(db->handle, sql, -1, &stmt, NULL) != SQLITE_OK) {
         return BUNNY_DB_ERR_QUERY_FAILED;

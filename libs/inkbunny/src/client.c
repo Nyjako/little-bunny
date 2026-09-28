@@ -8,7 +8,8 @@
 
 #include "internal.h"
 
-static void rate_limit_wait(inkbunny_client_t *client) {
+static void rate_limit_wait(inkbunny_client_t *client)
+{
     if (client->min_request_interval_sec <= 0) {
         return;
     }
@@ -17,8 +18,7 @@ static void rate_limit_wait(inkbunny_client_t *client) {
     clock_gettime(CLOCK_MONOTONIC, &now);
 
     if (client->has_last_request_time) {
-        double elapsed = (double)(now.tv_sec - client->last_request_time.tv_sec) +
-                          (double)(now.tv_nsec - client->last_request_time.tv_nsec) / 1e9;
+        double elapsed = (double)(now.tv_sec - client->last_request_time.tv_sec) + (double)(now.tv_nsec - client->last_request_time.tv_nsec) / 1e9;
         double remaining = client->min_request_interval_sec - elapsed;
         if (remaining > 0) {
             struct timespec sleep_time;
@@ -38,8 +38,8 @@ static void rate_limit_wait(inkbunny_client_t *client) {
  * (5xx, rate limiting). query_or_null is appended to the URL as "?...",
  * already encoded by the caller. out_json, if non-NULL, receives the parsed
  * response body on INKBUNNY_OK (caller owns it). */
-static inkbunny_result_t perform_request(inkbunny_client_t *client, const char *path,
-                                          const char *query_or_null, cJSON **out_json) {
+static inkbunny_result_t perform_request(inkbunny_client_t *client, const char *path, const char *query_or_null, cJSON **out_json)
+{
     if (!client) {
         return INKBUNNY_ERR_INVALID_ARG;
     }
@@ -107,16 +107,16 @@ static inkbunny_result_t perform_request(inkbunny_client_t *client, const char *
     return INKBUNNY_OK;
 }
 
-inkbunny_client_t *inkbunny_client_create(const inkbunny_config_t *config) {
+inkbunny_client_t *inkbunny_client_create(const inkbunny_config_t *config)
+{
     inkbunny_client_t *client = calloc(1, sizeof(inkbunny_client_t));
     if (!client) {
         return NULL;
     }
 
     const char *base_url = (config && config->base_url) ? config->base_url : "https://inkbunny.net";
-    client->base_url = strdup(base_url);
-    client->min_request_interval_sec =
-        (config && config->min_request_interval_sec > 0) ? config->min_request_interval_sec : 0.5;
+    client->base_url = goblin_copy_cstr(base_url);
+    client->min_request_interval_sec = (config && config->min_request_interval_sec > 0) ? config->min_request_interval_sec : 0.5;
     client->transport = (config && config->transport) ? *config->transport : bunny_http_curl_transport();
     client->has_last_request_time = false;
 
@@ -128,7 +128,8 @@ inkbunny_client_t *inkbunny_client_create(const inkbunny_config_t *config) {
     return client;
 }
 
-void inkbunny_client_destroy(inkbunny_client_t *client) {
+void inkbunny_client_destroy(inkbunny_client_t *client)
+{
     if (!client) {
         return;
     }
@@ -140,7 +141,8 @@ void inkbunny_client_destroy(inkbunny_client_t *client) {
     free(client);
 }
 
-inkbunny_result_t inkbunny_login(inkbunny_client_t *client, const char *username, const char *password) {
+inkbunny_result_t inkbunny_login(inkbunny_client_t *client, const char *username, const char *password)
+{
     if (!client || !username) {
         return INKBUNNY_ERR_INVALID_ARG;
     }
@@ -170,7 +172,7 @@ inkbunny_result_t inkbunny_login(inkbunny_client_t *client, const char *username
         return INKBUNNY_ERR_PARSE;
     }
 
-    char *sid_copy = strdup(sid);
+    char *sid_copy = goblin_copy_cstr(sid);
     if (!sid_copy) {
         cJSON_Delete(json);
         return INKBUNNY_ERR_UNKNOWN;
@@ -184,7 +186,8 @@ inkbunny_result_t inkbunny_login(inkbunny_client_t *client, const char *username
     return INKBUNNY_OK;
 }
 
-inkbunny_result_t inkbunny_logout(inkbunny_client_t *client) {
+inkbunny_result_t inkbunny_logout(inkbunny_client_t *client)
+{
     if (!client) {
         return INKBUNNY_ERR_INVALID_ARG;
     }
@@ -204,8 +207,8 @@ inkbunny_result_t inkbunny_logout(inkbunny_client_t *client) {
     return result;
 }
 
-inkbunny_result_t inkbunny_search(inkbunny_client_t *client, const inkbunny_search_params_t *params,
-                                   inkbunny_submission_list_t *out_submissions) {
+inkbunny_result_t inkbunny_search(inkbunny_client_t *client, const inkbunny_search_params_t *params, inkbunny_submission_list_t *out_submissions)
+{
     if (!client || !out_submissions) {
         return INKBUNNY_ERR_INVALID_ARG;
     }
@@ -230,8 +233,7 @@ inkbunny_result_t inkbunny_search(inkbunny_client_t *client, const inkbunny_sear
             offset += (size_t)snprintf(query + offset, sizeof(query) - offset, "&keywords=yes");
         }
         if (params->favorited_by_user_id && params->favorited_by_user_id[0]) {
-            offset += (size_t)snprintf(query + offset, sizeof(query) - offset, "&favs_user_id=%s",
-                                        params->favorited_by_user_id);
+            offset += (size_t)snprintf(query + offset, sizeof(query) - offset, "&favs_user_id=%s", params->favorited_by_user_id);
         }
         if (params->page > 0) {
             offset += (size_t)snprintf(query + offset, sizeof(query) - offset, "&page=%d", params->page);
@@ -255,9 +257,8 @@ inkbunny_result_t inkbunny_search(inkbunny_client_t *client, const inkbunny_sear
     return result;
 }
 
-inkbunny_result_t inkbunny_get_submissions(inkbunny_client_t *client, const int64_t *submission_ids,
-                                            size_t submission_id_count,
-                                            inkbunny_submission_list_t *out_submissions) {
+inkbunny_result_t inkbunny_get_submissions(inkbunny_client_t *client, const int64_t *submission_ids, size_t submission_id_count, inkbunny_submission_list_t *out_submissions)
+{
     if (!client || !out_submissions || !submission_ids || submission_id_count == 0) {
         return INKBUNNY_ERR_INVALID_ARG;
     }
@@ -271,8 +272,7 @@ inkbunny_result_t inkbunny_get_submissions(inkbunny_client_t *client, const int6
     char ids_buf[1400];
     size_t offset = 0;
     for (size_t i = 0; i < submission_id_count; i++) {
-        int written = snprintf(ids_buf + offset, sizeof(ids_buf) - offset, "%s%lld", i == 0 ? "" : ",",
-                                (long long)submission_ids[i]);
+        int written = snprintf(ids_buf + offset, sizeof(ids_buf) - offset, "%s%lld", i == 0 ? "" : ",", (long long)submission_ids[i]);
         if (written < 0 || (size_t)written >= sizeof(ids_buf) - offset) {
             return INKBUNNY_ERR_INVALID_ARG;
         }
@@ -280,8 +280,7 @@ inkbunny_result_t inkbunny_get_submissions(inkbunny_client_t *client, const int6
     }
 
     char query[1700];
-    snprintf(query, sizeof(query), "sid=%s&submission_ids=%s&show_description=yes&show_pools=yes", client->sid,
-             ids_buf);
+    snprintf(query, sizeof(query), "sid=%s&submission_ids=%s&show_description=yes&show_pools=yes", client->sid, ids_buf);
 
     cJSON *json = NULL;
     inkbunny_result_t result = perform_request(client, "/api_submissions.php", query, &json);
@@ -300,8 +299,8 @@ inkbunny_result_t inkbunny_get_submissions(inkbunny_client_t *client, const int6
     return result;
 }
 
-inkbunny_result_t inkbunny_get_submission(inkbunny_client_t *client, int64_t submission_id,
-                                           inkbunny_submission_t *out_submission) {
+inkbunny_result_t inkbunny_get_submission(inkbunny_client_t *client, int64_t submission_id, inkbunny_submission_t *out_submission)
+{
     if (!client || !out_submission) {
         return INKBUNNY_ERR_INVALID_ARG;
     }

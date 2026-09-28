@@ -1,6 +1,7 @@
 #include "inkbunny/error.h"
 
-const char *inkbunny_result_to_string(inkbunny_result_t result) {
+const char *inkbunny_result_to_string(inkbunny_result_t result)
+{
     switch (result) {
         case INKBUNNY_OK:
             return "ok";
