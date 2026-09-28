@@ -26,6 +26,10 @@ static inline bunny_core_result_t bunny_core_map_db_result(bunny_db_result_t res
             return BUNNY_CORE_ERR_INVALID_ARG;
         case BUNNY_DB_ERR_NOT_FOUND:
             return BUNNY_CORE_ERR_NOT_FOUND;
+        case BUNNY_DB_ERR_CONSTRAINT:
+            /* e.g. a foreign-key violation from an id that doesn't exist --
+             * that's bad caller input, not a server-side failure. */
+            return BUNNY_CORE_ERR_INVALID_ARG;
         default:
             return BUNNY_CORE_ERR_DB;
     }

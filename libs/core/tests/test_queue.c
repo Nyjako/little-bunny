@@ -287,6 +287,16 @@ void test_queue_inkbunny_favorite_without_account_fails(void)
     TEST_ASSERT_EQUAL(1, stats.actions_failed);
 }
 
+void test_queue_favorite_add_for_nonexistent_post_is_invalid_arg(void)
+{
+    /* action_queue.post_id has a foreign-key reference to posts(id); a
+     * nonexistent post_id must surface as a client error (bad post id), not
+     * a generic "database error" -- this is bad caller input, not a server
+     * fault. */
+    bunny_core_result_t result = bunny_core_queue_favorite_add(g_core, 999999, -1);
+    TEST_ASSERT_EQUAL(BUNNY_CORE_ERR_INVALID_ARG, result);
+}
+
 int main(void)
 {
     UNITY_BEGIN();
@@ -296,5 +306,6 @@ int main(void)
     RUN_TEST(test_queue_e621_action_failure_marks_failed_not_retried);
     RUN_TEST(test_queue_inkbunny_vote_always_invalid);
     RUN_TEST(test_queue_inkbunny_favorite_without_account_fails);
+    RUN_TEST(test_queue_favorite_add_for_nonexistent_post_is_invalid_arg);
     return UNITY_END();
 }
