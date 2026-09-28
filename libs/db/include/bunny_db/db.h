@@ -67,6 +67,12 @@ typedef struct
 bunny_db_result_t bunny_db_post_upsert(bunny_db_t *db, const bunny_db_post_upsert_t *post, int64_t *out_id);
 bunny_db_result_t bunny_db_post_get(bunny_db_t *db, bunny_db_site_t site, int64_t external_id, bunny_db_post_t *out_post);
 
+/* Same as bunny_db_post_get, but keyed on the local db id rather than
+ * (site, external_id) -- what the action queue below has to work with, since
+ * it stores the local id (matching bunny_db_favorite_add/download_record's
+ * own convention). */
+bunny_db_result_t bunny_db_post_get_by_id(bunny_db_t *db, int64_t post_id, bunny_db_post_t *out_post);
+
 /* Associates a cached post with a search's result set (e.g. after running that
  * search against the site). Idempotent: re-adding the same pair is a no-op. */
 bunny_db_result_t bunny_db_search_add_result(bunny_db_t *db, int64_t search_id, int64_t post_id);
@@ -103,6 +109,18 @@ bunny_db_result_t bunny_db_top_favorited_tags(bunny_db_t *db, int limit, bunny_d
  * contain any characters, including literal `%`/`_`/`\` -- they're matched
  * literally, not treated as SQL LIKE wildcards. */
 bunny_db_result_t bunny_db_tag_autocomplete(bunny_db_t *db, bunny_db_site_t site, const char *prefix, int limit, bunny_db_tag_stat_list_t *out_list);
+
+/* --- Action queue -------------------------------------------------------------
+ * Proxies favorite/vote/comment calls to the sites (M4.3): an action is
+ * enqueued here, then bunny_core_process_queue() (libs/core) drains it
+ * against the real site API and marks it done/failed. bunny_db itself never
+ * touches the network -- `payload` is an opaque blob (e.g. a vote's score) it
+ * stores and returns as-is. */
+
+bunny_db_result_t bunny_db_action_queue_add(bunny_db_t *db, int64_t post_id, bunny_db_action_type_t action_type, const char *payload, int64_t *out_id);
+bunny_db_result_t bunny_db_action_queue_list_pending(bunny_db_t *db, bunny_db_action_list_t *out_list);
+bunny_db_result_t bunny_db_action_queue_mark_done(bunny_db_t *db, int64_t action_id);
+bunny_db_result_t bunny_db_action_queue_mark_failed(bunny_db_t *db, int64_t action_id, const char *error_message);
 
 #ifdef __cplusplus
 }

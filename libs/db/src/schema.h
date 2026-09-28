@@ -81,8 +81,19 @@ static const char *const BUNNY_DB_SCHEMA_SQL = "PRAGMA foreign_keys = ON;"
                                                "    checksum_verified INTEGER NOT NULL DEFAULT 0,"
                                                "    downloaded_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))"
                                                ");"
+                                               "CREATE TABLE IF NOT EXISTS action_queue ("
+                                               "    id INTEGER PRIMARY KEY,"
+                                               "    post_id INTEGER NOT NULL REFERENCES posts(id) ON DELETE CASCADE,"
+                                               "    action_type TEXT NOT NULL CHECK (action_type IN ('favorite_add', 'favorite_remove', 'vote', 'comment')),"
+                                               "    payload TEXT," /* action-specific data, e.g. {"score":1} for a vote -- opaque to bunny_db */
+                                               "    status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'done', 'failed')),"
+                                               "    created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),"
+                                               "    attempted_at TEXT,"
+                                               "    error_message TEXT"
+                                               ");"
                                                "CREATE INDEX IF NOT EXISTS idx_post_tags_tag_id ON post_tags(tag_id);"
                                                "CREATE INDEX IF NOT EXISTS idx_search_results_search_id ON search_results(search_id);"
-                                               "CREATE INDEX IF NOT EXISTS idx_downloads_post_id ON downloads(post_id);";
+                                               "CREATE INDEX IF NOT EXISTS idx_downloads_post_id ON downloads(post_id);"
+                                               "CREATE INDEX IF NOT EXISTS idx_action_queue_status ON action_queue(status);";
 
 #endif /* BUNNY_DB_SCHEMA_H */

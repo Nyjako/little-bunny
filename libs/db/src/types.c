@@ -127,3 +127,44 @@ void bunny_db_download_list_free(bunny_db_download_list_t *list)
     list->items = NULL;
     list->count = 0;
 }
+
+const char *bunny_db_action_type_to_string(bunny_db_action_type_t action_type)
+{
+    switch (action_type) {
+        case BUNNY_DB_ACTION_FAVORITE_ADD:
+            return "favorite_add";
+        case BUNNY_DB_ACTION_FAVORITE_REMOVE:
+            return "favorite_remove";
+        case BUNNY_DB_ACTION_VOTE:
+            return "vote";
+        case BUNNY_DB_ACTION_COMMENT:
+            return "comment";
+        default:
+            return "favorite_add";
+    }
+}
+
+void bunny_db_action_free(bunny_db_action_t *action)
+{
+    if (!action) {
+        return;
+    }
+    free(action->payload);
+    free(action->created_at);
+    free(action->attempted_at);
+    free(action->error_message);
+    memset(action, 0, sizeof(*action));
+}
+
+void bunny_db_action_list_free(bunny_db_action_list_t *list)
+{
+    if (!list) {
+        return;
+    }
+    for (size_t i = 0; i < list->count; i++) {
+        bunny_db_action_free(&list->items[i]);
+    }
+    free(list->items);
+    list->items = NULL;
+    list->count = 0;
+}

@@ -340,6 +340,91 @@ void test_download_record_and_list(void)
     bunny_db_download_list_free(&downloads);
 }
 
+void test_post_get_by_id(void)
+{
+    bunny_db_post_upsert_t post;
+    make_test_post(&post, 901, 1);
+    int64_t id = 0;
+    bunny_db_post_upsert(g_db, &post, &id);
+
+    bunny_db_post_t fetched;
+    bunny_db_result_t result = bunny_db_post_get_by_id(g_db, id, &fetched);
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, result);
+    TEST_ASSERT_EQUAL(901, fetched.external_id);
+    TEST_ASSERT_EQUAL_STRING("someartist", fetched.artist);
+    bunny_db_post_free(&fetched);
+}
+
+void test_post_get_by_id_not_found(void)
+{
+    bunny_db_post_t fetched;
+    bunny_db_result_t result = bunny_db_post_get_by_id(g_db, 999999, &fetched);
+    TEST_ASSERT_EQUAL(BUNNY_DB_ERR_NOT_FOUND, result);
+}
+
+void test_action_queue_add_and_list_pending(void)
+{
+    bunny_db_post_upsert_t post;
+    make_test_post(&post, 1001, 1);
+    int64_t post_id = 0;
+    bunny_db_post_upsert(g_db, &post, &post_id);
+
+    int64_t action_id = 0;
+    bunny_db_result_t result = bunny_db_action_queue_add(g_db, post_id, BUNNY_DB_ACTION_VOTE, "{\"score\":1}", &action_id);
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, result);
+    TEST_ASSERT_TRUE(action_id > 0);
+
+    bunny_db_action_list_t pending;
+    result = bunny_db_action_queue_list_pending(g_db, &pending);
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, result);
+    TEST_ASSERT_EQUAL(1, (int)pending.count);
+    TEST_ASSERT_EQUAL(action_id, pending.items[0].id);
+    TEST_ASSERT_EQUAL(post_id, pending.items[0].post_id);
+    TEST_ASSERT_EQUAL(BUNNY_DB_ACTION_VOTE, pending.items[0].action_type);
+    TEST_ASSERT_EQUAL_STRING("{\"score\":1}", pending.items[0].payload);
+    TEST_ASSERT_EQUAL(BUNNY_DB_ACTION_STATUS_PENDING, pending.items[0].status);
+    TEST_ASSERT_NULL(pending.items[0].attempted_at);
+    bunny_db_action_list_free(&pending);
+}
+
+void test_action_queue_mark_done_removes_from_pending(void)
+{
+    bunny_db_post_upsert_t post;
+    make_test_post(&post, 1002, 1);
+    int64_t post_id = 0;
+    bunny_db_post_upsert(g_db, &post, &post_id);
+
+    int64_t action_id = 0;
+    bunny_db_action_queue_add(g_db, post_id, BUNNY_DB_ACTION_FAVORITE_ADD, NULL, &action_id);
+
+    bunny_db_result_t result = bunny_db_action_queue_mark_done(g_db, action_id);
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, result);
+
+    bunny_db_action_list_t pending;
+    bunny_db_action_queue_list_pending(g_db, &pending);
+    TEST_ASSERT_EQUAL(0, (int)pending.count);
+    bunny_db_action_list_free(&pending);
+}
+
+void test_action_queue_mark_failed_records_error(void)
+{
+    bunny_db_post_upsert_t post;
+    make_test_post(&post, 1003, 1);
+    int64_t post_id = 0;
+    bunny_db_post_upsert(g_db, &post, &post_id);
+
+    int64_t action_id = 0;
+    bunny_db_action_queue_add(g_db, post_id, BUNNY_DB_ACTION_COMMENT, NULL, &action_id);
+
+    bunny_db_result_t result = bunny_db_action_queue_mark_failed(g_db, action_id, "network error");
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, result);
+
+    bunny_db_action_list_t pending;
+    bunny_db_action_queue_list_pending(g_db, &pending);
+    TEST_ASSERT_EQUAL(0, (int)pending.count); /* failed rows aren't pending anymore */
+    bunny_db_action_list_free(&pending);
+}
+
 void test_top_favorited_tags(void)
 {
     const char *tags1[] = {"wolf", "forest"};
@@ -506,6 +591,11 @@ int main(void)
     RUN_TEST(test_favorite_add_remove_list);
     RUN_TEST(test_search_results_and_list_posts);
     RUN_TEST(test_download_record_and_list);
+    RUN_TEST(test_post_get_by_id);
+    RUN_TEST(test_post_get_by_id_not_found);
+    RUN_TEST(test_action_queue_add_and_list_pending);
+    RUN_TEST(test_action_queue_mark_done_removes_from_pending);
+    RUN_TEST(test_action_queue_mark_failed_records_error);
     RUN_TEST(test_top_favorited_tags);
     RUN_TEST(test_tag_autocomplete_prefix_match);
     RUN_TEST(test_tag_autocomplete_orders_by_usage_then_name);

@@ -195,24 +195,7 @@ static bunny_core_result_t upsert_inkbunny_submission(bunny_db_t *db, const inkb
 
 static bunny_core_result_t sync_e621_search(bunny_core_t *core, const bunny_db_search_t *search, bunny_core_sync_stats_t *stats)
 {
-    bunny_db_account_t account;
-    memset(&account, 0, sizeof(account));
-    bool have_account = bunny_db_account_get(core->db, BUNNY_DB_SITE_E621, &account) == BUNNY_DB_OK;
-
-    e621_config_t config;
-    memset(&config, 0, sizeof(config));
-    config.user_agent = core->user_agent;
-    config.transport = core->e621_transport;
-    config.min_request_interval_sec = core->min_request_interval_sec;
-    if (have_account) {
-        config.username = account.username;
-        config.api_key = account.secret;
-    }
-
-    e621_client_t *client = e621_client_create(&config);
-    if (have_account) {
-        bunny_db_account_free(&account);
-    }
+    e621_client_t *client = bunny_core_build_e621_client(core);
     if (!client) {
         return BUNNY_CORE_ERR_SITE;
     }
@@ -239,33 +222,8 @@ static bunny_core_result_t sync_e621_search(bunny_core_t *core, const bunny_db_s
 
 static bunny_core_result_t sync_inkbunny_search(bunny_core_t *core, const bunny_db_search_t *search, bunny_core_sync_stats_t *stats)
 {
-    bunny_db_account_t account;
-    memset(&account, 0, sizeof(account));
-    bool have_account = bunny_db_account_get(core->db, BUNNY_DB_SITE_INKBUNNY, &account) == BUNNY_DB_OK;
-
-    inkbunny_config_t config;
-    memset(&config, 0, sizeof(config));
-    config.transport = core->inkbunny_transport;
-    config.min_request_interval_sec = core->min_request_interval_sec;
-
-    inkbunny_client_t *client = inkbunny_client_create(&config);
+    inkbunny_client_t *client = bunny_core_build_inkbunny_client(core);
     if (!client) {
-        if (have_account) {
-            bunny_db_account_free(&account);
-        }
-        return BUNNY_CORE_ERR_SITE;
-    }
-
-    /* Inkbunny needs at least a guest login for any search, since results
-     * are only ever returned for a logged-in session (see inkbunny_login). */
-    const char *username = have_account ? account.username : "guest";
-    const char *password = have_account ? account.secret : NULL;
-    inkbunny_result_t login_result = inkbunny_login(client, username, password);
-    if (have_account) {
-        bunny_db_account_free(&account);
-    }
-    if (login_result != INKBUNNY_OK) {
-        inkbunny_client_destroy(client);
         return BUNNY_CORE_ERR_SITE;
     }
 
