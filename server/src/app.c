@@ -25,7 +25,7 @@ static int health_handler(struct mg_connection *conn, void *cbdata)
     return 200;
 }
 
-server_app_t *server_app_start(const bunny_core_config_t *core_config, const char *data_dir, int port)
+server_app_t *server_app_start(const bunny_core_config_t *core_config, const char *data_dir, int port, int poll_interval_sec)
 {
     server_app_t *app = calloc(1, sizeof(server_app_t));
     if (!app) {
@@ -89,6 +89,16 @@ server_app_t *server_app_start(const bunny_core_config_t *core_config, const cha
     server_routes_register_searches(app->mg_ctx, &app->ctx);
     server_routes_register_queue(app->mg_ctx, &app->ctx);
 
+    if (!server_scheduler_start(&app->scheduler, &app->ctx, poll_interval_sec)) {
+        mg_stop(app->mg_ctx);
+        pthread_mutex_destroy(&app->ctx.core_mutex);
+        bunny_core_close(app->core);
+        free(app->cert_path);
+        server_auth_free(app->auth);
+        free(app);
+        return NULL;
+    }
+
     return app;
 }
 
@@ -102,6 +112,9 @@ void server_app_stop(server_app_t *app)
     if (!app) {
         return;
     }
+    /* Stop the scheduler first so it's done issuing bunny_core_* calls
+     * before civetweb's workers and the core itself get torn down. */
+    server_scheduler_stop(&app->scheduler);
     mg_stop(app->mg_ctx);
     pthread_mutex_destroy(&app->ctx.core_mutex);
     bunny_core_close(app->core);

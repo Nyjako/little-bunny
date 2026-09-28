@@ -111,7 +111,10 @@ void setUp(void)
     core_config.e621_transport = &g_e621_transport;
     core_config.min_request_interval_sec = 0.001;
 
-    g_app = server_app_start(&core_config, g_data_dir, TEST_PORT);
+    /* poll_interval_sec <= 0 disables the scheduler -- these tests drive
+     * /sync and /queue/process explicitly and don't want a background pass
+     * racing (and consuming) the fake transport's canned responses. */
+    g_app = server_app_start(&core_config, g_data_dir, TEST_PORT, 0);
     TEST_ASSERT_NOT_NULL(g_app);
     usleep(100000); /* give civetweb a moment to bind before the first request */
 }
@@ -203,6 +206,40 @@ void test_full_account_search_sync_favorite_flow(void)
     free(response.data);
 }
 
+void test_scheduler_syncs_search_automatically(void)
+{
+    /* setUp started the app with the scheduler disabled (poll_interval=0);
+     * restart with a short interval to exercise the actual background
+     * thread, instead of relying on an explicit /sync call. */
+    server_app_stop(g_app);
+
+    bunny_core_config_t core_config;
+    memset(&core_config, 0, sizeof(core_config));
+    core_config.db_path = ":memory:";
+    core_config.user_agent = "bunny-tests/1.0 (integration)";
+    core_config.e621_transport = &g_e621_transport;
+    core_config.min_request_interval_sec = 0.001;
+
+    g_app = server_app_start(&core_config, g_data_dir, TEST_PORT, 1);
+    TEST_ASSERT_NOT_NULL(g_app);
+    usleep(100000);
+
+    response_buffer_t response = {0};
+    long status = do_request("POST", "/searches", "{\"site\":\"e621\",\"label\":\"wolves\",\"query\":\"wolf\",\"interval_hours\":24}", &response, true, NULL);
+    TEST_ASSERT_EQUAL(201, status);
+    free(response.data);
+    memset(&response, 0, sizeof(response));
+
+    /* Give the 1s-poll scheduler thread time to fire at least once, with no
+     * explicit /sync call from this test. */
+    sleep(3);
+
+    status = do_request("GET", "/searches/1/posts", NULL, &response, true, NULL);
+    TEST_ASSERT_EQUAL(200, status);
+    TEST_ASSERT_NOT_NULL(strstr(response.data, "\"external_id\":1"));
+    free(response.data);
+}
+
 int main(void)
 {
     curl_global_init(CURL_GLOBAL_DEFAULT);
@@ -211,6 +248,7 @@ int main(void)
     RUN_TEST(test_request_without_token_is_rejected);
     RUN_TEST(test_request_with_wrong_token_is_rejected);
     RUN_TEST(test_full_account_search_sync_favorite_flow);
+    RUN_TEST(test_scheduler_syncs_search_automatically);
     int result = UNITY_END();
     curl_global_cleanup();
     return result;

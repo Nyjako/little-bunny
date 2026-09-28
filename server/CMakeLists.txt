@@ -6,6 +6,7 @@ add_library(bunny_server_lib STATIC
     src/config.c
     src/auth.c
     src/tls.c
+    src/scheduler.c
     src/route_utils.c
     src/json_helpers.c
     src/routes_accounts.c

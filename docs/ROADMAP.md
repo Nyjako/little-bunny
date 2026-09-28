@@ -96,7 +96,7 @@ this file is the single source of truth for "what's done" across sessions.
   M4.2's sync code into a shared internal helper (`libs/core/src/site_clients.c`) since
   M4.3 needed the exact same logic.
 
-- [ ] **M5 — C server**
+- [x] **M5 — C server**
   Exposes the core over HTTP/JSON (embeddable HTTP server library pulled via CPM). Auth
   between GUI clients and the server. Runs on Linux. Delivered as three sub-milestones,
   M5.1–M5.3 below.
@@ -142,6 +142,25 @@ this file is the single source of truth for "what's done" across sessions.
   "database error" instead of 400 — `bunny_core_map_db_result` now maps
   `BUNNY_DB_ERR_CONSTRAINT` to `BUNNY_CORE_ERR_INVALID_ARG`, since a constraint violation
   from bad caller input isn't a server-side fault.
+
+- [x] **M5.3 — Background scheduler + graceful shutdown**
+  `server_scheduler_start/stop()` (`server/src/scheduler.c`): a background thread that
+  loops sleep(`poll_interval_sec`, default 15 min) → `bunny_core_sync_due_searches` →
+  `bunny_core_process_queue` → repeat, serialized through the same `core_mutex` every
+  route handler uses. Sleeps in 1-second increments so shutdown is picked up within ~1s
+  rather than waiting out the full interval. `poll_interval_sec <= 0` disables the
+  scheduler entirely — used by the integration test suite so its explicit `/sync`/
+  `/queue/process` calls don't race a background pass consuming the fake transport's
+  canned responses; a dedicated test (`test_scheduler_syncs_search_automatically`) runs
+  with a 1s interval specifically to exercise the real background thread. The
+  scheduler's lifecycle now lives in `server_app_start()`/`server_app_stop()`
+  (`server/src/app.c`) alongside civetweb and `bunny_core` — stopped first on shutdown so
+  it's done issuing `bunny_core_*` calls before civetweb and the core get torn down.
+  `main.c` already had `SIGINT`/`SIGTERM` handling from M5.1; this milestone didn't need
+  to add more, just make sure the scheduler thread joins cleanly as part of it. Verified
+  live: a real search synced automatically against e621.net on the configured interval,
+  no explicit `/sync` call needed, followed by a graceful shutdown (exit code 0) on
+  `SIGTERM`.
 
 - [ ] **M6 — Flutter app skeleton**
   App shell, FFI bindings to the core for standalone mode, HTTP client for networked mode,
