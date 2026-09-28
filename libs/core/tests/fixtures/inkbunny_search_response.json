@@ -1,0 +1,35 @@
+{
+  "sid": "77N2zxwuZFvRduEQzvE15zGkiR",
+  "results_count_all": 1,
+  "results_count_thispage": 1,
+  "pages_count": 1,
+  "page": 1,
+  "user_location": "",
+  "search_params": [],
+  "submissions": [
+    {
+      "submission_id": "3955918",
+      "hidden": "f",
+      "username": "OvineSatanOMG",
+      "user_id": "628881",
+      "create_datetime": "2026-09-27 22:22:21.223627+00",
+      "thumbnail_url_large_noncustom": "https://nl1.ib.metapix.net/thumbnails/large/6175/6175043_noncustom.jpg",
+      "file_name": "6175043_OvineSatanOMG_tribute.jpg",
+      "title": "Thank you, Digimon Beatbreak",
+      "deleted": "f",
+      "public": "t",
+      "mimetype": "image/jpeg",
+      "pagecount": "1",
+      "rating_id": "0",
+      "rating_name": "General",
+      "file_url_full": "https://nl1.ib.metapix.net/files/full/6175/6175043_tribute.jpg",
+      "file_url_screen": "https://nl1.ib.metapix.net/files/screen/6175/6175043_tribute.jpg",
+      "file_url_preview": "https://nl1.ib.metapix.net/files/preview/6175/6175043_tribute.jpg",
+      "submission_type_id": "1",
+      "type_name": "Picture/Pinup",
+      "friends_only": "f",
+      "guest_block": "f",
+      "scraps": "f"
+    }
+  ]
+}

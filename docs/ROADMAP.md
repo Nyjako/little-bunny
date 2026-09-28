@@ -63,6 +63,19 @@ this file is the single source of truth for "what's done" across sessions.
   auth is M5's job — neither belongs here. See `architecture.md`'s "Core sync engine (M4)"
   section.
 
+- [x] **M4.2 — Scheduled search sync**
+  `bunny_core_sync_due_searches()`: runs every saved search whose `last_run_at` is `NULL`
+  or older than its `interval_hours`, builds an e621/Inkbunny client (authenticated via the
+  stored account if present, anonymous/guest otherwise), fetches results, maps each into a
+  `bunny_db_post_upsert_t`, upserts it, links it to the search, and touches `last_run_at`.
+  e621's 8 tag categories are flattened into one array; Inkbunny's search results carry no
+  `description`/`keywords` (only `inkbunny_get_submission(s)` returns those), so those
+  fields are simply left unset for now. `bunny_core_search_create/delete/list/list_posts`
+  were added alongside it as thin `bunny_db` pass-throughs — `bunny_core` is the single
+  entry point apps use, so it needs to expose search CRUD even though the sync engine
+  itself only reads. `bunny_core_config_t` gained `min_request_interval_sec` so tests don't
+  pay each site library's ~0.5s real-world rate-limit default.
+
 - [ ] **M5 — C server**
   Exposes the core over HTTP/JSON (embeddable HTTP server library pulled via CPM). Auth
   between GUI clients and the server. Runs on Linux.
