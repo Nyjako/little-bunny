@@ -419,6 +419,44 @@ M6).
   SQLite-backed data) to confirm account/search CRUD, cert-pinning accept/reject, and the
   sync/queue endpoints all work over an actual TLS connection, not just canned responses.
 
+## Auth & app-lock (M7)
+
+**Account verification (M7.1)**: `BunnyRepository.verifyAccount(site, username, secret)`
+tests credentials against the real site without persisting them, so the login UI can reject
+bad input before calling `setAccount`. Neither e621 nor Inkbunny's official APIs have a
+dedicated "am I authenticated" check, so `bunny_core_account_verify`
+(`libs/core/src/verify.c`) improvises with each site's cheapest real authenticated call:
+
+- **e621**: no login endpoint at all — every request just carries HTTP Basic auth. Builds a
+  throwaway `e621_client_t` with the given username/API key and calls
+  `e621_list_favorites(client, NULL, 1, &out)` ("list the authenticated client's own
+  favorites"); succeeds or fails exactly as a real authenticated request would, whether or
+  not the account actually has any favorites.
+- **Inkbunny**: already has an explicit `inkbunny_login(client, username, password)` used
+  directly.
+
+Both map any failure (bad credentials, network error, ...) to the existing
+`BUNNY_CORE_ERR_SITE` — deliberately not a new result code or an `out_error` string
+parameter, since no other function in `bunny_core`'s public API distinguishes reasons for a
+site failure either (`bunny_core_result_to_string` is the existing, sole way callers get a
+message). This propagates up cleanly: the server's `POST /accounts/verify` route reuses the
+exact same `server_json_respond_error` helper every other route already uses (a rejected
+credential is a 502 with a generic body, like any other site failure), and
+`BunnyRepository.verifyAccount` just throws `BunnyRepositoryException` on failure — matching
+every other write-style method on the interface, rather than introducing a
+"meaningful non-exceptional failure" case (like `getAccount`'s `null`) that nothing beneath
+it actually supports.
+
+**Testing note**: `bunny_core_ffi_open`'s public config has no fake-transport injection
+point (standalone mode always talks to the real sites, unlike `libs/core`'s own tests) --
+`FfiBunnyRepository`'s and the raw `BunnyCoreNative`'s `verifyAccount` tests deliberately use
+bogus credentials against the *real* e621 API rather than a fake one. This is safe to rely
+on in the automated suite: e621 will always reject fake Basic-auth credentials, fast and
+deterministically, regardless of the test environment's broader network conditions. The
+underlying accept/reject *logic* itself is already thoroughly covered with fake transports
+at the C level (`libs/core/tests/test_sync.c`, both sites, both outcomes) — the FFI/HTTP
+layers only need to prove their own plumbing reaches it.
+
 ## Inkbunny API constraints (found in M2)
 
 Verified against the live API and the official docs while building `libinkbunny`:

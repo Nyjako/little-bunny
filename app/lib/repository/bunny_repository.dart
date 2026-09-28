@@ -22,6 +22,14 @@ class BunnyRepositoryException implements Exception {
 /// background isolate so native calls never block the UI thread, and the
 /// HTTP implementation makes a real network call.
 abstract interface class BunnyRepository {
+  /// Tests [username]/[secret] against the real site without persisting
+  /// anything. Throws [BunnyRepositoryException] if the site rejected them
+  /// or the request otherwise failed -- neither this interface nor the
+  /// server distinguishes "bad credentials" from "site unreachable" here,
+  /// so unlike [getAccount] there's no meaningful non-exceptional failure
+  /// case to return instead.
+  Future<void> verifyAccount(BunnySite site, String username, String secret);
+
   /// Stores or replaces the account for `site`. `secret` is the e621 API key
   /// or the Inkbunny password, depending on `site`.
   Future<void> setAccount(BunnySite site, String username, String secret);

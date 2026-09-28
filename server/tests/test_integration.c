@@ -157,6 +157,32 @@ void test_request_with_wrong_token_is_rejected(void)
     free(response.data);
 }
 
+void test_verify_account(void)
+{
+    response_buffer_t response = {0};
+
+    /* fake_e621_send always returns E621_FIXTURE regardless of credentials,
+     * so this only proves the route reaches bunny_core_account_verify and
+     * maps a real E621_OK through to 200 -- the actual accept/reject logic
+     * is covered against both success and failure fixtures in
+     * libs/core/tests/test_sync.c. */
+    long status = do_request("POST", "/accounts/verify", "{\"site\":\"e621\",\"username\":\"tester\",\"secret\":\"testkey\"}", &response, true, NULL);
+    TEST_ASSERT_EQUAL(200, status);
+    TEST_ASSERT_NOT_NULL(strstr(response.data, "\"ok\":true"));
+    free(response.data);
+    memset(&response, 0, sizeof(response));
+
+    /* Verifying doesn't persist anything. */
+    status = do_request("GET", "/accounts/e621", NULL, &response, true, NULL);
+    TEST_ASSERT_EQUAL(404, status);
+    free(response.data);
+    memset(&response, 0, sizeof(response));
+
+    status = do_request("POST", "/accounts/verify", "{\"site\":\"e621\",\"username\":\"tester\"}", &response, true, NULL);
+    TEST_ASSERT_EQUAL(400, status);
+    free(response.data);
+}
+
 void test_full_account_search_sync_favorite_flow(void)
 {
     response_buffer_t response = {0};
@@ -249,6 +275,7 @@ int main(void)
     RUN_TEST(test_health_check_no_auth_needed);
     RUN_TEST(test_request_without_token_is_rejected);
     RUN_TEST(test_request_with_wrong_token_is_rejected);
+    RUN_TEST(test_verify_account);
     RUN_TEST(test_full_account_search_sync_favorite_flow);
     RUN_TEST(test_scheduler_syncs_search_automatically);
     int result = UNITY_END();

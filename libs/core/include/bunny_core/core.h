@@ -48,6 +48,17 @@ bunny_core_result_t bunny_core_account_set(bunny_core_t *core, bunny_db_site_t s
 bunny_core_result_t bunny_core_account_get(bunny_core_t *core, bunny_db_site_t site, bunny_db_account_t *out_account);
 bunny_core_result_t bunny_core_account_delete(bunny_core_t *core, bunny_db_site_t site);
 
+/* Tests username/secret against the real site without persisting anything --
+ * builds a throwaway client (never touches bunny_db, unlike the three
+ * functions above). e621 has no dedicated login endpoint (auth is per-request
+ * Basic auth), so this makes one real authenticated call
+ * (e621_list_favorites) and checks it doesn't fail; Inkbunny has an explicit
+ * login call, used directly. Returns BUNNY_CORE_ERR_SITE if the site rejected
+ * the credentials or the request otherwise failed (network, etc.) -- use
+ * bunny_core_result_to_string for a message, same as every other site-facing
+ * function here. */
+bunny_core_result_t bunny_core_account_verify(bunny_core_t *core, bunny_db_site_t site, const char *username, const char *secret);
+
 /* --- Searches -----------------------------------------------------------------
  * Thin pass-throughs to bunny_db's search CRUD: bunny_core is the single
  * entry point apps use (standalone FFI or networked server), so it needs to

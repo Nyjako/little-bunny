@@ -22,6 +22,12 @@ void main() {
     expect(await repository.getAccount(BunnySite.e621), isNull);
   });
 
+  test('verifyAccount rejects bogus e621 credentials', () async {
+    // See bunny_core_ffi/test/bunny_core_native_test.dart for why this hits
+    // real e621 network: standalone mode has no fake-transport override.
+    await expectLater(repository.verifyAccount(BunnySite.e621, 'definitely-not-a-real-user', 'definitely-not-a-real-key'), throwsA(isA<BunnyRepositoryException>()));
+  });
+
   test('setAccount then getAccount round-trips into a BunnyAccount', () async {
     await repository.setAccount(BunnySite.e621, 'someuser', 'somesecret');
 

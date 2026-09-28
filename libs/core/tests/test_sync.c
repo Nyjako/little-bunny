@@ -178,11 +178,66 @@ void test_sync_skips_search_not_due_yet(void)
     free(fixture);
 }
 
+void test_verify_e621_accepts_valid_credentials(void)
+{
+    char *fixture = read_fixture("e621_posts_search.json");
+    TEST_ASSERT_NOT_NULL(fixture);
+    g_e621_state.bodies[0] = fixture;
+    g_e621_state.body_count = 1;
+
+    bunny_core_result_t result = bunny_core_account_verify(g_core, BUNNY_DB_SITE_E621, "someuser", "someapikey");
+    TEST_ASSERT_EQUAL(BUNNY_CORE_OK, result);
+
+    free(fixture);
+}
+
+void test_verify_e621_rejects_when_site_call_fails(void)
+{
+    /* No fixture queued -- fake_send returns an empty 200 body, which fails
+     * to parse as e621's expected JSON shape, exercising the same
+     * any-site-failure-maps-to-ERR_SITE path a real 401 would. */
+    bunny_core_result_t result = bunny_core_account_verify(g_core, BUNNY_DB_SITE_E621, "someuser", "badkey");
+    TEST_ASSERT_EQUAL(BUNNY_CORE_ERR_SITE, result);
+}
+
+void test_verify_inkbunny_accepts_valid_credentials(void)
+{
+    char *fixture = read_fixture("inkbunny_login_success.json");
+    TEST_ASSERT_NOT_NULL(fixture);
+    g_inkbunny_state.bodies[0] = fixture;
+    g_inkbunny_state.body_count = 1;
+
+    bunny_core_result_t result = bunny_core_account_verify(g_core, BUNNY_DB_SITE_INKBUNNY, "someuser", "somepassword");
+    TEST_ASSERT_EQUAL(BUNNY_CORE_OK, result);
+
+    free(fixture);
+}
+
+void test_verify_inkbunny_rejects_invalid_credentials(void)
+{
+    /* Inkbunny reports auth failure as an error_code/error_message body
+     * under HTTP 200 (see docs/architecture.md's Inkbunny API constraints),
+     * not a non-2xx status -- this is the real shape a bad login returns. */
+    char *fixture = read_fixture("inkbunny_login_failure.json");
+    TEST_ASSERT_NOT_NULL(fixture);
+    g_inkbunny_state.bodies[0] = fixture;
+    g_inkbunny_state.body_count = 1;
+
+    bunny_core_result_t result = bunny_core_account_verify(g_core, BUNNY_DB_SITE_INKBUNNY, "someuser", "badpassword");
+    TEST_ASSERT_EQUAL(BUNNY_CORE_ERR_SITE, result);
+
+    free(fixture);
+}
+
 int main(void)
 {
     UNITY_BEGIN();
     RUN_TEST(test_sync_e621_search_upserts_post);
     RUN_TEST(test_sync_inkbunny_search_upserts_post);
     RUN_TEST(test_sync_skips_search_not_due_yet);
+    RUN_TEST(test_verify_e621_accepts_valid_credentials);
+    RUN_TEST(test_verify_e621_rejects_when_site_call_fails);
+    RUN_TEST(test_verify_inkbunny_accepts_valid_credentials);
+    RUN_TEST(test_verify_inkbunny_rejects_invalid_credentials);
     return UNITY_END();
 }

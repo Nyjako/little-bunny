@@ -85,6 +85,9 @@ class FfiBunnyRepository implements BunnyRepository {
   Future<void> close() => _native.close();
 
   @override
+  Future<void> verifyAccount(BunnySite site, String username, String secret) => _wrapped(() => _native.verifyAccount(site.toWireString(), username, secret));
+
+  @override
   Future<void> setAccount(BunnySite site, String username, String secret) => _wrapped(() => _native.setAccount(site.toWireString(), username, secret));
 
   @override
