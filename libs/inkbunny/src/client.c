@@ -8,39 +8,6 @@
 
 #include "internal.h"
 
-struct inkbunny_client {
-    char *base_url;
-    char *sid;
-    int64_t user_id;
-    double min_request_interval_sec;
-    bunny_http_transport_t transport;
-    struct timespec last_request_time;
-    bool has_last_request_time;
-};
-
-static char *url_encode(const char *value) {
-    if (!value) {
-        return strdup("");
-    }
-    size_t len = strlen(value);
-    char *out = malloc(len * 3 + 1);
-    if (!out) {
-        return NULL;
-    }
-    size_t j = 0;
-    for (size_t i = 0; i < len; i++) {
-        unsigned char c = (unsigned char)value[i];
-        if (isalnum(c) || c == '-' || c == '_' || c == '.' || c == '~') {
-            out[j++] = (char)c;
-        } else {
-            snprintf(out + j, 4, "%%%02X", c);
-            j += 3;
-        }
-    }
-    out[j] = '\0';
-    return out;
-}
-
 static void rate_limit_wait(inkbunny_client_t *client) {
     if (client->min_request_interval_sec <= 0) {
         return;
@@ -167,6 +134,9 @@ void inkbunny_client_destroy(inkbunny_client_t *client) {
     }
     free(client->base_url);
     free(client->sid);
+    if (client->website_curl) {
+        curl_easy_cleanup(client->website_curl);
+    }
     free(client);
 }
 
@@ -175,8 +145,8 @@ inkbunny_result_t inkbunny_login(inkbunny_client_t *client, const char *username
         return INKBUNNY_ERR_INVALID_ARG;
     }
 
-    char *encoded_user = url_encode(username);
-    char *encoded_pass = url_encode(password ? password : "");
+    char *encoded_user = inkbunny_url_encode(username);
+    char *encoded_pass = inkbunny_url_encode(password ? password : "");
     if (!encoded_user || !encoded_pass) {
         free(encoded_user);
         free(encoded_pass);
@@ -249,7 +219,7 @@ inkbunny_result_t inkbunny_search(inkbunny_client_t *client, const inkbunny_sear
 
     if (params) {
         if (params->text && params->text[0]) {
-            char *encoded_text = url_encode(params->text);
+            char *encoded_text = inkbunny_url_encode(params->text);
             if (!encoded_text) {
                 return INKBUNNY_ERR_UNKNOWN;
             }

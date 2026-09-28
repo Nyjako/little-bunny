@@ -1,8 +1,9 @@
 BUILD_DIR ?= build
 RELEASE_DIR ?= build-release
 WINDOWS_DIR ?= build-windows
+TOOLS_DIR ?= build-tools
 
-.PHONY: build test release clean dockcross windows
+.PHONY: build test release clean dockcross windows tools
 
 build:
 	cmake -S . -B $(BUILD_DIR) -DCMAKE_BUILD_TYPE=Debug -DBUNNY_BUILD_TESTS=ON
@@ -16,7 +17,11 @@ release:
 	cmake --build $(RELEASE_DIR) -j
 
 clean:
-	rm -rf $(BUILD_DIR) $(RELEASE_DIR) $(WINDOWS_DIR)
+	rm -rf $(BUILD_DIR) $(RELEASE_DIR) $(WINDOWS_DIR) $(TOOLS_DIR)
+
+tools:
+	cmake -S . -B $(TOOLS_DIR) -DCMAKE_BUILD_TYPE=Debug -DBUNNY_BUILD_TOOLS=ON
+	cmake --build $(TOOLS_DIR) -j
 
 dockcross:
 	docker run --rm dockcross/windows-static-x64 > ./dockcross

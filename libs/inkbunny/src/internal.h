@@ -1,13 +1,36 @@
 #ifndef INKBUNNY_INTERNAL_H
 #define INKBUNNY_INTERNAL_H
 
+#include <bunny_common/http.h>
 #include <bunny_common/json.h>
+#include <ctype.h>
+#include <curl/curl.h>
 #include <stdint.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 
 #include "inkbunny/error.h"
 #include "inkbunny/types.h"
+
+/* Shared between client.c (owns lifecycle + the official API calls) and
+ * unofficial_favorites.c (uses website_curl for the website-session-based
+ * favorite/unfavorite flow -- see inkbunny/unofficial_favorites.h). */
+struct inkbunny_client {
+    char *base_url;
+    char *sid;
+    int64_t user_id;
+    double min_request_interval_sec;
+    bunny_http_transport_t transport;
+    struct timespec last_request_time;
+    bool has_last_request_time;
+
+    /* NULL until inkbunny_website_login() succeeds. Kept alive for the
+     * client's lifetime so its cookie jar persists across favorite/unfavorite
+     * calls; not related to `sid`, which is the official API's session. */
+    CURL *website_curl;
+};
 
 /* JSON <-> struct (de)serialization, shared between client.c and tests. */
 inkbunny_result_t inkbunny_parse_submission(const cJSON *json, inkbunny_submission_t *out);
@@ -51,6 +74,31 @@ static inline bool inkbunny_field_bool_tf(const cJSON *object, const char *key, 
         return false;
     }
     return default_value;
+}
+
+/* Shared between client.c (official API query strings) and
+ * unofficial_favorites.c (website form bodies). */
+static inline char *inkbunny_url_encode(const char *value) {
+    if (!value) {
+        return strdup("");
+    }
+    size_t len = strlen(value);
+    char *out = malloc(len * 3 + 1);
+    if (!out) {
+        return NULL;
+    }
+    size_t j = 0;
+    for (size_t i = 0; i < len; i++) {
+        unsigned char c = (unsigned char)value[i];
+        if (isalnum(c) || c == '-' || c == '_' || c == '.' || c == '~') {
+            out[j++] = (char)c;
+        } else {
+            snprintf(out + j, 4, "%%%02X", c);
+            j += 3;
+        }
+    }
+    out[j] = '\0';
+    return out;
 }
 
 #endif /* INKBUNNY_INTERNAL_H */

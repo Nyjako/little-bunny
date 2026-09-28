@@ -10,11 +10,21 @@ this file is the single source of truth for "what's done" across sessions.
 
 - [x] **M2 — `libinkbunny`**
   Session-based login (`api_login.php` → SID)/logout, search submissions, submission
-  details (single + batched up to 100 ids). Reuses `bunny_common` for HTTP/JSON. **Does
-  not** implement adding/removing favorites or posting/listing comments — confirmed via
-  the live API and official docs that Inkbunny's API has no endpoints for either (see
-  `architecture.md`); only read-only counts/flags and an existing-favorites-list lookup
-  (`favs_user_id`) are available.
+  details (single + batched up to 100 ids). Reuses `bunny_common` for HTTP/JSON. The
+  official API has no endpoint to add/remove favorites or post/list comments (confirmed
+  via the live API and official docs, see `architecture.md`) — favoriting was later added
+  via an unofficial route (see M2.3 below); **commenting still has no path at all**.
+
+- [x] **M2.3 — Unofficial Inkbunny favorite/unfavorite**
+  `inkbunny_website_login()`, `inkbunny_favorite_add()`, `inkbunny_favorite_remove()`
+  (`inkbunny/unofficial_favorites.h`) drive the website's own internal favorite flow
+  (login.php/login_process.php cookie session + a scraped CSRF token +
+  `submissionfav_process.php`), since the official API has none. A deliberate, explicit
+  reversal of M2's "official API only" call, made after the user asked to test it directly
+  and confirmed it worked end-to-end against their own account. Fragile by nature (HTML
+  markup dependent, no fixture-based tests, only live verification) — see
+  `architecture.md`. `tools/inkbunny_favorite_experiment` is now a thin CLI over these
+  functions for manual testing. Commenting still has no path, official or unofficial.
 
 - [x] **M2.1 — Pools and post relationships**
   `e621_pool_t` + `e621_get_pool()` (GET `/pools/{id}.json`); `e621_post_t` gained
@@ -53,9 +63,10 @@ this file is the single source of truth for "what's done" across sessions.
   Single + mass like/favorite/download, commenting, download manager writing to
   `%artist%/%id%.%extension%`, checksum (md5) verification of downloaded files against the
   site-provided value. Downloads happen client-side, straight from the site CDN. Favorite
-  and comment actions only apply to e621 — Inkbunny's API doesn't support them (M2); the UI
-  needs to reflect that (e.g. grey out those actions for Inkbunny posts) rather than fail
-  silently.
+  now works for both sites (e621 officially, Inkbunny via the unofficial route in M2.3 —
+  needs `inkbunny_website_login()` in addition to `inkbunny_login()`). Comment actions only
+  apply to e621; the UI needs to reflect that (e.g. grey out commenting for Inkbunny posts)
+  rather than fail silently.
 
 - [ ] **M10 — Automation & recommendations**
   "Auto-like/auto-favorite on download" setting, most-liked/most-favorited tag stats,

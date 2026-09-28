@@ -1,0 +1,3 @@
+add_executable(inkbunny_favorite_experiment main.c)
+
+target_link_libraries(inkbunny_favorite_experiment PRIVATE bunny_inkbunny)
