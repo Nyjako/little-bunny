@@ -5,13 +5,15 @@
 #include <stdlib.h>
 #include <string.h>
 
-typedef struct {
+typedef struct
+{
     char *data;
     size_t len;
     size_t cap;
 } growable_buf_t;
 
-static size_t write_cb(char *ptr, size_t size, size_t nmemb, void *userdata) {
+static size_t write_cb(char *ptr, size_t size, size_t nmemb, void *userdata)
+{
     growable_buf_t *buf = (growable_buf_t *)userdata;
     size_t add = size * nmemb;
 
@@ -34,7 +36,8 @@ static size_t write_cb(char *ptr, size_t size, size_t nmemb, void *userdata) {
     return add;
 }
 
-static void ensure_curl_global_init(void) {
+static void ensure_curl_global_init(void)
+{
     static int initialized = 0;
     if (!initialized) {
         curl_global_init(CURL_GLOBAL_DEFAULT);
@@ -42,7 +45,8 @@ static void ensure_curl_global_init(void) {
     }
 }
 
-static struct curl_slist *build_header_list(const bunny_http_request_t *request) {
+static struct curl_slist *build_header_list(const bunny_http_request_t *request)
+{
     struct curl_slist *list = NULL;
     for (size_t i = 0; i < request->header_count; i++) {
         const char *name = request->headers[i].name;
@@ -59,9 +63,8 @@ static struct curl_slist *build_header_list(const bunny_http_request_t *request)
     return list;
 }
 
-static bunny_http_result_t curl_send(void *user_data,
-                                      const bunny_http_request_t *request,
-                                      bunny_http_response_t *out_response) {
+static bunny_http_result_t curl_send(void *user_data, const bunny_http_request_t *request, bunny_http_response_t *out_response)
+{
     (void)user_data;
     if (!request || !request->url || !out_response) {
         return BUNNY_HTTP_ERR_INVALID_ARG;
@@ -132,16 +135,16 @@ static bunny_http_result_t curl_send(void *user_data,
     return result;
 }
 
-bunny_http_transport_t bunny_http_curl_transport(void) {
+bunny_http_transport_t bunny_http_curl_transport(void)
+{
     bunny_http_transport_t transport;
     transport.send = curl_send;
     transport.user_data = NULL;
     return transport;
 }
 
-bunny_http_result_t bunny_http_send(const bunny_http_transport_t *transport,
-                                     const bunny_http_request_t *request,
-                                     bunny_http_response_t *out_response) {
+bunny_http_result_t bunny_http_send(const bunny_http_transport_t *transport, const bunny_http_request_t *request, bunny_http_response_t *out_response)
+{
     if (!transport || !transport->send || !request || !out_response) {
         return BUNNY_HTTP_ERR_INVALID_ARG;
     }
@@ -149,7 +152,8 @@ bunny_http_result_t bunny_http_send(const bunny_http_transport_t *transport,
     return transport->send(transport->user_data, request, out_response);
 }
 
-void bunny_http_response_free(bunny_http_response_t *response) {
+void bunny_http_response_free(bunny_http_response_t *response)
+{
     if (!response) {
         return;
     }

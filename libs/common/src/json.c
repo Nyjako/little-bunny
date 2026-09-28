@@ -1,6 +1,7 @@
 #include "bunny_common/json.h"
 
-bunny_json_result_t bunny_json_get_object(const cJSON *object, const char *key, cJSON **out) {
+bunny_json_result_t bunny_json_get_object(const cJSON *object, const char *key, cJSON **out)
+{
     if (!object || !cJSON_IsObject(object)) {
         return BUNNY_JSON_ERR_MISSING;
     }
@@ -15,7 +16,8 @@ bunny_json_result_t bunny_json_get_object(const cJSON *object, const char *key, 
     return BUNNY_JSON_OK;
 }
 
-bunny_json_result_t bunny_json_get_array(const cJSON *object, const char *key, cJSON **out) {
+bunny_json_result_t bunny_json_get_array(const cJSON *object, const char *key, cJSON **out)
+{
     if (!object || !cJSON_IsObject(object)) {
         return BUNNY_JSON_ERR_MISSING;
     }
@@ -30,7 +32,8 @@ bunny_json_result_t bunny_json_get_array(const cJSON *object, const char *key, c
     return BUNNY_JSON_OK;
 }
 
-bunny_json_result_t bunny_json_get_string(const cJSON *object, const char *key, const char **out) {
+bunny_json_result_t bunny_json_get_string(const cJSON *object, const char *key, const char **out)
+{
     if (!object || !cJSON_IsObject(object)) {
         return BUNNY_JSON_ERR_MISSING;
     }
@@ -45,7 +48,8 @@ bunny_json_result_t bunny_json_get_string(const cJSON *object, const char *key, 
     return BUNNY_JSON_OK;
 }
 
-bunny_json_result_t bunny_json_get_int(const cJSON *object, const char *key, int *out) {
+bunny_json_result_t bunny_json_get_int(const cJSON *object, const char *key, int *out)
+{
     if (!object || !cJSON_IsObject(object)) {
         return BUNNY_JSON_ERR_MISSING;
     }
@@ -60,7 +64,8 @@ bunny_json_result_t bunny_json_get_int(const cJSON *object, const char *key, int
     return BUNNY_JSON_OK;
 }
 
-bunny_json_result_t bunny_json_get_int64(const cJSON *object, const char *key, int64_t *out) {
+bunny_json_result_t bunny_json_get_int64(const cJSON *object, const char *key, int64_t *out)
+{
     if (!object || !cJSON_IsObject(object)) {
         return BUNNY_JSON_ERR_MISSING;
     }
@@ -75,7 +80,8 @@ bunny_json_result_t bunny_json_get_int64(const cJSON *object, const char *key, i
     return BUNNY_JSON_OK;
 }
 
-bunny_json_result_t bunny_json_get_bool(const cJSON *object, const char *key, bool *out) {
+bunny_json_result_t bunny_json_get_bool(const cJSON *object, const char *key, bool *out)
+{
     if (!object || !cJSON_IsObject(object)) {
         return BUNNY_JSON_ERR_MISSING;
     }
@@ -90,7 +96,8 @@ bunny_json_result_t bunny_json_get_bool(const cJSON *object, const char *key, bo
     return BUNNY_JSON_OK;
 }
 
-const char *bunny_json_get_string_or(const cJSON *object, const char *key, const char *default_value) {
+const char *bunny_json_get_string_or(const cJSON *object, const char *key, const char *default_value)
+{
     const char *value = NULL;
     if (bunny_json_get_string(object, key, &value) != BUNNY_JSON_OK) {
         return default_value;
@@ -98,7 +105,8 @@ const char *bunny_json_get_string_or(const cJSON *object, const char *key, const
     return value;
 }
 
-int bunny_json_get_int_or(const cJSON *object, const char *key, int default_value) {
+int bunny_json_get_int_or(const cJSON *object, const char *key, int default_value)
+{
     int value = 0;
     if (bunny_json_get_int(object, key, &value) != BUNNY_JSON_OK) {
         return default_value;
@@ -106,7 +114,8 @@ int bunny_json_get_int_or(const cJSON *object, const char *key, int default_valu
     return value;
 }
 
-bool bunny_json_get_bool_or(const cJSON *object, const char *key, bool default_value) {
+bool bunny_json_get_bool_or(const cJSON *object, const char *key, bool default_value)
+{
     bool value = false;
     if (bunny_json_get_bool(object, key, &value) != BUNNY_JSON_OK) {
         return default_value;

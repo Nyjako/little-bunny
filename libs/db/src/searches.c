@@ -5,8 +5,8 @@
 
 #include "internal.h"
 
-bunny_db_result_t bunny_db_search_create(bunny_db_t *db, bunny_db_site_t site, const char *label,
-                                          const char *query, int interval_hours, int64_t *out_id) {
+bunny_db_result_t bunny_db_search_create(bunny_db_t *db, bunny_db_site_t site, const char *label, const char *query, int interval_hours, int64_t *out_id)
+{
     if (!db || !label || !query) {
         return BUNNY_DB_ERR_INVALID_ARG;
     }
@@ -35,7 +35,8 @@ bunny_db_result_t bunny_db_search_create(bunny_db_t *db, bunny_db_site_t site, c
     return BUNNY_DB_OK;
 }
 
-bunny_db_result_t bunny_db_search_delete(bunny_db_t *db, int64_t search_id) {
+bunny_db_result_t bunny_db_search_delete(bunny_db_t *db, int64_t search_id)
+{
     if (!db) {
         return BUNNY_DB_ERR_INVALID_ARG;
     }
@@ -51,7 +52,8 @@ bunny_db_result_t bunny_db_search_delete(bunny_db_t *db, int64_t search_id) {
     return rc == SQLITE_DONE ? BUNNY_DB_OK : bunny_db_sqlite_rc_to_result(rc);
 }
 
-static void fill_search_from_row(sqlite3_stmt *stmt, bunny_db_search_t *out) {
+static void fill_search_from_row(sqlite3_stmt *stmt, bunny_db_search_t *out)
+{
     out->id = sqlite3_column_int64(stmt, 0);
     out->site = bunny_db_site_from_text((const char *)sqlite3_column_text(stmt, 1));
     out->label = bunny_db_column_text_dup(stmt, 2);
@@ -61,14 +63,14 @@ static void fill_search_from_row(sqlite3_stmt *stmt, bunny_db_search_t *out) {
     out->last_run_at = bunny_db_column_text_dup(stmt, 6);
 }
 
-bunny_db_result_t bunny_db_search_list(bunny_db_t *db, bunny_db_search_list_t *out_list) {
+bunny_db_result_t bunny_db_search_list(bunny_db_t *db, bunny_db_search_list_t *out_list)
+{
     if (!db || !out_list) {
         return BUNNY_DB_ERR_INVALID_ARG;
     }
     memset(out_list, 0, sizeof(*out_list));
 
-    const char *sql =
-        "SELECT id, site, label, query, interval_hours, created_at, last_run_at FROM searches ORDER BY id;";
+    const char *sql = "SELECT id, site, label, query, interval_hours, created_at, last_run_at FROM searches ORDER BY id;";
     sqlite3_stmt *stmt = NULL;
     if (sqlite3_prepare_v2(db->handle, sql, -1, &stmt, NULL) != SQLITE_OK) {
         return BUNNY_DB_ERR_QUERY_FAILED;
@@ -112,7 +114,8 @@ bunny_db_result_t bunny_db_search_list(bunny_db_t *db, bunny_db_search_list_t *o
     return BUNNY_DB_OK;
 }
 
-bunny_db_result_t bunny_db_search_touch_last_run(bunny_db_t *db, int64_t search_id) {
+bunny_db_result_t bunny_db_search_touch_last_run(bunny_db_t *db, int64_t search_id)
+{
     if (!db) {
         return BUNNY_DB_ERR_INVALID_ARG;
     }

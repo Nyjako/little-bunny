@@ -9,7 +9,8 @@
 extern "C" {
 #endif
 
-typedef enum {
+typedef enum
+{
     BUNNY_JSON_OK = 0,
     BUNNY_JSON_ERR_MISSING,
     BUNNY_JSON_ERR_TYPE,

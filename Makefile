@@ -3,7 +3,9 @@ RELEASE_DIR ?= build-release
 WINDOWS_DIR ?= build-windows
 TOOLS_DIR ?= build-tools
 
-.PHONY: build test release clean dockcross windows tools
+SOURCES := $(shell find libs tools -name '*.c' -o -name '*.h')
+
+.PHONY: build test release clean dockcross windows tools format format-check
 
 build:
 	cmake -S . -B $(BUILD_DIR) -DCMAKE_BUILD_TYPE=Debug -DBUNNY_BUILD_TESTS=ON
@@ -30,3 +32,9 @@ dockcross:
 windows: dockcross
 	./dockcross cmake -S . -B $(WINDOWS_DIR) -DCMAKE_BUILD_TYPE=Release -DBUNNY_BUILD_TESTS=OFF
 	./dockcross cmake --build $(WINDOWS_DIR) -j
+
+format:
+	clang-format -i $(SOURCES)
+
+format-check:
+	clang-format --dry-run --Werror $(SOURCES)
