@@ -49,9 +49,10 @@ this file is the single source of truth for "what's done" across sessions.
   schema — tags are already collected as a side effect of `bunny_db_post_upsert`. Feeds
   M8's search-box autocomplete for both e621 and Inkbunny.
 
-- [ ] **M4 — Core sync engine**
+- [x] **M4 — Core sync engine**
   Credential storage, scheduled searches (24h default, configurable), seen/unseen
   tracking, an action queue that proxies favorite/vote/comment calls to the sites.
+  Delivered as three sub-milestones, M4.1–M4.3 below.
 
 - [x] **M4.1 — Account credential storage**
   New `bunny_core` library (`libs/core`), the first to sit on top of `bunny_db` (site
@@ -75,6 +76,25 @@ this file is the single source of truth for "what's done" across sessions.
   entry point apps use, so it needs to expose search CRUD even though the sync engine
   itself only reads. `bunny_core_config_t` gained `min_request_interval_sec` so tests don't
   pay each site library's ~0.5s real-world rate-limit default.
+
+- [x] **M4.3 — Action queue (favorite/vote/comment proxy)**
+  New `action_queue` table + `bunny_db_action_queue_add/list_pending/mark_done/
+  mark_failed`, plus `bunny_db_post_get_by_id` (the queue only has the local post id,
+  matching `bunny_db_favorite_add`'s own convention, and needs to resolve it to
+  `(site, external_id)` before calling a site API). `bunny_core_queue_favorite_add/
+  remove/vote/comment` enqueue (action-specific data like a vote's score goes in a small
+  JSON `payload`, built/read via cJSON — already a transitive dependency through
+  `bunny_common`); `bunny_core_process_queue()` drains pending actions, builds/reuses an
+  e621 client across the pass, calls the matching site function, updates the local
+  favorites mirror on success, and marks each row done/failed. Vote/comment against an
+  Inkbunny post always fails cleanly (Inkbunny has no API for either); Inkbunny
+  favoriting requires a real stored account (the unofficial route has no guest mode) and
+  fails immediately without a network call if none is configured. No retry scheduling —
+  a failed action stays failed; a future scheduler (M5) can re-drive the queue on
+  whatever cadence makes sense once there's an always-on process. `bunny_core_build_e621_
+  client`/`build_inkbunny_client` (client-building + account lookup) were factored out of
+  M4.2's sync code into a shared internal helper (`libs/core/src/site_clients.c`) since
+  M4.3 needed the exact same logic.
 
 - [ ] **M5 — C server**
   Exposes the core over HTTP/JSON (embeddable HTTP server library pulled via CPM). Auth

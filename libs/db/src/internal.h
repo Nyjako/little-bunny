@@ -48,6 +48,31 @@ static inline bunny_db_site_t bunny_db_site_from_text(const char *text)
     return BUNNY_DB_SITE_E621;
 }
 
+static inline bunny_db_action_type_t bunny_db_action_type_from_text(const char *text)
+{
+    if (text && strcmp(text, "favorite_remove") == 0) {
+        return BUNNY_DB_ACTION_FAVORITE_REMOVE;
+    }
+    if (text && strcmp(text, "vote") == 0) {
+        return BUNNY_DB_ACTION_VOTE;
+    }
+    if (text && strcmp(text, "comment") == 0) {
+        return BUNNY_DB_ACTION_COMMENT;
+    }
+    return BUNNY_DB_ACTION_FAVORITE_ADD;
+}
+
+static inline bunny_db_action_status_t bunny_db_action_status_from_text(const char *text)
+{
+    if (text && strcmp(text, "done") == 0) {
+        return BUNNY_DB_ACTION_STATUS_DONE;
+    }
+    if (text && strcmp(text, "failed") == 0) {
+        return BUNNY_DB_ACTION_STATUS_FAILED;
+    }
+    return BUNNY_DB_ACTION_STATUS_PENDING;
+}
+
 static inline void bunny_db_bind_text_or_null(sqlite3_stmt *stmt, int idx, const char *value)
 {
     if (value) {

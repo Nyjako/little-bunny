@@ -79,6 +79,43 @@ typedef struct
  * unless `core` itself or listing the searches fails; out_stats may be NULL. */
 bunny_core_result_t bunny_core_sync_due_searches(bunny_core_t *core, bunny_core_sync_stats_t *out_stats);
 
+/* --- Action queue --------------------------------------------------------------
+ * Proxies favorite/vote/comment calls to the sites: enqueue now (fast, no
+ * network), process later via bunny_core_process_queue (typically on a
+ * schedule, alongside bunny_core_sync_due_searches). `post_id` is the local
+ * bunny_db post id, matching bunny_db_favorite_add/download_record's own
+ * convention. Inkbunny has no vote or comment API at all (see
+ * libs/inkbunny/include/inkbunny/client.h) -- queuing one against an
+ * Inkbunny post is accepted (bunny_core doesn't know a post's site until
+ * processing) but always fails when processed, with a clear error. Inkbunny
+ * favoriting also always fails if no Inkbunny account is configured: the
+ * unofficial favorite route (libs/inkbunny/include/inkbunny/
+ * unofficial_favorites.h) has no guest mode. */
+
+/* stars: Inkbunny's 1-3 rating, or -1 if not applicable (e621's plain favorite). */
+bunny_core_result_t bunny_core_queue_favorite_add(bunny_core_t *core, int64_t post_id, int stars);
+bunny_core_result_t bunny_core_queue_favorite_remove(bunny_core_t *core, int64_t post_id);
+bunny_core_result_t bunny_core_queue_vote(bunny_core_t *core, int64_t post_id, int score, bool no_unvote);
+bunny_core_result_t bunny_core_queue_comment(bunny_core_t *core, int64_t post_id, const char *body, bool anonymous);
+
+typedef struct
+{
+    int actions_processed;
+    int actions_succeeded;
+    int actions_failed;
+} bunny_core_queue_stats_t;
+
+/* Drains all pending queued actions in order: resolves each to its post's
+ * (site, external_id), builds a client for that site (same account lookup as
+ * bunny_core_sync_due_searches; e621 clients are built once and reused across
+ * a pass, Inkbunny actions each build/login their own since the unofficial
+ * favorite route needs its own website session per client), calls the
+ * matching site function, updates the local favorites mirror on success, and
+ * marks the row done/failed. Always returns BUNNY_CORE_OK unless `core`
+ * itself or listing pending actions fails; out_stats may be NULL. No retry
+ * scheduling -- a failed action stays failed. */
+bunny_core_result_t bunny_core_process_queue(bunny_core_t *core, bunny_core_queue_stats_t *out_stats);
+
 #ifdef __cplusplus
 }
 #endif
