@@ -9,7 +9,8 @@ LittleBunny is an e621 + Inkbunny viewer/manager with three moving parts.
    and proxies favorite/vote/comment actions to the sites so any device can trigger them
    without needing its own site session. **Inkbunny is the exception**: its API has no
    favorite/comment write actions at all (see "Inkbunny API constraints" below), so the
-   server can only proxy those for e621.
+   server can only proxy those for e621. Wraps `bunny_core` in an HTTP/HTTPS API (M5) —
+   see "C server (M5)" below.
 2. **Core library** — the site clients, DB layer, and sync engine compiled as a library,
    usable in two modes:
    - **Networked**: the server process links it; GUI clients talk to the server over
@@ -160,6 +161,66 @@ factored out of M4.2's sync code specifically so the queue could reuse the exact
 "build a client using the stored account, or guest/anonymous" logic instead of duplicating
 it.
 
+## C server (M5)
+
+`server/` (executable target `bunny_server`) links `bunny_core` and exposes it over HTTPS,
+turning the library into the always-on sync authority multiple devices talk to. Config is
+env-var-only (`BUNNY_SERVER_PORT`/`DATA_DIR`/`USER_AGENT`/`POLL_INTERVAL_SEC`,
+`server/src/config.c`) — four settings didn't justify a config-file parser. The data
+directory defaults via GOBLIN's `appdirs.h` (`goblin_appdir_data_dir`), the first real use
+of that header after it sat as a "good future fit" note since M3/M4; its implementation is
+instantiated in the same single spot as `cstr.h`'s (`libs/common/src/goblin_impl.c`), via
+its own `GOBLIN_APPDIR_IMPLEMENTATION` macro.
+
+**HTTP library**: [civetweb](https://github.com/civetweb/civetweb), vendored via CPM
+(target name is `civetweb-c-library`, not `civetweb` — check `build/_deps/civetweb-src` if
+this ever needs re-verifying against a version bump). `CIVETWEB_ENABLE_SSL_DYNAMIC_LOADING
+OFF` so it links OpenSSL directly at build time instead of `dlopen`-ing it at runtime,
+matching how curl is configured. **`CIVETWEB_ENABLE_ASAN OFF` is load-bearing**: civetweb's
+own CMakeLists defaults `CIVETWEB_ENABLE_ASAN` to `ON` in Debug builds, completely
+independent of this project's `BUNNY_ENABLE_ASAN` — without turning it off, any Debug build
+fails to link with `undefined reference to __ubsan_handle_*` because civetweb's object code
+expects a sanitizer runtime that isn't linked into anything else. No other vendored
+dependency (sqlite3, curl, cJSON) self-instruments like this; only `BUNNY_ENABLE_ASAN`
+controls sanitizer coverage for this project's own code.
+
+**Security model (why it looks the way it does):** this server is meant to run on a remote
+host (confirmed target: an Oracle Cloud free-tier instance) rather than the user's LAN, and
+the user explicitly doesn't want to run a reverse proxy or manage TLS certificates by hand.
+That combination — remote, no proxy, no manual certs — drove two decisions:
+- **Auth is a single shared bearer token** (`server/src/auth.c`), 32 random bytes from
+  OpenSSL's `RAND_bytes`, hex-encoded, generated once into `<data_dir>/auth_token` (`0600`)
+  and logged to stdout on first generation only. Every route except `/health` must present
+  it via `Authorization: Bearer <token>` (`server_auth_check_request`, constant-time
+  compare via `server_auth_verify`). Simpler than per-device paired/revocable tokens,
+  appropriate for a single-user app — revoking access means regenerating the file and
+  re-entering it on every client.
+- **The server generates its own self-signed TLS certificate** (`server/src/tls.c`,
+  OpenSSL `EVP_PKEY`/`X509` APIs, RSA-2048, ~10-year validity, written to
+  `<data_dir>/server.pem` in civetweb's combined-cert-and-key convention) and terminates
+  HTTPS itself. There's no CA involved and likely no domain name (a cloud instance's public
+  IP), so plain HTTP was ruled out (the bearer token would cross the open internet in
+  cleartext) but so was a CA-issued cert. **This means M7's GUI must pin the server's
+  certificate — by its SHA-256 fingerprint, shown once alongside the auth token — rather
+  than validating it against the system trust store.** This is a trust-on-first-use model,
+  the same shape as SSH host keys, not the web PKI. The cert's long validity exists
+  specifically so M5 doesn't also need rotation logic.
+- Because credentials in the DB are stored plain (M4.1) and the auth token/TLS key are
+  sensitive, `main.c` explicitly `chmod`s the SQLite DB file to `0600` right after
+  `bunny_core_open()` (SQLite/the OS default is more permissive) — the same treatment the
+  token and cert files already get from `server_auth_load`/`server_tls_ensure_cert`.
+
+**Concurrency**: `bunny_core` and `bunny_db` were built assuming a single caller (every
+prior milestone's tests and tools were single-threaded). civetweb runs a worker-thread pool
+by default, and M5.3 adds a background scheduler thread — two potential concurrent callers
+into the same `bunny_core_t`/`sqlite3*` where there used to be at most one. Fix: a single
+`pthread_mutex_t` in `server_context_t` (`server/src/context.h`) that every route handler
+and the scheduler must lock around their `bunny_core_*` calls. Coarse-grained on purpose —
+this is a personal, low-traffic server, not something that needs fine-grained locking.
+
+`/health` (no auth) returns `200 {"status":"ok"}` and exists mainly to smoke-test that the
+HTTPS listener and cert came up correctly.
+
 ## Inkbunny API constraints (found in M2)
 
 Verified against the live API and the official docs while building `libinkbunny`:
@@ -260,8 +321,12 @@ for security issues) via CPM is impractical. It must be installed on the build m
 (e.g. `libssl-dev` / `openssl-devel`).
 
 Everything else — `curl` (HTTP client), `cJSON` (JSON parsing), `Unity` (C unit test
-framework), `GOBLIN` (shared C utilities, see above), and the sqlite amalgamation — is
-fetched and built from source via CPM, pinned to specific versions/tags/commits.
+framework), `GOBLIN` (shared C utilities, see above), `civetweb` (the M5 server's
+HTTP/HTTPS library, see "C server (M5)"), and the sqlite amalgamation — is fetched and
+built from source via CPM, pinned to specific versions/tags/commits. `civetweb` both uses
+OpenSSL (for HTTPS) and needs `CIVETWEB_ENABLE_ASAN OFF` in its CPM options, since it
+otherwise self-instruments with sanitizers in Debug builds independent of this project's
+own `BUNNY_ENABLE_ASAN` flag — see "C server (M5)" for why that combination breaks linking.
 
 ## Testing philosophy
 

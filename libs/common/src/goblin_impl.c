@@ -1,7 +1,11 @@
 /* Single compiled instantiation of GOBLIN's header-only implementations
  * (https://github.com/Nyjako/GOBLIN), so no other translation unit in this
- * project may also define GOBLIN_CSTR_IMPLEMENTATION -- doing so would
+ * project may also define these *_IMPLEMENTATION macros -- doing so would
  * produce duplicate-symbol errors wherever both end up in the same link
- * (e.g. once M4 links libe621 + libinkbunny + bunny_db together). */
+ * (e.g. bunny_core links libe621 + libinkbunny + bunny_db + bunny_common
+ * together). */
 #define GOBLIN_CSTR_IMPLEMENTATION
 #include <goblin/cstr.h>
+
+#define GOBLIN_APPDIR_IMPLEMENTATION
+#include <goblin/appdirs.h>
