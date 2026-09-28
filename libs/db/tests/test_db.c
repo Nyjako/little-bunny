@@ -86,6 +86,66 @@ void test_search_touch_last_run(void)
     bunny_db_search_list_free(&list);
 }
 
+void test_account_set_and_get(void)
+{
+    bunny_db_result_t result = bunny_db_account_set(g_db, BUNNY_DB_SITE_E621, "someuser", "someapikey");
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, result);
+
+    bunny_db_account_t account;
+    result = bunny_db_account_get(g_db, BUNNY_DB_SITE_E621, &account);
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, result);
+    TEST_ASSERT_EQUAL_STRING("someuser", account.username);
+    TEST_ASSERT_EQUAL_STRING("someapikey", account.secret);
+    bunny_db_account_free(&account);
+}
+
+void test_account_set_upserts_by_site(void)
+{
+    bunny_db_account_set(g_db, BUNNY_DB_SITE_E621, "user1", "secret1");
+    bunny_db_account_set(g_db, BUNNY_DB_SITE_E621, "user2", "secret2");
+
+    bunny_db_account_t account;
+    bunny_db_account_get(g_db, BUNNY_DB_SITE_E621, &account);
+    TEST_ASSERT_EQUAL_STRING("user2", account.username);
+    TEST_ASSERT_EQUAL_STRING("secret2", account.secret);
+    bunny_db_account_free(&account);
+}
+
+void test_account_get_not_found(void)
+{
+    bunny_db_account_t account;
+    bunny_db_result_t result = bunny_db_account_get(g_db, BUNNY_DB_SITE_INKBUNNY, &account);
+    TEST_ASSERT_EQUAL(BUNNY_DB_ERR_NOT_FOUND, result);
+}
+
+void test_account_delete(void)
+{
+    bunny_db_account_set(g_db, BUNNY_DB_SITE_E621, "user", "secret");
+
+    bunny_db_result_t result = bunny_db_account_delete(g_db, BUNNY_DB_SITE_E621);
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, result);
+
+    bunny_db_account_t account;
+    result = bunny_db_account_get(g_db, BUNNY_DB_SITE_E621, &account);
+    TEST_ASSERT_EQUAL(BUNNY_DB_ERR_NOT_FOUND, result);
+}
+
+void test_account_is_per_site(void)
+{
+    bunny_db_account_set(g_db, BUNNY_DB_SITE_E621, "e621user", "e621secret");
+    bunny_db_account_set(g_db, BUNNY_DB_SITE_INKBUNNY, "ibuser", "ibsecret");
+
+    bunny_db_account_t e621_account;
+    bunny_db_account_get(g_db, BUNNY_DB_SITE_E621, &e621_account);
+    TEST_ASSERT_EQUAL_STRING("e621user", e621_account.username);
+    bunny_db_account_free(&e621_account);
+
+    bunny_db_account_t ib_account;
+    bunny_db_account_get(g_db, BUNNY_DB_SITE_INKBUNNY, &ib_account);
+    TEST_ASSERT_EQUAL_STRING("ibuser", ib_account.username);
+    bunny_db_account_free(&ib_account);
+}
+
 static void make_test_post(bunny_db_post_upsert_t *post, int64_t external_id, int score)
 {
     memset(post, 0, sizeof(*post));
@@ -430,6 +490,11 @@ int main(void)
 {
     UNITY_BEGIN();
     RUN_TEST(test_open_close);
+    RUN_TEST(test_account_set_and_get);
+    RUN_TEST(test_account_set_upserts_by_site);
+    RUN_TEST(test_account_get_not_found);
+    RUN_TEST(test_account_delete);
+    RUN_TEST(test_account_is_per_site);
     RUN_TEST(test_search_create_and_list);
     RUN_TEST(test_search_default_interval);
     RUN_TEST(test_search_delete);

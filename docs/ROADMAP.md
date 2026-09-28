@@ -50,8 +50,18 @@ this file is the single source of truth for "what's done" across sessions.
   M8's search-box autocomplete for both e621 and Inkbunny.
 
 - [ ] **M4 — Core sync engine**
-  Encrypted credential storage, scheduled searches (24h default, configurable), seen/unseen
+  Credential storage, scheduled searches (24h default, configurable), seen/unseen
   tracking, an action queue that proxies favorite/vote/comment calls to the sites.
+
+- [x] **M4.1 — Account credential storage**
+  New `bunny_core` library (`libs/core`), the first to sit on top of `bunny_db` (site
+  clients join in M4.2/M4.3). `bunny_db_account_set/get/delete` (one account per site) and
+  thin `bunny_core_account_*` wrappers. Credentials are stored **plain**, not encrypted —
+  a deliberate reversal of an initial encrypted-vault design: the server must run scheduled
+  syncs unattended, so gating access behind an interactive unlock would break that. App-lock
+  (password/PIN/fingerprint) is a separate per-device client concern (M7), and client↔server
+  auth is M5's job — neither belongs here. See `architecture.md`'s "Core sync engine (M4)"
+  section.
 
 - [ ] **M5 — C server**
   Exposes the core over HTTP/JSON (embeddable HTTP server library pulled via CPM). Auth
@@ -63,7 +73,9 @@ this file is the single source of truth for "what's done" across sessions.
 
 - [ ] **M7 — Auth & app-lock UI**
   Site login screens (e621 username/API key, Inkbunny username/password), app-lock via
-  password/PIN/fingerprint.
+  password/PIN/fingerprint. App-lock is a per-device, client-side setting, not tied to
+  server-side credential storage (M4.1) — each device/app instance can use a different
+  mechanism (e.g. password on desktop, fingerprint + PIN fallback on mobile).
 
 - [ ] **M8 — Browse & search UI**
   Manage saved searches, post grid/list with unseen markers, post detail view with full

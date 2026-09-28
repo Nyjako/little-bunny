@@ -1,0 +1,3 @@
+add_executable(bunny_core_test_core test_core.c)
+target_link_libraries(bunny_core_test_core PRIVATE bunny_core unity::framework)
+add_test(NAME bunny_core_test_core COMMAND bunny_core_test_core)

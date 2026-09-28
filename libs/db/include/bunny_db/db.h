@@ -19,6 +19,18 @@ typedef struct bunny_db bunny_db_t;
 bunny_db_result_t bunny_db_open(const char *path, bunny_db_t **out_db);
 void bunny_db_close(bunny_db_t *db);
 
+/* --- Accounts ---------------------------------------------------------------
+ * One account per site (e621 API key, or Inkbunny username/password). Stored
+ * as plain text: the server needs to read these unattended to run scheduled
+ * syncs, so there's no passphrase-gated encryption layer here. App-lock
+ * (password/PIN/fingerprint), if used, is a separate per-device client
+ * concern (M7) with no relationship to this storage -- see architecture.md.
+ * Setting an account again for the same site replaces it (upsert). */
+
+bunny_db_result_t bunny_db_account_set(bunny_db_t *db, bunny_db_site_t site, const char *username, const char *secret);
+bunny_db_result_t bunny_db_account_get(bunny_db_t *db, bunny_db_site_t site, bunny_db_account_t *out_account);
+bunny_db_result_t bunny_db_account_delete(bunny_db_t *db, bunny_db_site_t site);
+
 /* --- Searches ------------------------------------------------------------ */
 
 bunny_db_result_t bunny_db_search_create(bunny_db_t *db, bunny_db_site_t site, const char *label, const char *query, int interval_hours, int64_t *out_id);
