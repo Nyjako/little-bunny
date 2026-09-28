@@ -21,6 +21,15 @@ typedef struct
 {
     int64_t id;
     bunny_db_site_t site;
+    char *username;
+    char *secret;
+    char *created_at;
+} bunny_db_account_t;
+
+typedef struct
+{
+    int64_t id;
+    bunny_db_site_t site;
     char *label;
     char *query;
     int interval_hours;
@@ -92,6 +101,7 @@ typedef struct
     size_t count;
 } bunny_db_download_list_t;
 
+void bunny_db_account_free(bunny_db_account_t *account);
 void bunny_db_search_free(bunny_db_search_t *search);
 void bunny_db_search_list_free(bunny_db_search_list_t *list);
 void bunny_db_post_free(bunny_db_post_t *post);

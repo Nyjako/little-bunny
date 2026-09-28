@@ -15,6 +15,17 @@ const char *bunny_db_site_to_string(bunny_db_site_t site)
     }
 }
 
+void bunny_db_account_free(bunny_db_account_t *account)
+{
+    if (!account) {
+        return;
+    }
+    free(account->username);
+    free(account->secret);
+    free(account->created_at);
+    memset(account, 0, sizeof(*account));
+}
+
 void bunny_db_search_free(bunny_db_search_t *search)
 {
     if (!search) {

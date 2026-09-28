@@ -109,6 +109,7 @@ add_subdirectory(libs/common)
 add_subdirectory(libs/e621)
 add_subdirectory(libs/inkbunny)
 add_subdirectory(libs/db)
+add_subdirectory(libs/core)
 
 if(BUNNY_BUILD_TOOLS)
   add_subdirectory(tools/inkbunny_favorite_experiment)
