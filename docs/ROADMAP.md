@@ -13,9 +13,17 @@ this file is the single source of truth for "what's done" across sessions.
   details (single + batched up to 100 ids). Reuses `bunny_common` for HTTP/JSON. The
   official API has no endpoint to add/remove favorites or post/list comments (confirmed
   via the live API and official docs, see `architecture.md`) — favoriting was later added
-  via an unofficial route (see M2.3 below); **commenting still has no path at all**.
+  via an unofficial route (see M2.2 below); **commenting still has no path at all**.
 
-- [x] **M2.3 — Unofficial Inkbunny favorite/unfavorite**
+- [x] **M2.1 — Pools and post relationships**
+  `e621_pool_t` + `e621_get_pool()` (GET `/pools/{id}.json`); `e621_post_t` gained
+  `relationships` (parent_id/has_children/has_active_children/children), confirmed live.
+  `inkbunny_pool_t` gained per-submission left/right sibling navigation
+  (`show_pools=yes`) — Inkbunny has no "list a whole pool" endpoint, only per-submission
+  neighbors, and confirmed via the wiki docs that Inkbunny has **no parent/child concept**
+  at all (only pools), so there's nothing to add there.
+
+- [x] **M2.2 — Unofficial Inkbunny favorite/unfavorite**
   `inkbunny_website_login()`, `inkbunny_favorite_add()`, `inkbunny_favorite_remove()`
   (`inkbunny/unofficial_favorites.h`) drive the website's own internal favorite flow
   (login.php/login_process.php cookie session + a scraped CSRF token +
@@ -25,14 +33,6 @@ this file is the single source of truth for "what's done" across sessions.
   markup dependent, no fixture-based tests, only live verification) — see
   `architecture.md`. `tools/inkbunny_favorite_experiment` is now a thin CLI over these
   functions for manual testing. Commenting still has no path, official or unofficial.
-
-- [x] **M2.1 — Pools and post relationships**
-  `e621_pool_t` + `e621_get_pool()` (GET `/pools/{id}.json`); `e621_post_t` gained
-  `relationships` (parent_id/has_children/has_active_children/children), confirmed live.
-  `inkbunny_pool_t` gained per-submission left/right sibling navigation
-  (`show_pools=yes`) — Inkbunny has no "list a whole pool" endpoint, only per-submission
-  neighbors, and confirmed via the wiki docs that Inkbunny has **no parent/child concept**
-  at all (only pools), so there's nothing to add there.
 
 - [ ] **M3 — SQLite schema + core DB layer**
   Vendor the sqlite amalgamation via CPM (`DOWNLOAD_ONLY`). Schema for accounts, searches,
@@ -63,7 +63,7 @@ this file is the single source of truth for "what's done" across sessions.
   Single + mass like/favorite/download, commenting, download manager writing to
   `%artist%/%id%.%extension%`, checksum (md5) verification of downloaded files against the
   site-provided value. Downloads happen client-side, straight from the site CDN. Favorite
-  now works for both sites (e621 officially, Inkbunny via the unofficial route in M2.3 —
+  now works for both sites (e621 officially, Inkbunny via the unofficial route in M2.2 —
   needs `inkbunny_website_login()` in addition to `inkbunny_login()`). Comment actions only
   apply to e621; the UI needs to reflect that (e.g. grey out commenting for Inkbunny posts)
   rather than fail silently.
