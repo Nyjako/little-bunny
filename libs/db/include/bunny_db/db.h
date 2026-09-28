@@ -84,6 +84,14 @@ bunny_db_result_t bunny_db_download_list_for_post(bunny_db_t *db, int64_t post_i
  * them, descending. Feeds the "most liked/favorited tags" feature (M10). */
 bunny_db_result_t bunny_db_top_favorited_tags(bunny_db_t *db, int limit, bunny_db_tag_stat_list_t *out_list);
 
+/* Tags on `site` whose name starts with `prefix` (case-insensitive for ASCII),
+ * ordered by how many cached posts carry them (most-used first) then name.
+ * Feeds search-box autocomplete. Tags are already collected per-site as a
+ * side effect of bunny_db_post_upsert(); this is a pure read. `prefix` may
+ * contain any characters, including literal `%`/`_`/`\` -- they're matched
+ * literally, not treated as SQL LIKE wildcards. */
+bunny_db_result_t bunny_db_tag_autocomplete(bunny_db_t *db, bunny_db_site_t site, const char *prefix, int limit, bunny_db_tag_stat_list_t *out_list);
+
 #ifdef __cplusplus
 }
 #endif
