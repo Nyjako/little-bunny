@@ -1,21 +1,20 @@
-# inkbunny_favorite_experiment (unofficial, experimental)
+# inkbunny_favorite_experiment
 
-Tests whether Inkbunny's own website flow (not the documented API) can be used to
-add/remove a favorite. `libinkbunny` deliberately doesn't do this because the official
-API has no endpoint for it — see `docs/architecture.md`. This tool is for evaluating
-whether that decision should be revisited, not for production use.
+A thin CLI over `libinkbunny`'s unofficial favorite functions
+(`inkbunny/unofficial_favorites.h`: `inkbunny_website_login`, `inkbunny_favorite_add`,
+`inkbunny_favorite_remove`), for manually testing them against a real account. See
+`docs/architecture.md`, "Unofficial favorite flow", for what these do and why they exist
+separately from the documented-API-only parts of `libinkbunny`.
 
-It logs into inkbunny.net the same way a browser would (`login.php` →
-`login_process.php`, cookie-based session), scrapes a page-embedded CSRF token
-(`global_token`), and POSTs to the same `submissionfav_process.php` endpoint the
-website's own JS (`js82/fav.rev01.js`) calls when you click the favorite stars.
-
-**This is fragile.** It depends on exact HTML markup that Inkbunny could change at any
-time without notice, unlike the documented API. Treat it as a spike, not a dependency.
+**This is fragile.** These functions depend on exact HTML markup that Inkbunny could
+change at any time without notice, unlike the documented API — confirmed live 2026-09-28
+when the site's mixed single-/double-quoted attributes broke the first extraction attempt.
 
 ## Build
 
 ```sh
+make tools
+# or directly:
 cmake -S . -B build-tools -DCMAKE_BUILD_TYPE=Debug -DBUNNY_BUILD_TOOLS=ON
 cmake --build build-tools
 ```
@@ -30,7 +29,7 @@ cmake --build build-tools
 You'll be prompted for your password on stdin (not echoed). It's used once to log in
 and then overwritten in memory — never logged, printed, or stored anywhere.
 
-Example, tested against <https://inkbunny.net/s/3948160>:
+Example, verified working against <https://inkbunny.net/s/3948160>:
 
 ```sh
 ./build-tools/tools/inkbunny_favorite_experiment/inkbunny_favorite_experiment yourname 3948160 add 1
