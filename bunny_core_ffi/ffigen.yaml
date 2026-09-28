@@ -1,0 +1,35 @@
+# Run with `dart run ffigen --config ffigen.yaml`.
+name: BunnyCoreFfiBindings
+description: |
+  Bindings for bunny_core's public API (libs/core/include/bunny_core/*.h)
+  and the bunny_db types it exposes (libs/db/include/bunny_db/types.h).
+  These headers are already plain, simple C -- no hand-written glue needed.
+
+  Regenerate bindings with `dart run ffigen --config ffigen.yaml`.
+output: 'lib/bunny_core_ffi_bindings_generated.dart'
+headers:
+  entry-points:
+    - '../libs/core/include/bunny_core/core.h'
+    - '../libs/core/include/bunny_core/error.h'
+    - '../libs/db/include/bunny_db/types.h'
+  include-directives:
+    - '**/bunny_core/**'
+    - '**/bunny_db/**'
+compiler-opts:
+  - '-I../libs/core/include'
+  - '-I../libs/db/include'
+  - '-I../libs/common/include'
+  # ffigen's libclang doesn't always auto-detect the system compiler's
+  # freestanding headers (stdbool.h, stddef.h, ...). If `dart run ffigen`
+  # fails with "file not found" for one of those, update this path to your
+  # machine's `clang -print-resource-dir`/include.
+  - '-I/usr/lib/clang/22/include'
+comments:
+  style: any
+  length: full
+# The C enums here (bunny_core_result_t, bunny_db_site_t, ...) always get
+# compiled by the same toolchain that builds bunny_core_ffi's shared library,
+# so ffigen's "enum underlying type is implementation-defined" warning isn't
+# a real risk in this project -- there's no cross-toolchain mismatch to worry
+# about.
+silence-enum-warning: true

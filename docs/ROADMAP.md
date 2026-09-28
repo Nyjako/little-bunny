@@ -182,6 +182,30 @@ this file is the single source of truth for "what's done" across sessions.
   implementations behaviorally identical). No implementations yet — M6.2 (FFI) and M6.3
   (HTTP) each land independently against this stable interface.
 
+- [x] **M6.2 — FFI bindings + standalone-mode repository**
+  New top-level `bunny_core_ffi/` (`plugin_ffi` template — deprecated in favor of
+  `package_ffi`'s native-assets/build-hooks system, but kept deliberately since this
+  project's whole-CMake-project reuse approach doesn't map onto that newer mechanism).
+  Reuses the entire existing CMake project (`bunny_core` and its whole dependency chain)
+  via `add_subdirectory` instead of a second, parallel build definition, gated by the new
+  `BUNNY_BUILD_SERVER` option (default `ON`; `OFF` for this plugin's build, which only
+  needs `libs/`, not the C server or civetweb). `ffigen` generates
+  `lib/bunny_core_ffi_bindings_generated.dart` from `bunny_core`'s and `bunny_db`'s public
+  headers directly — no hand-written glue needed. Every `bunny_core_*` call (real SQLite/
+  network I/O) is dispatched to one dedicated background isolate
+  (`bunny_core_ffi/lib/src/bunny_core_isolate.dart`) that owns the single `bunny_core_t`
+  handle for the app's lifetime, so it never blocks the UI thread and there's never
+  concurrent native access to worry about (the FFI equivalent of M5's `core_mutex`).
+  `lib/repository/ffi_bunny_repository.dart` implements `BunnyRepository` on top of that
+  isolate. Tested against the real compiled shared library (`:memory:`-backed), both
+  directly (`bunny_core_ffi/test/`) and through the repository interface
+  (`app/test/repository/ffi_bunny_repository_test.dart`).
+  **Known gap**: Android's NDK has no prebuilt OpenSSL, so `fvm flutter build apk` fails at
+  the CMake configure step (`find_package(OpenSSL REQUIRED)`) — confirmed by direct
+  reproduction, same class of problem as the existing Windows gap, deferred to M12
+  alongside it. Linux desktop (this environment's only build-verifiable desktop target)
+  builds and runs correctly.
+
 - [ ] **M7 — Auth & app-lock UI**
   Site login screens (e621 username/API key, Inkbunny username/password), app-lock via
   password/PIN/fingerprint. App-lock is a per-device, client-side setting, not tied to
