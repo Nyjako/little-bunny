@@ -4,12 +4,12 @@ LittleBunny is an e621 + Inkbunny viewer/manager with three moving parts.
 
 ## Components
 
-1. **Server** (C, CMake, CPM, SQLite, Linux) — owns the sync state. Stores encrypted
-   e621/Inkbunny credentials, runs scheduled searches (24h default), tracks seen/unseen
-   posts per device, and proxies favorite/vote/comment actions to the sites so any device
-   can trigger them without needing its own site session. **Inkbunny is the exception**:
-   its API has no favorite/comment write actions at all (see "Inkbunny API constraints"
-   below), so the server can only proxy those for e621.
+1. **Server** (C, CMake, CPM, SQLite, Linux) — owns the sync state. Stores e621/Inkbunny
+   credentials, runs scheduled searches (24h default), tracks seen/unseen posts per device,
+   and proxies favorite/vote/comment actions to the sites so any device can trigger them
+   without needing its own site session. **Inkbunny is the exception**: its API has no
+   favorite/comment write actions at all (see "Inkbunny API constraints" below), so the
+   server can only proxy those for e621.
 2. **Core library** — the site clients, DB layer, and sync engine compiled as a library,
    usable in two modes:
    - **Networked**: the server process links it; GUI clients talk to the server over
@@ -40,15 +40,13 @@ site libraries never depend back on the core.
 ## Database layer (M3)
 
 `bunny_db` (`libs/db`) wraps SQLite behind an opaque `bunny_db_t` handle and a CRUD API
-per concern (`bunny_db_search_*`, `bunny_db_post_*`, `bunny_db_favorite_*`,
-`bunny_db_download_*`, `bunny_db_top_favorited_tags`). Nothing outside `libs/db/src`
-touches `sqlite3.h` directly. Schema (`libs/db/src/schema.h`) is a single idempotent
-`CREATE TABLE IF NOT EXISTS ...` block applied on every `bunny_db_open()`, covering
-accounts, searches, a post cache with normalized `tags`/`post_tags` tables (so tag-based
-queries like the top-favorited-tags stat don't need to parse JSON at query time),
-search-result membership, seen state, a favorites mirror, and downloads. `accounts.
-secret_encrypted` is a placeholder column — the actual encryption is M4's job; M3 only
-needed the column to exist so the schema doesn't need a breaking migration later.
+per concern (`bunny_db_account_*`, `bunny_db_search_*`, `bunny_db_post_*`,
+`bunny_db_favorite_*`, `bunny_db_download_*`, `bunny_db_top_favorited_tags`). Nothing
+outside `libs/db/src` touches `sqlite3.h` directly. Schema (`libs/db/src/schema.h`) is a
+single idempotent `CREATE TABLE IF NOT EXISTS ...` block applied on every `bunny_db_open()`,
+covering accounts, searches, a post cache with normalized `tags`/`post_tags` tables (so
+tag-based queries like the top-favorited-tags stat don't need to parse JSON at query time),
+search-result membership, seen state, a favorites mirror, and downloads.
 
 Posts are cached via **upsert** keyed on `(site, external_id)`: re-fetching a post updates
 the existing row (and replaces its tag associations) rather than duplicating it, so the
@@ -64,6 +62,33 @@ SQLite is vendored differently from the other CPM dependencies: it has no CMake-
 GitHub repo, so `CPMAddPackage` fetches the official amalgamation zip directly by URL (with
 a `URL_HASH` pin) with `DOWNLOAD_ONLY YES`, and the top-level `CMakeLists.txt` defines its
 own `add_library(sqlite3 STATIC ...)` target around the downloaded `sqlite3.c`.
+
+## Core sync engine (M4)
+
+`bunny_core` (`libs/core`) is the first library that links `bunny_db` together with the
+site clients (`libe621`/`libinkbunny` — pulled in as M4.2/M4.3 add sync and the action
+queue), matching the "Components" description above. It exposes a `bunny_core_t` handle
+that wraps a `bunny_db_t`.
+
+**Credential storage is intentionally plain, not encrypted.** The original plan for M4.1
+was a single-passphrase "vault" (AES-256-GCM, PBKDF2 key derivation) that would double as
+the future app-lock credential. The user rejected this design: the server has to run
+scheduled syncs unattended, with no human present to unlock anything, so gating credential
+access behind an interactive passphrase would make the server unable to sync while
+"locked" — the wrong model entirely for a 24/7 process. The clarified, current model:
+
+- `bunny_db_account_set/get/delete` (`libs/db/src/accounts.c`) store one account per site
+  (`accounts.secret` is now a plain `TEXT` column, not a placeholder BLOB) with no
+  encryption layer. `bunny_core_account_*` (`libs/core/src/accounts.c`) is a thin
+  pass-through so M4.2/M4.3 (and later M5) have one call site for "the credential for this
+  site" rather than reaching into `bunny_db` directly.
+- **App-lock (password/PIN/fingerprint) is a separate, per-device, client-side concern**
+  (M7), not tied to how the server stores site credentials at all. Each GUI instance can
+  use a different mechanism — e.g. password on desktop, fingerprint with a PIN fallback on
+  mobile.
+- **Client↔server authentication** ("a safe way to connect to server") is also out of scope
+  here — it's M5's job (see the Roadmap), since it only exists once there's an actual
+  server process for clients to authenticate against.
 
 ## Inkbunny API constraints (found in M2)
 

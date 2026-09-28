@@ -12,11 +12,10 @@ static const char *const BUNNY_DB_SCHEMA_SQL = "PRAGMA foreign_keys = ON;"
                                                ");"
                                                "CREATE TABLE IF NOT EXISTS accounts ("
                                                "    id INTEGER PRIMARY KEY,"
-                                               "    site TEXT NOT NULL CHECK (site IN ('e621', 'inkbunny')),"
+                                               "    site TEXT NOT NULL UNIQUE CHECK (site IN ('e621', 'inkbunny'))," /* one account per site */
                                                "    username TEXT NOT NULL,"
-                                               "    secret_encrypted BLOB," /* filled in by M4's credential encryption */
-                                               "    created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),"
-                                               "    UNIQUE (site, username)"
+                                               "    secret TEXT NOT NULL," /* e621 API key, or Inkbunny password -- stored plain, see M4 in architecture.md */
+                                               "    created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))"
                                                ");"
                                                "CREATE TABLE IF NOT EXISTS searches ("
                                                "    id INTEGER PRIMARY KEY,"

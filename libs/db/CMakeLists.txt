@@ -2,6 +2,7 @@ add_library(bunny_db STATIC
     src/db.c
     src/error.c
     src/types.c
+    src/accounts.c
     src/searches.c
     src/posts.c
     src/favorites.c
