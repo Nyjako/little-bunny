@@ -59,6 +59,19 @@ void main() {
     expect(find.text('No saved searches yet. Tap + to add one.'), findsOneWidget);
   });
 
+  testWidgets('tapping a search row opens PostGridScreen for that search', (WidgetTester tester) async {
+    final repository = FakeBunnyRepository();
+    await repository.createSearch(BunnySite.e621, 'Foxes', 'fox');
+
+    await tester.pumpWidget(_wrap(repository));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Foxes'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('No posts cached yet. Tap refresh to sync.'), findsOneWidget);
+  });
+
   testWidgets('tapping the accounts icon opens AccountsScreen', (WidgetTester tester) async {
     await tester.pumpWidget(_wrap(FakeBunnyRepository()));
     await tester.pumpAndSettle();

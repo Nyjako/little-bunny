@@ -636,6 +636,30 @@ icon next to the existing settings icon. `SearchesScreen` lists `BunnySearch` vi
   same explicit `required BunnyRepository repository` constructor parameter, dropping its
   `BunnyRepositoryScope.of(context)` lookup entirely.
 
+**Post grid + unseen markers (M8.3)**: `PostGridScreen` (`app/lib/screens/
+post_grid_screen.dart`), opened by tapping a row in `SearchesScreen`, loads a search's cached
+posts via `listSearchPosts` and renders them as a `GridView` of `CachedNetworkImage
+(post.previewUrl)` thumbnails — a new `cached_network_image` dependency, since Flutter's
+built-in `Image.network` re-fetches on every rebuild/scroll rather than caching to disk.
+Unseen posts (`!post.isSeen`) get a small red-dot overlay; an app bar toggle re-runs
+`listSearchPosts(search.id, unseenOnly: true)`; a refresh action calls `syncDueSearches()`
+then reloads. Tapping a post calls `markPostSeen` and reloads the grid, clearing its own
+marker — `PostDetailScreen`'s full metadata/media viewer is M8.4's scope and doesn't exist
+yet, so this is the interim "opening a post" behavior.
+
+- **A real bug this surfaced, a repeat of one already found in M7.3.** `_openPost`'s original
+  `setState(() => _postsFuture = _loadPosts())` is the exact same arrow-closure-returns-a-
+  Future bug `AccountsScreen._refresh` had (see M7.3 above) — Dart's assignment expression
+  evaluates to the assigned value, so the closure body returned a `Future` even without
+  `async`/`await`, tripping Flutter's assertion against async `setState` callbacks. Caught
+  immediately by the equivalent widget test (`post_grid_screen_test.dart`'s "tapping a post
+  marks it seen" case) and fixed the same way, with a block body. Worth noting since it's the
+  second time this exact shape of bug has appeared — any future `setState(() => x = y())`
+  one-liner assigning a `Future` is worth writing as a block body from the start.
+- **Grid tiles are keyed by post id** (`ValueKey(post.id)`) purely for test targeting —
+  `GridView`'s internal `Scrollable` already contributes its own `GestureDetector`s to the
+  tree, so `find.byType(GestureDetector)` matches more than just the tappable tiles.
+
 ## Inkbunny API constraints (found in M2)
 
 Verified against the live API and the official docs while building `libinkbunny`:

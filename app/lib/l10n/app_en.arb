@@ -64,6 +64,10 @@
   "createSearchIntervalLabel": "Sync interval (hours)",
   "createSearchSubmit": "Create",
 
+  "postGridUnseenOnlyTooltip": "Show unseen only",
+  "postGridRefreshTooltip": "Refresh",
+  "postGridEmptyState": "No posts cached yet. Tap refresh to sync.",
+
   "lockScreenMessage": "LittleBunny is locked",
   "lockScreenBiometricReason": "Unlock LittleBunny",
   "lockScreenPinLabel": "PIN/password",
