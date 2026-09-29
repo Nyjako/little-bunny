@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:fvp/fvp.dart' as fvp;
 
 import 'bunny_repository_scope.dart';
 import 'l10n/app_localizations.dart';
@@ -15,6 +16,10 @@ import 'settings/theme_settings_store.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  // video_player has no official Linux/Windows implementation; fvp fills the
+  // gap for exactly those platforms via its own bundled decoder, leaving
+  // Android/iOS on video_player's official backend untouched.
+  fvp.registerWith(options: {'platforms': ['windows', 'linux']});
   final secretStore = FlutterSecureStorageSecretStore();
   runApp(LittleBunnyApp(settingsStore: RepositorySettingsStore(secretStore), lockService: AppLockService(secretStore), themeSettingsStore: const ThemeSettingsStore()));
 }

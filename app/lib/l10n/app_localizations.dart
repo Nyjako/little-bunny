@@ -334,6 +334,78 @@ abstract class AppLocalizations {
   /// **'No posts cached yet. Tap refresh to sync.'**
   String get postGridEmptyState;
 
+  /// No description provided for @postDetailScreenTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Post'**
+  String get postDetailScreenTitle;
+
+  /// No description provided for @postDetailUnsupportedFormat.
+  ///
+  /// In en, this message translates to:
+  /// **'This file format ({extension}) isn\'t supported yet'**
+  String postDetailUnsupportedFormat(String extension);
+
+  /// No description provided for @postDetailArtistLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Artist'**
+  String get postDetailArtistLabel;
+
+  /// No description provided for @postDetailTitleLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Title'**
+  String get postDetailTitleLabel;
+
+  /// No description provided for @postDetailDescriptionLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Description'**
+  String get postDetailDescriptionLabel;
+
+  /// No description provided for @postDetailRatingLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Rating'**
+  String get postDetailRatingLabel;
+
+  /// No description provided for @postDetailScoreLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Score'**
+  String get postDetailScoreLabel;
+
+  /// No description provided for @postDetailFavoritesLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Favorites'**
+  String get postDetailFavoritesLabel;
+
+  /// No description provided for @postDetailCommentsLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Comments'**
+  String get postDetailCommentsLabel;
+
+  /// No description provided for @postDetailDimensionsLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Dimensions'**
+  String get postDetailDimensionsLabel;
+
+  /// No description provided for @postDetailCreatedLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Posted'**
+  String get postDetailCreatedLabel;
+
+  /// No description provided for @postDetailUnknownValue.
+  ///
+  /// In en, this message translates to:
+  /// **'Unknown'**
+  String get postDetailUnknownValue;
+
   /// No description provided for @lockScreenMessage.
   ///
   /// In en, this message translates to:

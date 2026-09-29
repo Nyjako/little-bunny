@@ -660,6 +660,46 @@ yet, so this is the interim "opening a post" behavior.
   `GridView`'s internal `Scrollable` already contributes its own `GestureDetector`s to the
   tree, so `find.byType(GestureDetector)` matches more than just the tappable tiles.
 
+**Post detail view + media viewers (M8.4, completes M8)**: `PostDetailScreen`
+(`app/lib/screens/post_detail_screen.dart`) is opened by tapping a tile in `PostGridScreen`
+(which now navigates there instead of calling `markPostSeen` directly itself). It shows full
+read-only metadata (artist, title, description, rating, score, favorite/comment counts,
+dimensions, site creation date) — no favorite/vote/comment action buttons, since that's M9's
+scope — and calls `markPostSeen(post.id)` once in `initState`. `PostGridScreen` reloads its
+list when the detail screen pops, so the cleared unseen marker shows up immediately without
+either screen needing to know about the other's internal state.
+
+- **Media viewer branches on `post.fileExt`.** Images (jpg/png/gif/webp) render via
+  `CachedNetworkImage(post.fileUrl)` — the same dependency M8.3 introduced for grid
+  thumbnails, reused here at full size. Videos (webm/mp4) use `video_player` +
+  `fvp`. Anything else (Flash/SWF) shows a plain "not supported" placeholder — the roadmap
+  already calls out Flash/SWF as intentionally unimplemented, not a gap to fix later.
+- **`fvp`'s actual backend, and a version pin that mattered.** M8 planning assumed `fvp`
+  used `libmpv`; in fact it's built on `libmdk` (MDK) with its own bundled FFmpeg-based
+  decoder, so no system `libmpv` dependency exists at all — a better outcome than planned,
+  not a gap. `fvp: ^0.30.0` (the version checked during planning) failed to *compile* once
+  actually wired in: pub resolved `video_player` to 2.14.0, and `fvp 0.30.0`'s own source
+  referenced `VideoPlayerController.textureId`, a getter that version of `video_player` no
+  longer has. Fixed by pinning `fvp: ^0.38.1` (current latest) instead, whose code matches
+  the resolved `video_player` API. `main.dart` calls
+  `fvp.registerWith(options: {'platforms': ['windows', 'linux']})` once at startup, before
+  `runApp` — restricting it to exactly the platforms `video_player` has no official
+  implementation for, leaving Android/iOS on `video_player`'s own backend untouched, per the
+  original M8 planning decision. Verified past mere compilation: a real `flutter build linux`
+  succeeds and the built bundle's startup log shows `fvp`'s MDK backend (`0.38.0`)
+  initializing cleanly, with no crash.
+- **Testing video playback without a real platform.** `flutter test` has no real platform
+  channel implementation for `video_player` — a widget test that builds `PostDetailScreen`
+  with a video post needs `VideoPlayerPlatform.instance` replaced first, or
+  `VideoPlayerController.initialize()` hangs waiting on a channel call nothing answers.
+  `app/test/fakes/fake_video_player_platform.dart` implements the platform interface
+  directly (not a mock), immediately emitting an `initialized` `VideoEvent` with a fixed
+  size/duration — enough for the widget tree to build past the loading state. This proves
+  `PostDetailScreen` picks the right viewer widget per file extension (the plan's own stated
+  goal — "cover it with a widget test asserting the right viewer widget type is chosen per
+  file extension, not actual playback"); real decoding is verified by the Linux build launch
+  above and by manual testing against a real server instead.
+
 ## Inkbunny API constraints (found in M2)
 
 Verified against the live API and the official docs while building `libinkbunny`:

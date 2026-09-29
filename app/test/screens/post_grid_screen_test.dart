@@ -59,7 +59,7 @@ void main() {
     expect(find.byKey(const ValueKey(2)), findsNothing);
   });
 
-  testWidgets('tapping a post marks it seen and clears its marker', (WidgetTester tester) async {
+  testWidgets('tapping a post opens PostDetailScreen, marking it seen and clearing its marker on return', (WidgetTester tester) async {
     final repository = FakeBunnyRepository();
     repository.postsBySearchId[1] = [_post(id: 1, isSeen: false)];
 
@@ -69,7 +69,13 @@ void main() {
     await tester.tap(find.byKey(const ValueKey(1)));
     await tester.pumpAndSettle();
 
+    expect(find.text('Post'), findsOneWidget);
     expect(repository.postsBySearchId[1]!.single.isSeen, isTrue);
+
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+
+    expect(find.text('Foxes'), findsOneWidget);
   });
 
   testWidgets('tapping refresh calls syncDueSearches then reloads', (WidgetTester tester) async {

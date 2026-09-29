@@ -68,6 +68,22 @@
   "postGridRefreshTooltip": "Refresh",
   "postGridEmptyState": "No posts cached yet. Tap refresh to sync.",
 
+  "postDetailScreenTitle": "Post",
+  "postDetailUnsupportedFormat": "This file format ({extension}) isn't supported yet",
+  "@postDetailUnsupportedFormat": {
+    "placeholders": {"extension": {"type": "String"}}
+  },
+  "postDetailArtistLabel": "Artist",
+  "postDetailTitleLabel": "Title",
+  "postDetailDescriptionLabel": "Description",
+  "postDetailRatingLabel": "Rating",
+  "postDetailScoreLabel": "Score",
+  "postDetailFavoritesLabel": "Favorites",
+  "postDetailCommentsLabel": "Comments",
+  "postDetailDimensionsLabel": "Dimensions",
+  "postDetailCreatedLabel": "Posted",
+  "postDetailUnknownValue": "Unknown",
+
   "lockScreenMessage": "LittleBunny is locked",
   "lockScreenBiometricReason": "Unlock LittleBunny",
   "lockScreenPinLabel": "PIN/password",
