@@ -72,9 +72,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get accountsScreenTitle => 'Accounts';
 
   @override
-  String get accountsSettingsTooltip => 'Settings';
-
-  @override
   String get accountsRemoveDialogTitle => 'Remove account?';
 
   @override
@@ -89,6 +86,49 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get accountsNotConnected => 'Not connected';
+
+  @override
+  String get searchesScreenTitle => 'Searches';
+
+  @override
+  String get searchesAccountsTooltip => 'Accounts';
+
+  @override
+  String get searchesSettingsTooltip => 'Settings';
+
+  @override
+  String get searchesNewSearchTooltip => 'New search';
+
+  @override
+  String get searchesEmptyState => 'No saved searches yet. Tap + to add one.';
+
+  @override
+  String searchesIntervalSubtitle(String site, int hours) {
+    return '$site • every ${hours}h';
+  }
+
+  @override
+  String get searchesRemoveDialogTitle => 'Remove search?';
+
+  @override
+  String searchesRemoveDialogContent(String label) {
+    return 'This removes the saved search \"$label\" from this app.';
+  }
+
+  @override
+  String get createSearchScreenTitle => 'New search';
+
+  @override
+  String get createSearchLabelField => 'Label';
+
+  @override
+  String get createSearchQueryField => 'Query';
+
+  @override
+  String get createSearchIntervalLabel => 'Sync interval (hours)';
+
+  @override
+  String get createSearchSubmit => 'Create';
 
   @override
   String get lockScreenMessage => 'LittleBunny is locked';
