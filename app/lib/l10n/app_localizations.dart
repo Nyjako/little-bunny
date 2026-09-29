@@ -316,6 +316,24 @@ abstract class AppLocalizations {
   /// **'Create'**
   String get createSearchSubmit;
 
+  /// No description provided for @postGridUnseenOnlyTooltip.
+  ///
+  /// In en, this message translates to:
+  /// **'Show unseen only'**
+  String get postGridUnseenOnlyTooltip;
+
+  /// No description provided for @postGridRefreshTooltip.
+  ///
+  /// In en, this message translates to:
+  /// **'Refresh'**
+  String get postGridRefreshTooltip;
+
+  /// No description provided for @postGridEmptyState.
+  ///
+  /// In en, this message translates to:
+  /// **'No posts cached yet. Tap refresh to sync.'**
+  String get postGridEmptyState;
+
   /// No description provided for @lockScreenMessage.
   ///
   /// In en, this message translates to:
