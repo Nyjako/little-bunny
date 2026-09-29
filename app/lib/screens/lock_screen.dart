@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:local_auth/local_auth.dart';
 
+import '../l10n/app_localizations.dart';
 import '../settings/app_lock_service.dart';
 
 /// Shown at app root whenever [AppLockService.isEnabled] is true, gating
@@ -30,11 +31,17 @@ class _LockScreenState extends State<LockScreen> {
   final _secretController = TextEditingController();
   String? _error;
   bool _checking = false;
+  bool _biometricAttempted = false;
 
   @override
-  void initState() {
-    super.initState();
-    if (Platform.isAndroid) {
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Not initState(): AppLocalizations.of(context) (used inside
+    // _tryBiometric) isn't safe to call before dependencies are resolved.
+    // _biometricAttempted guards against didChangeDependencies firing more
+    // than once.
+    if (!_biometricAttempted && Platform.isAndroid) {
+      _biometricAttempted = true;
       _tryBiometric();
     }
   }
@@ -46,13 +53,14 @@ class _LockScreenState extends State<LockScreen> {
   }
 
   Future<void> _tryBiometric() async {
+    final localizedReason = AppLocalizations.of(context)!.lockScreenBiometricReason;
     final auth = LocalAuthentication();
     try {
       final canCheck = await auth.canCheckBiometrics && await auth.isDeviceSupported();
       if (!canCheck) {
         return;
       }
-      final authenticated = await auth.authenticate(localizedReason: 'Unlock LittleBunny', biometricOnly: true);
+      final authenticated = await auth.authenticate(localizedReason: localizedReason, biometricOnly: true);
       if (authenticated) {
         widget.onUnlocked();
       }
@@ -78,13 +86,14 @@ class _LockScreenState extends State<LockScreen> {
     }
     setState(() {
       _checking = false;
-      _error = 'Incorrect PIN/password';
+      _error = AppLocalizations.of(context)!.lockScreenIncorrectPin;
       _secretController.clear();
     });
   }
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     return Scaffold(
       body: Center(
         child: Padding(
@@ -92,14 +101,14 @@ class _LockScreenState extends State<LockScreen> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Text('LittleBunny is locked'),
+              Text(l10n.lockScreenMessage),
               const SizedBox(height: 16),
-              TextField(controller: _secretController, enabled: !_checking, obscureText: true, decoration: const InputDecoration(labelText: 'PIN/password'), onSubmitted: (_) => _submitPin()),
+              TextField(controller: _secretController, enabled: !_checking, obscureText: true, decoration: InputDecoration(labelText: l10n.lockScreenPinLabel), onSubmitted: (_) => _submitPin()),
               const SizedBox(height: 16),
               if (_error != null) Text(_error!, style: TextStyle(color: Theme.of(context).colorScheme.error)),
               const SizedBox(height: 16),
-              FilledButton(onPressed: _checking ? null : _submitPin, child: const Text('Unlock')),
-              if (Platform.isAndroid) TextButton(onPressed: _checking ? null : _tryBiometric, child: const Text('Try fingerprint again')),
+              FilledButton(onPressed: _checking ? null : _submitPin, child: Text(l10n.lockScreenUnlock)),
+              if (Platform.isAndroid) TextButton(onPressed: _checking ? null : _tryBiometric, child: Text(l10n.lockScreenTryFingerprintAgain)),
             ],
           ),
         ),

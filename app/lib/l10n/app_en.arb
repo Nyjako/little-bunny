@@ -1,0 +1,68 @@
+{
+  "@@locale": "en",
+
+  "appTitle": "LittleBunny",
+  "@appTitle": {"description": "The app's title, used as MaterialApp.title."},
+
+  "commonRequired": "Required",
+  "commonCancel": "Cancel",
+  "commonRemove": "Remove",
+  "commonContinue": "Continue",
+
+  "setupScreenTitle": "Set up LittleBunny",
+  "setupModeStandalone": "Standalone",
+  "setupModeNetworked": "Networked",
+  "setupStandaloneDescription": "Stores everything locally on this device. No server needed.",
+  "setupServerUrlLabel": "Server URL",
+  "setupServerUrlHint": "https://192.168.1.10:8443",
+  "setupServerUrlInvalid": "Enter a valid URL",
+  "setupBearerTokenLabel": "Bearer token",
+  "setupCertFingerprintLabel": "Certificate SHA-256 fingerprint",
+
+  "loginScreenTitle": "Log in to {site}",
+  "@loginScreenTitle": {
+    "placeholders": {"site": {"type": "String"}}
+  },
+  "loginUsernameLabel": "Username",
+  "loginApiKeyLabel": "API key",
+  "loginPasswordLabel": "Password",
+  "loginSubmit": "Log in",
+
+  "accountsScreenTitle": "Accounts",
+  "accountsSettingsTooltip": "Settings",
+  "accountsRemoveDialogTitle": "Remove account?",
+  "accountsRemoveDialogContent": "This removes the saved {site} account from this app. You can log in again later.",
+  "@accountsRemoveDialogContent": {
+    "placeholders": {"site": {"type": "String"}}
+  },
+  "accountsLoggedInAs": "Logged in as {username}",
+  "@accountsLoggedInAs": {
+    "placeholders": {"username": {"type": "String"}}
+  },
+  "accountsNotConnected": "Not connected",
+
+  "lockScreenMessage": "LittleBunny is locked",
+  "lockScreenBiometricReason": "Unlock LittleBunny",
+  "lockScreenPinLabel": "PIN/password",
+  "lockScreenUnlock": "Unlock",
+  "lockScreenTryFingerprintAgain": "Try fingerprint again",
+  "lockScreenIncorrectPin": "Incorrect PIN/password",
+
+  "lockSetupScreenTitle": "App lock",
+  "lockSetupDescription": "Set a PIN or password to lock this app on startup.",
+  "lockSetupNewPinLabel": "New PIN/password",
+  "lockSetupConfirmLabel": "Confirm",
+  "lockSetupEntriesDoNotMatch": "Entries do not match",
+  "lockSetupEnableButton": "Enable app lock",
+  "lockSetupCurrentlyOn": "App lock is currently on.",
+  "lockSetupCurrentPinLabel": "Enter current PIN/password to disable",
+  "lockSetupDisableButton": "Disable app lock",
+
+  "settingsScreenTitle": "Settings",
+  "settingsAppearanceSection": "Appearance",
+  "settingsThemeLight": "Light",
+  "settingsThemeDark": "Dark",
+  "settingsThemeSystem": "System",
+  "settingsAppLockSection": "App lock",
+  "settingsAppLockEntry": "Manage app lock"
+}

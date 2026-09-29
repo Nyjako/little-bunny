@@ -4,6 +4,7 @@ import 'package:little_bunny/repository/bunny_models.dart';
 import 'package:little_bunny/screens/login_form_screen.dart';
 
 import '../fakes/fake_bunny_repository.dart';
+import '../fakes/test_app.dart';
 
 void main() {
   testWidgets('e621 form has a username and API key field, then saves on success', (WidgetTester tester) async {
@@ -11,8 +12,8 @@ void main() {
     bool? popped;
 
     await tester.pumpWidget(
-      MaterialApp(
-        home: Builder(
+      wrapWithLocalization(
+        Builder(
           builder: (context) => ElevatedButton(
             onPressed: () async {
               popped = await Navigator.push<bool>(context, MaterialPageRoute(builder: (context) => LoginFormScreen(site: BunnySite.e621, repository: repository)));
@@ -38,7 +39,7 @@ void main() {
   });
 
   testWidgets('inkbunny form obscures the password field', (WidgetTester tester) async {
-    await tester.pumpWidget(MaterialApp(home: LoginFormScreen(site: BunnySite.inkbunny, repository: FakeBunnyRepository())));
+    await tester.pumpWidget(wrapWithLocalization(LoginFormScreen(site: BunnySite.inkbunny, repository: FakeBunnyRepository())));
 
     expect(find.text('Password'), findsOneWidget);
     final field = tester.widget<TextField>(find.descendant(of: find.widgetWithText(TextFormField, 'Password'), matching: find.byType(TextField)));
@@ -49,7 +50,7 @@ void main() {
     final repository = FakeBunnyRepository();
     repository.verifyFailures[BunnySite.e621] = 'an e621/Inkbunny client call failed (network, auth, ...)';
 
-    await tester.pumpWidget(MaterialApp(home: LoginFormScreen(site: BunnySite.e621, repository: repository)));
+    await tester.pumpWidget(wrapWithLocalization(LoginFormScreen(site: BunnySite.e621, repository: repository)));
 
     await tester.enterText(find.widgetWithText(TextFormField, 'Username'), 'someuser');
     await tester.enterText(find.widgetWithText(TextFormField, 'API key'), 'wrongkey');
@@ -63,7 +64,7 @@ void main() {
   testWidgets('validates required fields before submitting', (WidgetTester tester) async {
     final repository = FakeBunnyRepository();
 
-    await tester.pumpWidget(MaterialApp(home: LoginFormScreen(site: BunnySite.e621, repository: repository)));
+    await tester.pumpWidget(wrapWithLocalization(LoginFormScreen(site: BunnySite.e621, repository: repository)));
 
     await tester.tap(find.text('Log in'));
     await tester.pumpAndSettle();

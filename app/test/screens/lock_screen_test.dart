@@ -5,6 +5,7 @@ import 'package:little_bunny/settings/app_lock_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../fakes/fake_secret_store.dart';
+import '../fakes/test_app.dart';
 
 // Runs on the Linux/desktop test host, so Platform.isAndroid is false and
 // LockScreen never attempts the biometric path here -- that's inherently
@@ -21,7 +22,7 @@ void main() {
     await lockService.enable('1234');
     var unlocked = false;
 
-    await tester.pumpWidget(MaterialApp(home: LockScreen(lockService: lockService, onUnlocked: () => unlocked = true)));
+    await tester.pumpWidget(wrapWithLocalization(LockScreen(lockService: lockService, onUnlocked: () => unlocked = true)));
 
     await tester.enterText(find.byType(TextField), '1234');
     await tester.tap(find.text('Unlock'));
@@ -35,7 +36,7 @@ void main() {
     await lockService.enable('1234');
     var unlocked = false;
 
-    await tester.pumpWidget(MaterialApp(home: LockScreen(lockService: lockService, onUnlocked: () => unlocked = true)));
+    await tester.pumpWidget(wrapWithLocalization(LockScreen(lockService: lockService, onUnlocked: () => unlocked = true)));
 
     await tester.enterText(find.byType(TextField), '0000');
     await tester.tap(find.text('Unlock'));
