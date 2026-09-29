@@ -341,6 +341,29 @@ this file is the single source of truth for "what's done" across sessions.
   `bunny_core_map_db_result` already treats as bad caller input (same convention documented
   for the action queue's own foreign key in M4.3).
 
+- [x] **M8.2 — Navigation restructuring + saved search management**
+  Browse/search is the app's actual daily-use surface, so a new `SearchesScreen` replaces
+  `AccountsScreen` as the post-lock home; `AccountsScreen` moves to an app bar icon next to
+  the existing settings icon. `SearchesScreen` lists `BunnySearch` via `listSearches`, each
+  row showing a `site • every Nh` subtitle, with a delete action (confirmation dialog,
+  mirroring `AccountsScreen._removeAccount`'s existing pattern) and a "new search" FAB
+  opening `CreateSearchScreen` (label/site/query/interval fields; the query field's
+  tag-autocomplete is a 300ms-debounced lookup against `tagAutocomplete`, e621-style —
+  it only re-completes the word currently being typed, tracked as the substring after the
+  last space, and appends the picked tag with a trailing space rather than replacing the
+  whole query). Every new string is routed through `AppLocalizations` from the start, no
+  retrofit needed.
+  **A real bug this surfaced**: `AccountsScreen` had always been reached as the app's `home`
+  (M7.3–M8.1), so its internal `BunnyRepositoryScope.of(context)` lookup worked because the
+  scope wrapped `home` directly. Once it became a screen reached only via `Navigator.push`
+  from `SearchesScreen`, that lookup started throwing a null-check error — a pushed route's
+  widget subtree is a sibling of `home`'s subtree under the `Navigator`'s `Overlay`, not a
+  descendant of whatever wraps `home`, so `BunnyRepositoryScope` isn't visible there. Caught
+  by a widget test (`searches_screen_test.dart`'s "tapping the accounts icon" case) before it
+  could ship as a live crash. Fixed by giving `AccountsScreen` an explicit
+  `required BunnyRepository repository` constructor parameter instead, matching the
+  convention `LoginFormScreen`/`CreateSearchScreen` already used for exactly this reason.
+
 - [ ] **M9 — Actions & downloads**
   Single + mass like/favorite/download, commenting, download manager writing to
   `%artist%/%id%.%extension%`, checksum (md5) verification of downloaded files against the
