@@ -3,15 +3,19 @@ import 'package:little_bunny/repository/bunny_repository.dart';
 
 /// In-memory fake for widget tests that exercise account login/verify/list/
 /// remove and search/post browsing -- fakes the dependency, not the business
-/// logic, same philosophy as every C library's own tests. Queue/sync methods
-/// are unimplemented since nothing under test (through M8) calls them --
-/// that's M9's scope.
+/// logic, same philosophy as every C library's own tests. Queue methods are
+/// unimplemented since nothing under test (through M8) calls them -- that's
+/// M9's scope. [syncDueSearches] is a no-op returning zeroed stats (M8.3's
+/// [PostGridScreen] calls it as a manual "refresh" action, but nothing under
+/// test needs it to actually add posts -- tests seed `postsBySearchId`
+/// directly instead).
 class FakeBunnyRepository implements BunnyRepository {
   final Map<BunnySite, BunnyAccount> accounts = {};
   final List<BunnySearch> searches = [];
   final Map<int, List<BunnyPost>> postsBySearchId = {};
   final List<BunnyTagStat> tagStats = [];
   int _nextSearchId = 1;
+  int syncCallCount = 0;
 
   /// Set a message here to make [verifyAccount] throw for that site instead
   /// of succeeding.
@@ -98,7 +102,10 @@ class FakeBunnyRepository implements BunnyRepository {
   }
 
   @override
-  Future<BunnySyncStats> syncDueSearches() => throw UnimplementedError();
+  Future<BunnySyncStats> syncDueSearches() async {
+    syncCallCount++;
+    return const BunnySyncStats(searchesChecked: 0, searchesSynced: 0, postsUpserted: 0);
+  }
 
   @override
   Future<void> queueFavoriteAdd(int postId, {int? stars}) => throw UnimplementedError();

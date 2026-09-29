@@ -131,6 +131,15 @@ class AppLocalizationsEn extends AppLocalizations {
   String get createSearchSubmit => 'Create';
 
   @override
+  String get postGridUnseenOnlyTooltip => 'Show unseen only';
+
+  @override
+  String get postGridRefreshTooltip => 'Refresh';
+
+  @override
+  String get postGridEmptyState => 'No posts cached yet. Tap refresh to sync.';
+
+  @override
   String get lockScreenMessage => 'LittleBunny is locked';
 
   @override

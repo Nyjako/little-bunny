@@ -364,6 +364,21 @@ this file is the single source of truth for "what's done" across sessions.
   `required BunnyRepository repository` constructor parameter instead, matching the
   convention `LoginFormScreen`/`CreateSearchScreen` already used for exactly this reason.
 
+- [x] **M8.3 — Post grid + unseen markers**
+  New `PostGridScreen` (`app/lib/screens/post_grid_screen.dart`), opened by tapping a row in
+  `SearchesScreen`. Loads a search's cached posts via `listSearchPosts`, rendered as a
+  `GridView` of `CachedNetworkImage(post.previewUrl)` thumbnails (new `cached_network_image`
+  dependency). Unseen posts (`!post.isSeen`) get a small red dot overlay; an app bar toggle
+  re-runs `listSearchPosts(search.id, unseenOnly: true)`; a refresh action calls
+  `syncDueSearches()` then reloads. Tapping a post calls `markPostSeen` and reloads the grid,
+  clearing its marker — the full metadata/media viewer (`PostDetailScreen`) is M8.4's scope,
+  not built yet, so this is the interim "opening a post" behavior for now.
+  **A real bug this surfaced**: the exact same `setState(() => future = ...)` arrow-closure
+  bug M7.3 found in `AccountsScreen._refresh` (Dart's assignment-expression-evaluates-to-the-
+  assigned-value semantics making the closure return a `Future`) recurred in
+  `_PostGridScreenState._openPost`, caught immediately by the equivalent widget test. Fixed
+  the same way, with a block body.
+
 - [ ] **M9 — Actions & downloads**
   Single + mass like/favorite/download, commenting, download manager writing to
   `%artist%/%id%.%extension%`, checksum (md5) verification of downloaded files against the

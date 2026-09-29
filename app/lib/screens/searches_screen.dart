@@ -8,6 +8,7 @@ import '../settings/app_lock_service.dart';
 import '../settings/theme_settings_store.dart';
 import 'accounts_screen.dart';
 import 'create_search_screen.dart';
+import 'post_grid_screen.dart';
 import 'settings_screen.dart';
 
 /// The app's actual home screen (M8.2 promoted this over [AccountsScreen] --
@@ -101,6 +102,7 @@ class _SearchesScreenState extends State<SearchesScreen> {
                     title: Text(search.label),
                     subtitle: Text(l10n.searchesIntervalSubtitle(search.site.toWireString(), search.intervalHours)),
                     trailing: IconButton(icon: const Icon(Icons.delete), onPressed: () => _removeSearch(search)),
+                    onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => PostGridScreen(search: search, repository: _repository!))),
                   ),
                 )
                 .toList(),
