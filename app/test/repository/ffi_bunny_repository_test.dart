@@ -22,6 +22,14 @@ void main() {
     expect(await repository.getAccount(BunnySite.e621), isNull);
   });
 
+  test('tagAutocomplete returns an empty list when nothing is cached', () async {
+    expect(await repository.tagAutocomplete(BunnySite.e621, 'any'), isEmpty);
+  });
+
+  test('markPostSeen rejects a post id with no cached post', () async {
+    await expectLater(repository.markPostSeen(1), throwsA(isA<BunnyRepositoryException>()));
+  });
+
   test('verifyAccount rejects bogus e621 credentials', () async {
     // See bunny_core_ffi/test/bunny_core_native_test.dart for why this hits
     // real e621 network: standalone mode has no fake-transport override.

@@ -101,6 +101,15 @@ class BunnyPost {
   });
 }
 
+/// Mirrors `bunny_db_tag_stat_t` -- a search box's autocomplete suggestion,
+/// ranked by how many cached posts use it.
+class BunnyTagStat {
+  final String name;
+  final int count;
+
+  const BunnyTagStat({required this.name, required this.count});
+}
+
 /// Mirrors `bunny_core_sync_stats_t`.
 class BunnySyncStats {
   final int searchesChecked;

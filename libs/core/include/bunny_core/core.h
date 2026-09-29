@@ -71,6 +71,20 @@ bunny_core_result_t bunny_core_search_delete(bunny_core_t *core, int64_t search_
 bunny_core_result_t bunny_core_search_list(bunny_core_t *core, bunny_db_search_list_t *out_list);
 bunny_core_result_t bunny_core_search_list_posts(bunny_core_t *core, int64_t search_id, bool unseen_only, bunny_db_post_list_t *out_list);
 
+/* Ranks cached tags (from already-synced posts) by usage count, for a
+ * search box's autocomplete -- a thin pass-through to bunny_db, same shape
+ * as the search CRUD above. `prefix`'s characters are matched literally, not
+ * as SQL LIKE wildcards. */
+bunny_core_result_t bunny_core_tag_autocomplete(bunny_core_t *core, bunny_db_site_t site, const char *prefix, int limit, bunny_db_tag_stat_list_t *out_list);
+
+/* Marks a post seen (global per post, not per search) -- lets a post detail
+ * view clear the unseen marker bunny_core_search_list_posts's unseen_only
+ * filter and bunny_db_post_t.is_seen are based on. Returns
+ * BUNNY_CORE_ERR_INVALID_ARG for a post_id that doesn't exist in the local
+ * post cache (a foreign-key violation, not a "not found" in the usual
+ * sense -- see bunny_core_map_db_result). */
+bunny_core_result_t bunny_core_post_mark_seen(bunny_core_t *core, int64_t post_id);
+
 /* --- Scheduled search sync --------------------------------------------------- */
 
 typedef struct

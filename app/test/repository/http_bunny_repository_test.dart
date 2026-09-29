@@ -190,6 +190,34 @@ void main() {
       expect(posts.single.title, isNull);
     });
 
+    test('tagAutocomplete sends site/prefix/limit as query params and maps results', () async {
+      respond = (_) => http.Response(
+        jsonEncode([
+          {'name': 'one', 'count': 3},
+          {'name': 'onomatopoeia', 'count': 1},
+        ]),
+        200,
+      );
+
+      final stats = await buildRepository().tagAutocomplete(BunnySite.e621, 'on', limit: 5);
+
+      expect(capturedMethod, 'GET');
+      expect(capturedUri.path, '/tags/autocomplete');
+      expect(capturedUri.queryParameters, {'site': 'e621', 'prefix': 'on', 'limit': '5'});
+      expect(stats, hasLength(2));
+      expect(stats.first.name, 'one');
+      expect(stats.first.count, 3);
+    });
+
+    test('markPostSeen sends POST to the right path', () async {
+      respond = (_) => http.Response(jsonEncode({'ok': true}), 200);
+
+      await buildRepository().markPostSeen(5);
+
+      expect(capturedMethod, 'POST');
+      expect(capturedUri.path, '/posts/5/seen');
+    });
+
     test('syncDueSearches maps the stats response', () async {
       respond = (_) => http.Response(jsonEncode({'searches_checked': 3, 'searches_synced': 2, 'posts_upserted': 10}), 200);
 

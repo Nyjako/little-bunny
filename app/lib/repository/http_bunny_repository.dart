@@ -49,6 +49,8 @@ BunnyPost _postFromJson(Map<String, Object?> j) => BunnyPost(
   isFavorited: j['is_favorited'] as bool,
 );
 
+BunnyTagStat _tagStatFromJson(Map<String, Object?> j) => BunnyTagStat(name: j['name'] as String, count: (j['count'] as num).toInt());
+
 BunnySyncStats _syncStatsFromJson(Map<String, Object?> j) => BunnySyncStats(
   searchesChecked: (j['searches_checked'] as num).toInt(),
   searchesSynced: (j['searches_synced'] as num).toInt(),
@@ -201,6 +203,23 @@ class HttpBunnyRepository implements BunnyRepository {
       _throwError(response);
     }
     return _decodeList(response).map(_postFromJson).toList();
+  }
+
+  @override
+  Future<List<BunnyTagStat>> tagAutocomplete(BunnySite site, String prefix, {int limit = 10}) async {
+    final response = await _client.get(_uri('/tags/autocomplete', {'site': site.toWireString(), 'prefix': prefix, 'limit': limit.toString()}), headers: _headers);
+    if (response.statusCode != 200) {
+      _throwError(response);
+    }
+    return _decodeList(response).map(_tagStatFromJson).toList();
+  }
+
+  @override
+  Future<void> markPostSeen(int postId) async {
+    final response = await _client.post(_uri('/posts/$postId/seen'), headers: _headers);
+    if (response.statusCode != 200) {
+      _throwError(response);
+    }
   }
 
   @override

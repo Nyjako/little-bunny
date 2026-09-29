@@ -120,6 +120,74 @@ void test_sync_e621_search_upserts_post(void)
     free(fixture);
 }
 
+void test_tag_autocomplete_finds_tags_from_synced_posts(void)
+{
+    char *fixture = read_fixture("e621_posts_search.json");
+    TEST_ASSERT_NOT_NULL(fixture);
+    g_e621_state.bodies[0] = fixture;
+    g_e621_state.body_count = 1;
+
+    int64_t search_id = 0;
+    bunny_core_search_create(g_core, BUNNY_DB_SITE_E621, "wolves", "wolf", 24, &search_id);
+    bunny_core_sync_due_searches(g_core, NULL);
+
+    bunny_db_tag_stat_list_t tags;
+    bunny_core_result_t result = bunny_core_tag_autocomplete(g_core, BUNNY_DB_SITE_E621, "on", 10, &tags);
+    TEST_ASSERT_EQUAL(BUNNY_CORE_OK, result);
+    TEST_ASSERT_EQUAL(1, (int)tags.count);
+    TEST_ASSERT_EQUAL_STRING("one", tags.items[0].name);
+    bunny_db_tag_stat_list_free(&tags);
+
+    free(fixture);
+}
+
+void test_tag_autocomplete_returns_empty_list_for_no_match(void)
+{
+    bunny_db_tag_stat_list_t tags;
+    bunny_core_result_t result = bunny_core_tag_autocomplete(g_core, BUNNY_DB_SITE_E621, "nonexistent", 10, &tags);
+    TEST_ASSERT_EQUAL(BUNNY_CORE_OK, result);
+    TEST_ASSERT_EQUAL(0, (int)tags.count);
+    bunny_db_tag_stat_list_free(&tags);
+}
+
+void test_mark_seen_flips_is_seen_on_a_synced_post(void)
+{
+    char *fixture = read_fixture("e621_posts_search.json");
+    TEST_ASSERT_NOT_NULL(fixture);
+    g_e621_state.bodies[0] = fixture;
+    g_e621_state.body_count = 1;
+
+    int64_t search_id = 0;
+    bunny_core_search_create(g_core, BUNNY_DB_SITE_E621, "wolves", "wolf", 24, &search_id);
+    bunny_core_sync_due_searches(g_core, NULL);
+
+    bunny_db_post_list_t posts;
+    bunny_core_search_list_posts(g_core, search_id, false, &posts);
+    TEST_ASSERT_EQUAL(1, (int)posts.count);
+    TEST_ASSERT_FALSE(posts.items[0].is_seen);
+    int64_t post_id = posts.items[0].id;
+    bunny_db_post_list_free(&posts);
+
+    bunny_core_result_t result = bunny_core_post_mark_seen(g_core, post_id);
+    TEST_ASSERT_EQUAL(BUNNY_CORE_OK, result);
+
+    bunny_core_search_list_posts(g_core, search_id, false, &posts);
+    TEST_ASSERT_TRUE(posts.items[0].is_seen);
+    bunny_db_post_list_free(&posts);
+
+    free(fixture);
+}
+
+void test_mark_seen_rejects_a_nonexistent_post(void)
+{
+    /* seen_posts.post_id REFERENCES posts(id) -- a nonexistent post_id is a
+     * foreign-key violation, which bunny_core_map_db_result treats as bad
+     * caller input (BUNNY_CORE_ERR_INVALID_ARG), not BUNNY_CORE_ERR_NOT_FOUND
+     * (see libs/core/src/internal.h). */
+    bunny_core_result_t result = bunny_core_post_mark_seen(g_core, 999);
+    TEST_ASSERT_EQUAL(BUNNY_CORE_ERR_INVALID_ARG, result);
+}
+
 void test_sync_inkbunny_search_upserts_post(void)
 {
     char *login_fixture = read_fixture("inkbunny_login_success.json");
@@ -233,6 +301,10 @@ int main(void)
 {
     UNITY_BEGIN();
     RUN_TEST(test_sync_e621_search_upserts_post);
+    RUN_TEST(test_tag_autocomplete_finds_tags_from_synced_posts);
+    RUN_TEST(test_tag_autocomplete_returns_empty_list_for_no_match);
+    RUN_TEST(test_mark_seen_flips_is_seen_on_a_synced_post);
+    RUN_TEST(test_mark_seen_rejects_a_nonexistent_post);
     RUN_TEST(test_sync_inkbunny_search_upserts_post);
     RUN_TEST(test_sync_skips_search_not_due_yet);
     RUN_TEST(test_verify_e621_accepts_valid_credentials);
