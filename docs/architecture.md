@@ -606,6 +606,36 @@ FFI isolate methods, a server route each, and `BunnyRepository` methods implemen
   expectation, not the behavior — the behavior was already correct and consistent with the
   rest of the codebase.
 
+**Navigation restructuring + saved search management (M8.2)**: browse/search is the app's
+real daily-use surface, so `SearchesScreen` (`app/lib/screens/searches_screen.dart`) replaces
+`AccountsScreen` as the post-lock home in `main.dart`; `AccountsScreen` moves to an app bar
+icon next to the existing settings icon. `SearchesScreen` lists `BunnySearch` via
+`listSearches`, each row showing a `{site} • every {hours}h` subtitle and a delete action
+(confirmation dialog, mirroring `AccountsScreen._removeAccount`'s existing pattern), plus a
+"new search" FAB opening `CreateSearchScreen`.
+
+- **`CreateSearchScreen`'s tag-autocomplete UX.** The query field tracks its "current word"
+  as the substring after the last space in the field, debounces a 300ms `Timer` before
+  calling `tagAutocomplete(site, currentWord)`, and shows results as `ActionChip`s below the
+  field. Picking one appends the tag plus a trailing space to the text *before* the current
+  word rather than replacing the whole field — e621-style multi-tag queries, where you're
+  always completing just the tag you're currently typing.
+- **A real bug this surfaced: `BunnyRepositoryScope` doesn't survive `Navigator.push`.**
+  `AccountsScreen` had always been reached as the app's `home` (M7.3 through M8.1), so its
+  `didChangeDependencies`-based `BunnyRepositoryScope.of(context)` lookup worked, because
+  `main.dart` wrapped `home` directly in the scope. Once `SearchesScreen` became `home` and
+  `AccountsScreen` became a screen reached only via `Navigator.push`, that same lookup started
+  throwing a null-check error at runtime. The reason: `MaterialApp`'s `Navigator` renders each
+  route's widget subtree as a sibling entry inside its own `Overlay`, not as a descendant of
+  whatever wraps `home` — an `InheritedWidget` set up around `home` is invisible to any other
+  route pushed onto the same `Navigator`. This is the same reason `LoginFormScreen` and
+  `CreateSearchScreen` already took `BunnyRepository` as an explicit constructor parameter
+  instead of reading it from context; `AccountsScreen` had never needed to, since it used to
+  be `home` itself. A widget test (`searches_screen_test.dart`'s "tapping the accounts icon"
+  case) caught this before it could ship as a live crash. Fixed by giving `AccountsScreen` the
+  same explicit `required BunnyRepository repository` constructor parameter, dropping its
+  `BunnyRepositoryScope.of(context)` lookup entirely.
+
 ## Inkbunny API constraints (found in M2)
 
 Verified against the live API and the official docs while building `libinkbunny`:

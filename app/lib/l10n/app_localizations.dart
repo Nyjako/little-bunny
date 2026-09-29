@@ -214,12 +214,6 @@ abstract class AppLocalizations {
   /// **'Accounts'**
   String get accountsScreenTitle;
 
-  /// No description provided for @accountsSettingsTooltip.
-  ///
-  /// In en, this message translates to:
-  /// **'Settings'**
-  String get accountsSettingsTooltip;
-
   /// No description provided for @accountsRemoveDialogTitle.
   ///
   /// In en, this message translates to:
@@ -243,6 +237,84 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Not connected'**
   String get accountsNotConnected;
+
+  /// No description provided for @searchesScreenTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Searches'**
+  String get searchesScreenTitle;
+
+  /// No description provided for @searchesAccountsTooltip.
+  ///
+  /// In en, this message translates to:
+  /// **'Accounts'**
+  String get searchesAccountsTooltip;
+
+  /// No description provided for @searchesSettingsTooltip.
+  ///
+  /// In en, this message translates to:
+  /// **'Settings'**
+  String get searchesSettingsTooltip;
+
+  /// No description provided for @searchesNewSearchTooltip.
+  ///
+  /// In en, this message translates to:
+  /// **'New search'**
+  String get searchesNewSearchTooltip;
+
+  /// No description provided for @searchesEmptyState.
+  ///
+  /// In en, this message translates to:
+  /// **'No saved searches yet. Tap + to add one.'**
+  String get searchesEmptyState;
+
+  /// No description provided for @searchesIntervalSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'{site} • every {hours}h'**
+  String searchesIntervalSubtitle(String site, int hours);
+
+  /// No description provided for @searchesRemoveDialogTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Remove search?'**
+  String get searchesRemoveDialogTitle;
+
+  /// No description provided for @searchesRemoveDialogContent.
+  ///
+  /// In en, this message translates to:
+  /// **'This removes the saved search \"{label}\" from this app.'**
+  String searchesRemoveDialogContent(String label);
+
+  /// No description provided for @createSearchScreenTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'New search'**
+  String get createSearchScreenTitle;
+
+  /// No description provided for @createSearchLabelField.
+  ///
+  /// In en, this message translates to:
+  /// **'Label'**
+  String get createSearchLabelField;
+
+  /// No description provided for @createSearchQueryField.
+  ///
+  /// In en, this message translates to:
+  /// **'Query'**
+  String get createSearchQueryField;
+
+  /// No description provided for @createSearchIntervalLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Sync interval (hours)'**
+  String get createSearchIntervalLabel;
+
+  /// No description provided for @createSearchSubmit.
+  ///
+  /// In en, this message translates to:
+  /// **'Create'**
+  String get createSearchSubmit;
 
   /// No description provided for @lockScreenMessage.
   ///

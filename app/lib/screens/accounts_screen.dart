@@ -1,41 +1,38 @@
 import 'package:flutter/material.dart';
 
-import '../bunny_repository_scope.dart';
 import '../l10n/app_localizations.dart';
 import '../repository/bunny_models.dart';
 import '../repository/bunny_repository.dart';
-import '../settings/app_lock_service.dart';
-import '../settings/theme_settings_store.dart';
 import 'login_form_screen.dart';
-import 'settings_screen.dart';
 
-/// The interim real "home" page (M7.3), replacing M6's placeholder: lists
-/// both sites' configured accounts and lets the user log in/remove them.
-/// Browse/search (M8) will build on top of this rather than replace it.
+/// Site login management (M7.3) -- reachable from [SearchesScreen]'s app bar
+/// (M8.2 promoted browse/search to the app's actual home, since that's the
+/// daily-use surface; this screen only matters when setting up or changing
+/// site credentials). Takes [repository] explicitly rather than through
+/// `BunnyRepositoryScope.of(context)` -- it's only ever reached via
+/// `Navigator.push`, which puts it in a separate route subtree from
+/// wherever the scope is set up, same reasoning as [LoginFormScreen] and
+/// `CreateSearchScreen`.
 class AccountsScreen extends StatefulWidget {
-  final AppLockService lockService;
-  final ThemeSettingsStore themeSettingsStore;
-  final ValueChanged<ThemeMode> onThemeModeChanged;
+  final BunnyRepository repository;
 
-  const AccountsScreen({super.key, required this.lockService, required this.themeSettingsStore, required this.onThemeModeChanged});
+  const AccountsScreen({super.key, required this.repository});
 
   @override
   State<AccountsScreen> createState() => _AccountsScreenState();
 }
 
 class _AccountsScreenState extends State<AccountsScreen> {
-  BunnyRepository? _repository;
   Future<Map<BunnySite, BunnyAccount?>>? _accountsFuture;
 
   @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    _repository = BunnyRepositoryScope.of(context);
-    _accountsFuture ??= _loadAccounts();
+  void initState() {
+    super.initState();
+    _accountsFuture = _loadAccounts();
   }
 
   Future<Map<BunnySite, BunnyAccount?>> _loadAccounts() async {
-    final repository = _repository!;
+    final repository = widget.repository;
     final results = await Future.wait([repository.getAccount(BunnySite.e621), repository.getAccount(BunnySite.inkbunny)]);
     return {BunnySite.e621: results[0], BunnySite.inkbunny: results[1]};
   }
@@ -47,7 +44,7 @@ class _AccountsScreenState extends State<AccountsScreen> {
   }
 
   Future<void> _openLoginForm(BunnySite site) async {
-    final saved = await Navigator.push<bool>(context, MaterialPageRoute(builder: (context) => LoginFormScreen(site: site, repository: _repository!)));
+    final saved = await Navigator.push<bool>(context, MaterialPageRoute(builder: (context) => LoginFormScreen(site: site, repository: widget.repository)));
     if (saved == true) {
       _refresh();
     }
@@ -69,7 +66,7 @@ class _AccountsScreenState extends State<AccountsScreen> {
     if (confirmed != true) {
       return;
     }
-    await _repository!.deleteAccount(site);
+    await widget.repository.deleteAccount(site);
     _refresh();
   }
 
@@ -77,16 +74,7 @@ class _AccountsScreenState extends State<AccountsScreen> {
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
     return Scaffold(
-      appBar: AppBar(
-        title: Text(l10n.accountsScreenTitle),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.settings_outlined),
-            tooltip: l10n.accountsSettingsTooltip,
-            onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (context) => SettingsScreen(themeSettingsStore: widget.themeSettingsStore, lockService: widget.lockService, onThemeModeChanged: widget.onThemeModeChanged))),
-          ),
-        ],
-      ),
+      appBar: AppBar(title: Text(l10n.accountsScreenTitle)),
       body: FutureBuilder<Map<BunnySite, BunnyAccount?>>(
         future: _accountsFuture,
         builder: (context, snapshot) {
