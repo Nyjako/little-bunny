@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../l10n/app_localizations.dart';
 import '../repository/bunny_models.dart';
 import '../repository/bunny_repository.dart';
 
@@ -69,28 +70,29 @@ class _LoginFormScreenState extends State<LoginFormScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     return Scaffold(
-      appBar: AppBar(title: Text('Log in to ${_isE621 ? 'e621' : 'Inkbunny'}')),
+      appBar: AppBar(title: Text(l10n.loginScreenTitle(_isE621 ? 'e621' : 'Inkbunny'))),
       body: Padding(
         padding: const EdgeInsets.all(16),
         child: Form(
           key: _formKey,
           child: ListView(
             children: [
-              TextFormField(controller: _usernameController, enabled: !_submitting, decoration: const InputDecoration(labelText: 'Username'), validator: (value) => (value == null || value.trim().isEmpty) ? 'Required' : null),
+              TextFormField(controller: _usernameController, enabled: !_submitting, decoration: InputDecoration(labelText: l10n.loginUsernameLabel), validator: (value) => (value == null || value.trim().isEmpty) ? l10n.commonRequired : null),
               TextFormField(
                 controller: _secretController,
                 enabled: !_submitting,
                 obscureText: !_isE621,
-                decoration: InputDecoration(labelText: _isE621 ? 'API key' : 'Password'),
-                validator: (value) => (value == null || value.isEmpty) ? 'Required' : null,
+                decoration: InputDecoration(labelText: _isE621 ? l10n.loginApiKeyLabel : l10n.loginPasswordLabel),
+                validator: (value) => (value == null || value.isEmpty) ? l10n.commonRequired : null,
               ),
               const SizedBox(height: 16),
               if (_error != null) Text(_error!, style: TextStyle(color: Theme.of(context).colorScheme.error)),
               const SizedBox(height: 16),
               FilledButton(
                 onPressed: _submitting ? null : _submit,
-                child: _submitting ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)) : const Text('Log in'),
+                child: _submitting ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)) : Text(l10n.loginSubmit),
               ),
             ],
           ),

@@ -2,6 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:little_bunny/main.dart';
 import 'package:little_bunny/settings/app_lock_service.dart';
 import 'package:little_bunny/settings/repository_settings_store.dart';
+import 'package:little_bunny/settings/theme_settings_store.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'fakes/fake_secret_store.dart';
@@ -12,7 +13,7 @@ void main() {
     final settingsStore = RepositorySettingsStore(FakeSecretStore({'repository_bearer_token': 'test-token', 'repository_cert_fingerprint': '00' * 32}));
     final lockService = AppLockService(FakeSecretStore());
 
-    await tester.pumpWidget(LittleBunnyApp(settingsStore: settingsStore, lockService: lockService));
+    await tester.pumpWidget(LittleBunnyApp(settingsStore: settingsStore, lockService: lockService, themeSettingsStore: const ThemeSettingsStore()));
     // Not pumpAndSettle(): AccountsScreen's own getAccount calls go through a
     // real HttpBunnyRepository against an unreachable localhost:9443 here,
     // which never cleanly "settles" under TestWidgetsFlutterBinding. Two
@@ -32,7 +33,7 @@ void main() {
     final settingsStore = RepositorySettingsStore(FakeSecretStore());
     final lockService = AppLockService(FakeSecretStore());
 
-    await tester.pumpWidget(LittleBunnyApp(settingsStore: settingsStore, lockService: lockService));
+    await tester.pumpWidget(LittleBunnyApp(settingsStore: settingsStore, lockService: lockService, themeSettingsStore: const ThemeSettingsStore()));
     await tester.pumpAndSettle();
 
     expect(find.text('Set up LittleBunny'), findsOneWidget);
@@ -46,7 +47,7 @@ void main() {
     final settingsStore = RepositorySettingsStore(FakeSecretStore({'repository_bearer_token': 'test-token', 'repository_cert_fingerprint': '00' * 32}));
     final lockService = AppLockService(lockSecrets);
 
-    await tester.pumpWidget(LittleBunnyApp(settingsStore: settingsStore, lockService: lockService));
+    await tester.pumpWidget(LittleBunnyApp(settingsStore: settingsStore, lockService: lockService, themeSettingsStore: const ThemeSettingsStore()));
     await tester.pump();
     await tester.pump();
 

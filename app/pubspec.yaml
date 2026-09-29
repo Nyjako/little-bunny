@@ -46,6 +46,9 @@ dependencies:
   flutter_secure_storage: ^11.2.0
   path: ^1.9.1
   local_auth: ^3.0.2
+  flutter_localizations:
+    sdk: flutter
+  intl: ^0.20.2
 
 dev_dependencies:
   flutter_test:
@@ -70,6 +73,10 @@ flutter:
   # included with your application, so that you can use the icons in
   # the material Icons class.
   uses-material-design: true
+
+  # Generates AppLocalizations from lib/l10n/app_en.arb (see l10n.yaml) --
+  # adding a language later is just a new .arb file, no code changes.
+  generate: true
 
   # To add assets to your application, add an assets section, like this:
   # assets:
