@@ -4,11 +4,12 @@ import 'package:flutter/material.dart';
 import '../l10n/app_localizations.dart';
 import '../repository/bunny_models.dart';
 import '../repository/bunny_repository.dart';
+import 'post_detail_screen.dart';
 
 /// Shows a [BunnySearch]'s cached posts as a thumbnail grid, with an unseen
-/// marker overlay and an "unseen only" filter (M8.3). Tapping a post marks it
-/// seen and clears its marker -- the full metadata/media viewer
-/// (`PostDetailScreen`) is M8.4's scope, not built yet.
+/// marker overlay and an "unseen only" filter (M8.3). Tapping a post opens
+/// [PostDetailScreen] (M8.4), which marks it seen on open; the grid reloads
+/// on return so the cleared marker shows up immediately.
 class PostGridScreen extends StatefulWidget {
   final BunnySearch search;
   final BunnyRepository repository;
@@ -52,7 +53,7 @@ class _PostGridScreenState extends State<PostGridScreen> {
   }
 
   Future<void> _openPost(BunnyPost post) async {
-    await widget.repository.markPostSeen(post.id);
+    await Navigator.push(context, MaterialPageRoute(builder: (context) => PostDetailScreen(post: post, repository: widget.repository)));
     if (!mounted) {
       return;
     }
