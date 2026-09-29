@@ -226,7 +226,7 @@ this file is the single source of truth for "what's done" across sessions.
   `bunny_server` instance over a real TLS connection (account/search CRUD, cert-pinning
   accept/reject) in addition to the fake-transport unit tests.
 
-- [ ] **M7 — Auth & app-lock UI**
+- [x] **M7 — Auth & app-lock UI**
   Site login screens (e621 username/API key, Inkbunny username/password), app-lock via
   password/PIN/fingerprint. App-lock is a per-device, client-side setting, not tied to
   server-side credential storage (M4.1) — each device/app instance can use a different
@@ -292,6 +292,29 @@ this file is the single source of truth for "what's done" across sessions.
   `verifyAccount`/`setAccount`/`deleteAccount`'s underlying behavior against real sites/a
   real server was already verified in M7.1; these tests only cover the UI's own orchestration
   (which state renders what, error display, confirmation flow).
+
+- [x] **M7.4 — App-lock (completes M7)**
+  `AppLockService` (`app/lib/settings/`) stores whether app-lock is enabled
+  (`shared_preferences`) and the PIN/password itself directly in `SecretStore` (compared by
+  string equality) — no hand-rolled hashing, since the real backend already encrypts values
+  at rest and this is a local UI gate, not data-at-rest protection. `LockSetupScreen`
+  (reachable from `AccountsScreen`'s app bar) enables/disables it, requiring the current
+  PIN/password to disable. `LockScreen` gates the app at root whenever enabled: on Android,
+  tries `local_auth` biometric first (`biometricOnly: true` — the fallback is this app's own
+  PIN, not the OS device credential, per the roadmap's "per-device, client-side" wording);
+  every platform falls back to PIN/password entry. `main.dart`'s `LittleBunnyApp` checks
+  lock state right after loading the repository and shows `LockScreen` before
+  `AccountsScreen` when needed.
+  `app/android`'s `MainActivity` now extends `FlutterFragmentActivity` (not `FlutterActivity`)
+  and the app's launch/normal themes inherit `Theme.AppCompat.*` instead of the plain
+  platform theme — both required for `local_auth`'s `BiometricPrompt` to host its dialog
+  fragment; the `USE_BIOMETRIC` permission itself needs no manual manifest edit, since
+  `local_auth_android` already declares it in its own manifest, merged in automatically.
+  **Known gap**: none of this is verified by any real build — `flutter build apk` already
+  fails at the OpenSSL step (M6.2, deferred to M12), and `Platform.isAndroid` is false on
+  this dev machine's test host anyway, so neither a real build nor the automated test suite
+  exercises the biometric path. Written correctly per `local_auth`'s own reference example
+  regardless, to avoid revisiting this milestone once Android builds again.
 
 - [ ] **M8 — Browse & search UI**
   Manage saved searches, post grid/list with unseen markers, post detail view with full

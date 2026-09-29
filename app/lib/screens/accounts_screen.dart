@@ -3,13 +3,17 @@ import 'package:flutter/material.dart';
 import '../bunny_repository_scope.dart';
 import '../repository/bunny_models.dart';
 import '../repository/bunny_repository.dart';
+import '../settings/app_lock_service.dart';
 import 'login_form_screen.dart';
+import 'lock_setup_screen.dart';
 
 /// The interim real "home" page (M7.3), replacing M6's placeholder: lists
 /// both sites' configured accounts and lets the user log in/remove them.
 /// Browse/search (M8) will build on top of this rather than replace it.
 class AccountsScreen extends StatefulWidget {
-  const AccountsScreen({super.key});
+  final AppLockService lockService;
+
+  const AccountsScreen({super.key, required this.lockService});
 
   @override
   State<AccountsScreen> createState() => _AccountsScreenState();
@@ -67,7 +71,12 @@ class _AccountsScreenState extends State<AccountsScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Accounts')),
+      appBar: AppBar(
+        title: const Text('Accounts'),
+        actions: [
+          IconButton(icon: const Icon(Icons.lock_outline), tooltip: 'App lock', onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (context) => LockSetupScreen(lockService: widget.lockService)))),
+        ],
+      ),
       body: FutureBuilder<Map<BunnySite, BunnyAccount?>>(
         future: _accountsFuture,
         builder: (context, snapshot) {
