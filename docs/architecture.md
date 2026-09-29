@@ -575,6 +575,37 @@ hashing would just be extra bespoke crypto code with no real benefit.
   never exercises the biometric branch either (`test/screens/lock_screen_test.dart` only
   covers the PIN/password fallback, which every platform shares).
 
+## Browse & search (M8)
+
+**Tag autocomplete + mark-seen plumbing (M8.1)**: two `bunny_db`-layer capabilities had never
+been exposed anywhere above `bunny_db` before this — `bunny_db_tag_autocomplete` (built and
+tested since a pre-M4 chore, just never wired up) and `bunny_db_post_mark_seen`. Both get thin
+`bunny_core_tag_autocomplete`/`bunny_core_post_mark_seen` wrappers in `libs/core/src/
+searches.c`, then the exact same layering M7.1 established for `bunny_core_account_verify`:
+FFI isolate methods, a server route each, and `BunnyRepository` methods implemented in both
+`FfiBunnyRepository` and `HttpBunnyRepository`.
+
+- **New server route file, not an addition to an existing one.** `server/src/
+  routes_tags.{c,h}` registers `GET /tags/autocomplete?site=&prefix=&limit=` — a genuinely
+  new resource, so it gets its own file matching the established one-file-per-resource
+  convention (`routes_accounts.c`/`routes_searches.c`/`routes_queue.c`), rather than being
+  bolted onto one of those. `POST /posts/{id}/seen`, by contrast, went into the *existing*
+  `routes_queue.c`, since that file already owns all `/posts` dispatch.
+- **No site-transport complexity, unlike M7.1.** Neither capability ever touches e621/
+  Inkbunny site clients — both are pure `bunny_db` reads/writes — so every layer's tests are
+  fully deterministic, including at the FFI layer (M7.1's `verifyAccount` tests had to hit
+  real e621 network for their failure path, since `bunny_core_ffi_open` has no
+  fake-transport override; `tagAutocomplete`/`markPostSeen` need no such workaround).
+- **A real bug found via the C-level tests**: `bunny_core_post_mark_seen` on a nonexistent
+  `post_id` returns `BUNNY_CORE_ERR_INVALID_ARG`, not `BUNNY_CORE_ERR_NOT_FOUND` as first
+  assumed when writing the test. `seen_posts.post_id` has a foreign key against `posts(id)`
+  (`ON DELETE CASCADE`), so inserting a row for a post that doesn't exist is a constraint
+  violation — `bunny_core_map_db_result` already treats `BUNNY_DB_ERR_CONSTRAINT` as bad
+  caller input rather than "not found" (see `libs/core/src/internal.h`'s own comment on
+  this, first established for the action queue's foreign key in M4.3). Fixed the test
+  expectation, not the behavior — the behavior was already correct and consistent with the
+  rest of the codebase.
+
 ## Inkbunny API constraints (found in M2)
 
 Verified against the live API and the official docs while building `libinkbunny`:

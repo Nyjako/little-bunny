@@ -43,6 +43,8 @@ BunnyPost _postFromMap(Map<String, Object?> m) => BunnyPost(
   isFavorited: m['isFavorited'] as bool,
 );
 
+BunnyTagStat _tagStatFromMap(Map<String, Object?> m) => BunnyTagStat(name: m['name'] as String, count: m['count'] as int);
+
 BunnySyncStats _syncStatsFromMap(Map<String, Object?> m) => BunnySyncStats(
   searchesChecked: m['searchesChecked'] as int,
   searchesSynced: m['searchesSynced'] as int,
@@ -116,6 +118,15 @@ class FfiBunnyRepository implements BunnyRepository {
     final items = await _wrapped(() => _native.listSearchPosts(searchId, unseenOnly));
     return items.map(_postFromMap).toList();
   }
+
+  @override
+  Future<List<BunnyTagStat>> tagAutocomplete(BunnySite site, String prefix, {int limit = 10}) async {
+    final items = await _wrapped(() => _native.tagAutocomplete(site.toWireString(), prefix, limit));
+    return items.map(_tagStatFromMap).toList();
+  }
+
+  @override
+  Future<void> markPostSeen(int postId) => _wrapped(() => _native.markPostSeen(postId));
 
   @override
   Future<BunnySyncStats> syncDueSearches() async {
