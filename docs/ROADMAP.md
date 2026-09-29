@@ -316,7 +316,7 @@ this file is the single source of truth for "what's done" across sessions.
   exercises the biometric path. Written correctly per `local_auth`'s own reference example
   regardless, to avoid revisiting this milestone once Android builds again.
 
-- [ ] **M8 — Browse & search UI**
+- [x] **M8 — Browse & search UI**
   Manage saved searches, post grid/list with unseen markers, post detail view with full
   metadata, viewers for supported formats (image/video/webm/gif; Flash/SWF intentionally
   unsupported). Tag autocomplete in the search box uses `bunny_db_tag_autocomplete` (M3.1).
@@ -378,6 +378,36 @@ this file is the single source of truth for "what's done" across sessions.
   assigned-value semantics making the closure return a `Future`) recurred in
   `_PostGridScreenState._openPost`, caught immediately by the equivalent widget test. Fixed
   the same way, with a block body.
+
+- [x] **M8.4 — Post detail view + media viewers (completes M8)**
+  New `PostDetailScreen` (`app/lib/screens/post_detail_screen.dart`), opened by tapping a
+  tile in `PostGridScreen` (which now navigates there instead of just calling `markPostSeen`
+  directly). Shows full read-only metadata — artist, title, description, rating, score,
+  favorite/comment counts, dimensions, site creation date — with no favorite/vote/comment
+  action buttons yet (that's M9's scope). Calls `markPostSeen(post.id)` once in `initState`;
+  `PostGridScreen` reloads its list on return so the cleared marker shows immediately.
+  Media viewer branches on `post.fileExt`: images (jpg/png/gif/webp) via
+  `CachedNetworkImage(post.fileUrl)`; videos (webm/mp4) via `video_player` + `fvp` (new
+  dependencies); anything else (Flash/SWF) shows a clear "not supported" placeholder,
+  matching the roadmap's own note that Flash/SWF is intentionally unimplemented.
+  - **`fvp` version pin matters.** The plan called for `fvp` since `video_player` has no
+    official Linux implementation, but pinning `fvp: ^0.30.0` (the version investigated
+    during M8 planning) broke the build against the `video_player` version pub actually
+    resolved (2.14.0) — `fvp 0.30.0`'s own code referenced `VideoPlayerController.textureId`,
+    which that newer `video_player` had removed. Fixed by pinning `fvp: ^0.38.1` instead,
+    the latest release, which matches the resolved `video_player` API. Confirmed by a real
+    `flutter build linux` succeeding and the built bundle logging `fvp`'s underlying decoder
+    (MDK 0.38.0) initializing on startup with no crash — libmpv was never actually needed;
+    `fvp` bundles its own FFmpeg-based decoder (MDK), contrary to the libmpv assumption made
+    during M8 planning.
+  - **Testing video playback**: `flutter test` has no real platform channel implementation
+    for `video_player`, so a widget test that builds `PostDetailScreen` with a video post
+    needs `VideoPlayerPlatform.instance` replaced with a fake
+    (`app/test/fakes/fake_video_player_platform.dart`) that reports "initialized" immediately
+    without touching a network or a real decoder — per the plan, this only proves the right
+    viewer widget type is chosen per file extension, not that playback actually works (that's
+    covered by the real Linux build launching and by manual verification against a real
+    server).
 
 - [ ] **M9 — Actions & downloads**
   Single + mass like/favorite/download, commenting, download manager writing to

@@ -140,6 +140,44 @@ class AppLocalizationsEn extends AppLocalizations {
   String get postGridEmptyState => 'No posts cached yet. Tap refresh to sync.';
 
   @override
+  String get postDetailScreenTitle => 'Post';
+
+  @override
+  String postDetailUnsupportedFormat(String extension) {
+    return 'This file format ($extension) isn\'t supported yet';
+  }
+
+  @override
+  String get postDetailArtistLabel => 'Artist';
+
+  @override
+  String get postDetailTitleLabel => 'Title';
+
+  @override
+  String get postDetailDescriptionLabel => 'Description';
+
+  @override
+  String get postDetailRatingLabel => 'Rating';
+
+  @override
+  String get postDetailScoreLabel => 'Score';
+
+  @override
+  String get postDetailFavoritesLabel => 'Favorites';
+
+  @override
+  String get postDetailCommentsLabel => 'Comments';
+
+  @override
+  String get postDetailDimensionsLabel => 'Dimensions';
+
+  @override
+  String get postDetailCreatedLabel => 'Posted';
+
+  @override
+  String get postDetailUnknownValue => 'Unknown';
+
+  @override
   String get lockScreenMessage => 'LittleBunny is locked';
 
   @override
