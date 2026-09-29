@@ -29,7 +29,6 @@
   "loginSubmit": "Log in",
 
   "accountsScreenTitle": "Accounts",
-  "accountsSettingsTooltip": "Settings",
   "accountsRemoveDialogTitle": "Remove account?",
   "accountsRemoveDialogContent": "This removes the saved {site} account from this app. You can log in again later.",
   "@accountsRemoveDialogContent": {
@@ -40,6 +39,30 @@
     "placeholders": {"username": {"type": "String"}}
   },
   "accountsNotConnected": "Not connected",
+
+  "searchesScreenTitle": "Searches",
+  "searchesAccountsTooltip": "Accounts",
+  "searchesSettingsTooltip": "Settings",
+  "searchesNewSearchTooltip": "New search",
+  "searchesEmptyState": "No saved searches yet. Tap + to add one.",
+  "searchesIntervalSubtitle": "{site} • every {hours}h",
+  "@searchesIntervalSubtitle": {
+    "placeholders": {
+      "site": {"type": "String"},
+      "hours": {"type": "int"}
+    }
+  },
+  "searchesRemoveDialogTitle": "Remove search?",
+  "searchesRemoveDialogContent": "This removes the saved search \"{label}\" from this app.",
+  "@searchesRemoveDialogContent": {
+    "placeholders": {"label": {"type": "String"}}
+  },
+
+  "createSearchScreenTitle": "New search",
+  "createSearchLabelField": "Label",
+  "createSearchQueryField": "Query",
+  "createSearchIntervalLabel": "Sync interval (hours)",
+  "createSearchSubmit": "Create",
 
   "lockScreenMessage": "LittleBunny is locked",
   "lockScreenBiometricReason": "Unlock LittleBunny",

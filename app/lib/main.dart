@@ -5,8 +5,8 @@ import 'bunny_repository_scope.dart';
 import 'l10n/app_localizations.dart';
 import 'repository/bunny_repository.dart';
 import 'repository/bunny_repository_factory.dart';
-import 'screens/accounts_screen.dart';
 import 'screens/lock_screen.dart';
+import 'screens/searches_screen.dart';
 import 'screens/setup_screen.dart';
 import 'settings/app_lock_service.dart';
 import 'settings/repository_settings_store.dart';
@@ -106,7 +106,7 @@ class _LittleBunnyAppState extends State<LittleBunnyApp> {
     } else if (_locked) {
       home = LockScreen(lockService: widget.lockService, onUnlocked: _onUnlocked);
     } else {
-      home = BunnyRepositoryScope(repository: _repository!, child: AccountsScreen(lockService: widget.lockService, themeSettingsStore: widget.themeSettingsStore, onThemeModeChanged: (mode) => setState(() => _themeMode = mode)));
+      home = BunnyRepositoryScope(repository: _repository!, child: SearchesScreen(lockService: widget.lockService, themeSettingsStore: widget.themeSettingsStore, onThemeModeChanged: (mode) => setState(() => _themeMode = mode)));
     }
 
     return MaterialApp(
