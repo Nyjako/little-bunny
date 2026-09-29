@@ -3,10 +3,12 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:little_bunny/bunny_repository_scope.dart';
 import 'package:little_bunny/repository/bunny_models.dart';
 import 'package:little_bunny/screens/accounts_screen.dart';
+import 'package:little_bunny/settings/app_lock_service.dart';
 
 import '../fakes/fake_bunny_repository.dart';
+import '../fakes/fake_secret_store.dart';
 
-Widget _wrap(FakeBunnyRepository repository) => MaterialApp(home: BunnyRepositoryScope(repository: repository, child: const AccountsScreen()));
+Widget _wrap(FakeBunnyRepository repository) => MaterialApp(home: BunnyRepositoryScope(repository: repository, child: AccountsScreen(lockService: AppLockService(FakeSecretStore()))));
 
 void main() {
   testWidgets('shows "Not connected" for both sites when nothing is configured', (WidgetTester tester) async {

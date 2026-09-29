@@ -536,6 +536,45 @@ site opens `LoginFormScreen`, whose only per-site difference is field labels/obs
   non-networked) settings load and render `AccountsScreen`'s `Scaffold`/`AppBar`, which
   doesn't itself wait on the account-loading future to appear.
 
+**App-lock (M7.4, completes M7)**: `AppLockService` (`app/lib/settings/app_lock_service.dart`)
+stores whether the lock is enabled (`shared_preferences`) and the PIN/password itself
+directly in `SecretStore` (`app_lock_secret` key, compared by string equality in `verify`) —
+the same direct-storage-not-hashing rationale already used for the networked mode's bearer
+token (M7.2): the real `SecretStore` backend already encrypts values at rest via the
+OS-native mechanism, and this is a local UI gate, not data-at-rest protection, so hand-rolled
+hashing would just be extra bespoke crypto code with no real benefit.
+
+- **`LockSetupScreen`** (reachable from `AccountsScreen`'s app bar, a lock icon) enables/
+  disables the lock. Disabling requires re-entering the current PIN/password first — without
+  that, anyone with the app open could remove the lock with no gate at all.
+- **`LockScreen`** gates the app at root: `main.dart`'s `LittleBunnyApp` checks
+  `AppLockService.isEnabled()` right after the repository is ready (both on initial boot and
+  right after `SetupScreen` hands back a repository) and shows `LockScreen` before
+  `AccountsScreen` when it's on. On Android, `LockScreen` tries `local_auth` biometric first
+  with `biometricOnly: true` — deliberately not the OS's own device-credential fallback,
+  since the roadmap's "fingerprint + PIN fallback" means falling back to *this app's own* PIN
+  (set up via `LockSetupScreen`), not the phone's screen lock, matching "a per-device,
+  client-side setting" independent of the OS. Every platform (and Android whenever biometric
+  fails, isn't enrolled, or isn't available) falls back to the same PIN/password entry field.
+- **Android integration, unverified by any real build**: `local_auth`'s `BiometricPrompt`
+  needs a `FragmentActivity` to host its dialog fragment and an AppCompat-based activity
+  theme. Per `local_auth_android`'s own reference example
+  (`local_auth_android`'s pub cache `example/android/`), `app/android/app/src/main/kotlin/
+  .../MainActivity.kt` now extends `FlutterFragmentActivity` instead of `FlutterActivity`,
+  and both `values/styles.xml` and `values-night/styles.xml`'s `LaunchTheme`/`NormalTheme`
+  now inherit `Theme.AppCompat.*` instead of the plain `@android:style/Theme.*` Flutter
+  scaffolds by default — the `windowBackground`/splash-screen behavior is otherwise
+  unchanged, only the theme's parent lineage. No manifest edit was needed for the
+  `USE_BIOMETRIC` permission itself: `local_auth_android`'s own bundled manifest already
+  declares it, and Gradle's manifest merger folds it into the app's final manifest
+  automatically. AppCompat itself needed no new Gradle dependency either — it's already
+  transitively available via Flutter's own Android embedding. None of this can be
+  build-verified in this dev environment: `flutter build apk` already fails at the OpenSSL
+  configure step (M6.2, deferred to M12) before Gradle ever reaches these files, and
+  `Platform.isAndroid` is false on this dev machine's test host, so the automated test suite
+  never exercises the biometric branch either (`test/screens/lock_screen_test.dart` only
+  covers the PIN/password fallback, which every platform shares).
+
 ## Inkbunny API constraints (found in M2)
 
 Verified against the live API and the official docs while building `libinkbunny`:

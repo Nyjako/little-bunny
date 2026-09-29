@@ -1,30 +1,18 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:little_bunny/main.dart';
+import 'package:little_bunny/settings/app_lock_service.dart';
 import 'package:little_bunny/settings/repository_settings_store.dart';
-import 'package:little_bunny/settings/secret_store.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-class _FakeSecretStore implements SecretStore {
-  final Map<String, String> values;
-
-  _FakeSecretStore([Map<String, String>? initial]) : values = initial ?? {};
-
-  @override
-  Future<String?> read(String key) async => values[key];
-
-  @override
-  Future<void> write(String key, String value) async => values[key] = value;
-
-  @override
-  Future<void> delete(String key) async => values.remove(key);
-}
+import 'fakes/fake_secret_store.dart';
 
 void main() {
   testWidgets('app boots straight to the accounts screen when already configured', (WidgetTester tester) async {
     SharedPreferences.setMockInitialValues({'repository_mode': 'networked', 'repository_server_url': 'https://localhost:9443'});
-    final settingsStore = RepositorySettingsStore(_FakeSecretStore({'repository_bearer_token': 'test-token', 'repository_cert_fingerprint': '00' * 32}));
+    final settingsStore = RepositorySettingsStore(FakeSecretStore({'repository_bearer_token': 'test-token', 'repository_cert_fingerprint': '00' * 32}));
+    final lockService = AppLockService(FakeSecretStore());
 
-    await tester.pumpWidget(LittleBunnyApp(settingsStore: settingsStore));
+    await tester.pumpWidget(LittleBunnyApp(settingsStore: settingsStore, lockService: lockService));
     // Not pumpAndSettle(): AccountsScreen's own getAccount calls go through a
     // real HttpBunnyRepository against an unreachable localhost:9443 here,
     // which never cleanly "settles" under TestWidgetsFlutterBinding. Two
@@ -41,13 +29,28 @@ void main() {
 
   testWidgets('app shows the setup screen on first launch (no persisted config)', (WidgetTester tester) async {
     SharedPreferences.setMockInitialValues({});
-    final settingsStore = RepositorySettingsStore(_FakeSecretStore());
+    final settingsStore = RepositorySettingsStore(FakeSecretStore());
+    final lockService = AppLockService(FakeSecretStore());
 
-    await tester.pumpWidget(LittleBunnyApp(settingsStore: settingsStore));
+    await tester.pumpWidget(LittleBunnyApp(settingsStore: settingsStore, lockService: lockService));
     await tester.pumpAndSettle();
 
     expect(find.text('Set up LittleBunny'), findsOneWidget);
     expect(find.text('Standalone'), findsOneWidget);
     expect(find.text('Networked'), findsOneWidget);
+  });
+
+  testWidgets('app shows the lock screen when app-lock is enabled', (WidgetTester tester) async {
+    SharedPreferences.setMockInitialValues({'repository_mode': 'networked', 'repository_server_url': 'https://localhost:9443', 'app_lock_enabled': true});
+    final lockSecrets = FakeSecretStore({'app_lock_secret': 'my-pin'});
+    final settingsStore = RepositorySettingsStore(FakeSecretStore({'repository_bearer_token': 'test-token', 'repository_cert_fingerprint': '00' * 32}));
+    final lockService = AppLockService(lockSecrets);
+
+    await tester.pumpWidget(LittleBunnyApp(settingsStore: settingsStore, lockService: lockService));
+    await tester.pump();
+    await tester.pump();
+
+    expect(find.text('LittleBunny is locked'), findsOneWidget);
+    expect(find.text('Accounts'), findsNothing);
   });
 }
