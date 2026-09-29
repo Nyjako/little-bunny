@@ -9,6 +9,7 @@
 #include "routes_accounts.h"
 #include "routes_queue.h"
 #include "routes_searches.h"
+#include "routes_tags.h"
 #include "tls.h"
 
 static int health_handler(struct mg_connection *conn, void *cbdata)
@@ -88,6 +89,7 @@ server_app_t *server_app_start(const bunny_core_config_t *core_config, const cha
     server_routes_register_accounts(app->mg_ctx, &app->ctx);
     server_routes_register_searches(app->mg_ctx, &app->ctx);
     server_routes_register_queue(app->mg_ctx, &app->ctx);
+    server_routes_register_tags(app->mg_ctx, &app->ctx);
 
     if (!server_scheduler_start(&app->scheduler, &app->ctx, poll_interval_sec)) {
         mg_stop(app->mg_ctx);

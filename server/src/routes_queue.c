@@ -92,6 +92,23 @@ static int handle_comment(struct mg_connection *conn, server_context_t *ctx, int
     return respond_queued(conn);
 }
 
+static int handle_mark_seen(struct mg_connection *conn, server_context_t *ctx, int64_t post_id)
+{
+    pthread_mutex_lock(&ctx->core_mutex);
+    bunny_core_result_t result = bunny_core_post_mark_seen(ctx->core, post_id);
+    pthread_mutex_unlock(&ctx->core_mutex);
+
+    if (result != BUNNY_CORE_OK) {
+        return server_json_respond_error(conn, result);
+    }
+
+    cJSON *response = cJSON_CreateObject();
+    cJSON_AddBoolToObject(response, "ok", true);
+    int status = server_json_respond(conn, 200, response);
+    cJSON_Delete(response);
+    return status;
+}
+
 static int posts_handler(struct mg_connection *conn, void *cbdata)
 {
     server_context_t *ctx = (server_context_t *)cbdata;
@@ -118,6 +135,9 @@ static int posts_handler(struct mg_connection *conn, void *cbdata)
     }
     if (strcmp(method, "POST") == 0 && server_route_parse_id_with_suffix(sub_path, "comment", &post_id)) {
         return handle_comment(conn, ctx, post_id);
+    }
+    if (strcmp(method, "POST") == 0 && server_route_parse_id_with_suffix(sub_path, "seen", &post_id)) {
+        return handle_mark_seen(conn, ctx, post_id);
     }
 
     return server_json_respond_error(conn, BUNNY_CORE_ERR_NOT_FOUND);

@@ -78,6 +78,16 @@ void main() {
     expect(stats['actionsFailed'], 0);
   });
 
+  test('tagAutocomplete returns an empty list when nothing is cached', () async {
+    expect(await native.tagAutocomplete('e621', 'any', 10), isEmpty);
+  });
+
+  test('markPostSeen rejects a post id with no cached post', () async {
+    // seen_posts.post_id REFERENCES posts(id) -- same foreign-key rejection
+    // as queueFavoriteAdd below.
+    await expectLater(native.markPostSeen(1), throwsA(isA<BunnyCoreNativeException>()));
+  });
+
   test('queueFavoriteAdd rejects a post id with no cached post', () async {
     // bunny_db_action_queue_add enforces a foreign key against the post
     // cache, so this fails immediately at queue time rather than later

@@ -81,6 +81,8 @@ Map<String, Object?> _postToMap(bunny_db_post_t post) => {
   'isFavorited': post.is_favorited,
 };
 
+Map<String, Object?> _tagStatToMap(bunny_db_tag_stat_t stat) => {'name': _readNullableString(stat.name), 'count': stat.count};
+
 Map<String, Object?> _syncStatsToMap(bunny_core_sync_stats_t stats) => {'searchesChecked': stats.searches_checked, 'searchesSynced': stats.searches_synced, 'postsUpserted': stats.posts_upserted};
 
 Map<String, Object?> _queueStatsToMap(bunny_core_queue_stats_t stats) => {'actionsProcessed': stats.actions_processed, 'actionsSucceeded': stats.actions_succeeded, 'actionsFailed': stats.actions_failed};
@@ -166,6 +168,20 @@ class _ListSearchPostsRequest extends _Request {
 
 class _SyncDueSearchesRequest extends _Request {
   const _SyncDueSearchesRequest();
+}
+
+class _TagAutocompleteRequest extends _Request {
+  final String site;
+  final String prefix;
+  final int limit;
+
+  const _TagAutocompleteRequest(this.site, this.prefix, this.limit);
+}
+
+class _MarkPostSeenRequest extends _Request {
+  final int postId;
+
+  const _MarkPostSeenRequest(this.postId);
 }
 
 class _QueueFavoriteAddRequest extends _Request {
@@ -258,6 +274,19 @@ List<Map<String, Object?>> _handleListSearches(Pointer<bunny_core_t> core) {
   });
 }
 
+List<Map<String, Object?>> _handleTagAutocomplete(Pointer<bunny_core_t> core, _TagAutocompleteRequest r) {
+  return using((arena) {
+    final out = arena<bunny_db_tag_stat_list_t>();
+    _check(_bindings.bunny_core_tag_autocomplete(core, _siteFromWire(r.site), r.prefix.toNativeUtf8(allocator: arena).cast(), r.limit, out));
+    final items = <Map<String, Object?>>[];
+    for (var i = 0; i < out.ref.count; i++) {
+      items.add(_tagStatToMap(out.ref.items[i]));
+    }
+    _bindings.bunny_db_tag_stat_list_free(out);
+    return items;
+  });
+}
+
 List<Map<String, Object?>> _handleListSearchPosts(Pointer<bunny_core_t> core, _ListSearchPostsRequest r) {
   return using((arena) {
     final out = arena<bunny_db_post_list_t>();
@@ -318,6 +347,11 @@ Object? _dispatch(Pointer<bunny_core_t>? core, _Request request, void Function(P
         final outStats = arena<bunny_core_sync_stats_t>();
         _check(_bindings.bunny_core_sync_due_searches(c, outStats));
         return _syncStatsToMap(outStats.ref);
+      case _TagAutocompleteRequest r:
+        return _handleTagAutocomplete(c, r);
+      case _MarkPostSeenRequest r:
+        _check(_bindings.bunny_core_post_mark_seen(c, r.postId));
+        return null;
       case _QueueFavoriteAddRequest r:
         _check(_bindings.bunny_core_queue_favorite_add(c, r.postId, r.stars));
         return null;
@@ -431,6 +465,10 @@ class BunnyCoreNative {
   Future<List<Map<String, Object?>>> listSearchPosts(int searchId, bool unseenOnly) => _send<List<Map<String, Object?>>>(_ListSearchPostsRequest(searchId, unseenOnly));
 
   Future<Map<String, Object?>> syncDueSearches() => _send<Map<String, Object?>>(const _SyncDueSearchesRequest());
+
+  Future<List<Map<String, Object?>>> tagAutocomplete(String site, String prefix, int limit) => _send<List<Map<String, Object?>>>(_TagAutocompleteRequest(site, prefix, limit));
+
+  Future<void> markPostSeen(int postId) => _send<void>(_MarkPostSeenRequest(postId));
 
   Future<void> queueFavoriteAdd(int postId, int stars) => _send<void>(_QueueFavoriteAddRequest(postId, stars));
 

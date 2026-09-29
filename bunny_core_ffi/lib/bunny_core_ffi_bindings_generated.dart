@@ -483,6 +483,69 @@ class BunnyCoreFfiBindings {
         )
       >();
 
+  /// Ranks cached tags (from already-synced posts) by usage count, for a
+  /// search box's autocomplete -- a thin pass-through to bunny_db, same shape
+  /// as the search CRUD above. `prefix`'s characters are matched literally, not
+  /// as SQL LIKE wildcards.
+  bunny_core_result_t bunny_core_tag_autocomplete(
+    ffi.Pointer<bunny_core_t> core,
+    bunny_db_site_t site,
+    ffi.Pointer<ffi.Char> prefix,
+    int limit,
+    ffi.Pointer<bunny_db_tag_stat_list_t> out_list,
+  ) {
+    return bunny_core_result_t.fromValue(
+      _bunny_core_tag_autocomplete(core, site.value, prefix, limit, out_list),
+    );
+  }
+
+  late final _bunny_core_tag_autocompletePtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.UnsignedInt Function(
+            ffi.Pointer<bunny_core_t>,
+            ffi.UnsignedInt,
+            ffi.Pointer<ffi.Char>,
+            ffi.Int,
+            ffi.Pointer<bunny_db_tag_stat_list_t>,
+          )
+        >
+      >('bunny_core_tag_autocomplete');
+  late final _bunny_core_tag_autocomplete = _bunny_core_tag_autocompletePtr
+      .asFunction<
+        int Function(
+          ffi.Pointer<bunny_core_t>,
+          int,
+          ffi.Pointer<ffi.Char>,
+          int,
+          ffi.Pointer<bunny_db_tag_stat_list_t>,
+        )
+      >();
+
+  /// Marks a post seen (global per post, not per search) -- lets a post detail
+  /// view clear the unseen marker bunny_core_search_list_posts's unseen_only
+  /// filter and bunny_db_post_t.is_seen are based on. Returns
+  /// BUNNY_CORE_ERR_INVALID_ARG for a post_id that doesn't exist in the local
+  /// post cache (a foreign-key violation, not a "not found" in the usual
+  /// sense -- see bunny_core_map_db_result).
+  bunny_core_result_t bunny_core_post_mark_seen(
+    ffi.Pointer<bunny_core_t> core,
+    int post_id,
+  ) {
+    return bunny_core_result_t.fromValue(
+      _bunny_core_post_mark_seen(core, post_id),
+    );
+  }
+
+  late final _bunny_core_post_mark_seenPtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.UnsignedInt Function(ffi.Pointer<bunny_core_t>, ffi.Int64)
+        >
+      >('bunny_core_post_mark_seen');
+  late final _bunny_core_post_mark_seen = _bunny_core_post_mark_seenPtr
+      .asFunction<int Function(ffi.Pointer<bunny_core_t>, int)>();
+
   /// Runs every saved search whose last run is NULL or older than its
   /// interval_hours: builds a client for that search's site (authenticated via
   /// the stored account if one exists, or anonymous/guest otherwise), fetches

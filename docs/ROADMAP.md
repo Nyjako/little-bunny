@@ -320,6 +320,26 @@ this file is the single source of truth for "what's done" across sessions.
   Manage saved searches, post grid/list with unseen markers, post detail view with full
   metadata, viewers for supported formats (image/video/webm/gif; Flash/SWF intentionally
   unsupported). Tag autocomplete in the search box uses `bunny_db_tag_autocomplete` (M3.1).
+  Delivered as four sub-milestones, M8.1–M8.4 below.
+
+- [x] **M8.1 — Tag autocomplete + mark-seen plumbing**
+  Two `bunny_db`-layer capabilities — `bunny_db_tag_autocomplete` (M3.1) and
+  `bunny_db_post_mark_seen`, both used nowhere above `bunny_db` before this — get thin
+  `bunny_core_tag_autocomplete`/`bunny_core_post_mark_seen` wrappers (`libs/core/src/
+  searches.c`, alongside the existing search CRUD pass-throughs), then the same C-core →
+  FFI → HTTP → repository plumbing M7.1 established for `bunny_core_account_verify`: new
+  `server/src/routes_tags.{c,h}` (`GET /tags/autocomplete?site=&prefix=&limit=`, a new
+  resource file matching the one-file-per-resource convention), `POST /posts/{id}/seen`
+  added to the existing `routes_queue.c` (it already owns `/posts` dispatch), and
+  `BunnyRepository.tagAutocomplete`/`markPostSeen` implemented in both `FfiBunnyRepository`
+  and `HttpBunnyRepository`. Unlike M7.1's verify plumbing, none of this touches e621/
+  Inkbunny site clients — it's pure `bunny_db` — so every layer's tests are fully
+  deterministic (no real-network caveat needed, even at the FFI layer).
+  **A real bug this surfaced**: `bunny_core_post_mark_seen` on a nonexistent post_id returns
+  `BUNNY_CORE_ERR_INVALID_ARG`, not `BUNNY_CORE_ERR_NOT_FOUND` — `seen_posts.post_id`
+  references `posts(id)`, so a missing post is a foreign-key violation, which
+  `bunny_core_map_db_result` already treats as bad caller input (same convention documented
+  for the action queue's own foreign key in M4.3).
 
 - [ ] **M9 — Actions & downloads**
   Single + mass like/favorite/download, commenting, download manager writing to

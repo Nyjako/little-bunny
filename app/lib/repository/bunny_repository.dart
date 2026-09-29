@@ -56,6 +56,19 @@ abstract interface class BunnyRepository {
     bool unseenOnly = false,
   });
 
+  /// Ranks cached tags starting with [prefix] by usage count, for a search
+  /// box's autocomplete.
+  Future<List<BunnyTagStat>> tagAutocomplete(
+    BunnySite site,
+    String prefix, {
+    int limit = 10,
+  });
+
+  /// Marks a post seen (global per post, not per search) -- clears the
+  /// unseen marker [listSearchPosts]'s `unseenOnly` filter and
+  /// `BunnyPost.isSeen` are based on.
+  Future<void> markPostSeen(int postId);
+
   /// Manually triggers a sync pass (runs every due search). The server also
   /// does this on its own schedule (M5.3); this is for an explicit
   /// "refresh now" action.
