@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../l10n/app_localizations.dart';
 import '../repository/bunny_repository.dart';
 import '../repository/bunny_repository_factory.dart';
 import '../settings/repository_settings_store.dart';
@@ -92,8 +93,9 @@ class _SetupScreenState extends State<SetupScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     return Scaffold(
-      appBar: AppBar(title: const Text('Set up LittleBunny')),
+      appBar: AppBar(title: Text(l10n.setupScreenTitle)),
       body: Padding(
         padding: const EdgeInsets.all(16),
         child: Form(
@@ -101,35 +103,35 @@ class _SetupScreenState extends State<SetupScreen> {
           child: ListView(
             children: [
               SegmentedButton<_Mode>(
-                segments: const [
-                  ButtonSegment(value: _Mode.standalone, label: Text('Standalone')),
-                  ButtonSegment(value: _Mode.networked, label: Text('Networked')),
+                segments: [
+                  ButtonSegment(value: _Mode.standalone, label: Text(l10n.setupModeStandalone)),
+                  ButtonSegment(value: _Mode.networked, label: Text(l10n.setupModeNetworked)),
                 ],
                 selected: {_mode},
                 onSelectionChanged: _submitting ? null : (selection) => setState(() => _mode = selection.first),
               ),
               const SizedBox(height: 16),
               if (_mode == _Mode.standalone) ...[
-                const Text('Stores everything locally on this device. No server needed.'),
+                Text(l10n.setupStandaloneDescription),
               ] else ...[
                 TextFormField(
                   controller: _serverUrlController,
                   enabled: !_submitting,
-                  decoration: const InputDecoration(labelText: 'Server URL', hintText: 'https://192.168.1.10:8443'),
+                  decoration: InputDecoration(labelText: l10n.setupServerUrlLabel, hintText: l10n.setupServerUrlHint),
                   validator: (value) {
                     final uri = Uri.tryParse(value ?? '');
                     if (uri == null || !uri.isAbsolute) {
-                      return 'Enter a valid URL';
+                      return l10n.setupServerUrlInvalid;
                     }
                     return null;
                   },
                 ),
-                TextFormField(controller: _bearerTokenController, enabled: !_submitting, decoration: const InputDecoration(labelText: 'Bearer token'), validator: (value) => (value == null || value.trim().isEmpty) ? 'Required' : null),
+                TextFormField(controller: _bearerTokenController, enabled: !_submitting, decoration: InputDecoration(labelText: l10n.setupBearerTokenLabel), validator: (value) => (value == null || value.trim().isEmpty) ? l10n.commonRequired : null),
                 TextFormField(
                   controller: _certFingerprintController,
                   enabled: !_submitting,
-                  decoration: const InputDecoration(labelText: 'Certificate SHA-256 fingerprint'),
-                  validator: (value) => (value == null || value.trim().isEmpty) ? 'Required' : null,
+                  decoration: InputDecoration(labelText: l10n.setupCertFingerprintLabel),
+                  validator: (value) => (value == null || value.trim().isEmpty) ? l10n.commonRequired : null,
                 ),
               ],
               const SizedBox(height: 16),
@@ -145,7 +147,7 @@ class _SetupScreenState extends State<SetupScreen> {
                           _submitNetworked();
                         }
                       },
-                child: _submitting ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)) : const Text('Continue'),
+                child: _submitting ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)) : Text(l10n.commonContinue),
               ),
             ],
           ),

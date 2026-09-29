@@ -1,0 +1,410 @@
+import 'dart:async';
+
+import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:intl/intl.dart' as intl;
+
+import 'app_localizations_en.dart';
+
+// ignore_for_file: type=lint
+
+/// Callers can lookup localized strings with an instance of AppLocalizations
+/// returned by `AppLocalizations.of(context)`.
+///
+/// Applications need to include `AppLocalizations.delegate()` in their app's
+/// `localizationDelegates` list, and the locales they support in the app's
+/// `supportedLocales` list. For example:
+///
+/// ```dart
+/// import 'l10n/app_localizations.dart';
+///
+/// return MaterialApp(
+///   localizationsDelegates: AppLocalizations.localizationsDelegates,
+///   supportedLocales: AppLocalizations.supportedLocales,
+///   home: MyApplicationHome(),
+/// );
+/// ```
+///
+/// ## Update pubspec.yaml
+///
+/// Please make sure to update your pubspec.yaml to include the following
+/// packages:
+///
+/// ```yaml
+/// dependencies:
+///   # Internationalization support.
+///   flutter_localizations:
+///     sdk: flutter
+///   intl: any # Use the pinned version from flutter_localizations
+///
+///   # Rest of dependencies
+/// ```
+///
+/// ## iOS Applications
+///
+/// iOS applications define key application metadata, including supported
+/// locales, in an Info.plist file that is built into the application bundle.
+/// To configure the locales supported by your app, you’ll need to edit this
+/// file.
+///
+/// First, open your project’s ios/Runner.xcworkspace Xcode workspace file.
+/// Then, in the Project Navigator, open the Info.plist file under the Runner
+/// project’s Runner folder.
+///
+/// Next, select the Information Property List item, select Add Item from the
+/// Editor menu, then select Localizations from the pop-up menu.
+///
+/// Select and expand the newly-created Localizations item then, for each
+/// locale your application supports, add a new item and select the locale
+/// you wish to add from the pop-up menu in the Value field. This list should
+/// be consistent with the languages listed in the AppLocalizations.supportedLocales
+/// property.
+abstract class AppLocalizations {
+  AppLocalizations(String locale)
+    : localeName = intl.Intl.canonicalizedLocale(locale.toString());
+
+  final String localeName;
+
+  static AppLocalizations? of(BuildContext context) {
+    return Localizations.of<AppLocalizations>(context, AppLocalizations);
+  }
+
+  static const LocalizationsDelegate<AppLocalizations> delegate =
+      _AppLocalizationsDelegate();
+
+  /// A list of this localizations delegate along with the default localizations
+  /// delegates.
+  ///
+  /// Returns a list of localizations delegates containing this delegate along with
+  /// GlobalMaterialLocalizations.delegate, GlobalCupertinoLocalizations.delegate,
+  /// and GlobalWidgetsLocalizations.delegate.
+  ///
+  /// Additional delegates can be added by appending to this list in
+  /// MaterialApp. This list does not have to be used at all if a custom list
+  /// of delegates is preferred or required.
+  static const List<LocalizationsDelegate<dynamic>> localizationsDelegates =
+      <LocalizationsDelegate<dynamic>>[
+        delegate,
+        GlobalMaterialLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+      ];
+
+  /// A list of this localizations delegate's supported locales.
+  static const List<Locale> supportedLocales = <Locale>[Locale('en')];
+
+  /// The app's title, used as MaterialApp.title.
+  ///
+  /// In en, this message translates to:
+  /// **'LittleBunny'**
+  String get appTitle;
+
+  /// No description provided for @commonRequired.
+  ///
+  /// In en, this message translates to:
+  /// **'Required'**
+  String get commonRequired;
+
+  /// No description provided for @commonCancel.
+  ///
+  /// In en, this message translates to:
+  /// **'Cancel'**
+  String get commonCancel;
+
+  /// No description provided for @commonRemove.
+  ///
+  /// In en, this message translates to:
+  /// **'Remove'**
+  String get commonRemove;
+
+  /// No description provided for @commonContinue.
+  ///
+  /// In en, this message translates to:
+  /// **'Continue'**
+  String get commonContinue;
+
+  /// No description provided for @setupScreenTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Set up LittleBunny'**
+  String get setupScreenTitle;
+
+  /// No description provided for @setupModeStandalone.
+  ///
+  /// In en, this message translates to:
+  /// **'Standalone'**
+  String get setupModeStandalone;
+
+  /// No description provided for @setupModeNetworked.
+  ///
+  /// In en, this message translates to:
+  /// **'Networked'**
+  String get setupModeNetworked;
+
+  /// No description provided for @setupStandaloneDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Stores everything locally on this device. No server needed.'**
+  String get setupStandaloneDescription;
+
+  /// No description provided for @setupServerUrlLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Server URL'**
+  String get setupServerUrlLabel;
+
+  /// No description provided for @setupServerUrlHint.
+  ///
+  /// In en, this message translates to:
+  /// **'https://192.168.1.10:8443'**
+  String get setupServerUrlHint;
+
+  /// No description provided for @setupServerUrlInvalid.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter a valid URL'**
+  String get setupServerUrlInvalid;
+
+  /// No description provided for @setupBearerTokenLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Bearer token'**
+  String get setupBearerTokenLabel;
+
+  /// No description provided for @setupCertFingerprintLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Certificate SHA-256 fingerprint'**
+  String get setupCertFingerprintLabel;
+
+  /// No description provided for @loginScreenTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Log in to {site}'**
+  String loginScreenTitle(String site);
+
+  /// No description provided for @loginUsernameLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Username'**
+  String get loginUsernameLabel;
+
+  /// No description provided for @loginApiKeyLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'API key'**
+  String get loginApiKeyLabel;
+
+  /// No description provided for @loginPasswordLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Password'**
+  String get loginPasswordLabel;
+
+  /// No description provided for @loginSubmit.
+  ///
+  /// In en, this message translates to:
+  /// **'Log in'**
+  String get loginSubmit;
+
+  /// No description provided for @accountsScreenTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Accounts'**
+  String get accountsScreenTitle;
+
+  /// No description provided for @accountsSettingsTooltip.
+  ///
+  /// In en, this message translates to:
+  /// **'Settings'**
+  String get accountsSettingsTooltip;
+
+  /// No description provided for @accountsRemoveDialogTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Remove account?'**
+  String get accountsRemoveDialogTitle;
+
+  /// No description provided for @accountsRemoveDialogContent.
+  ///
+  /// In en, this message translates to:
+  /// **'This removes the saved {site} account from this app. You can log in again later.'**
+  String accountsRemoveDialogContent(String site);
+
+  /// No description provided for @accountsLoggedInAs.
+  ///
+  /// In en, this message translates to:
+  /// **'Logged in as {username}'**
+  String accountsLoggedInAs(String username);
+
+  /// No description provided for @accountsNotConnected.
+  ///
+  /// In en, this message translates to:
+  /// **'Not connected'**
+  String get accountsNotConnected;
+
+  /// No description provided for @lockScreenMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'LittleBunny is locked'**
+  String get lockScreenMessage;
+
+  /// No description provided for @lockScreenBiometricReason.
+  ///
+  /// In en, this message translates to:
+  /// **'Unlock LittleBunny'**
+  String get lockScreenBiometricReason;
+
+  /// No description provided for @lockScreenPinLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'PIN/password'**
+  String get lockScreenPinLabel;
+
+  /// No description provided for @lockScreenUnlock.
+  ///
+  /// In en, this message translates to:
+  /// **'Unlock'**
+  String get lockScreenUnlock;
+
+  /// No description provided for @lockScreenTryFingerprintAgain.
+  ///
+  /// In en, this message translates to:
+  /// **'Try fingerprint again'**
+  String get lockScreenTryFingerprintAgain;
+
+  /// No description provided for @lockScreenIncorrectPin.
+  ///
+  /// In en, this message translates to:
+  /// **'Incorrect PIN/password'**
+  String get lockScreenIncorrectPin;
+
+  /// No description provided for @lockSetupScreenTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'App lock'**
+  String get lockSetupScreenTitle;
+
+  /// No description provided for @lockSetupDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Set a PIN or password to lock this app on startup.'**
+  String get lockSetupDescription;
+
+  /// No description provided for @lockSetupNewPinLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'New PIN/password'**
+  String get lockSetupNewPinLabel;
+
+  /// No description provided for @lockSetupConfirmLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Confirm'**
+  String get lockSetupConfirmLabel;
+
+  /// No description provided for @lockSetupEntriesDoNotMatch.
+  ///
+  /// In en, this message translates to:
+  /// **'Entries do not match'**
+  String get lockSetupEntriesDoNotMatch;
+
+  /// No description provided for @lockSetupEnableButton.
+  ///
+  /// In en, this message translates to:
+  /// **'Enable app lock'**
+  String get lockSetupEnableButton;
+
+  /// No description provided for @lockSetupCurrentlyOn.
+  ///
+  /// In en, this message translates to:
+  /// **'App lock is currently on.'**
+  String get lockSetupCurrentlyOn;
+
+  /// No description provided for @lockSetupCurrentPinLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter current PIN/password to disable'**
+  String get lockSetupCurrentPinLabel;
+
+  /// No description provided for @lockSetupDisableButton.
+  ///
+  /// In en, this message translates to:
+  /// **'Disable app lock'**
+  String get lockSetupDisableButton;
+
+  /// No description provided for @settingsScreenTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Settings'**
+  String get settingsScreenTitle;
+
+  /// No description provided for @settingsAppearanceSection.
+  ///
+  /// In en, this message translates to:
+  /// **'Appearance'**
+  String get settingsAppearanceSection;
+
+  /// No description provided for @settingsThemeLight.
+  ///
+  /// In en, this message translates to:
+  /// **'Light'**
+  String get settingsThemeLight;
+
+  /// No description provided for @settingsThemeDark.
+  ///
+  /// In en, this message translates to:
+  /// **'Dark'**
+  String get settingsThemeDark;
+
+  /// No description provided for @settingsThemeSystem.
+  ///
+  /// In en, this message translates to:
+  /// **'System'**
+  String get settingsThemeSystem;
+
+  /// No description provided for @settingsAppLockSection.
+  ///
+  /// In en, this message translates to:
+  /// **'App lock'**
+  String get settingsAppLockSection;
+
+  /// No description provided for @settingsAppLockEntry.
+  ///
+  /// In en, this message translates to:
+  /// **'Manage app lock'**
+  String get settingsAppLockEntry;
+}
+
+class _AppLocalizationsDelegate
+    extends LocalizationsDelegate<AppLocalizations> {
+  const _AppLocalizationsDelegate();
+
+  @override
+  Future<AppLocalizations> load(Locale locale) {
+    return SynchronousFuture<AppLocalizations>(lookupAppLocalizations(locale));
+  }
+
+  @override
+  bool isSupported(Locale locale) =>
+      <String>['en'].contains(locale.languageCode);
+
+  @override
+  bool shouldReload(_AppLocalizationsDelegate old) => false;
+}
+
+AppLocalizations lookupAppLocalizations(Locale locale) {
+  // Lookup logic when only language code is specified.
+  switch (locale.languageCode) {
+    case 'en':
+      return AppLocalizationsEn();
+  }
+
+  throw FlutterError(
+    'AppLocalizations.delegate failed to load unsupported locale "$locale". This is likely '
+    'an issue with the localizations generation tool. Please file an issue '
+    'on GitHub with a reproducible sample app and the gen-l10n configuration '
+    'that was used.',
+  );
+}

@@ -4,11 +4,15 @@ import 'package:little_bunny/bunny_repository_scope.dart';
 import 'package:little_bunny/repository/bunny_models.dart';
 import 'package:little_bunny/screens/accounts_screen.dart';
 import 'package:little_bunny/settings/app_lock_service.dart';
+import 'package:little_bunny/settings/theme_settings_store.dart';
 
 import '../fakes/fake_bunny_repository.dart';
 import '../fakes/fake_secret_store.dart';
+import '../fakes/test_app.dart';
 
-Widget _wrap(FakeBunnyRepository repository) => MaterialApp(home: BunnyRepositoryScope(repository: repository, child: AccountsScreen(lockService: AppLockService(FakeSecretStore()))));
+Widget _wrap(FakeBunnyRepository repository) => wrapWithLocalization(
+  BunnyRepositoryScope(repository: repository, child: AccountsScreen(lockService: AppLockService(FakeSecretStore()), themeSettingsStore: const ThemeSettingsStore(), onThemeModeChanged: (_) {})),
+);
 
 void main() {
   testWidgets('shows "Not connected" for both sites when nothing is configured', (WidgetTester tester) async {

@@ -1,19 +1,23 @@
 import 'package:flutter/material.dart';
 
 import '../bunny_repository_scope.dart';
+import '../l10n/app_localizations.dart';
 import '../repository/bunny_models.dart';
 import '../repository/bunny_repository.dart';
 import '../settings/app_lock_service.dart';
+import '../settings/theme_settings_store.dart';
 import 'login_form_screen.dart';
-import 'lock_setup_screen.dart';
+import 'settings_screen.dart';
 
 /// The interim real "home" page (M7.3), replacing M6's placeholder: lists
 /// both sites' configured accounts and lets the user log in/remove them.
 /// Browse/search (M8) will build on top of this rather than replace it.
 class AccountsScreen extends StatefulWidget {
   final AppLockService lockService;
+  final ThemeSettingsStore themeSettingsStore;
+  final ValueChanged<ThemeMode> onThemeModeChanged;
 
-  const AccountsScreen({super.key, required this.lockService});
+  const AccountsScreen({super.key, required this.lockService, required this.themeSettingsStore, required this.onThemeModeChanged});
 
   @override
   State<AccountsScreen> createState() => _AccountsScreenState();
@@ -50,14 +54,15 @@ class _AccountsScreenState extends State<AccountsScreen> {
   }
 
   Future<void> _removeAccount(BunnySite site) async {
+    final l10n = AppLocalizations.of(context)!;
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Remove account?'),
-        content: Text('This removes the saved ${site.toWireString()} account from this app. You can log in again later.'),
+        title: Text(l10n.accountsRemoveDialogTitle),
+        content: Text(l10n.accountsRemoveDialogContent(site.toWireString())),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
-          TextButton(onPressed: () => Navigator.pop(context, true), child: const Text('Remove')),
+          TextButton(onPressed: () => Navigator.pop(context, false), child: Text(l10n.commonCancel)),
+          TextButton(onPressed: () => Navigator.pop(context, true), child: Text(l10n.commonRemove)),
         ],
       ),
     );
@@ -70,11 +75,16 @@ class _AccountsScreenState extends State<AccountsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Accounts'),
+        title: Text(l10n.accountsScreenTitle),
         actions: [
-          IconButton(icon: const Icon(Icons.lock_outline), tooltip: 'App lock', onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (context) => LockSetupScreen(lockService: widget.lockService)))),
+          IconButton(
+            icon: const Icon(Icons.settings_outlined),
+            tooltip: l10n.accountsSettingsTooltip,
+            onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (context) => SettingsScreen(themeSettingsStore: widget.themeSettingsStore, lockService: widget.lockService, onThemeModeChanged: widget.onThemeModeChanged))),
+          ),
         ],
       ),
       body: FutureBuilder<Map<BunnySite, BunnyAccount?>>(
@@ -89,7 +99,7 @@ class _AccountsScreenState extends State<AccountsScreen> {
               final account = accounts[site];
               return ListTile(
                 title: Text(site.toWireString()),
-                subtitle: Text(account != null ? 'Logged in as ${account.username}' : 'Not connected'),
+                subtitle: Text(account != null ? l10n.accountsLoggedInAs(account.username) : l10n.accountsNotConnected),
                 trailing: account != null ? IconButton(icon: const Icon(Icons.delete), onPressed: () => _removeAccount(site)) : null,
                 onTap: account == null ? () => _openLoginForm(site) : null,
               );

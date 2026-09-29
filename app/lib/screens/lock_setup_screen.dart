@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../l10n/app_localizations.dart';
 import '../settings/app_lock_service.dart';
 
 /// Lets the user enable/disable the app-lock PIN/password (M7.4), reachable
@@ -50,7 +51,7 @@ class _LockSetupScreenState extends State<LockSetupScreen> {
       return;
     }
     if (_newSecretController.text != _confirmSecretController.text) {
-      setState(() => _error = 'Entries do not match');
+      setState(() => _error = AppLocalizations.of(context)!.lockSetupEntriesDoNotMatch);
       return;
     }
 
@@ -75,7 +76,7 @@ class _LockSetupScreenState extends State<LockSetupScreen> {
   Future<void> _disableLock() async {
     final valid = await widget.lockService.verify(_currentSecretController.text);
     if (!valid) {
-      setState(() => _error = 'Incorrect PIN/password');
+      setState(() => _error = AppLocalizations.of(context)!.lockScreenIncorrectPin);
       return;
     }
 
@@ -98,45 +99,46 @@ class _LockSetupScreenState extends State<LockSetupScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
     if (_enabled == null) {
-      return Scaffold(appBar: AppBar(title: const Text('App lock')), body: const Center(child: CircularProgressIndicator()));
+      return Scaffold(appBar: AppBar(title: Text(l10n.lockSetupScreenTitle)), body: const Center(child: CircularProgressIndicator()));
     }
 
     return Scaffold(
-      appBar: AppBar(title: const Text('App lock')),
+      appBar: AppBar(title: Text(l10n.lockSetupScreenTitle)),
       body: Padding(
         padding: const EdgeInsets.all(16),
-        child: _enabled! ? _buildDisableForm(context) : _buildEnableForm(context),
+        child: _enabled! ? _buildDisableForm(context, l10n) : _buildEnableForm(context, l10n),
       ),
     );
   }
 
-  Widget _buildEnableForm(BuildContext context) {
+  Widget _buildEnableForm(BuildContext context, AppLocalizations l10n) {
     return Form(
       key: _formKey,
       child: ListView(
         children: [
-          const Text('Set a PIN or password to lock this app on startup.'),
-          TextFormField(controller: _newSecretController, enabled: !_submitting, obscureText: true, decoration: const InputDecoration(labelText: 'New PIN/password'), validator: (value) => (value == null || value.isEmpty) ? 'Required' : null),
-          TextFormField(controller: _confirmSecretController, enabled: !_submitting, obscureText: true, decoration: const InputDecoration(labelText: 'Confirm'), validator: (value) => (value == null || value.isEmpty) ? 'Required' : null),
+          Text(l10n.lockSetupDescription),
+          TextFormField(controller: _newSecretController, enabled: !_submitting, obscureText: true, decoration: InputDecoration(labelText: l10n.lockSetupNewPinLabel), validator: (value) => (value == null || value.isEmpty) ? l10n.commonRequired : null),
+          TextFormField(controller: _confirmSecretController, enabled: !_submitting, obscureText: true, decoration: InputDecoration(labelText: l10n.lockSetupConfirmLabel), validator: (value) => (value == null || value.isEmpty) ? l10n.commonRequired : null),
           const SizedBox(height: 16),
           if (_error != null) Text(_error!, style: TextStyle(color: Theme.of(context).colorScheme.error)),
           const SizedBox(height: 16),
-          FilledButton(onPressed: _submitting ? null : _enableLock, child: const Text('Enable app lock')),
+          FilledButton(onPressed: _submitting ? null : _enableLock, child: Text(l10n.lockSetupEnableButton)),
         ],
       ),
     );
   }
 
-  Widget _buildDisableForm(BuildContext context) {
+  Widget _buildDisableForm(BuildContext context, AppLocalizations l10n) {
     return ListView(
       children: [
-        const Text('App lock is currently on.'),
-        TextField(controller: _currentSecretController, enabled: !_submitting, obscureText: true, decoration: const InputDecoration(labelText: 'Enter current PIN/password to disable')),
+        Text(l10n.lockSetupCurrentlyOn),
+        TextField(controller: _currentSecretController, enabled: !_submitting, obscureText: true, decoration: InputDecoration(labelText: l10n.lockSetupCurrentPinLabel)),
         const SizedBox(height: 16),
         if (_error != null) Text(_error!, style: TextStyle(color: Theme.of(context).colorScheme.error)),
         const SizedBox(height: 16),
-        FilledButton(onPressed: _submitting ? null : _disableLock, child: const Text('Disable app lock')),
+        FilledButton(onPressed: _submitting ? null : _disableLock, child: Text(l10n.lockSetupDisableButton)),
       ],
     );
   }

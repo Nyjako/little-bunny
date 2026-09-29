@@ -5,6 +5,7 @@ import 'package:little_bunny/settings/app_lock_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../fakes/fake_secret_store.dart';
+import '../fakes/test_app.dart';
 
 void main() {
   setUp(() {
@@ -14,7 +15,7 @@ void main() {
   testWidgets('enabling the lock requires matching PIN entries', (WidgetTester tester) async {
     final lockService = AppLockService(FakeSecretStore());
 
-    await tester.pumpWidget(MaterialApp(home: LockSetupScreen(lockService: lockService)));
+    await tester.pumpWidget(wrapWithLocalization(LockSetupScreen(lockService: lockService)));
     await tester.pumpAndSettle();
 
     await tester.enterText(find.widgetWithText(TextFormField, 'New PIN/password'), '1234');
@@ -29,7 +30,7 @@ void main() {
   testWidgets('enabling the lock with matching entries persists it', (WidgetTester tester) async {
     final lockService = AppLockService(FakeSecretStore());
 
-    await tester.pumpWidget(MaterialApp(home: LockSetupScreen(lockService: lockService)));
+    await tester.pumpWidget(wrapWithLocalization(LockSetupScreen(lockService: lockService)));
     await tester.pumpAndSettle();
 
     await tester.enterText(find.widgetWithText(TextFormField, 'New PIN/password'), '1234');
@@ -46,7 +47,7 @@ void main() {
     final lockService = AppLockService(FakeSecretStore());
     await lockService.enable('1234');
 
-    await tester.pumpWidget(MaterialApp(home: LockSetupScreen(lockService: lockService)));
+    await tester.pumpWidget(wrapWithLocalization(LockSetupScreen(lockService: lockService)));
     await tester.pumpAndSettle();
 
     await tester.enterText(find.widgetWithText(TextField, 'Enter current PIN/password to disable'), '0000');
