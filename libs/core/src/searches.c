@@ -57,3 +57,11 @@ bunny_core_result_t bunny_core_search_mark_all_seen(bunny_core_t *core, int64_t 
     }
     return bunny_core_map_db_result(bunny_db_search_mark_all_seen(core->db, search_id));
 }
+
+bunny_core_result_t bunny_core_post_get_tags_by_category(bunny_core_t *core, int64_t post_id, bunny_db_post_tag_list_t *out_list)
+{
+    if (!core) {
+        return BUNNY_CORE_ERR_INVALID_ARG;
+    }
+    return bunny_core_map_db_result(bunny_db_post_get_tags_by_category(core->db, post_id, out_list));
+}

@@ -143,6 +143,30 @@ class BunnyCoreFfiBindings {
   late final _bunny_db_tag_stat_list_free = _bunny_db_tag_stat_list_freePtr
       .asFunction<void Function(ffi.Pointer<bunny_db_tag_stat_list_t>)>();
 
+  void bunny_db_post_tag_free(ffi.Pointer<bunny_db_post_tag_t> tag) {
+    return _bunny_db_post_tag_free(tag);
+  }
+
+  late final _bunny_db_post_tag_freePtr =
+      _lookup<
+        ffi.NativeFunction<ffi.Void Function(ffi.Pointer<bunny_db_post_tag_t>)>
+      >('bunny_db_post_tag_free');
+  late final _bunny_db_post_tag_free = _bunny_db_post_tag_freePtr
+      .asFunction<void Function(ffi.Pointer<bunny_db_post_tag_t>)>();
+
+  void bunny_db_post_tag_list_free(ffi.Pointer<bunny_db_post_tag_list_t> list) {
+    return _bunny_db_post_tag_list_free(list);
+  }
+
+  late final _bunny_db_post_tag_list_freePtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.Void Function(ffi.Pointer<bunny_db_post_tag_list_t>)
+        >
+      >('bunny_db_post_tag_list_free');
+  late final _bunny_db_post_tag_list_free = _bunny_db_post_tag_list_freePtr
+      .asFunction<void Function(ffi.Pointer<bunny_db_post_tag_list_t>)>();
+
   void bunny_db_download_free(ffi.Pointer<bunny_db_download_t> download) {
     return _bunny_db_download_free(download);
   }
@@ -568,6 +592,40 @@ class BunnyCoreFfiBindings {
       _bunny_core_search_mark_all_seenPtr
           .asFunction<int Function(ffi.Pointer<bunny_core_t>, int)>();
 
+  /// A post's tags with their categories, for a post detail view's sectioned
+  /// tag display (Artists/Characters/Copyrights/Species/General/Meta for e621;
+  /// a single uncategorized group for Inkbunny, whose keywords have no category
+  /// concept at all) -- a thin pass-through to bunny_db.
+  bunny_core_result_t bunny_core_post_get_tags_by_category(
+    ffi.Pointer<bunny_core_t> core,
+    int post_id,
+    ffi.Pointer<bunny_db_post_tag_list_t> out_list,
+  ) {
+    return bunny_core_result_t.fromValue(
+      _bunny_core_post_get_tags_by_category(core, post_id, out_list),
+    );
+  }
+
+  late final _bunny_core_post_get_tags_by_categoryPtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.UnsignedInt Function(
+            ffi.Pointer<bunny_core_t>,
+            ffi.Int64,
+            ffi.Pointer<bunny_db_post_tag_list_t>,
+          )
+        >
+      >('bunny_core_post_get_tags_by_category');
+  late final _bunny_core_post_get_tags_by_category =
+      _bunny_core_post_get_tags_by_categoryPtr
+          .asFunction<
+            int Function(
+              ffi.Pointer<bunny_core_t>,
+              int,
+              ffi.Pointer<bunny_db_post_tag_list_t>,
+            )
+          >();
+
   /// Runs every saved search whose last run is NULL or older than its
   /// interval_hours: builds a client for that search's site (authenticated via
   /// the stored account if one exists, or anonymous/guest otherwise), fetches
@@ -907,6 +965,24 @@ final class bunny_db_tag_stat_t extends ffi.Struct {
 
 final class bunny_db_tag_stat_list_t extends ffi.Struct {
   external ffi.Pointer<bunny_db_tag_stat_t> items;
+
+  @ffi.Size()
+  external int count;
+}
+
+/// One of a post's tags, with its category (e621: general/artist/copyright/
+/// character/species/invalid/lore/meta; NULL for Inkbunny keywords, which
+/// have no category concept at all). Feeds a post detail view's sectioned
+/// tag display.
+final class bunny_db_post_tag_t extends ffi.Struct {
+  external ffi.Pointer<ffi.Char> name;
+
+  /// may be NULL
+  external ffi.Pointer<ffi.Char> category;
+}
+
+final class bunny_db_post_tag_list_t extends ffi.Struct {
+  external ffi.Pointer<bunny_db_post_tag_t> items;
 
   @ffi.Size()
   external int count;

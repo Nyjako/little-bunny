@@ -64,6 +64,11 @@ typedef struct
     const char *created_at_site; /* may be NULL */
     const char **tags;           /* may be NULL */
     size_t tag_count;
+    /* Parallel to tags (same length as tag_count) -- tag_categories[i] is
+     * tags[i]'s category, or NULL if uncategorized (always NULL for
+     * Inkbunny keywords, which have no category concept). May be NULL
+     * wholesale if no category info is available at all. */
+    const char **tag_categories;
 } bunny_db_post_upsert_t;
 
 bunny_db_result_t bunny_db_post_upsert(bunny_db_t *db, const bunny_db_post_upsert_t *post, int64_t *out_id);
@@ -79,6 +84,12 @@ bunny_db_result_t bunny_db_post_get_by_id(bunny_db_t *db, int64_t post_id, bunny
  * search against the site). Idempotent: re-adding the same pair is a no-op. */
 bunny_db_result_t bunny_db_search_add_result(bunny_db_t *db, int64_t search_id, int64_t post_id);
 bunny_db_result_t bunny_db_search_list_posts(bunny_db_t *db, int64_t search_id, bool unseen_only, bunny_db_post_list_t *out_list);
+
+/* A post's tags with their categories, for a post detail view's sectioned
+ * tag display (Artists/Characters/Copyrights/Species/General/Meta for e621;
+ * a single uncategorized group for Inkbunny, whose keywords have no
+ * category concept at all). */
+bunny_db_result_t bunny_db_post_get_tags_by_category(bunny_db_t *db, int64_t post_id, bunny_db_post_tag_list_t *out_list);
 
 /* --- Seen state (global per post, not per search) ------------------------- */
 

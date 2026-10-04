@@ -855,6 +855,38 @@ unrelated client-side fixes, no backend plumbing for either.
   parameter on `SearchesScreen` (passed down to both `CreateSearchScreen` and
   `SettingsScreen`, the two screens that actually need it) and on `LittleBunnyApp`/`main()`.
 
+**Tag categories (M8.5.3)**: e621's 8 tag categories (`general`/`artist`/`copyright`/
+`character`/`species`/`invalid`/`lore`/`meta`) are a property of the *tag itself*, not a given
+post — e621's own model has a given tag name always belong to the same category site-wide.
+New `tag_categories` table keys on `tag_id` alone (`PRIMARY KEY`, `REFERENCES tags(id)`), so
+`bunny_db_post_upsert`'s tag-linking loop upserts a tag's category once per tag regardless of
+how many posts reference it, rather than duplicating it per `(post_id, tag_id)` pair. Inkbunny
+keywords have no category concept at all and simply never get a row — the read query
+(`bunny_db_post_get_tags_by_category`) `LEFT JOIN`s `tag_categories`, so a missing row comes
+back as `category: NULL` (uncategorized), not an error or an empty string.
+
+`sync.c`'s `flatten_e621_tags` previously only flattened `e621_tags_t`'s 8 separate lists
+(`general`/`artist`/.../`meta`) into one `items` array for `bunny_db_post_upsert_t.tags`. It
+now also builds a parallel `categories` array of the same length, written alongside `items` in
+the same nested loop — `categories[j]` is simply the literal category name for whichever of
+the 8 source lists `items[j]` came from (a `static const char *const category_names[]` indexed
+in lockstep with the existing `lists[]` array). `flatten_inkbunny_keywords` is untouched; its
+`flat_tag_list_t.categories` stays `NULL` via the struct's existing `{0}`-initialization,
+which `upsert_inkbunny_submission` passes straight through as `tag_categories = NULL`.
+
+**Server route placement — deviation from the original plan**: the plan called for a new
+`server/src/routes_posts.c` for `GET /posts/{id}/tags` (and the M8.5.4/M8.5.5 read endpoints
+that would follow it), reasoning that `routes_queue.c` was for *actions* and this is a
+*read*. In practice civetweb has no concept of two handlers sharing a URL prefix — the
+existing `server_routes_register_queue()` already calls `mg_set_request_handler(mg_ctx,
+"/posts", posts_handler, ctx)` once, and `posts_handler` dispatches every `/posts/*` request
+internally by sub-path (`server_route_parse_id_with_suffix`) for `/favorite`, `/vote`,
+`/comment`, `/seen`. A second `mg_set_request_handler` call for `/posts` would simply never be
+reached — civetweb's routing is last-registration-wins per literal path, not per-method or
+per-purpose. `GET /posts/{id}/tags` was added as one more case in that same `posts_handler`
+dispatch chain instead, exactly matching the precedent M8.1 already set (and documented) when
+it added `POST /posts/{id}/seen` to this same file for the same reason.
+
 ## Inkbunny API constraints (found in M2)
 
 Verified against the live API and the official docs while building `libinkbunny`:
