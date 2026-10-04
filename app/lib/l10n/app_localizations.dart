@@ -597,6 +597,30 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Default sync interval (hours)'**
   String get settingsDefaultIntervalLabel;
+
+  /// No description provided for @settingsDisplaySection.
+  ///
+  /// In en, this message translates to:
+  /// **'Display'**
+  String get settingsDisplaySection;
+
+  /// No description provided for @settingsPreviewQualityThumbnail.
+  ///
+  /// In en, this message translates to:
+  /// **'Thumbnail'**
+  String get settingsPreviewQualityThumbnail;
+
+  /// No description provided for @settingsPreviewQualityMedium.
+  ///
+  /// In en, this message translates to:
+  /// **'Medium'**
+  String get settingsPreviewQualityMedium;
+
+  /// No description provided for @settingsGridColumnsLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Grid columns'**
+  String get settingsGridColumnsLabel;
 }
 
 class _AppLocalizationsDelegate

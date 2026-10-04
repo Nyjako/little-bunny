@@ -118,5 +118,9 @@
   "settingsAppLockSection": "App lock",
   "settingsAppLockEntry": "Manage app lock",
   "settingsSyncSection": "Sync",
-  "settingsDefaultIntervalLabel": "Default sync interval (hours)"
+  "settingsDefaultIntervalLabel": "Default sync interval (hours)",
+  "settingsDisplaySection": "Display",
+  "settingsPreviewQualityThumbnail": "Thumbnail",
+  "settingsPreviewQualityMedium": "Medium",
+  "settingsGridColumnsLabel": "Grid columns"
 }

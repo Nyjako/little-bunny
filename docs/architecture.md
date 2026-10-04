@@ -987,6 +987,37 @@ exact same string as the `AppBar` title) turned into two matches. Fixed with
 `findsNWidgets(2)` plus a comment, rather than restructuring the finder to be more specific,
 since both matches are legitimately expected UI.
 
+**Settings: preview quality + grid columns (M8.5.6)**: `post_media_variants` is the first
+new post-adjacent table that doesn't get its own `bunny_db_post_get_*` read function --
+`post_tags`/`post_sources`/`post_relationships`/`post_pools` (M8.5.3-5) are each either
+list-shaped or only needed on-demand (a post detail view), so a dedicated query made sense.
+`sample_url` is a single scalar needed by *every* post-reading query (the grid needs it for
+every tile, not just one post at a time), so it's `LEFT JOIN`ed straight into
+`BUNNY_DB_POST_SELECT_COLUMNS`/`BUNNY_DB_POST_SELECT_FROM_JOIN` instead -- the same macro
+`post_get`/`search_list_posts`/`favorite_list` already share -- avoiding an N+1 fetch per
+tile that a separate read function would have forced on `PostGridScreen`.
+
+`bunny_db_post_upsert` treats the new table exactly like `post_relationships`: always
+upserted (`INSERT ... ON CONFLICT DO UPDATE`), never wholesale-deleted-and-reinserted, since
+it's one scalar per post, not a list. A resync that loses a sample URL (e.g. e621 stops
+returning one, or the data genuinely changes) overwrites the old value via `excluded.sample_url`
+rather than leaving it stale -- same reasoning the M8.5.5a relationships row already
+established.
+
+This sub-milestone's test-writing incidentally surfaced a real test-coverage gap unrelated to
+the feature itself: `bunny_core_fetch_and_cache_post` (added in M8.5.5a) only ever had e621
+test coverage -- its Inkbunny branch (`site != BUNNY_DB_SITE_E621`) had never been exercised
+by any test. Writing a sample_url test for the Inkbunny side required a fixture with a
+`"files"` array (the one thing a search-sync fixture never has -- see the Inkbunny
+description/keywords gap already documented above), which doesn't exist anywhere in `libs/
+core/tests/fixtures/`; `libs/inkbunny/tests/fixtures/submission_full.json` already had exactly
+this shape, so it was copied over as `inkbunny_submission_full.json` rather than
+hand-authoring a new one. The resulting test (`test_fetch_and_cache_post_upserts_live_
+inkbunny_submission`) only asserts the fetch succeeds and returns a valid post id -- unlike
+the e621 fetch test, it deliberately does **not** also test re-fetch idempotency, since Inkbunny
+re-logs in on every `bunny_core_build_inkbunny_client` call (unlike e621's anonymous GETs),
+which would need a second canned login response the test doesn't provide.
+
 ## Inkbunny API constraints (found in M2)
 
 Verified against the live API and the official docs while building `libinkbunny`:

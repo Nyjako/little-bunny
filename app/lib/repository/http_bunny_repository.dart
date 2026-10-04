@@ -50,6 +50,7 @@ BunnyPost _postFromJson(Map<String, Object?> j) => BunnyPost(
   cachedAt: j['cached_at'] as String,
   isSeen: j['is_seen'] as bool,
   isFavorited: j['is_favorited'] as bool,
+  sampleUrl: j['sample_url'] as String?,
 );
 
 BunnyTagStat _tagStatFromJson(Map<String, Object?> j) => BunnyTagStat(name: j['name'] as String, count: (j['count'] as num).toInt());

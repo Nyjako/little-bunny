@@ -180,6 +180,7 @@ void main() {
             'cached_at': '2026-01-01T00:00:00Z',
             'is_seen': false,
             'is_favorited': true,
+            'sample_url': 'https://example.com/1_sample.png',
           },
         ]),
         200,
@@ -193,6 +194,7 @@ void main() {
       expect(posts.single.title, isNull);
       expect(posts.single.scoreUp, 6);
       expect(posts.single.scoreDown, 1);
+      expect(posts.single.sampleUrl, 'https://example.com/1_sample.png');
     });
 
     test('tagAutocomplete sends site/prefix/limit as query params and maps results', () async {
