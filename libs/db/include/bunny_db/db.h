@@ -71,6 +71,16 @@ typedef struct
     const char **tag_categories;
     const char **sources; /* may be NULL; order is preserved */
     size_t source_count;
+    /* e621 parent/child/pool membership (site's own external ids) -- always
+     * left at these zero-initialized defaults for Inkbunny, which has none
+     * of this. */
+    bool has_parent;
+    int64_t parent_external_id; /* valid only when has_parent */
+    bool has_active_children;
+    const int64_t *child_external_ids; /* may be NULL */
+    size_t child_count;
+    const int64_t *pool_ids; /* may be NULL */
+    size_t pool_count;
 } bunny_db_post_upsert_t;
 
 bunny_db_result_t bunny_db_post_upsert(bunny_db_t *db, const bunny_db_post_upsert_t *post, int64_t *out_id);
@@ -97,6 +107,16 @@ bunny_db_result_t bunny_db_post_get_tags_by_category(bunny_db_t *db, int64_t pos
  * comment). Empty for a post with none (e.g. every Inkbunny submission --
  * no such field there). */
 bunny_db_result_t bunny_db_post_get_sources(bunny_db_t *db, int64_t post_id, bunny_db_string_list_t *out_list);
+
+/* A post's parent/child relationships (e621 only -- see bunny_db_post_relationships_t's
+ * doc comment). A post with no row in post_relationships (never had a parent or active
+ * children) returns BUNNY_DB_OK with every field at its zero/empty default, not
+ * BUNNY_DB_ERR_NOT_FOUND -- "no relationships" is a normal state, not a missing one. */
+bunny_db_result_t bunny_db_post_get_relationships(bunny_db_t *db, int64_t post_id, bunny_db_post_relationships_t *out_relationships);
+
+/* The e621 pool ids a post belongs to (empty for Inkbunny, or an e621 post in
+ * no pools). Same "empty is OK, not NOT_FOUND" rule as the relationships read above. */
+bunny_db_result_t bunny_db_post_get_pool_ids(bunny_db_t *db, int64_t post_id, bunny_db_int64_list_t *out_list);
 
 /* --- Seen state (global per post, not per search) ------------------------- */
 

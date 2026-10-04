@@ -870,6 +870,119 @@ void test_post_upsert_replaces_sources_wholesale_on_resync(void)
     bunny_db_string_list_free(&list);
 }
 
+void test_post_get_relationships_defaults_when_no_row(void)
+{
+    bunny_db_post_upsert_t post;
+    make_test_post(&post, 608, 1);
+    /* has_parent/has_active_children/child_external_ids left at their
+     * memset-zero defaults -- a post with no relationships at all. */
+
+    int64_t post_id = 0;
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, bunny_db_post_upsert(g_db, &post, &post_id));
+
+    bunny_db_post_relationships_t relationships;
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, bunny_db_post_get_relationships(g_db, post_id, &relationships));
+    TEST_ASSERT_FALSE(relationships.has_parent);
+    TEST_ASSERT_FALSE(relationships.has_active_children);
+    TEST_ASSERT_EQUAL(0, relationships.children.count);
+
+    bunny_db_post_relationships_free(&relationships);
+}
+
+void test_post_get_relationships_with_parent_and_children(void)
+{
+    int64_t children[] = {101, 102};
+    bunny_db_post_upsert_t post;
+    make_test_post(&post, 609, 1);
+    post.has_parent = true;
+    post.parent_external_id = 999;
+    post.has_active_children = true;
+    post.child_external_ids = children;
+    post.child_count = 2;
+
+    int64_t post_id = 0;
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, bunny_db_post_upsert(g_db, &post, &post_id));
+
+    bunny_db_post_relationships_t relationships;
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, bunny_db_post_get_relationships(g_db, post_id, &relationships));
+    TEST_ASSERT_TRUE(relationships.has_parent);
+    TEST_ASSERT_EQUAL(999, relationships.parent_external_id);
+    TEST_ASSERT_TRUE(relationships.has_active_children);
+    TEST_ASSERT_EQUAL(2, relationships.children.count);
+    TEST_ASSERT_EQUAL(101, relationships.children.items[0]);
+    TEST_ASSERT_EQUAL(102, relationships.children.items[1]);
+
+    bunny_db_post_relationships_free(&relationships);
+}
+
+void test_post_upsert_replaces_relationships_wholesale_on_resync(void)
+{
+    int64_t children1[] = {101};
+    bunny_db_post_upsert_t post;
+    make_test_post(&post, 610, 1);
+    post.has_parent = true;
+    post.parent_external_id = 999;
+    post.child_external_ids = children1;
+    post.child_count = 1;
+
+    int64_t post_id = 0;
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, bunny_db_post_upsert(g_db, &post, &post_id));
+
+    /* Re-sync with the parent gone and a different child set -- the stale
+     * parent_external_id/children must not linger. */
+    post.has_parent = false;
+    int64_t children2[] = {201, 202};
+    post.child_external_ids = children2;
+    post.child_count = 2;
+    int64_t second_id = 0;
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, bunny_db_post_upsert(g_db, &post, &second_id));
+    TEST_ASSERT_EQUAL(post_id, second_id);
+
+    bunny_db_post_relationships_t relationships;
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, bunny_db_post_get_relationships(g_db, post_id, &relationships));
+    TEST_ASSERT_FALSE(relationships.has_parent);
+    TEST_ASSERT_EQUAL(2, relationships.children.count);
+    TEST_ASSERT_EQUAL(201, relationships.children.items[0]);
+    TEST_ASSERT_EQUAL(202, relationships.children.items[1]);
+
+    bunny_db_post_relationships_free(&relationships);
+}
+
+void test_post_get_pool_ids_empty_when_none(void)
+{
+    bunny_db_post_upsert_t post;
+    make_test_post(&post, 611, 1);
+
+    int64_t post_id = 0;
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, bunny_db_post_upsert(g_db, &post, &post_id));
+
+    bunny_db_int64_list_t pools;
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, bunny_db_post_get_pool_ids(g_db, post_id, &pools));
+    TEST_ASSERT_EQUAL(0, pools.count);
+
+    bunny_db_int64_list_free(&pools);
+}
+
+void test_post_get_pool_ids_returns_pools(void)
+{
+    int64_t pool_ids[] = {5, 9};
+    bunny_db_post_upsert_t post;
+    make_test_post(&post, 612, 1);
+    post.pool_ids = pool_ids;
+    post.pool_count = 2;
+
+    int64_t post_id = 0;
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, bunny_db_post_upsert(g_db, &post, &post_id));
+
+    bunny_db_int64_list_t pools;
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, bunny_db_post_get_pool_ids(g_db, post_id, &pools));
+    TEST_ASSERT_EQUAL(2, pools.count);
+    TEST_ASSERT_EQUAL(5, pools.items[0]);
+    TEST_ASSERT_EQUAL(9, pools.items[1]);
+
+    bunny_db_int64_list_free(&pools);
+}
+
 int main(void)
 {
     UNITY_BEGIN();
@@ -910,5 +1023,10 @@ int main(void)
     RUN_TEST(test_post_get_sources_preserves_order);
     RUN_TEST(test_post_get_sources_empty_when_none_given);
     RUN_TEST(test_post_upsert_replaces_sources_wholesale_on_resync);
+    RUN_TEST(test_post_get_relationships_defaults_when_no_row);
+    RUN_TEST(test_post_get_relationships_with_parent_and_children);
+    RUN_TEST(test_post_upsert_replaces_relationships_wholesale_on_resync);
+    RUN_TEST(test_post_get_pool_ids_empty_when_none);
+    RUN_TEST(test_post_get_pool_ids_returns_pools);
     return UNITY_END();
 }

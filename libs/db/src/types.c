@@ -140,6 +140,25 @@ void bunny_db_string_list_free(bunny_db_string_list_t *list)
     list->count = 0;
 }
 
+void bunny_db_int64_list_free(bunny_db_int64_list_t *list)
+{
+    if (!list) {
+        return;
+    }
+    free(list->items);
+    list->items = NULL;
+    list->count = 0;
+}
+
+void bunny_db_post_relationships_free(bunny_db_post_relationships_t *relationships)
+{
+    if (!relationships) {
+        return;
+    }
+    bunny_db_int64_list_free(&relationships->children);
+    memset(relationships, 0, sizeof(*relationships));
+}
+
 void bunny_db_download_free(bunny_db_download_t *download)
 {
     if (!download) {

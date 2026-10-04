@@ -84,6 +84,24 @@ abstract interface class BunnyRepository {
   /// none (e.g. every Inkbunny submission -- no such field there).
   Future<List<String>> getPostSources(int postId);
 
+  /// A post's e621 parent/child relationships (always empty/false for
+  /// Inkbunny, which has no such concept).
+  Future<BunnyPostRelationships> getPostRelationships(int postId);
+
+  /// The e621 pool ids a post belongs to (empty for Inkbunny, or an e621
+  /// post in no pools).
+  Future<List<int>> getPostPoolIds(int postId);
+
+  /// Fetches a single post live from its site and caches it, without
+  /// requiring it to already be linked to any saved search -- used when a
+  /// parent/child/pool chip points at a post that was never independently
+  /// synced. Returns the (possibly pre-existing) local post id.
+  Future<int> fetchPost(BunnySite site, int externalId);
+
+  /// A pool's own metadata, fetched live (e621 only) -- used only to
+  /// auto-fill a pool search's label at creation time.
+  Future<BunnyPoolInfo> fetchPool(int poolId);
+
   /// Manually triggers a sync pass (runs every due search). The server also
   /// does this on its own schedule (M5.3); this is for an explicit
   /// "refresh now" action.

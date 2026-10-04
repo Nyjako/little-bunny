@@ -910,6 +910,54 @@ an implicit `T** -> const T**` conversion). Inkbunny submissions have no source-
 all, so `upsert_inkbunny_submission` needed no change -- `sources`/`source_count` stay at the
 upsert struct's existing zero-initialization.
 
+**Pools + parent/child relationships backend (M8.5.5a)**: the original plan treated "pools +
+relationships" as one M8.5.5 sub-milestone covering backend plumbing *and* UI (a "Pools" tab,
+a "create pool search" flow). Split in two during implementation, the same way M8.5.1 was
+split when it grew unwieldy — this covers the backend only; the UI is a separate follow-up.
+
+New tables (`post_relationships`, `post_children`, `post_pools`) all key on e621's *own*
+external ids, never local `posts.id` — a post's parent, children, or pool-mates may never have
+been independently synced, so there's nothing to foreign-key against. This is also why
+`bunny_core_fetch_and_cache_post` exists: tapping a parent/child/pool chip that points at an
+uncached post needs a way to fetch-and-cache it live, which is exactly what it does by
+factoring the single-post upsert logic (previously inlined in `upsert_e621_post`/
+`upsert_inkbunny_submission`, called only from the sync-loop context) out into a standalone
+function callable against a live `e621_get_post`/`inkbunny_get_submission` call.
+
+`bunny_db_post_upsert` treats `post_relationships` and `post_children`/`post_pools`
+differently on purpose. The relationships row is always upserted (`INSERT ... ON CONFLICT DO
+UPDATE`) even when both fields are at their "empty" default, so a resync that drops a parent
+link is reflected rather than leaving a stale `parent_external_id` from a previous sync.
+`post_children`/`post_pools`, like `post_sources` before them, are wholesale-replaced
+(`DELETE` then re-`INSERT`) since they're list-shaped, not a single row to update in place.
+
+`bunny_core_fetch_pool` deliberately does **not** persist anything — unlike every other
+`bunny_core_fetch_*`/`upsert_*` function, it has no backing table. The findings that shaped
+the original M8.5 plan already established that "save a pool as a search" needs no new
+backend logic at all (e621's own tag-search syntax treats `pool:<id>` as a literal query
+string `e621_search_posts` passes straight through), so this function's only job is answering
+"what's pool 5 actually called?" for prefilling a label at search-creation time — a pure,
+stateless passthrough to `e621_get_pool`.
+
+**Server route placement**: `GET /posts/{id}/relationships`, `GET /posts/{id}/pools`, and
+`POST /posts/fetch` all landed in the existing `routes_queue.c` `posts_handler` dispatch chain
+(same civetweb-ownership reasoning as M8.5.3/M8.5.4 — civetweb's routing is one handler per
+literal path prefix, and `/posts` already has one). `GET /pools/{id}` is different: nothing
+owns `/pools` yet, so a new `server/src/routes_pools.c`/`.h` was the correct call here, not a
+deviation — matching the same "new resource gets a new file" shape `routes_searches.c`/
+`routes_tags.c` already established.
+
+Testing the new live-fetch paths (`bunny_core_fetch_and_cache_post`, `bunny_core_fetch_pool`,
+and the server's `/posts/fetch`/`/pools/{id}` routes) needed the shared fake e621 transport to
+become path-aware for the first time — every earlier fake transport in this codebase (`libs/
+core/tests/test_sync.c`'s `fake_send`, the server integration test's `fake_e621_send`) simply
+returned the next canned body in sequence or one fixed body, since every prior test only ever
+made one *kind* of e621 request per test run. A single test now exercising "sync a search"
+*and* "fetch a single post" *and* "fetch a pool" needs three different response shapes from
+the same fake, so `fake_e621_send` now inspects `request->url` for `/posts/42.json` /
+`/pools/5.json` substrings and serves the matching fixture, falling back to the search-results
+fixture otherwise.
+
 ## Inkbunny API constraints (found in M2)
 
 Verified against the live API and the official docs while building `libinkbunny`:

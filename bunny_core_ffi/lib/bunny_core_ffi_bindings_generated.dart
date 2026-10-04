@@ -180,6 +180,37 @@ class BunnyCoreFfiBindings {
   late final _bunny_db_string_list_free = _bunny_db_string_list_freePtr
       .asFunction<void Function(ffi.Pointer<bunny_db_string_list_t>)>();
 
+  void bunny_db_int64_list_free(ffi.Pointer<bunny_db_int64_list_t> list) {
+    return _bunny_db_int64_list_free(list);
+  }
+
+  late final _bunny_db_int64_list_freePtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.Void Function(ffi.Pointer<bunny_db_int64_list_t>)
+        >
+      >('bunny_db_int64_list_free');
+  late final _bunny_db_int64_list_free = _bunny_db_int64_list_freePtr
+      .asFunction<void Function(ffi.Pointer<bunny_db_int64_list_t>)>();
+
+  void bunny_db_post_relationships_free(
+    ffi.Pointer<bunny_db_post_relationships_t> relationships,
+  ) {
+    return _bunny_db_post_relationships_free(relationships);
+  }
+
+  late final _bunny_db_post_relationships_freePtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.Void Function(ffi.Pointer<bunny_db_post_relationships_t>)
+        >
+      >('bunny_db_post_relationships_free');
+  late final _bunny_db_post_relationships_free =
+      _bunny_db_post_relationships_freePtr
+          .asFunction<
+            void Function(ffi.Pointer<bunny_db_post_relationships_t>)
+          >();
+
   void bunny_db_download_free(ffi.Pointer<bunny_db_download_t> download) {
     return _bunny_db_download_free(download);
   }
@@ -670,6 +701,155 @@ class BunnyCoreFfiBindings {
         )
       >();
 
+  /// A post's parent/child relationships (e621 only) -- a thin pass-through to
+  /// bunny_db. See bunny_db_post_get_relationships's doc comment for the
+  /// "no row = all-empty/OK, not NOT_FOUND" convention this follows.
+  bunny_core_result_t bunny_core_post_get_relationships(
+    ffi.Pointer<bunny_core_t> core,
+    int post_id,
+    ffi.Pointer<bunny_db_post_relationships_t> out_relationships,
+  ) {
+    return bunny_core_result_t.fromValue(
+      _bunny_core_post_get_relationships(core, post_id, out_relationships),
+    );
+  }
+
+  late final _bunny_core_post_get_relationshipsPtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.UnsignedInt Function(
+            ffi.Pointer<bunny_core_t>,
+            ffi.Int64,
+            ffi.Pointer<bunny_db_post_relationships_t>,
+          )
+        >
+      >('bunny_core_post_get_relationships');
+  late final _bunny_core_post_get_relationships =
+      _bunny_core_post_get_relationshipsPtr
+          .asFunction<
+            int Function(
+              ffi.Pointer<bunny_core_t>,
+              int,
+              ffi.Pointer<bunny_db_post_relationships_t>,
+            )
+          >();
+
+  /// The e621 pool ids a post belongs to (empty for Inkbunny, or an e621 post
+  /// in no pools) -- a thin pass-through to bunny_db.
+  bunny_core_result_t bunny_core_post_get_pool_ids(
+    ffi.Pointer<bunny_core_t> core,
+    int post_id,
+    ffi.Pointer<bunny_db_int64_list_t> out_list,
+  ) {
+    return bunny_core_result_t.fromValue(
+      _bunny_core_post_get_pool_ids(core, post_id, out_list),
+    );
+  }
+
+  late final _bunny_core_post_get_pool_idsPtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.UnsignedInt Function(
+            ffi.Pointer<bunny_core_t>,
+            ffi.Int64,
+            ffi.Pointer<bunny_db_int64_list_t>,
+          )
+        >
+      >('bunny_core_post_get_pool_ids');
+  late final _bunny_core_post_get_pool_ids = _bunny_core_post_get_pool_idsPtr
+      .asFunction<
+        int Function(
+          ffi.Pointer<bunny_core_t>,
+          int,
+          ffi.Pointer<bunny_db_int64_list_t>,
+        )
+      >();
+
+  /// Fetches a single post live from its site and caches it (upserting into the
+  /// local post cache exactly like a sync pass would for one post), without
+  /// requiring it to already be linked to any saved search. Used when a
+  /// parent/child/pool chip on the detail page points at a post that was never
+  /// independently synced. Returns the (possibly pre-existing) local post id.
+  bunny_core_result_t bunny_core_fetch_and_cache_post(
+    ffi.Pointer<bunny_core_t> core,
+    bunny_db_site_t site,
+    int external_id,
+    ffi.Pointer<ffi.Int64> out_post_id,
+  ) {
+    return bunny_core_result_t.fromValue(
+      _bunny_core_fetch_and_cache_post(
+        core,
+        site.value,
+        external_id,
+        out_post_id,
+      ),
+    );
+  }
+
+  late final _bunny_core_fetch_and_cache_postPtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.UnsignedInt Function(
+            ffi.Pointer<bunny_core_t>,
+            ffi.UnsignedInt,
+            ffi.Int64,
+            ffi.Pointer<ffi.Int64>,
+          )
+        >
+      >('bunny_core_fetch_and_cache_post');
+  late final _bunny_core_fetch_and_cache_post =
+      _bunny_core_fetch_and_cache_postPtr
+          .asFunction<
+            int Function(
+              ffi.Pointer<bunny_core_t>,
+              int,
+              int,
+              ffi.Pointer<ffi.Int64>,
+            )
+          >();
+
+  void bunny_core_pool_info_free(ffi.Pointer<bunny_core_pool_info_t> info) {
+    return _bunny_core_pool_info_free(info);
+  }
+
+  late final _bunny_core_pool_info_freePtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.Void Function(ffi.Pointer<bunny_core_pool_info_t>)
+        >
+      >('bunny_core_pool_info_free');
+  late final _bunny_core_pool_info_free = _bunny_core_pool_info_freePtr
+      .asFunction<void Function(ffi.Pointer<bunny_core_pool_info_t>)>();
+
+  bunny_core_result_t bunny_core_fetch_pool(
+    ffi.Pointer<bunny_core_t> core,
+    int pool_id,
+    ffi.Pointer<bunny_core_pool_info_t> out_info,
+  ) {
+    return bunny_core_result_t.fromValue(
+      _bunny_core_fetch_pool(core, pool_id, out_info),
+    );
+  }
+
+  late final _bunny_core_fetch_poolPtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.UnsignedInt Function(
+            ffi.Pointer<bunny_core_t>,
+            ffi.Int64,
+            ffi.Pointer<bunny_core_pool_info_t>,
+          )
+        >
+      >('bunny_core_fetch_pool');
+  late final _bunny_core_fetch_pool = _bunny_core_fetch_poolPtr
+      .asFunction<
+        int Function(
+          ffi.Pointer<bunny_core_t>,
+          int,
+          ffi.Pointer<bunny_core_pool_info_t>,
+        )
+      >();
+
   /// Runs every saved search whose last run is NULL or older than its
   /// interval_hours: builds a client for that search's site (authenticated via
   /// the stored account if one exists, or anonymous/guest otherwise), fetches
@@ -1042,6 +1222,36 @@ final class bunny_db_string_list_t extends ffi.Struct {
   external int count;
 }
 
+/// A generic list of 64-bit ids -- feeds bunny_db_post_get_pool_ids and
+/// bunny_db_post_relationships_t.children below.
+final class bunny_db_int64_list_t extends ffi.Struct {
+  external ffi.Pointer<ffi.Int64> items;
+
+  @ffi.Size()
+  external int count;
+}
+
+/// e621 parent/child post relationships (site's own external ids -- a parent
+/// or child post may never have been synced locally, so these aren't local
+/// posts.id values). has_active_children mirrors e621's own flag: a post can
+/// have_children=false in e621's model while a deleted child still exists, so
+/// "active" is the meaningful signal for whether to show a children link at
+/// all. Always all-false/empty for Inkbunny, which has no such concept.
+final class bunny_db_post_relationships_t extends ffi.Struct {
+  @ffi.Bool()
+  external bool has_parent;
+
+  /// valid only when has_parent
+  @ffi.Int64()
+  external int parent_external_id;
+
+  @ffi.Bool()
+  external bool has_active_children;
+
+  /// child external ids
+  external bunny_db_int64_list_t children;
+}
+
 final class bunny_db_download_t extends ffi.Struct {
   @ffi.Int64()
   external int id;
@@ -1256,6 +1466,20 @@ final class bunny_core_config_t extends ffi.Struct {
   /// touches both sites doesn't take the better part of a second.
   @ffi.Double()
   external double min_request_interval_sec;
+}
+
+/// A pool's own metadata, fetched live (e621 only -- no persistence, no
+/// equivalent on Inkbunny). Used only to auto-fill a pool search's label at
+/// creation time; the pool's posts themselves are fetched via a normal
+/// tag search for "pool:<id>" (bunny_core_search_create), not through this.
+final class bunny_core_pool_info_t extends ffi.Struct {
+  @ffi.Int64()
+  external int id;
+
+  external ffi.Pointer<ffi.Char> name;
+
+  @ffi.Int64()
+  external int post_count;
 }
 
 /// --- Scheduled search sync ---------------------------------------------------

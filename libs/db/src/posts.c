@@ -10,6 +10,7 @@
 GOBLIN_DYN_ARRAY_DECL(bunny_db_post, bunny_db_post_t)
 GOBLIN_DYN_ARRAY_DECL(bunny_db_post_tag, bunny_db_post_tag_t)
 GOBLIN_DYN_ARRAY_DECL(bunny_db_string, char *)
+GOBLIN_DYN_ARRAY_DECL(bunny_db_int64, int64_t)
 
 bunny_db_result_t bunny_db_post_upsert(bunny_db_t *db, const bunny_db_post_upsert_t *post, int64_t *out_id)
 {
@@ -154,9 +155,161 @@ bunny_db_result_t bunny_db_post_upsert(bunny_db_t *db, const bunny_db_post_upser
         }
     }
 
+    /* Always upsert the relationships row (even when both fields are
+     * "empty") so a resync that drops a parent/active-children flag is
+     * reflected, not stuck at a stale prior value. */
+    const char *relationships_sql = "INSERT INTO post_relationships (post_id, parent_external_id, has_active_children) VALUES (?, ?, ?) "
+                                    "ON CONFLICT(post_id) DO UPDATE SET parent_external_id = excluded.parent_external_id, "
+                                    "has_active_children = excluded.has_active_children;";
+    sqlite3_stmt *relationships_stmt = NULL;
+    if (sqlite3_prepare_v2(db->handle, relationships_sql, -1, &relationships_stmt, NULL) == SQLITE_OK) {
+        sqlite3_bind_int64(relationships_stmt, 1, post_id);
+        if (post->has_parent) {
+            sqlite3_bind_int64(relationships_stmt, 2, post->parent_external_id);
+        } else {
+            sqlite3_bind_null(relationships_stmt, 2);
+        }
+        sqlite3_bind_int(relationships_stmt, 3, post->has_active_children ? 1 : 0);
+        sqlite3_step(relationships_stmt);
+        sqlite3_finalize(relationships_stmt);
+    }
+
+    /* Replace this post's children/pools wholesale, same reasoning as
+     * post_sources above. */
+    const char *del_children_sql = "DELETE FROM post_children WHERE post_id = ?;";
+    sqlite3_stmt *del_children_stmt = NULL;
+    if (sqlite3_prepare_v2(db->handle, del_children_sql, -1, &del_children_stmt, NULL) == SQLITE_OK) {
+        sqlite3_bind_int64(del_children_stmt, 1, post_id);
+        sqlite3_step(del_children_stmt);
+        sqlite3_finalize(del_children_stmt);
+    }
+    for (size_t i = 0; i < post->child_count; i++) {
+        const char *child_sql = "INSERT OR IGNORE INTO post_children (post_id, child_external_id) VALUES (?, ?);";
+        sqlite3_stmt *child_stmt = NULL;
+        if (sqlite3_prepare_v2(db->handle, child_sql, -1, &child_stmt, NULL) == SQLITE_OK) {
+            sqlite3_bind_int64(child_stmt, 1, post_id);
+            sqlite3_bind_int64(child_stmt, 2, post->child_external_ids[i]);
+            sqlite3_step(child_stmt);
+            sqlite3_finalize(child_stmt);
+        }
+    }
+
+    const char *del_pools_sql = "DELETE FROM post_pools WHERE post_id = ?;";
+    sqlite3_stmt *del_pools_stmt = NULL;
+    if (sqlite3_prepare_v2(db->handle, del_pools_sql, -1, &del_pools_stmt, NULL) == SQLITE_OK) {
+        sqlite3_bind_int64(del_pools_stmt, 1, post_id);
+        sqlite3_step(del_pools_stmt);
+        sqlite3_finalize(del_pools_stmt);
+    }
+    for (size_t i = 0; i < post->pool_count; i++) {
+        const char *pool_sql = "INSERT OR IGNORE INTO post_pools (post_id, pool_id) VALUES (?, ?);";
+        sqlite3_stmt *pool_stmt = NULL;
+        if (sqlite3_prepare_v2(db->handle, pool_sql, -1, &pool_stmt, NULL) == SQLITE_OK) {
+            sqlite3_bind_int64(pool_stmt, 1, post_id);
+            sqlite3_bind_int64(pool_stmt, 2, post->pool_ids[i]);
+            sqlite3_step(pool_stmt);
+            sqlite3_finalize(pool_stmt);
+        }
+    }
+
     if (out_id) {
         *out_id = post_id;
     }
+    return BUNNY_DB_OK;
+}
+
+bunny_db_result_t bunny_db_post_get_relationships(bunny_db_t *db, int64_t post_id, bunny_db_post_relationships_t *out_relationships)
+{
+    if (!db || !out_relationships) {
+        return BUNNY_DB_ERR_INVALID_ARG;
+    }
+    memset(out_relationships, 0, sizeof(*out_relationships));
+
+    const char *sql = "SELECT parent_external_id, has_active_children FROM post_relationships WHERE post_id = ?;";
+    sqlite3_stmt *stmt = NULL;
+    if (sqlite3_prepare_v2(db->handle, sql, -1, &stmt, NULL) != SQLITE_OK) {
+        return BUNNY_DB_ERR_QUERY_FAILED;
+    }
+    sqlite3_bind_int64(stmt, 1, post_id);
+
+    int rc = sqlite3_step(stmt);
+    if (rc == SQLITE_ROW) {
+        if (sqlite3_column_type(stmt, 0) != SQLITE_NULL) {
+            out_relationships->has_parent = true;
+            out_relationships->parent_external_id = sqlite3_column_int64(stmt, 0);
+        }
+        out_relationships->has_active_children = sqlite3_column_int(stmt, 1) != 0;
+        rc = sqlite3_step(stmt); /* drain to SQLITE_DONE */
+    }
+    sqlite3_finalize(stmt);
+
+    if (rc != SQLITE_DONE && rc != SQLITE_ROW) {
+        return bunny_db_sqlite_rc_to_result(rc);
+    }
+
+    const char *children_sql = "SELECT child_external_id FROM post_children WHERE post_id = ? ORDER BY child_external_id ASC;";
+    sqlite3_stmt *children_stmt = NULL;
+    if (sqlite3_prepare_v2(db->handle, children_sql, -1, &children_stmt, NULL) != SQLITE_OK) {
+        return BUNNY_DB_ERR_QUERY_FAILED;
+    }
+    sqlite3_bind_int64(children_stmt, 1, post_id);
+
+    bunny_db_int64_array arr;
+    bunny_db_int64_array_init(&arr);
+
+    while ((rc = sqlite3_step(children_stmt)) == SQLITE_ROW) {
+        if (!bunny_db_int64_array_push(&arr, sqlite3_column_int64(children_stmt, 0))) {
+            sqlite3_finalize(children_stmt);
+            bunny_db_int64_array_free(&arr);
+            return BUNNY_DB_ERR_UNKNOWN;
+        }
+    }
+    sqlite3_finalize(children_stmt);
+
+    if (rc != SQLITE_DONE) {
+        bunny_db_int64_array_free(&arr);
+        return bunny_db_sqlite_rc_to_result(rc);
+    }
+
+    out_relationships->children.items = arr.items;
+    out_relationships->children.count = arr.count;
+    return BUNNY_DB_OK;
+}
+
+bunny_db_result_t bunny_db_post_get_pool_ids(bunny_db_t *db, int64_t post_id, bunny_db_int64_list_t *out_list)
+{
+    if (!db || !out_list) {
+        return BUNNY_DB_ERR_INVALID_ARG;
+    }
+    memset(out_list, 0, sizeof(*out_list));
+
+    const char *sql = "SELECT pool_id FROM post_pools WHERE post_id = ? ORDER BY pool_id ASC;";
+    sqlite3_stmt *stmt = NULL;
+    if (sqlite3_prepare_v2(db->handle, sql, -1, &stmt, NULL) != SQLITE_OK) {
+        return BUNNY_DB_ERR_QUERY_FAILED;
+    }
+    sqlite3_bind_int64(stmt, 1, post_id);
+
+    bunny_db_int64_array arr;
+    bunny_db_int64_array_init(&arr);
+
+    int rc;
+    while ((rc = sqlite3_step(stmt)) == SQLITE_ROW) {
+        if (!bunny_db_int64_array_push(&arr, sqlite3_column_int64(stmt, 0))) {
+            sqlite3_finalize(stmt);
+            bunny_db_int64_array_free(&arr);
+            return BUNNY_DB_ERR_UNKNOWN;
+        }
+    }
+    sqlite3_finalize(stmt);
+
+    if (rc != SQLITE_DONE) {
+        bunny_db_int64_array_free(&arr);
+        return bunny_db_sqlite_rc_to_result(rc);
+    }
+
+    out_list->items = arr.items;
+    out_list->count = arr.count;
     return BUNNY_DB_OK;
 }
 

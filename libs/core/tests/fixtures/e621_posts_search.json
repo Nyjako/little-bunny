@@ -14,7 +14,8 @@
       "description": "a test post",
       "comment_count": 0,
       "is_favorited": false,
-      "pools": []
+      "pools": [5, 9],
+      "relationships": {"parent_id": 999, "has_children": true, "has_active_children": true, "children": [101, 102]}
     }
   ]
 }
