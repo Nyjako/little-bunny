@@ -824,6 +824,14 @@ final class bunny_db_post_t extends ffi.Struct {
   @ffi.Int()
   external int score;
 
+  /// 0 for Inkbunny -- no vote concept there
+  @ffi.Int()
+  external int score_up;
+
+  /// 0 for Inkbunny -- no vote concept there
+  @ffi.Int()
+  external int score_down;
+
   @ffi.Int()
   external int fav_count;
 

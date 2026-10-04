@@ -53,6 +53,8 @@ typedef struct
     char *description;
     char *rating;
     int score;
+    int score_up;   /* 0 for Inkbunny -- no vote concept there */
+    int score_down; /* 0 for Inkbunny -- no vote concept there */
     int fav_count;
     int comment_count;
     char *file_url;

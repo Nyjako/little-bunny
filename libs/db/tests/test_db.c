@@ -1,5 +1,6 @@
 #include "unity.h"
 
+#include <stdio.h>
 #include <string.h>
 
 #include "bunny_db/db.h"
@@ -156,6 +157,8 @@ static void make_test_post(bunny_db_post_upsert_t *post, int64_t external_id, in
     post->description = "a test post";
     post->rating = "s";
     post->score = score;
+    post->score_up = score + 2;
+    post->score_down = 2;
     post->fav_count = 5;
     post->comment_count = 1;
     post->file_url = "https://example.com/file.jpg";
@@ -188,6 +191,8 @@ void test_post_upsert_and_get(void)
     TEST_ASSERT_NULL(fetched.title);
     TEST_ASSERT_EQUAL_STRING("abc123", fetched.file_md5);
     TEST_ASSERT_EQUAL(10, fetched.score);
+    TEST_ASSERT_EQUAL(12, fetched.score_up);
+    TEST_ASSERT_EQUAL(2, fetched.score_down);
     TEST_ASSERT_FALSE(fetched.is_seen);
     TEST_ASSERT_FALSE(fetched.is_favorited);
 
@@ -571,6 +576,37 @@ void test_tag_autocomplete_escapes_literal_underscore(void)
     bunny_db_tag_stat_list_free(&results);
 }
 
+void test_migrations_apply_cleanly_and_are_idempotent_on_reopen(void)
+{
+    /* setUp's :memory: db already proves migrations apply to a fresh
+     * database (every other test in this file exercises that implicitly).
+     * This test needs a real file to prove reopening an *already-migrated*
+     * database doesn't fail or re-apply the ALTER TABLEs. */
+    const char *path = "/tmp/bunny_db_test_migration_idempotent.sqlite3";
+    remove(path);
+
+    bunny_db_t *db1 = NULL;
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, bunny_db_open(path, &db1));
+    bunny_db_close(db1);
+
+    bunny_db_t *db2 = NULL;
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, bunny_db_open(path, &db2));
+
+    bunny_db_post_upsert_t post;
+    make_test_post(&post, 9001, 7);
+    int64_t post_id = 0;
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, bunny_db_post_upsert(db2, &post, &post_id));
+
+    bunny_db_post_t fetched;
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, bunny_db_post_get_by_id(db2, post_id, &fetched));
+    TEST_ASSERT_EQUAL(9, fetched.score_up);
+    TEST_ASSERT_EQUAL(2, fetched.score_down);
+    bunny_db_post_free(&fetched);
+
+    bunny_db_close(db2);
+    remove(path);
+}
+
 int main(void)
 {
     UNITY_BEGIN();
@@ -601,5 +637,6 @@ int main(void)
     RUN_TEST(test_tag_autocomplete_orders_by_usage_then_name);
     RUN_TEST(test_tag_autocomplete_is_per_site);
     RUN_TEST(test_tag_autocomplete_escapes_literal_underscore);
+    RUN_TEST(test_migrations_apply_cleanly_and_are_idempotent_on_reopen);
     return UNITY_END();
 }
