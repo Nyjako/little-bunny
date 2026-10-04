@@ -165,6 +165,8 @@ void main() {
             'description': null,
             'rating': 's',
             'score': 5,
+            'score_up': 6,
+            'score_down': 1,
             'fav_count': 2,
             'comment_count': 0,
             'file_url': 'https://example.com/1.png',
@@ -188,6 +190,8 @@ void main() {
       expect(posts.single.externalId, 100);
       expect(posts.single.isFavorited, isTrue);
       expect(posts.single.title, isNull);
+      expect(posts.single.scoreUp, 6);
+      expect(posts.single.scoreDown, 1);
     });
 
     test('tagAutocomplete sends site/prefix/limit as query params and maps results', () async {

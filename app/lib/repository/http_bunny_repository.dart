@@ -35,6 +35,8 @@ BunnyPost _postFromJson(Map<String, Object?> j) => BunnyPost(
   description: j['description'] as String?,
   rating: j['rating'] as String?,
   score: (j['score'] as num).toInt(),
+  scoreUp: (j['score_up'] as num).toInt(),
+  scoreDown: (j['score_down'] as num).toInt(),
   favCount: (j['fav_count'] as num).toInt(),
   commentCount: (j['comment_count'] as num).toInt(),
   fileUrl: j['file_url'] as String?,
