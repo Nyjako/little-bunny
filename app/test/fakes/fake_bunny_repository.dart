@@ -48,7 +48,20 @@ class FakeBunnyRepository implements BunnyRepository {
   }
 
   @override
-  Future<List<BunnySearch>> listSearches() async => List.unmodifiable(searches);
+  Future<List<BunnySearch>> listSearches() async => searches
+      .map(
+        (search) => BunnySearch(
+          id: search.id,
+          site: search.site,
+          label: search.label,
+          query: search.query,
+          intervalHours: search.intervalHours,
+          createdAt: search.createdAt,
+          lastRunAt: search.lastRunAt,
+          unseenCount: (postsBySearchId[search.id] ?? const []).where((post) => !post.isSeen).length,
+        ),
+      )
+      .toList();
 
   @override
   Future<void> deleteSearch(int searchId) async {

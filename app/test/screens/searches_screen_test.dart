@@ -41,6 +41,20 @@ void main() {
     expect(find.text('e621 • every 6h'), findsOneWidget);
   });
 
+  testWidgets('shows an unseen-count badge only when there are unseen posts', (WidgetTester tester) async {
+    final repository = FakeBunnyRepository();
+    final searchId = await repository.createSearch(BunnySite.e621, 'Foxes', 'fox');
+    repository.postsBySearchId[searchId] = [
+      BunnyPost(id: 1, site: BunnySite.e621, externalId: 1, score: 0, favCount: 0, commentCount: 0, width: 100, height: 100, cachedAt: '2026-01-01T00:00:00Z', isSeen: false, isFavorited: false),
+      BunnyPost(id: 2, site: BunnySite.e621, externalId: 2, score: 0, favCount: 0, commentCount: 0, width: 100, height: 100, cachedAt: '2026-01-01T00:00:00Z', isSeen: true, isFavorited: false),
+    ];
+
+    await tester.pumpWidget(_wrap(repository));
+    await tester.pumpAndSettle();
+
+    expect(find.text('1'), findsOneWidget);
+  });
+
   testWidgets('tapping remove then confirming deletes the search', (WidgetTester tester) async {
     final repository = FakeBunnyRepository();
     await repository.createSearch(BunnySite.e621, 'Foxes', 'fox');
