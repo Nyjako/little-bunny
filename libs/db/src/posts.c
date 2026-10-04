@@ -284,6 +284,22 @@ bunny_db_result_t bunny_db_post_mark_seen(bunny_db_t *db, int64_t post_id)
     return rc == SQLITE_DONE ? BUNNY_DB_OK : bunny_db_sqlite_rc_to_result(rc);
 }
 
+bunny_db_result_t bunny_db_search_mark_all_seen(bunny_db_t *db, int64_t search_id)
+{
+    if (!db) {
+        return BUNNY_DB_ERR_INVALID_ARG;
+    }
+    const char *sql = "INSERT OR IGNORE INTO seen_posts (post_id) SELECT post_id FROM search_results WHERE search_id = ?;";
+    sqlite3_stmt *stmt = NULL;
+    if (sqlite3_prepare_v2(db->handle, sql, -1, &stmt, NULL) != SQLITE_OK) {
+        return BUNNY_DB_ERR_QUERY_FAILED;
+    }
+    sqlite3_bind_int64(stmt, 1, search_id);
+    int rc = sqlite3_step(stmt);
+    sqlite3_finalize(stmt);
+    return rc == SQLITE_DONE ? BUNNY_DB_OK : bunny_db_sqlite_rc_to_result(rc);
+}
+
 bunny_db_result_t bunny_db_count_unseen(bunny_db_t *db, int64_t *out_count)
 {
     if (!db || !out_count) {

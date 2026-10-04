@@ -69,6 +69,11 @@ abstract interface class BunnyRepository {
   /// `BunnyPost.isSeen` are based on.
   Future<void> markPostSeen(int postId);
 
+  /// Bulk counterpart to [markPostSeen] -- marks every post currently linked
+  /// to [searchId] as seen in one call, for a post grid's "mark all as seen"
+  /// action.
+  Future<void> markAllSeen(int searchId);
+
   /// Manually triggers a sync pass (runs every due search). The server also
   /// does this on its own schedule (M5.3); this is for an explicit
   /// "refresh now" action.

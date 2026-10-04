@@ -226,6 +226,14 @@ class HttpBunnyRepository implements BunnyRepository {
   }
 
   @override
+  Future<void> markAllSeen(int searchId) async {
+    final response = await _client.post(_uri('/searches/$searchId/mark_all_seen'), headers: _headers);
+    if (response.statusCode != 200) {
+      _throwError(response);
+    }
+  }
+
+  @override
   Future<BunnySyncStats> syncDueSearches() async {
     final response = await _client.post(_uri('/sync'), headers: _headers);
     if (response.statusCode != 200) {

@@ -334,6 +334,12 @@ abstract class AppLocalizations {
   /// **'No posts cached yet. Tap refresh to sync.'**
   String get postGridEmptyState;
 
+  /// No description provided for @postGridMarkAllSeen.
+  ///
+  /// In en, this message translates to:
+  /// **'Mark all as seen'**
+  String get postGridMarkAllSeen;
+
   /// No description provided for @postDetailScreenTitle.
   ///
   /// In en, this message translates to:

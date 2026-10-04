@@ -108,4 +108,19 @@ void main() {
     expect(inkbunnyImage.httpHeaders, isNotNull);
     expect(inkbunnyImage.httpHeaders!['Referer'], 'https://inkbunny.net/');
   });
+
+  testWidgets('mark all as seen clears every unseen marker', (WidgetTester tester) async {
+    final repository = FakeBunnyRepository();
+    repository.postsBySearchId[1] = [_post(id: 1, isSeen: false), _post(id: 2, isSeen: false)];
+
+    await tester.pumpWidget(wrapWithLocalization(PostGridScreen(search: search, repository: repository)));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byType(PopupMenuButton<void>));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Mark all as seen'));
+    await tester.pumpAndSettle();
+
+    expect(repository.postsBySearchId[1]!.every((post) => post.isSeen), isTrue);
+  });
 }

@@ -67,6 +67,7 @@
   "postGridUnseenOnlyTooltip": "Show unseen only",
   "postGridRefreshTooltip": "Refresh",
   "postGridEmptyState": "No posts cached yet. Tap refresh to sync.",
+  "postGridMarkAllSeen": "Mark all as seen",
 
   "postDetailScreenTitle": "Post",
   "postDetailUnsupportedFormat": "This file format ({extension}) isn't supported yet",
