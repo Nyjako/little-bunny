@@ -496,6 +496,30 @@ this file is the single source of truth for "what's done" across sessions.
   harmless no-op, since the underlying `INSERT` just selects zero rows; there's nothing to
   reject.
 
+- [x] **M8.5.13 — Search creation UX: label mirrors query + default interval (completes the
+  independent M8.5 wins)**
+  Two small, unrelated `CreateSearchScreen`/`SettingsScreen` UX fixes bundled together since
+  both are pure client-side changes with no backend plumbing:
+  - **Default sync interval.** New `app/lib/settings/sync_settings_store.dart`
+    (`SyncSettingsStore`, same `shared_preferences` shape as `ThemeSettingsStore`) persists a
+    `defaultIntervalHours` (default 24) that `CreateSearchScreen`'s interval field now loads
+    on open instead of a hardcoded `'24'`. `SettingsScreen` gained a new "Sync" section to
+    edit it. Purely a client-side UX convenience — there's no equivalent backend setting,
+    since the sync engine only ever reads each search's own `interval_hours`.
+  - **Label mirrors query.** `CreateSearchScreen`'s label field now mirrors the query field's
+    text live (e.g. query `cat -dog standing` → label defaults to the same string) until the
+    user types into the label directly, after which it stops — the classic "slug follows
+    title" pattern. Implemented with two guard flags: `_labelManuallyEdited` (set the first
+    time the label changes for a reason other than the mirror itself) and `_mirroringLabel`
+    (set only while the mirror's own programmatic `_labelController.text = ...` assignment is
+    in flight, so that assignment doesn't trip `_labelManuallyEdited` and permanently disable
+    mirroring on the very first query keystroke).
+  Threading the new `SyncSettingsStore` through required adding it as a new constructor
+  parameter on `SearchesScreen` (which passes it on to both `CreateSearchScreen` and
+  `SettingsScreen`) and `LittleBunnyApp`/`main.dart` — the same "thread a new settings store
+  down through the screen that needs it" shape `ThemeSettingsStore` and `AppLockService`
+  already established.
+
 - [ ] **M9 — Actions & downloads**
   Single + mass like/favorite/download, commenting, download manager writing to
   `%artist%/%id%.%extension%`, checksum (md5) verification of downloaded files against the

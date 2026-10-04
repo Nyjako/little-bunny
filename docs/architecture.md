@@ -830,6 +830,31 @@ reloading the grid afterward so cleared markers show immediately.
   typed wrong — it only matters in that it means the two "mark seen" functions have
   deliberately different failure semantics for a bad id, not an oversight in either one.
 
+**Search creation UX: label mirrors query + default interval (M8.5.13)**: two small,
+unrelated client-side fixes, no backend plumbing for either.
+
+- **Default sync interval** is a pure UX convenience, not a real setting the sync engine
+  reads — `bunny_db_search_t.interval_hours` remains purely per-search (see M8.5.1's findings
+  on this). New `app/lib/settings/sync_settings_store.dart`'s `SyncSettingsStore` (same
+  `shared_preferences` shape as `ThemeSettingsStore`/`AppLockService`) just persists a value
+  to pre-fill `CreateSearchScreen`'s interval field with, editable from a new "Sync" section
+  on `SettingsScreen`.
+- **Label mirrors query** (`CreateSearchScreen`): a classic "slug follows title" pattern, with
+  the classic footgun that comes with it — a naive `_queryController.addListener(() =>
+  _labelController.text = _queryController.text)` would also fire on *every* keystroke
+  forever, since there's no way to tell "the user edited the label" apart from "the mirror
+  just wrote to the label" without an explicit guard. Two booleans solve it:
+  `_labelManuallyEdited` (set the first time the label's own listener fires for a reason
+  *other* than the mirror) permanently disables mirroring once set; `_mirroringLabel` (set
+  only while the mirror's own `_labelController.text = ...` assignment is in flight) is what
+  lets the label's listener tell the two cases apart — without it, the mirror's very first
+  write would set `_labelManuallyEdited = true` on itself and disable mirroring after exactly
+  one keystroke.
+- **Threading `SyncSettingsStore` through the widget tree** followed the exact shape
+  `ThemeSettingsStore`/`AppLockService` already established: a new required constructor
+  parameter on `SearchesScreen` (passed down to both `CreateSearchScreen` and
+  `SettingsScreen`, the two screens that actually need it) and on `LittleBunnyApp`/`main()`.
+
 ## Inkbunny API constraints (found in M2)
 
 Verified against the live API and the official docs while building `libinkbunny`:

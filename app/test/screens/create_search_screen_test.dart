@@ -2,14 +2,22 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:little_bunny/repository/bunny_models.dart';
 import 'package:little_bunny/screens/create_search_screen.dart';
+import 'package:little_bunny/settings/sync_settings_store.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../fakes/fake_bunny_repository.dart';
 import '../fakes/test_app.dart';
 
+Widget _wrap(FakeBunnyRepository repository) => wrapWithLocalization(CreateSearchScreen(repository: repository, syncSettingsStore: const SyncSettingsStore()));
+
 void main() {
+  setUp(() {
+    SharedPreferences.setMockInitialValues({});
+  });
+
   testWidgets('validates required fields before submitting', (WidgetTester tester) async {
     final repository = FakeBunnyRepository();
-    await tester.pumpWidget(wrapWithLocalization(CreateSearchScreen(repository: repository)));
+    await tester.pumpWidget(_wrap(repository));
     await tester.pumpAndSettle();
 
     await tester.tap(find.text('Create'));
@@ -21,7 +29,7 @@ void main() {
 
   testWidgets('submitting a filled form creates the search and pops true', (WidgetTester tester) async {
     final repository = FakeBunnyRepository();
-    await tester.pumpWidget(wrapWithLocalization(CreateSearchScreen(repository: repository)));
+    await tester.pumpWidget(_wrap(repository));
     await tester.pumpAndSettle();
 
     await tester.enterText(find.widgetWithText(TextFormField, 'Label'), 'Foxes');
@@ -40,7 +48,7 @@ void main() {
     final repository = FakeBunnyRepository();
     repository.tagStats.addAll(const [BunnyTagStat(name: 'fox', count: 10), BunnyTagStat(name: 'wolf', count: 5)]);
 
-    await tester.pumpWidget(wrapWithLocalization(CreateSearchScreen(repository: repository)));
+    await tester.pumpWidget(_wrap(repository));
     await tester.pumpAndSettle();
 
     await tester.enterText(find.widgetWithText(TextFormField, 'Query'), 'canine fo');
@@ -58,7 +66,7 @@ void main() {
 
   testWidgets('picking a site changes which site the search is created for', (WidgetTester tester) async {
     final repository = FakeBunnyRepository();
-    await tester.pumpWidget(wrapWithLocalization(CreateSearchScreen(repository: repository)));
+    await tester.pumpWidget(_wrap(repository));
     await tester.pumpAndSettle();
 
     await tester.tap(find.text('Inkbunny'));
@@ -69,5 +77,37 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(repository.searches.single.site, BunnySite.inkbunny);
+  });
+
+  testWidgets('label mirrors the query until the user edits the label directly', (WidgetTester tester) async {
+    final repository = FakeBunnyRepository();
+    await tester.pumpWidget(_wrap(repository));
+    await tester.pumpAndSettle();
+
+    await tester.enterText(find.widgetWithText(TextFormField, 'Query'), 'cat -dog standing');
+    await tester.pump();
+    expect(tester.widget<TextFormField>(find.widgetWithText(TextFormField, 'Label')).controller!.text, 'cat -dog standing');
+
+    // Further query edits still mirror...
+    await tester.enterText(find.widgetWithText(TextFormField, 'Query'), 'cat -dog standing rating:s');
+    await tester.pump();
+    expect(tester.widget<TextFormField>(find.widgetWithText(TextFormField, 'Label')).controller!.text, 'cat -dog standing rating:s');
+
+    // ...until the user types into the label directly, after which it stops.
+    await tester.enterText(find.widgetWithText(TextFormField, 'Label'), 'My custom label');
+    await tester.pump();
+    await tester.enterText(find.widgetWithText(TextFormField, 'Query'), 'cat -dog standing rating:s score:>10');
+    await tester.pump();
+    expect(tester.widget<TextFormField>(find.widgetWithText(TextFormField, 'Label')).controller!.text, 'My custom label');
+  });
+
+  testWidgets('interval field pre-fills from the stored default', (WidgetTester tester) async {
+    SharedPreferences.setMockInitialValues({'default_sync_interval_hours': 12});
+    final repository = FakeBunnyRepository();
+
+    await tester.pumpWidget(_wrap(repository));
+    await tester.pumpAndSettle();
+
+    expect(tester.widget<TextFormField>(find.widgetWithText(TextFormField, 'Sync interval (hours)')).controller!.text, '12');
   });
 }

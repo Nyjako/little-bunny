@@ -543,6 +543,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Manage app lock'**
   String get settingsAppLockEntry;
+
+  /// No description provided for @settingsSyncSection.
+  ///
+  /// In en, this message translates to:
+  /// **'Sync'**
+  String get settingsSyncSection;
+
+  /// No description provided for @settingsDefaultIntervalLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Default sync interval (hours)'**
+  String get settingsDefaultIntervalLabel;
 }
 
 class _AppLocalizationsDelegate
