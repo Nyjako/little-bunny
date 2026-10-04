@@ -244,6 +244,55 @@ void main() {
       expect(sources, ['https://example.com/a', 'https://example.com/b']);
     });
 
+    test('getPostRelationships sends GET to the right path and maps the response', () async {
+      respond = (_) => http.Response(
+        jsonEncode({'has_parent': true, 'parent_external_id': 999, 'has_active_children': true, 'children': [101, 102]}),
+        200,
+      );
+
+      final relationships = await buildRepository().getPostRelationships(5);
+
+      expect(capturedMethod, 'GET');
+      expect(capturedUri.path, '/posts/5/relationships');
+      expect(relationships.hasParent, isTrue);
+      expect(relationships.parentExternalId, 999);
+      expect(relationships.hasActiveChildren, isTrue);
+      expect(relationships.children, [101, 102]);
+    });
+
+    test('getPostPoolIds sends GET to the right path and returns a list of ints', () async {
+      respond = (_) => http.Response(jsonEncode([5, 9]), 200);
+
+      final poolIds = await buildRepository().getPostPoolIds(5);
+
+      expect(capturedMethod, 'GET');
+      expect(capturedUri.path, '/posts/5/pools');
+      expect(poolIds, [5, 9]);
+    });
+
+    test('fetchPost sends POST with site/external_id query params and returns the id', () async {
+      respond = (_) => http.Response(jsonEncode({'id': 7}), 200);
+
+      final postId = await buildRepository().fetchPost(BunnySite.e621, 42);
+
+      expect(capturedMethod, 'POST');
+      expect(capturedUri.path, '/posts/fetch');
+      expect(capturedUri.queryParameters, {'site': 'e621', 'external_id': '42'});
+      expect(postId, 7);
+    });
+
+    test('fetchPool sends GET to the right path and maps the response', () async {
+      respond = (_) => http.Response(jsonEncode({'id': 5, 'name': 'a_test_pool', 'post_count': 3}), 200);
+
+      final info = await buildRepository().fetchPool(5);
+
+      expect(capturedMethod, 'GET');
+      expect(capturedUri.path, '/pools/5');
+      expect(info.id, 5);
+      expect(info.name, 'a_test_pool');
+      expect(info.postCount, 3);
+    });
+
     test('markPostSeen sends POST to the right path', () async {
       respond = (_) => http.Response(jsonEncode({'ok': true}), 200);
 

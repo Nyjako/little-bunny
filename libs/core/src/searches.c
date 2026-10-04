@@ -73,3 +73,19 @@ bunny_core_result_t bunny_core_post_get_sources(bunny_core_t *core, int64_t post
     }
     return bunny_core_map_db_result(bunny_db_post_get_sources(core->db, post_id, out_list));
 }
+
+bunny_core_result_t bunny_core_post_get_relationships(bunny_core_t *core, int64_t post_id, bunny_db_post_relationships_t *out_relationships)
+{
+    if (!core) {
+        return BUNNY_CORE_ERR_INVALID_ARG;
+    }
+    return bunny_core_map_db_result(bunny_db_post_get_relationships(core->db, post_id, out_relationships));
+}
+
+bunny_core_result_t bunny_core_post_get_pool_ids(bunny_core_t *core, int64_t post_id, bunny_db_int64_list_t *out_list)
+{
+    if (!core) {
+        return BUNNY_CORE_ERR_INVALID_ARG;
+    }
+    return bunny_core_map_db_result(bunny_db_post_get_pool_ids(core->db, post_id, out_list));
+}
