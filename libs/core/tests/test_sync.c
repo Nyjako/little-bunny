@@ -59,6 +59,37 @@ static char *read_fixture(const char *filename)
     return buf;
 }
 
+/* Mirrors BUNNY_CORE_SYNC_E621_PAGE_LIMIT in sync.c -- not part of the public
+ * API, so this needs to be kept in sync by hand if that constant ever
+ * changes. */
+#define TEST_E621_FULL_PAGE_SIZE 320
+
+/* Builds a minimal e621 posts-search response with `count` posts (ids
+ * starting at `first_id`), so a "full page triggers another request" test
+ * doesn't need a literal 320-post fixture file checked into the repo. */
+static char *build_e621_posts_page_json(int count, int first_id)
+{
+    size_t capacity = 1024 + (size_t)count * 700;
+    char *buf = malloc(capacity);
+    if (!buf) {
+        return NULL;
+    }
+    size_t len = (size_t)snprintf(buf, capacity, "{\"posts\":[");
+    for (int i = 0; i < count; i++) {
+        int id = first_id + i;
+        len += (size_t)snprintf(buf + len, capacity - len,
+                                "%s{\"id\":%d,\"created_at\":\"2024-01-01T00:00:00.000-05:00\","
+                                "\"file\":{\"width\":100,\"height\":100,\"ext\":\"png\",\"size\":1000,\"md5\":\"aaa\",\"url\":\"https://static1.e621.net/data/%d.png\"},"
+                                "\"preview\":{\"width\":50,\"height\":50,\"url\":\"https://static1.e621.net/data/preview/%d.png\"},"
+                                "\"sample\":{\"has\":false},\"score\":{\"up\":1,\"down\":0,\"total\":1},"
+                                "\"tags\":{\"general\":[\"one\"],\"species\":[],\"character\":[],\"copyright\":[],\"artist\":[\"someartist\"],\"invalid\":[],\"lore\":[],\"meta\":[]},"
+                                "\"rating\":\"s\",\"fav_count\":1,\"sources\":[],\"description\":\"a test post\",\"comment_count\":0,\"is_favorited\":false,\"pools\":[]}",
+                                i == 0 ? "" : ",", id, id, id);
+    }
+    len += (size_t)snprintf(buf + len, capacity - len, "]}");
+    return buf;
+}
+
 void setUp(void)
 {
     memset(&g_e621_state, 0, sizeof(g_e621_state));
@@ -118,6 +149,51 @@ void test_sync_e621_search_upserts_post(void)
     TEST_ASSERT_EQUAL(1, posts.items[0].score_up);
     TEST_ASSERT_EQUAL(0, posts.items[0].score_down);
     bunny_db_post_list_free(&posts);
+
+    free(fixture);
+}
+
+void test_sync_e621_search_fetches_a_second_page_when_the_first_is_full(void)
+{
+    char *page1 = build_e621_posts_page_json(TEST_E621_FULL_PAGE_SIZE, 1);
+    char *page2 = build_e621_posts_page_json(5, TEST_E621_FULL_PAGE_SIZE + 1);
+    TEST_ASSERT_NOT_NULL(page1);
+    TEST_ASSERT_NOT_NULL(page2);
+    g_e621_state.bodies[0] = page1;
+    g_e621_state.bodies[1] = page2;
+    g_e621_state.body_count = 2;
+
+    int64_t search_id = 0;
+    bunny_core_search_create(g_core, BUNNY_DB_SITE_E621, "wolves", "wolf", 24, &search_id);
+
+    bunny_core_sync_stats_t stats;
+    bunny_core_result_t result = bunny_core_sync_due_searches(g_core, &stats);
+    TEST_ASSERT_EQUAL(BUNNY_CORE_OK, result);
+    TEST_ASSERT_EQUAL(1, stats.searches_synced);
+    TEST_ASSERT_EQUAL(TEST_E621_FULL_PAGE_SIZE + 5, stats.posts_upserted);
+    /* Exactly 2 requests -- a short second page must stop the loop rather
+     * than probing for a third. */
+    TEST_ASSERT_EQUAL(2, (int)g_e621_state.next_index);
+
+    free(page1);
+    free(page2);
+}
+
+void test_sync_e621_search_stops_after_a_single_short_page(void)
+{
+    char *fixture = read_fixture("e621_posts_search.json");
+    TEST_ASSERT_NOT_NULL(fixture);
+    g_e621_state.bodies[0] = fixture;
+    g_e621_state.body_count = 1;
+
+    int64_t search_id = 0;
+    bunny_core_search_create(g_core, BUNNY_DB_SITE_E621, "wolves", "wolf", 24, &search_id);
+
+    bunny_core_sync_stats_t stats;
+    bunny_core_result_t result = bunny_core_sync_due_searches(g_core, &stats);
+    TEST_ASSERT_EQUAL(BUNNY_CORE_OK, result);
+    TEST_ASSERT_EQUAL(1, stats.searches_synced);
+    TEST_ASSERT_EQUAL(1, (int)g_e621_state.next_index);
 
     free(fixture);
 }
@@ -194,11 +270,17 @@ void test_sync_inkbunny_search_upserts_post(void)
 {
     char *login_fixture = read_fixture("inkbunny_login_success.json");
     char *search_fixture = read_fixture("inkbunny_search_response.json");
+    /* With no total-results/total-pages signal in inkbunny_submission_list_t,
+     * the pagination loop (M8.5.1) always probes one page past the last
+     * non-empty one to confirm there's nothing more. */
+    char *empty_fixture = read_fixture("inkbunny_search_response_empty.json");
     TEST_ASSERT_NOT_NULL(login_fixture);
     TEST_ASSERT_NOT_NULL(search_fixture);
+    TEST_ASSERT_NOT_NULL(empty_fixture);
     g_inkbunny_state.bodies[0] = login_fixture;
     g_inkbunny_state.bodies[1] = search_fixture;
-    g_inkbunny_state.body_count = 2;
+    g_inkbunny_state.bodies[2] = empty_fixture;
+    g_inkbunny_state.body_count = 3;
 
     int64_t search_id = 0;
     bunny_core_result_t result = bunny_core_search_create(g_core, BUNNY_DB_SITE_INKBUNNY, "tribute", "tribute", 24, &search_id);
@@ -209,6 +291,9 @@ void test_sync_inkbunny_search_upserts_post(void)
     TEST_ASSERT_EQUAL(BUNNY_CORE_OK, result);
     TEST_ASSERT_EQUAL(1, stats.searches_synced);
     TEST_ASSERT_EQUAL(1, stats.posts_upserted);
+    /* login + page 1 (1 result) + page 2 (empty, stops the loop) -- never a
+     * page 3. */
+    TEST_ASSERT_EQUAL(3, (int)g_inkbunny_state.next_index);
 
     bunny_db_post_list_t posts;
     result = bunny_core_search_list_posts(g_core, search_id, false, &posts);
@@ -221,6 +306,7 @@ void test_sync_inkbunny_search_upserts_post(void)
 
     free(login_fixture);
     free(search_fixture);
+    free(empty_fixture);
 }
 
 void test_sync_skips_search_not_due_yet(void)
@@ -303,6 +389,8 @@ int main(void)
 {
     UNITY_BEGIN();
     RUN_TEST(test_sync_e621_search_upserts_post);
+    RUN_TEST(test_sync_e621_search_fetches_a_second_page_when_the_first_is_full);
+    RUN_TEST(test_sync_e621_search_stops_after_a_single_short_page);
     RUN_TEST(test_tag_autocomplete_finds_tags_from_synced_posts);
     RUN_TEST(test_tag_autocomplete_returns_empty_list_for_no_match);
     RUN_TEST(test_mark_seen_flips_is_seen_on_a_synced_post);

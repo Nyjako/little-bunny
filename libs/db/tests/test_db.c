@@ -323,6 +323,38 @@ void test_search_results_and_list_posts(void)
     bunny_db_post_list_free(&unseen_results);
 }
 
+void test_search_list_posts_orders_newest_first_by_site_date(void)
+{
+    int64_t search_id = 0;
+    bunny_db_search_create(g_db, BUNNY_DB_SITE_E621, "wolves", "wolf", 24, &search_id);
+
+    /* Added to the search in the opposite order of their site creation
+     * dates -- if list_posts still sorted by found_at (when this app linked
+     * them to the search) rather than the site's own created_at_site, this
+     * would come back oldest-first instead of newest-first. */
+    bunny_db_post_upsert_t older_post;
+    bunny_db_post_upsert_t newer_post;
+    make_test_post(&older_post, 701, 1);
+    make_test_post(&newer_post, 702, 1);
+    older_post.created_at_site = "2026-01-01T00:00:00Z";
+    newer_post.created_at_site = "2026-06-01T00:00:00Z";
+
+    int64_t older_id = 0;
+    int64_t newer_id = 0;
+    bunny_db_post_upsert(g_db, &older_post, &older_id);
+    bunny_db_search_add_result(g_db, search_id, older_id);
+    bunny_db_post_upsert(g_db, &newer_post, &newer_id);
+    bunny_db_search_add_result(g_db, search_id, newer_id);
+
+    bunny_db_post_list_t results;
+    bunny_db_result_t result = bunny_db_search_list_posts(g_db, search_id, false, &results);
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, result);
+    TEST_ASSERT_EQUAL(2, (int)results.count);
+    TEST_ASSERT_EQUAL(newer_id, results.items[0].id);
+    TEST_ASSERT_EQUAL(older_id, results.items[1].id);
+    bunny_db_post_list_free(&results);
+}
+
 void test_download_record_and_list(void)
 {
     bunny_db_post_upsert_t post;
@@ -626,6 +658,7 @@ int main(void)
     RUN_TEST(test_seen_state);
     RUN_TEST(test_favorite_add_remove_list);
     RUN_TEST(test_search_results_and_list_posts);
+    RUN_TEST(test_search_list_posts_orders_newest_first_by_site_date);
     RUN_TEST(test_download_record_and_list);
     RUN_TEST(test_post_get_by_id);
     RUN_TEST(test_post_get_by_id_not_found);
