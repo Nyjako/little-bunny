@@ -56,6 +56,7 @@ Map<String, Object?> _searchToMap(bunny_db_search_t search) => {
   'intervalHours': search.interval_hours,
   'createdAt': _readNullableString(search.created_at),
   'lastRunAt': _readNullableString(search.last_run_at),
+  'unseenCount': search.unseen_count,
 };
 
 Map<String, Object?> _postToMap(bunny_db_post_t post) => {

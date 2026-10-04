@@ -42,6 +42,7 @@ class BunnySearch {
   final int intervalHours;
   final String createdAt;
   final String? lastRunAt;
+  final int unseenCount;
 
   const BunnySearch({
     required this.id,
@@ -51,6 +52,7 @@ class BunnySearch {
     required this.intervalHours,
     required this.createdAt,
     this.lastRunAt,
+    this.unseenCount = 0,
   });
 }
 

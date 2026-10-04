@@ -798,6 +798,17 @@ expected to work, it may need an entirely new parameter/endpoint wired into `lib
 not a bug fix to existing code. This needs a live debugging session against a real configured
 account to pin down before any fix is written — tracked as open, not guessed at.
 
+**Unseen count per search (M8.5.11)**: `bunny_db_search_list`'s query (`libs/db/src/
+searches.c`) gained a correlated subquery counting `search_results` rows for that search with
+no matching `seen_posts` row, aliased `unseen_count`. This is an additive field on the
+existing `bunny_db_search_t` struct — not a schema change — so it required no migration and
+no new query function: `bunny_core_search_list`, the FFI isolate's `_searchToMap`, the
+server's `search_to_json`, and `BunnySearch` on the Dart side all just carry one more field
+through their existing plumbing. `SearchesScreen` renders a small badge next to each row's
+delete icon when `unseenCount > 0`. `FakeBunnyRepository.listSearches` computes the same
+count from its own `postsBySearchId` map (rather than hardcoding a stored value) so widget
+tests exercise the same "count unseen posts" behavior the real implementations have.
+
 ## Inkbunny API constraints (found in M2)
 
 Verified against the live API and the official docs while building `libinkbunny`:
