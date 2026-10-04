@@ -48,6 +48,8 @@ BunnyPost _postFromMap(Map<String, Object?> m) => BunnyPost(
 
 BunnyTagStat _tagStatFromMap(Map<String, Object?> m) => BunnyTagStat(name: m['name'] as String, count: m['count'] as int);
 
+BunnyPostTag _postTagFromMap(Map<String, Object?> m) => BunnyPostTag(name: m['name'] as String, category: m['category'] as String?);
+
 BunnySyncStats _syncStatsFromMap(Map<String, Object?> m) => BunnySyncStats(
   searchesChecked: m['searchesChecked'] as int,
   searchesSynced: m['searchesSynced'] as int,
@@ -133,6 +135,12 @@ class FfiBunnyRepository implements BunnyRepository {
 
   @override
   Future<void> markAllSeen(int searchId) => _wrapped(() => _native.markAllSeen(searchId));
+
+  @override
+  Future<List<BunnyPostTag>> getPostTagsByCategory(int postId) async {
+    final items = await _wrapped(() => _native.getPostTagsByCategory(postId));
+    return items.map(_postTagFromMap).toList();
+  }
 
   @override
   Future<BunnySyncStats> syncDueSearches() async {

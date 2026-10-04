@@ -90,6 +90,12 @@ bunny_core_result_t bunny_core_post_mark_seen(bunny_core_t *core, int64_t post_i
  * "mark all as seen" action. */
 bunny_core_result_t bunny_core_search_mark_all_seen(bunny_core_t *core, int64_t search_id);
 
+/* A post's tags with their categories, for a post detail view's sectioned
+ * tag display (Artists/Characters/Copyrights/Species/General/Meta for e621;
+ * a single uncategorized group for Inkbunny, whose keywords have no category
+ * concept at all) -- a thin pass-through to bunny_db. */
+bunny_core_result_t bunny_core_post_get_tags_by_category(bunny_core_t *core, int64_t post_id, bunny_db_post_tag_list_t *out_list);
+
 /* --- Scheduled search sync --------------------------------------------------- */
 
 typedef struct

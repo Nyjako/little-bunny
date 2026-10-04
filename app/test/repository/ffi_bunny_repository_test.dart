@@ -37,6 +37,13 @@ void main() {
     await expectLater(repository.markAllSeen(1), completes);
   });
 
+  test('getPostTagsByCategory returns an empty list for a nonexistent post', () async {
+    // Unlike markPostSeen (a foreign-key violation), this is a pure SELECT
+    // with no matching rows for a post that was never cached -- nothing to
+    // reject.
+    expect(await repository.getPostTagsByCategory(1), isEmpty);
+  });
+
   test('verifyAccount rejects bogus e621 credentials', () async {
     // See bunny_core_ffi/test/bunny_core_native_test.dart for why this hits
     // real e621 network: standalone mode has no fake-transport override.

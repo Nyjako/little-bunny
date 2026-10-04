@@ -21,6 +21,10 @@ typedef struct
 {
     const char **items;
     size_t count;
+    /* Parallel to items (same length as count) -- categories[i] is items[i]'s
+     * e621 category, or NULL wholesale when there's no category info at all
+     * (e.g. Inkbunny keywords, which have no category concept). */
+    const char **categories;
 } flat_tag_list_t;
 
 /* e621's real API allows up to 320 posts/page; Inkbunny has no explicit
@@ -76,6 +80,11 @@ static flat_tag_list_t flatten_e621_tags(const e621_post_t *post)
     const e621_string_list_t *lists[] = {
         &post->tags.general, &post->tags.artist, &post->tags.copyright, &post->tags.character, &post->tags.species, &post->tags.invalid, &post->tags.lore, &post->tags.meta,
     };
+    /* Parallel to lists[] above -- the category every tag in lists[i] belongs
+     * to, since that grouping is exactly e621's own per-tag category. */
+    static const char *const category_names[] = {
+        "general", "artist", "copyright", "character", "species", "invalid", "lore", "meta",
+    };
     size_t list_count = sizeof(lists) / sizeof(lists[0]);
 
     size_t total = 0;
@@ -89,18 +98,24 @@ static flat_tag_list_t flatten_e621_tags(const e621_post_t *post)
     }
 
     const char **items = malloc(total * sizeof(char *));
-    if (!items) {
+    const char **categories = malloc(total * sizeof(char *));
+    if (!items || !categories) {
+        free(items);
+        free(categories);
         return result;
     }
 
     size_t j = 0;
     for (size_t i = 0; i < list_count; i++) {
         for (size_t k = 0; k < lists[i]->count; k++) {
-            items[j++] = lists[i]->items[k];
+            items[j] = lists[i]->items[k];
+            categories[j] = category_names[i];
+            j++;
         }
     }
     result.items = items;
     result.count = total;
+    result.categories = categories;
     return result;
 }
 
@@ -163,11 +178,13 @@ static bunny_core_result_t upsert_e621_post(bunny_db_t *db, const e621_post_t *p
     upsert.created_at_site = post->created_at;
     upsert.tags = tags.items;
     upsert.tag_count = tags.count;
+    upsert.tag_categories = tags.categories;
 
     bunny_db_result_t result = bunny_db_post_upsert(db, &upsert, out_post_id);
 
     free(artist);
     free((void *)tags.items);
+    free((void *)tags.categories);
 
     return bunny_core_map_db_result(result);
 }

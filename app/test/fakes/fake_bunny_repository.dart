@@ -14,6 +14,7 @@ class FakeBunnyRepository implements BunnyRepository {
   final List<BunnySearch> searches = [];
   final Map<int, List<BunnyPost>> postsBySearchId = {};
   final List<BunnyTagStat> tagStats = [];
+  final Map<int, List<BunnyPostTag>> tagsByPostId = {};
   int _nextSearchId = 1;
   int syncCallCount = 0;
 
@@ -125,6 +126,9 @@ class FakeBunnyRepository implements BunnyRepository {
       posts[i] = _markedSeen(posts[i]);
     }
   }
+
+  @override
+  Future<List<BunnyPostTag>> getPostTagsByCategory(int postId) async => List.of(tagsByPostId[postId] ?? const []);
 
   @override
   Future<BunnySyncStats> syncDueSearches() async {

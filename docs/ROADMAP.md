@@ -520,6 +520,35 @@ this file is the single source of truth for "what's done" across sessions.
   down through the screen that needs it" shape `ThemeSettingsStore` and `AppLockService`
   already established.
 
+- [x] **M8.5.3 — Tag categories**
+  New `tag_categories` table (`libs/db/src/schema.h`): `tag_id INTEGER PRIMARY KEY REFERENCES
+  tags(id), category TEXT CHECK(...)`. A tag's category is a property of the tag itself, not
+  a given post — e621's own data model has a given tag name always belong to the same
+  category site-wide — so this keys on `tag_id` alone and is upserted once per tag regardless
+  of how many posts reference it, rather than per `(post_id, tag_id)`. Inkbunny keywords have
+  no category concept at all and simply never get a row (`LEFT JOIN` in the read query — `NULL`
+  means uncategorized, not "unknown"). `bunny_db_post_upsert_t` gained a parallel
+  `const char **tag_categories` (same length as `tags`/`tag_count`; `NULL` entries allowed,
+  or the whole array can be `NULL` when there's no category info at all). New read function
+  `bunny_db_post_get_tags_by_category(db, post_id, out_list)` returns `{name, category}` pairs
+  via new `bunny_db_post_tag_t`/`bunny_db_post_tag_list_t` types (same shape as
+  `bunny_db_tag_stat_t`). `sync.c`'s `flatten_e621_tags` now also builds a parallel
+  `categories` array (one of the 8 literal e621 category names per flattened tag, matching
+  which of `e621_tags_t`'s 8 lists it came from) so `upsert_e621_post` can populate
+  `tag_categories`; `upsert_inkbunny_submission` passes nothing (stays `NULL` via the existing
+  `memset`). Core wrapper `bunny_core_post_get_tags_by_category`. Full plumbing: `GET
+  /posts/{id}/tags` (new `BunnyPostTag` model), FFI isolate request/handler, both
+  `FfiBunnyRepository`/`HttpBunnyRepository`, `FakeBunnyRepository.tagsByPostId`.
+  **Plan deviation**: the original plan called for a new `server/src/routes_posts.c` file for
+  this and future M8.5.4/5 read endpoints. In practice `/posts` is already a single civetweb
+  route owned end-to-end by `posts_handler` in the existing `routes_queue.c` (registered via
+  one `mg_set_request_handler(mg_ctx, "/posts", posts_handler, ctx)` call, dispatching
+  internally by sub-path for `/favorite`, `/vote`, `/comment`, `/seen`) — civetweb has no
+  concept of two handlers sharing a prefix, so a second registration for the same prefix would
+  simply never be reached. `GET /posts/{id}/tags` was added as another case in that same
+  dispatch chain instead, matching the identical precedent already set by M8.1's `/posts/{id}/
+  seen` route and explicitly noted there for the same reason.
+
 - [ ] **M9 — Actions & downloads**
   Single + mass like/favorite/download, commenting, download manager writing to
   `%artist%/%id%.%extension%`, checksum (md5) verification of downloaded files against the

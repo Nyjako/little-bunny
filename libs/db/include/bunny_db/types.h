@@ -88,6 +88,22 @@ typedef struct
     size_t count;
 } bunny_db_tag_stat_list_t;
 
+/* One of a post's tags, with its category (e621: general/artist/copyright/
+ * character/species/invalid/lore/meta; NULL for Inkbunny keywords, which
+ * have no category concept at all). Feeds a post detail view's sectioned
+ * tag display. */
+typedef struct
+{
+    char *name;
+    char *category; /* may be NULL */
+} bunny_db_post_tag_t;
+
+typedef struct
+{
+    bunny_db_post_tag_t *items;
+    size_t count;
+} bunny_db_post_tag_list_t;
+
 typedef struct
 {
     int64_t id;
@@ -146,6 +162,8 @@ void bunny_db_post_free(bunny_db_post_t *post);
 void bunny_db_post_list_free(bunny_db_post_list_t *list);
 void bunny_db_tag_stat_free(bunny_db_tag_stat_t *stat);
 void bunny_db_tag_stat_list_free(bunny_db_tag_stat_list_t *list);
+void bunny_db_post_tag_free(bunny_db_post_tag_t *tag);
+void bunny_db_post_tag_list_free(bunny_db_post_tag_list_t *list);
 void bunny_db_download_free(bunny_db_download_t *download);
 void bunny_db_download_list_free(bunny_db_download_list_t *list);
 void bunny_db_action_free(bunny_db_action_t *action);
