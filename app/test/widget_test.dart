@@ -25,7 +25,9 @@ void main() {
     await tester.pump();
     await tester.pump();
 
-    expect(find.text('Searches'), findsOneWidget);
+    // Two matches now: the AppBar title and the "Searches" tab label (M8.5.5
+    // added a Pools tab alongside it).
+    expect(find.text('Searches'), findsNWidgets(2));
     expect(find.text('Set up LittleBunny'), findsNothing);
   });
 

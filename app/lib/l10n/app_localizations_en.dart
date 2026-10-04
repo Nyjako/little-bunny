@@ -116,6 +116,18 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String get searchesTabSearches => 'Searches';
+
+  @override
+  String get searchesTabPools => 'Pools';
+
+  @override
+  String get searchesPoolsEmptyState => 'No saved pools yet. Tap + to add one.';
+
+  @override
+  String get searchesNewPoolTooltip => 'Add pool';
+
+  @override
   String get createSearchScreenTitle => 'New search';
 
   @override
@@ -129,6 +141,15 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get createSearchSubmit => 'Create';
+
+  @override
+  String get createPoolSearchDialogTitle => 'Add pool';
+
+  @override
+  String get createPoolSearchIdLabel => 'Pool ID';
+
+  @override
+  String get createPoolSearchSubmit => 'Add';
 
   @override
   String get postGridUnseenOnlyTooltip => 'Show unseen only';

@@ -611,6 +611,25 @@ this file is the single source of truth for "what's done" across sessions.
   repository tests. **No UI in this sub-milestone** — the "Pools" tab and "create pool search"
   flow are a separate follow-up.
 
+- [x] **M8.5.5b — Pools tab + create-pool-search flow (completes M8.5.5)**
+  The UI follow-up to M8.5.5a. `SearchesScreen` gained a `TabController`/`TabBar` with two
+  tabs, "Searches" and "Pools" — a pool search is just a regular `BunnySearch` with a
+  recognizable shape (`site == e621 && query.startsWith('pool:')`, reusing the finding from
+  the original M8.5 plan that `pool:<id>` already works as a literal e621 tag-search query),
+  so the split is a pure client-side filter over the same `listSearches()` call, not a new
+  repository method. The floating action button's behavior switches with the active tab:
+  "Searches" still opens the existing `CreateSearchScreen`; "Pools" opens a new `AlertDialog`
+  prompting for a numeric pool id, calling `fetchPool(id)` (from M8.5.5a) to auto-fill a
+  friendly label from the pool's own name, then `createSearch(site: e621, label, query:
+  'pool:$id')`. A failed pool lookup (network error, deleted pool, wrong id) doesn't block
+  search creation — it just falls back to a `pool:$id` label, since the pool-search mechanism
+  itself needs nothing from that lookup to work. New l10n keys for the tab labels, empty
+  state, dialog title/field/submit button, and the pools-tab FAB tooltip. One pre-existing
+  test (`widget_test.dart`) needed updating: the new "Searches" tab label made
+  `find.text('Searches')` ambiguous against the AppBar title, fixed with `findsNWidgets(2)`
+  and a comment explaining why. New widget tests cover tab filtering, the pools empty state,
+  and both the successful-lookup and lookup-failure paths of the create-pool-search dialog.
+
 - [ ] **M9 — Actions & downloads**
   Single + mass like/favorite/download, commenting, download manager writing to
   `%artist%/%id%.%extension%`, checksum (md5) verification of downloaded files against the
