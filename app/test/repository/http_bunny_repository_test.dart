@@ -223,6 +223,15 @@ void main() {
       expect(capturedUri.path, '/posts/5/seen');
     });
 
+    test('markAllSeen sends POST to the right path', () async {
+      respond = (_) => http.Response(jsonEncode({'ok': true}), 200);
+
+      await buildRepository().markAllSeen(7);
+
+      expect(capturedMethod, 'POST');
+      expect(capturedUri.path, '/searches/7/mark_all_seen');
+    });
+
     test('syncDueSearches maps the stats response', () async {
       respond = (_) => http.Response(jsonEncode({'searches_checked': 3, 'searches_synced': 2, 'posts_upserted': 10}), 200);
 

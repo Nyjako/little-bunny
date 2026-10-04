@@ -187,6 +187,12 @@ class _MarkPostSeenRequest extends _Request {
   const _MarkPostSeenRequest(this.postId);
 }
 
+class _MarkAllSeenRequest extends _Request {
+  final int searchId;
+
+  const _MarkAllSeenRequest(this.searchId);
+}
+
 class _QueueFavoriteAddRequest extends _Request {
   final int postId;
   final int stars;
@@ -355,6 +361,9 @@ Object? _dispatch(Pointer<bunny_core_t>? core, _Request request, void Function(P
       case _MarkPostSeenRequest r:
         _check(_bindings.bunny_core_post_mark_seen(c, r.postId));
         return null;
+      case _MarkAllSeenRequest r:
+        _check(_bindings.bunny_core_search_mark_all_seen(c, r.searchId));
+        return null;
       case _QueueFavoriteAddRequest r:
         _check(_bindings.bunny_core_queue_favorite_add(c, r.postId, r.stars));
         return null;
@@ -472,6 +481,8 @@ class BunnyCoreNative {
   Future<List<Map<String, Object?>>> tagAutocomplete(String site, String prefix, int limit) => _send<List<Map<String, Object?>>>(_TagAutocompleteRequest(site, prefix, limit));
 
   Future<void> markPostSeen(int postId) => _send<void>(_MarkPostSeenRequest(postId));
+
+  Future<void> markAllSeen(int searchId) => _send<void>(_MarkAllSeenRequest(searchId));
 
   Future<void> queueFavoriteAdd(int postId, int stars) => _send<void>(_QueueFavoriteAddRequest(postId, stars));
 

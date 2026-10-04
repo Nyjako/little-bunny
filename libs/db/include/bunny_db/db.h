@@ -85,6 +85,12 @@ bunny_db_result_t bunny_db_search_list_posts(bunny_db_t *db, int64_t search_id, 
 bunny_db_result_t bunny_db_post_mark_seen(bunny_db_t *db, int64_t post_id);
 bunny_db_result_t bunny_db_count_unseen(bunny_db_t *db, int64_t *out_count);
 
+/* Marks every post currently linked to `search_id` as seen in one call --
+ * the bulk counterpart to bunny_db_post_mark_seen, for a post grid's
+ * "mark all as seen" action. Posts already seen, or linked to other
+ * searches too, are unaffected either way. */
+bunny_db_result_t bunny_db_search_mark_all_seen(bunny_db_t *db, int64_t search_id);
+
 /* --- Favorites mirror ------------------------------------------------------
  * A local cache of what's favorited, so the app doesn't have to round-trip to
  * the site to show favorite state. Does not itself call any site API. */

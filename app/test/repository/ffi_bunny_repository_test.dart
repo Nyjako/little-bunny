@@ -30,6 +30,13 @@ void main() {
     await expectLater(repository.markPostSeen(1), throwsA(isA<BunnyRepositoryException>()));
   });
 
+  test('markAllSeen is a no-op for a nonexistent search', () async {
+    // Unlike markPostSeen (a foreign-key violation on a bad post id),
+    // marking all of a search's posts seen is just an empty SELECT when the
+    // search has no linked posts (or doesn't exist) -- nothing to reject.
+    await expectLater(repository.markAllSeen(1), completes);
+  });
+
   test('verifyAccount rejects bogus e621 credentials', () async {
     // See bunny_core_ffi/test/bunny_core_native_test.dart for why this hits
     // real e621 network: standalone mode has no fake-transport override.
