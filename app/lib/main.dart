@@ -12,6 +12,7 @@ import 'screens/setup_screen.dart';
 import 'settings/app_lock_service.dart';
 import 'settings/repository_settings_store.dart';
 import 'settings/secret_store.dart';
+import 'settings/sync_settings_store.dart';
 import 'settings/theme_settings_store.dart';
 
 Future<void> main() async {
@@ -21,7 +22,14 @@ Future<void> main() async {
   // Android/iOS on video_player's official backend untouched.
   fvp.registerWith(options: {'platforms': ['windows', 'linux']});
   final secretStore = FlutterSecureStorageSecretStore();
-  runApp(LittleBunnyApp(settingsStore: RepositorySettingsStore(secretStore), lockService: AppLockService(secretStore), themeSettingsStore: const ThemeSettingsStore()));
+  runApp(
+    LittleBunnyApp(
+      settingsStore: RepositorySettingsStore(secretStore),
+      lockService: AppLockService(secretStore),
+      themeSettingsStore: const ThemeSettingsStore(),
+      syncSettingsStore: const SyncSettingsStore(),
+    ),
+  );
 }
 
 /// Root widget: on boot, tries to load a persisted [BunnyRepositoryConfig]
@@ -36,8 +44,9 @@ class LittleBunnyApp extends StatefulWidget {
   final RepositorySettingsStore settingsStore;
   final AppLockService lockService;
   final ThemeSettingsStore themeSettingsStore;
+  final SyncSettingsStore syncSettingsStore;
 
-  const LittleBunnyApp({super.key, required this.settingsStore, required this.lockService, required this.themeSettingsStore});
+  const LittleBunnyApp({super.key, required this.settingsStore, required this.lockService, required this.themeSettingsStore, required this.syncSettingsStore});
 
   @override
   State<LittleBunnyApp> createState() => _LittleBunnyAppState();
@@ -111,7 +120,15 @@ class _LittleBunnyAppState extends State<LittleBunnyApp> {
     } else if (_locked) {
       home = LockScreen(lockService: widget.lockService, onUnlocked: _onUnlocked);
     } else {
-      home = BunnyRepositoryScope(repository: _repository!, child: SearchesScreen(lockService: widget.lockService, themeSettingsStore: widget.themeSettingsStore, onThemeModeChanged: (mode) => setState(() => _themeMode = mode)));
+      home = BunnyRepositoryScope(
+        repository: _repository!,
+        child: SearchesScreen(
+          lockService: widget.lockService,
+          themeSettingsStore: widget.themeSettingsStore,
+          syncSettingsStore: widget.syncSettingsStore,
+          onThemeModeChanged: (mode) => setState(() => _themeMode = mode),
+        ),
+      );
     }
 
     return MaterialApp(

@@ -4,6 +4,7 @@ import 'package:little_bunny/bunny_repository_scope.dart';
 import 'package:little_bunny/repository/bunny_models.dart';
 import 'package:little_bunny/screens/searches_screen.dart';
 import 'package:little_bunny/settings/app_lock_service.dart';
+import 'package:little_bunny/settings/sync_settings_store.dart';
 import 'package:little_bunny/settings/theme_settings_store.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -14,7 +15,7 @@ import '../fakes/test_app.dart';
 Widget _wrap(FakeBunnyRepository repository) => wrapWithLocalization(
   BunnyRepositoryScope(
     repository: repository,
-    child: SearchesScreen(lockService: AppLockService(FakeSecretStore()), themeSettingsStore: const ThemeSettingsStore(), onThemeModeChanged: (_) {}),
+    child: SearchesScreen(lockService: AppLockService(FakeSecretStore()), themeSettingsStore: const ThemeSettingsStore(), syncSettingsStore: const SyncSettingsStore(), onThemeModeChanged: (_) {}),
   ),
 );
 

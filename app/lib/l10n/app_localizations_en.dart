@@ -247,4 +247,10 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get settingsAppLockEntry => 'Manage app lock';
+
+  @override
+  String get settingsSyncSection => 'Sync';
+
+  @override
+  String get settingsDefaultIntervalLabel => 'Default sync interval (hours)';
 }
