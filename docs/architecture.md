@@ -1018,6 +1018,23 @@ the e621 fetch test, it deliberately does **not** also test re-fetch idempotency
 re-logs in on every `bunny_core_build_inkbunny_client` call (unlike e621's anonymous GETs),
 which would need a second canned login response the test doesn't provide.
 
+**Grid tile badges (M8.5.7)**: purely client-side -- `BunnyPost` already carried every field
+needed (`rating`/`score`/`scoreUp`/`scoreDown`/`favCount`), so this sub-milestone touches no
+backend, FFI, or server code at all. `app/lib/widgets/rating_badge.dart` is the app's first
+`widgets/` directory; everything UI-related up to this point lived directly under `screens/`
+since nothing was reusable across more than one screen. `ratingBadgeFor` is a pure function
+(not a widget method) specifically so it can be unit-tested without pumping a widget tree,
+matching this session's general preference for testing logic separately from rendering where
+the two can be cleanly separated.
+
+The e621/Inkbunny split here mirrors the same asymmetry M8.5.3's tag categories already
+established: e621 has a fixed, site-defined enumeration (`"s"`/`"q"`/`"e"`, mapped 1:1), while
+Inkbunny's equivalent (`rating_name`) is free text with no fixed value set at all. Rather than
+inventing a brittle exhaustive mapping for Inkbunny's known strings (which may grow or change
+server-side without this app's knowledge), the Inkbunny branch does keyword substring matching
+and always has a safe fallback -- a grey badge showing the literal string -- so an unfamiliar
+rating value degrades gracefully instead of being hidden or crashing the tile.
+
 ## Inkbunny API constraints (found in M2)
 
 Verified against the live API and the official docs while building `libinkbunny`:

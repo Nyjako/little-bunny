@@ -9,12 +9,13 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../fakes/fake_bunny_repository.dart';
 import '../fakes/test_app.dart';
 
-BunnyPost _post({required int id, required bool isSeen, BunnySite site = BunnySite.e621, String? previewUrl, String? sampleUrl}) => BunnyPost(
+BunnyPost _post({required int id, required bool isSeen, BunnySite site = BunnySite.e621, String? previewUrl, String? sampleUrl, String? rating, int score = 0, int favCount = 0}) => BunnyPost(
   id: id,
   site: site,
   externalId: id,
-  score: 0,
-  favCount: 0,
+  rating: rating,
+  score: score,
+  favCount: favCount,
   commentCount: 0,
   previewUrl: previewUrl,
   sampleUrl: sampleUrl,
@@ -168,5 +169,18 @@ void main() {
 
     final image = tester.widget<CachedNetworkImage>(find.descendant(of: find.byKey(const ValueKey(1)), matching: find.byType(CachedNetworkImage)));
     expect(image.imageUrl, 'https://example.com/1_preview.jpg');
+  });
+
+  testWidgets('shows a rating badge and score/fav-count overlay per tile', (WidgetTester tester) async {
+    final repository = FakeBunnyRepository();
+    repository.postsBySearchId[1] = [_post(id: 1, isSeen: false, rating: 'e', score: 12, favCount: 34)];
+
+    await tester.pumpWidget(wrapWithLocalization(PostGridScreen(search: search, repository: repository, displaySettingsStore: const DisplaySettingsStore())));
+    await tester.pumpAndSettle();
+
+    final tile = find.byKey(const ValueKey(1));
+    expect(find.descendant(of: tile, matching: find.text('E')), findsOneWidget);
+    expect(find.descendant(of: tile, matching: find.text('12')), findsOneWidget);
+    expect(find.descendant(of: tile, matching: find.text('34')), findsOneWidget);
   });
 }
