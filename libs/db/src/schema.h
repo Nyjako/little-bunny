@@ -98,6 +98,14 @@ static const char *const BUNNY_DB_SCHEMA_SQL = "PRAGMA foreign_keys = ON;"
                                                "    pool_id INTEGER NOT NULL,"
                                                "    PRIMARY KEY (post_id, pool_id)"
                                                ");"
+                                               /* The medium-quality image variant (e621's "sample", Inkbunny's "screen")
+                                                * -- a single nullable URL per post, same one-to-one shape as
+                                                * post_relationships (the PK *is* the FK), upserted unconditionally on
+                                                * every sync so a value that disappears on resync doesn't linger. */
+                                               "CREATE TABLE IF NOT EXISTS post_media_variants ("
+                                               "    post_id INTEGER PRIMARY KEY REFERENCES posts(id) ON DELETE CASCADE,"
+                                               "    sample_url TEXT"
+                                               ");"
                                                "CREATE TABLE IF NOT EXISTS search_results ("
                                                "    search_id INTEGER NOT NULL REFERENCES searches(id) ON DELETE CASCADE,"
                                                "    post_id INTEGER NOT NULL REFERENCES posts(id) ON DELETE CASCADE,"

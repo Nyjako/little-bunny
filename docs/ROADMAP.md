@@ -630,6 +630,37 @@ this file is the single source of truth for "what's done" across sessions.
   and a comment explaining why. New widget tests cover tab filtering, the pools empty state,
   and both the successful-lookup and lookup-failure paths of the create-pool-search dialog.
 
+- [x] **M8.5.6 — Settings: preview quality + grid columns**
+  New `post_media_variants(post_id PK REFERENCES posts(id) ON DELETE CASCADE, sample_url
+  TEXT)` table stores the medium-quality image variant (e621's "sample", Inkbunny's "screen")
+  that was already being parsed (`e621_post_t.sample.url`, `inkbunny_file_t.url_screen`) but
+  previously discarded entirely. Same one-to-one shape as `post_relationships` (upserted
+  unconditionally so a resync that loses a sample URL clears it), but `sample_url` is `LEFT
+  JOIN`ed directly into the shared `BUNNY_DB_POST_SELECT_COLUMNS`/`FROM_JOIN` macros rather
+  than needing its own read function — every post-reading query (`post_get`,
+  `search_list_posts`, `favorite_list`) gets it for free, avoiding an N+1 fetch for the grid.
+  `bunny_db_post_t` gained `sample_url`; server's `post_to_json` gained the matching field;
+  `BunnyPost` gained `sampleUrl` through both repository implementations. New
+  `app/lib/settings/display_settings_store.dart` (`DisplaySettingsStore`, same
+  `shared_preferences` shape as the other settings stores): a `PreviewQuality` enum
+  (thumbnail/medium, default thumbnail) and `gridColumns` (default 3, matching
+  `PostGridScreen`'s pre-existing hardcoded value). `SettingsScreen` gained a "Display"
+  section (a `SegmentedButton` + a number field, same controls already used for theme/sync).
+  `PostGridScreen` now reads `gridColumns` into its `SliverGridDelegateWithFixedCrossAxisCount`
+  and picks `sampleUrl ?? previewUrl` vs. always `previewUrl` for `CachedNetworkImage` based on
+  the loaded quality — falling back to the thumbnail whenever a post has no sample URL (notably
+  every Inkbunny post synced via search alone, see below). `DisplaySettingsStore` threads
+  through `SearchesScreen` to both `SettingsScreen` and `PostGridScreen`, same pattern
+  `SyncSettingsStore` already established.
+  **Confirmed limitation, not a regression**: Inkbunny's search endpoint doesn't return a
+  `"files"` array at all (already documented for `description`/`keywords`) — `sample_url`
+  (like `file_url`/`file_md5`/`width`/`height`) can only ever be populated for an Inkbunny post
+  via a full `inkbunny_get_submission` fetch, never a search sync alone. Caught a first-ever
+  test gap for this while writing coverage: `bunny_core_fetch_and_cache_post`'s Inkbunny branch
+  had no test at all until this milestone (only e621 was covered since M8.5.5a) — added one
+  using a copy of `libinkbunny`'s own `submission_full.json` fixture, the first Inkbunny
+  fixture in this test suite that actually includes a `"files"` array.
+
 - [ ] **M9 — Actions & downloads**
   Single + mass like/favorite/download, commenting, download manager writing to
   `%artist%/%id%.%extension%`, checksum (md5) verification of downloaded files against the

@@ -297,6 +297,36 @@ void test_fetch_and_cache_post_upserts_live_e621_post(void)
     free(fixture2);
 }
 
+void test_fetch_and_cache_post_upserts_live_inkbunny_submission(void)
+{
+    /* The e621 counterpart above was this function's only test coverage
+     * until now -- this is the first test to exercise the Inkbunny branch.
+     * Also notable: unlike a search sync, a full inkbunny_get_submission
+     * response *does* include a "files" array (see architecture.md's note on
+     * this gap), so this is the one sync path that can actually populate
+     * file_url/file_md5/width/height/sample_url for an Inkbunny post -- all
+     * of which stay NULL/0 from a search sync alone. */
+    char *login_fixture = read_fixture("inkbunny_login_success.json");
+    char *submission_fixture = read_fixture("inkbunny_submission_full.json");
+    TEST_ASSERT_NOT_NULL(login_fixture);
+    TEST_ASSERT_NOT_NULL(submission_fixture);
+    g_inkbunny_state.bodies[0] = login_fixture;
+    g_inkbunny_state.bodies[1] = submission_fixture;
+    g_inkbunny_state.body_count = 2;
+
+    int64_t post_id = 0;
+    bunny_core_result_t result = bunny_core_fetch_and_cache_post(g_core, BUNNY_DB_SITE_INKBUNNY, 3955918, &post_id);
+    TEST_ASSERT_EQUAL(BUNNY_CORE_OK, result);
+    TEST_ASSERT_TRUE(post_id > 0);
+    /* Upsert-in-place idempotency is already covered by the e621 case above
+     * (both go through the same bunny_db_post_upsert) -- a second call here
+     * would need its own guest-login fixture, since bunny_core_build_
+     * inkbunny_client logs in fresh every call, unlike e621's anonymous GETs. */
+
+    free(login_fixture);
+    free(submission_fixture);
+}
+
 void test_fetch_pool_returns_live_pool_info(void)
 {
     char *fixture = read_fixture("e621_pool_single.json");
@@ -311,6 +341,31 @@ void test_fetch_pool_returns_live_pool_info(void)
     TEST_ASSERT_EQUAL_STRING("a_test_pool", info.name);
     TEST_ASSERT_EQUAL(3, info.post_count);
     bunny_core_pool_info_free(&info);
+
+    free(fixture);
+}
+
+void test_sync_e621_search_upserts_post_sample_url(void)
+{
+    char *fixture = read_fixture("e621_posts_search.json");
+    TEST_ASSERT_NOT_NULL(fixture);
+    g_e621_state.bodies[0] = fixture;
+    g_e621_state.body_count = 1;
+
+    int64_t search_id = 0;
+    bunny_core_result_t result = bunny_core_search_create(g_core, BUNNY_DB_SITE_E621, "wolves", "wolf", 24, &search_id);
+    TEST_ASSERT_EQUAL(BUNNY_CORE_OK, result);
+
+    bunny_core_sync_stats_t stats;
+    result = bunny_core_sync_due_searches(g_core, &stats);
+    TEST_ASSERT_EQUAL(BUNNY_CORE_OK, result);
+
+    bunny_db_post_list_t posts;
+    result = bunny_core_search_list_posts(g_core, search_id, false, &posts);
+    TEST_ASSERT_EQUAL(BUNNY_CORE_OK, result);
+    TEST_ASSERT_EQUAL(1, (int)posts.count);
+    TEST_ASSERT_EQUAL_STRING("https://static1.e621.net/data/sample/1.png", posts.items[0].sample_url);
+    bunny_db_post_list_free(&posts);
 
     free(fixture);
 }
@@ -464,6 +519,11 @@ void test_sync_inkbunny_search_upserts_post(void)
     TEST_ASSERT_EQUAL(3955918, posts.items[0].external_id);
     TEST_ASSERT_EQUAL_STRING("OvineSatanOMG", posts.items[0].artist);
     TEST_ASSERT_EQUAL_STRING("Thank you, Digimon Beatbreak", posts.items[0].title);
+    /* Inkbunny's search endpoint doesn't return a "files" array at all (see
+     * architecture.md's note on description/keywords having the same gap) --
+     * sample_url (like file_url/file_md5/width/height) is only ever
+     * populated via a full inkbunny_get_submission fetch, not a search sync. */
+    TEST_ASSERT_NULL(posts.items[0].sample_url);
     int64_t post_id = posts.items[0].id;
     bunny_db_post_list_free(&posts);
 
@@ -565,8 +625,10 @@ int main(void)
     RUN_TEST(test_sync_e621_search_upserts_post);
     RUN_TEST(test_sync_e621_search_upserts_post_tag_categories);
     RUN_TEST(test_sync_e621_search_upserts_post_sources);
+    RUN_TEST(test_sync_e621_search_upserts_post_sample_url);
     RUN_TEST(test_sync_e621_search_upserts_post_relationships_and_pools);
     RUN_TEST(test_fetch_and_cache_post_upserts_live_e621_post);
+    RUN_TEST(test_fetch_and_cache_post_upserts_live_inkbunny_submission);
     RUN_TEST(test_fetch_pool_returns_live_pool_info);
     RUN_TEST(test_sync_e621_search_fetches_a_second_page_when_the_first_is_full);
     RUN_TEST(test_sync_e621_search_stops_after_a_single_short_page);
