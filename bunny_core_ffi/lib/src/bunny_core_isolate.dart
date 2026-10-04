@@ -201,6 +201,12 @@ class _GetPostTagsByCategoryRequest extends _Request {
   const _GetPostTagsByCategoryRequest(this.postId);
 }
 
+class _GetPostSourcesRequest extends _Request {
+  final int postId;
+
+  const _GetPostSourcesRequest(this.postId);
+}
+
 class _QueueFavoriteAddRequest extends _Request {
   final int postId;
   final int stars;
@@ -317,6 +323,19 @@ List<Map<String, Object?>> _handleGetPostTagsByCategory(Pointer<bunny_core_t> co
   });
 }
 
+List<String> _handleGetPostSources(Pointer<bunny_core_t> core, _GetPostSourcesRequest r) {
+  return using((arena) {
+    final out = arena<bunny_db_string_list_t>();
+    _check(_bindings.bunny_core_post_get_sources(core, r.postId, out));
+    final items = <String>[];
+    for (var i = 0; i < out.ref.count; i++) {
+      items.add(out.ref.items[i].cast<Utf8>().toDartString());
+    }
+    _bindings.bunny_db_string_list_free(out);
+    return items;
+  });
+}
+
 List<Map<String, Object?>> _handleListSearchPosts(Pointer<bunny_core_t> core, _ListSearchPostsRequest r) {
   return using((arena) {
     final out = arena<bunny_db_post_list_t>();
@@ -387,6 +406,8 @@ Object? _dispatch(Pointer<bunny_core_t>? core, _Request request, void Function(P
         return null;
       case _GetPostTagsByCategoryRequest r:
         return _handleGetPostTagsByCategory(c, r);
+      case _GetPostSourcesRequest r:
+        return _handleGetPostSources(c, r);
       case _QueueFavoriteAddRequest r:
         _check(_bindings.bunny_core_queue_favorite_add(c, r.postId, r.stars));
         return null;
@@ -508,6 +529,8 @@ class BunnyCoreNative {
   Future<void> markAllSeen(int searchId) => _send<void>(_MarkAllSeenRequest(searchId));
 
   Future<List<Map<String, Object?>>> getPostTagsByCategory(int postId) => _send<List<Map<String, Object?>>>(_GetPostTagsByCategoryRequest(postId));
+
+  Future<List<String>> getPostSources(int postId) => _send<List<String>>(_GetPostSourcesRequest(postId));
 
   Future<void> queueFavoriteAdd(int postId, int stars) => _send<void>(_QueueFavoriteAddRequest(postId, stars));
 

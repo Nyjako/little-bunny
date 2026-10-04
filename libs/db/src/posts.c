@@ -9,6 +9,7 @@
 
 GOBLIN_DYN_ARRAY_DECL(bunny_db_post, bunny_db_post_t)
 GOBLIN_DYN_ARRAY_DECL(bunny_db_post_tag, bunny_db_post_tag_t)
+GOBLIN_DYN_ARRAY_DECL(bunny_db_string, char *)
 
 bunny_db_result_t bunny_db_post_upsert(bunny_db_t *db, const bunny_db_post_upsert_t *post, int64_t *out_id)
 {
@@ -123,6 +124,33 @@ bunny_db_result_t bunny_db_post_upsert(bunny_db_t *db, const bunny_db_post_upser
                     sqlite3_finalize(category_stmt);
                 }
             }
+        }
+    }
+
+    /* Replace this post's sources wholesale, same reasoning as post_tags
+     * above -- a re-fetch may have added/removed/reordered sources. */
+    const char *del_sources_sql = "DELETE FROM post_sources WHERE post_id = ?;";
+    sqlite3_stmt *del_sources_stmt = NULL;
+    if (sqlite3_prepare_v2(db->handle, del_sources_sql, -1, &del_sources_stmt, NULL) == SQLITE_OK) {
+        sqlite3_bind_int64(del_sources_stmt, 1, post_id);
+        sqlite3_step(del_sources_stmt);
+        sqlite3_finalize(del_sources_stmt);
+    }
+
+    for (size_t i = 0; i < post->source_count; i++) {
+        const char *url = post->sources[i];
+        if (!url || !url[0]) {
+            continue;
+        }
+
+        const char *source_sql = "INSERT INTO post_sources (post_id, position, url) VALUES (?, ?, ?);";
+        sqlite3_stmt *source_stmt = NULL;
+        if (sqlite3_prepare_v2(db->handle, source_sql, -1, &source_stmt, NULL) == SQLITE_OK) {
+            sqlite3_bind_int64(source_stmt, 1, post_id);
+            sqlite3_bind_int(source_stmt, 2, (int)i);
+            sqlite3_bind_text(source_stmt, 3, url, -1, SQLITE_TRANSIENT);
+            sqlite3_step(source_stmt);
+            sqlite3_finalize(source_stmt);
         }
     }
 
@@ -329,6 +357,51 @@ bunny_db_result_t bunny_db_post_get_tags_by_category(bunny_db_t *db, int64_t pos
             bunny_db_post_tag_free(&arr.items[i]);
         }
         bunny_db_post_tag_array_free(&arr);
+        return bunny_db_sqlite_rc_to_result(rc);
+    }
+
+    out_list->items = arr.items;
+    out_list->count = arr.count;
+    return BUNNY_DB_OK;
+}
+
+bunny_db_result_t bunny_db_post_get_sources(bunny_db_t *db, int64_t post_id, bunny_db_string_list_t *out_list)
+{
+    if (!db || !out_list) {
+        return BUNNY_DB_ERR_INVALID_ARG;
+    }
+    memset(out_list, 0, sizeof(*out_list));
+
+    const char *sql = "SELECT url FROM post_sources WHERE post_id = ? ORDER BY position ASC;";
+    sqlite3_stmt *stmt = NULL;
+    if (sqlite3_prepare_v2(db->handle, sql, -1, &stmt, NULL) != SQLITE_OK) {
+        return BUNNY_DB_ERR_QUERY_FAILED;
+    }
+    sqlite3_bind_int64(stmt, 1, post_id);
+
+    bunny_db_string_array arr;
+    bunny_db_string_array_init(&arr);
+
+    int rc;
+    while ((rc = sqlite3_step(stmt)) == SQLITE_ROW) {
+        char *url = bunny_db_column_text_dup(stmt, 0);
+        if (!bunny_db_string_array_push(&arr, url)) {
+            sqlite3_finalize(stmt);
+            free(url);
+            for (size_t i = 0; i < arr.count; i++) {
+                free(arr.items[i]);
+            }
+            bunny_db_string_array_free(&arr);
+            return BUNNY_DB_ERR_UNKNOWN;
+        }
+    }
+    sqlite3_finalize(stmt);
+
+    if (rc != SQLITE_DONE) {
+        for (size_t i = 0; i < arr.count; i++) {
+            free(arr.items[i]);
+        }
+        bunny_db_string_array_free(&arr);
         return bunny_db_sqlite_rc_to_result(rc);
     }
 

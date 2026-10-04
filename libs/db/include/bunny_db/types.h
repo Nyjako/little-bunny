@@ -104,6 +104,15 @@ typedef struct
     size_t count;
 } bunny_db_post_tag_list_t;
 
+/* A generic ordered list of strings -- feeds bunny_db_post_get_sources
+ * (position-ordered source URLs), and anything else that just needs "a list
+ * of strings" without per-item metadata. */
+typedef struct
+{
+    char **items;
+    size_t count;
+} bunny_db_string_list_t;
+
 typedef struct
 {
     int64_t id;
@@ -164,6 +173,7 @@ void bunny_db_tag_stat_free(bunny_db_tag_stat_t *stat);
 void bunny_db_tag_stat_list_free(bunny_db_tag_stat_list_t *list);
 void bunny_db_post_tag_free(bunny_db_post_tag_t *tag);
 void bunny_db_post_tag_list_free(bunny_db_post_tag_list_t *list);
+void bunny_db_string_list_free(bunny_db_string_list_t *list);
 void bunny_db_download_free(bunny_db_download_t *download);
 void bunny_db_download_list_free(bunny_db_download_list_t *list);
 void bunny_db_action_free(bunny_db_action_t *action);

@@ -167,6 +167,19 @@ class BunnyCoreFfiBindings {
   late final _bunny_db_post_tag_list_free = _bunny_db_post_tag_list_freePtr
       .asFunction<void Function(ffi.Pointer<bunny_db_post_tag_list_t>)>();
 
+  void bunny_db_string_list_free(ffi.Pointer<bunny_db_string_list_t> list) {
+    return _bunny_db_string_list_free(list);
+  }
+
+  late final _bunny_db_string_list_freePtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.Void Function(ffi.Pointer<bunny_db_string_list_t>)
+        >
+      >('bunny_db_string_list_free');
+  late final _bunny_db_string_list_free = _bunny_db_string_list_freePtr
+      .asFunction<void Function(ffi.Pointer<bunny_db_string_list_t>)>();
+
   void bunny_db_download_free(ffi.Pointer<bunny_db_download_t> download) {
     return _bunny_db_download_free(download);
   }
@@ -626,6 +639,37 @@ class BunnyCoreFfiBindings {
             )
           >();
 
+  /// A post's source URLs, in the site's own order -- a thin pass-through to
+  /// bunny_db. Empty for a post with none (e.g. every Inkbunny submission).
+  bunny_core_result_t bunny_core_post_get_sources(
+    ffi.Pointer<bunny_core_t> core,
+    int post_id,
+    ffi.Pointer<bunny_db_string_list_t> out_list,
+  ) {
+    return bunny_core_result_t.fromValue(
+      _bunny_core_post_get_sources(core, post_id, out_list),
+    );
+  }
+
+  late final _bunny_core_post_get_sourcesPtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.UnsignedInt Function(
+            ffi.Pointer<bunny_core_t>,
+            ffi.Int64,
+            ffi.Pointer<bunny_db_string_list_t>,
+          )
+        >
+      >('bunny_core_post_get_sources');
+  late final _bunny_core_post_get_sources = _bunny_core_post_get_sourcesPtr
+      .asFunction<
+        int Function(
+          ffi.Pointer<bunny_core_t>,
+          int,
+          ffi.Pointer<bunny_db_string_list_t>,
+        )
+      >();
+
   /// Runs every saved search whose last run is NULL or older than its
   /// interval_hours: builds a client for that search's site (authenticated via
   /// the stored account if one exists, or anonymous/guest otherwise), fetches
@@ -983,6 +1027,16 @@ final class bunny_db_post_tag_t extends ffi.Struct {
 
 final class bunny_db_post_tag_list_t extends ffi.Struct {
   external ffi.Pointer<bunny_db_post_tag_t> items;
+
+  @ffi.Size()
+  external int count;
+}
+
+/// A generic ordered list of strings -- feeds bunny_db_post_get_sources
+/// (position-ordered source URLs), and anything else that just needs "a list
+/// of strings" without per-item metadata.
+final class bunny_db_string_list_t extends ffi.Struct {
+  external ffi.Pointer<ffi.Pointer<ffi.Char>> items;
 
   @ffi.Size()
   external int count;

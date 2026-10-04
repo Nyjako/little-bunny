@@ -234,6 +234,16 @@ void main() {
       expect(tags[2].category, isNull);
     });
 
+    test('getPostSources sends GET to the right path and returns a list of strings', () async {
+      respond = (_) => http.Response(jsonEncode(['https://example.com/a', 'https://example.com/b']), 200);
+
+      final sources = await buildRepository().getPostSources(5);
+
+      expect(capturedMethod, 'GET');
+      expect(capturedUri.path, '/posts/5/sources');
+      expect(sources, ['https://example.com/a', 'https://example.com/b']);
+    });
+
     test('markPostSeen sends POST to the right path', () async {
       respond = (_) => http.Response(jsonEncode({'ok': true}), 200);
 

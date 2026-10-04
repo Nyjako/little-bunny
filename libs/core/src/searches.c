@@ -65,3 +65,11 @@ bunny_core_result_t bunny_core_post_get_tags_by_category(bunny_core_t *core, int
     }
     return bunny_core_map_db_result(bunny_db_post_get_tags_by_category(core->db, post_id, out_list));
 }
+
+bunny_core_result_t bunny_core_post_get_sources(bunny_core_t *core, int64_t post_id, bunny_db_string_list_t *out_list)
+{
+    if (!core) {
+        return BUNNY_CORE_ERR_INVALID_ARG;
+    }
+    return bunny_core_map_db_result(bunny_db_post_get_sources(core->db, post_id, out_list));
+}
