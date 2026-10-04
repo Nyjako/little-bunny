@@ -983,6 +983,56 @@ void test_post_get_pool_ids_returns_pools(void)
     bunny_db_int64_list_free(&pools);
 }
 
+void test_post_sample_url_round_trips_and_is_nullable(void)
+{
+    bunny_db_post_upsert_t post;
+    make_test_post(&post, 613, 1);
+    post.sample_url = "https://example.com/sample.jpg";
+
+    int64_t post_id = 0;
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, bunny_db_post_upsert(g_db, &post, &post_id));
+
+    bunny_db_post_t fetched;
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, bunny_db_post_get_by_id(g_db, post_id, &fetched));
+    TEST_ASSERT_EQUAL_STRING("https://example.com/sample.jpg", fetched.sample_url);
+    bunny_db_post_free(&fetched);
+
+    /* A post with no sample_url given at all (the memset-zero default, e.g.
+     * Inkbunny submissions with no "screen" file variant) should come back
+     * NULL, not an empty string or an error. */
+    bunny_db_post_upsert_t post_no_sample;
+    make_test_post(&post_no_sample, 614, 1);
+
+    int64_t no_sample_id = 0;
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, bunny_db_post_upsert(g_db, &post_no_sample, &no_sample_id));
+
+    bunny_db_post_t fetched_no_sample;
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, bunny_db_post_get_by_id(g_db, no_sample_id, &fetched_no_sample));
+    TEST_ASSERT_NULL(fetched_no_sample.sample_url);
+    bunny_db_post_free(&fetched_no_sample);
+}
+
+void test_post_upsert_replaces_sample_url_wholesale_on_resync(void)
+{
+    bunny_db_post_upsert_t post;
+    make_test_post(&post, 615, 1);
+    post.sample_url = "https://example.com/old_sample.jpg";
+
+    int64_t post_id = 0;
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, bunny_db_post_upsert(g_db, &post, &post_id));
+
+    /* Re-sync with the sample URL gone -- the stale value must not linger. */
+    post.sample_url = NULL;
+    int64_t second_id = 0;
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, bunny_db_post_upsert(g_db, &post, &second_id));
+    TEST_ASSERT_EQUAL(post_id, second_id);
+
+    bunny_db_post_t fetched;
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, bunny_db_post_get_by_id(g_db, post_id, &fetched));
+    TEST_ASSERT_NULL(fetched.sample_url);
+    bunny_db_post_free(&fetched);
+}
+
 int main(void)
 {
     UNITY_BEGIN();
@@ -1028,5 +1078,7 @@ int main(void)
     RUN_TEST(test_post_upsert_replaces_relationships_wholesale_on_resync);
     RUN_TEST(test_post_get_pool_ids_empty_when_none);
     RUN_TEST(test_post_get_pool_ids_returns_pools);
+    RUN_TEST(test_post_sample_url_round_trips_and_is_nullable);
+    RUN_TEST(test_post_upsert_replaces_sample_url_wholesale_on_resync);
     return UNITY_END();
 }

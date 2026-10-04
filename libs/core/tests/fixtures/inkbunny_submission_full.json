@@ -1,0 +1,71 @@
+{
+  "sid": "77N2zxwuZFvRduEQzvE15zGkiR",
+  "results_count": 1,
+  "user_location": "",
+  "submissions": [
+    {
+      "submission_id": "3955918",
+      "keywords": [
+        {"keyword_id": "1078", "keyword_name": "digital", "contributed": "f", "submissions_count": "39727"},
+        {"keyword_id": "123", "keyword_name": "female", "contributed": "f", "submissions_count": "1184815"},
+        {"keyword_id": "165", "keyword_name": "male", "contributed": "t", "submissions_count": "1302556"}
+      ],
+      "hidden": "f",
+      "scraps": "f",
+      "favorite": "t",
+      "favorites_count": "1",
+      "create_datetime": "2026-09-27 22:22:21.223627+00",
+      "username": "OvineSatanOMG",
+      "user_id": "628881",
+      "file_name": "6175043_OvineSatanOMG_tribute.jpg",
+      "file_url_full": "https://nl1.ib.metapix.net/files/full/6175/6175043_tribute.jpg",
+      "file_url_screen": "https://nl1.ib.metapix.net/files/screen/6175/6175043_tribute.jpg",
+      "file_url_preview": "https://nl1.ib.metapix.net/files/preview/6175/6175043_tribute.jpg",
+      "thumbnail_url_large_noncustom": "https://nl1.ib.metapix.net/thumbnails/large/6175/6175043_noncustom.jpg",
+      "files": [
+        {
+          "file_id": "6175043",
+          "file_name": "6175043_OvineSatanOMG_tribute.jpg",
+          "file_url_full": "https://nl1.ib.metapix.net/files/full/6175/6175043_tribute.jpg",
+          "file_url_screen": "https://nl1.ib.metapix.net/files/screen/6175/6175043_tribute.jpg",
+          "file_url_preview": "https://nl1.ib.metapix.net/files/preview/6175/6175043_tribute.jpg",
+          "mimetype": "image/jpeg",
+          "submission_id": "3955918",
+          "user_id": "628881",
+          "submission_file_order": "0",
+          "full_size_x": "3385",
+          "full_size_y": "1192",
+          "full_file_md5": "7669594067d7153074250653c72ad34b"
+        }
+      ],
+      "pools": [
+        {
+          "pool_id": "42",
+          "name": "Digimon Tributes",
+          "description": "A pool of tribute art.",
+          "count": "5",
+          "submission_left_submission_id": "3951894",
+          "submission_right_submission_id": "3956000"
+        }
+      ],
+      "description": "Time will prove you right.",
+      "pools_count": 1,
+      "title": "Thank you, Digimon Beatbreak",
+      "deleted": "f",
+      "public": "t",
+      "mimetype": "image/jpeg",
+      "pagecount": "1",
+      "rating_id": "1",
+      "rating_name": "Mature",
+      "ratings": [
+        {"content_tag_id": "3", "name": "Nudity", "description": "Depictions of nudity.", "rating_id": "1"}
+      ],
+      "submission_type_id": "1",
+      "type_name": "Picture/Pinup",
+      "guest_block": "f",
+      "friends_only": "f",
+      "comments_count": "4",
+      "views": "7"
+    }
+  ]
+}

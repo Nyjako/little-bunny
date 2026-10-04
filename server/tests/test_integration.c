@@ -16,7 +16,7 @@
 static const char *E621_FIXTURE = "{\"posts\":[{\"id\":1,\"created_at\":\"2024-01-01T00:00:00.000-05:00\","
                                   "\"file\":{\"width\":100,\"height\":100,\"ext\":\"png\",\"size\":1000,\"md5\":\"aaa\",\"url\":\"https://static1.e621.net/data/1.png\"},"
                                   "\"preview\":{\"width\":50,\"height\":50,\"url\":\"https://static1.e621.net/data/preview/1.png\"},"
-                                  "\"sample\":{\"has\":false},\"score\":{\"up\":1,\"down\":0,\"total\":1},"
+                                  "\"sample\":{\"has\":true,\"url\":\"https://static1.e621.net/data/sample/1.png\"},\"score\":{\"up\":1,\"down\":0,\"total\":1},"
                                   "\"tags\":{\"general\":[\"one\"],\"species\":[],\"character\":[],\"copyright\":[],\"artist\":[\"someartist\"],\"invalid\":[],\"lore\":[],\"meta\":[]},"
                                   "\"rating\":\"s\",\"fav_count\":1,\"sources\":[\"https://example.com/original\"],\"description\":\"a test post\",\"comment_count\":0,\"is_favorited\":false,\"pools\":[]}]}";
 
@@ -234,6 +234,7 @@ void test_full_account_search_sync_favorite_flow(void)
     TEST_ASSERT_EQUAL(200, status);
     TEST_ASSERT_NOT_NULL(strstr(response.data, "\"external_id\":1"));
     TEST_ASSERT_NOT_NULL(strstr(response.data, "\"is_seen\":false"));
+    TEST_ASSERT_NOT_NULL(strstr(response.data, "\"sample_url\":\"https://static1.e621.net/data/sample/1.png\""));
     free(response.data);
     memset(&response, 0, sizeof(response));
 

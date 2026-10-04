@@ -274,4 +274,16 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get settingsDefaultIntervalLabel => 'Default sync interval (hours)';
+
+  @override
+  String get settingsDisplaySection => 'Display';
+
+  @override
+  String get settingsPreviewQualityThumbnail => 'Thumbnail';
+
+  @override
+  String get settingsPreviewQualityMedium => 'Medium';
+
+  @override
+  String get settingsGridColumnsLabel => 'Grid columns';
 }

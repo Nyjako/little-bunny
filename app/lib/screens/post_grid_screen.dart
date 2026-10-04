@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import '../l10n/app_localizations.dart';
 import '../repository/bunny_models.dart';
 import '../repository/bunny_repository.dart';
+import '../settings/display_settings_store.dart';
 import '../util/image_headers.dart';
 import 'post_detail_screen.dart';
 
@@ -14,8 +15,9 @@ import 'post_detail_screen.dart';
 class PostGridScreen extends StatefulWidget {
   final BunnySearch search;
   final BunnyRepository repository;
+  final DisplaySettingsStore displaySettingsStore;
 
-  const PostGridScreen({super.key, required this.search, required this.repository});
+  const PostGridScreen({super.key, required this.search, required this.repository, required this.displaySettingsStore});
 
   @override
   State<PostGridScreen> createState() => _PostGridScreenState();
@@ -25,11 +27,35 @@ class _PostGridScreenState extends State<PostGridScreen> {
   bool _unseenOnly = false;
   bool _syncing = false;
   Future<List<BunnyPost>>? _postsFuture;
+  // Sensible defaults (match DisplaySettingsStore's own) so the first frame
+  // doesn't flash a different column count before the real value loads.
+  PreviewQuality _previewQuality = PreviewQuality.thumbnail;
+  int _gridColumns = 3;
 
   @override
   void initState() {
     super.initState();
     _postsFuture = _loadPosts();
+    _loadDisplaySettings();
+  }
+
+  Future<void> _loadDisplaySettings() async {
+    final quality = await widget.displaySettingsStore.loadPreviewQuality();
+    final columns = await widget.displaySettingsStore.loadGridColumns();
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      _previewQuality = quality;
+      _gridColumns = columns;
+    });
+  }
+
+  String? _imageUrlFor(BunnyPost post) {
+    if (_previewQuality == PreviewQuality.medium && post.sampleUrl != null) {
+      return post.sampleUrl;
+    }
+    return post.previewUrl;
   }
 
   Future<List<BunnyPost>> _loadPosts() => widget.repository.listSearchPosts(widget.search.id, unseenOnly: _unseenOnly);
@@ -103,17 +129,18 @@ class _PostGridScreenState extends State<PostGridScreen> {
           }
           return GridView.builder(
             padding: const EdgeInsets.all(4),
-            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: 3, crossAxisSpacing: 4, mainAxisSpacing: 4),
+            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: _gridColumns, crossAxisSpacing: 4, mainAxisSpacing: 4),
             itemCount: posts.length,
             itemBuilder: (context, index) {
               final post = posts[index];
+              final imageUrl = _imageUrlFor(post);
               return GestureDetector(
                 key: ValueKey(post.id),
                 onTap: () => _openPost(post),
                 child: Stack(
                   fit: StackFit.expand,
                   children: [
-                    if (post.previewUrl != null) CachedNetworkImage(imageUrl: post.previewUrl!, httpHeaders: imageHeadersFor(post.site), fit: BoxFit.cover) else const ColoredBox(color: Colors.black12),
+                    if (imageUrl != null) CachedNetworkImage(imageUrl: imageUrl, httpHeaders: imageHeadersFor(post.site), fit: BoxFit.cover) else const ColoredBox(color: Colors.black12),
                     if (!post.isSeen) Positioned(top: 4, right: 4, child: Container(width: 10, height: 10, decoration: const BoxDecoration(color: Colors.redAccent, shape: BoxShape.circle))),
                   ],
                 ),

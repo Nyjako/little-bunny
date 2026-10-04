@@ -53,6 +53,7 @@ static cJSON *post_to_json(const bunny_db_post_t *post)
     add_optional_string(json, "file_ext", post->file_ext);
     add_optional_string(json, "file_md5", post->file_md5);
     add_optional_string(json, "preview_url", post->preview_url);
+    add_optional_string(json, "sample_url", post->sample_url);
     cJSON_AddNumberToObject(json, "width", post->width);
     cJSON_AddNumberToObject(json, "height", post->height);
     add_optional_string(json, "created_at_site", post->created_at_site);

@@ -80,6 +80,10 @@ class BunnyPost {
   final String cachedAt;
   final bool isSeen;
   final bool isFavorited;
+  /// The medium-quality image variant (e621's "sample", Inkbunny's "screen");
+  /// null if the site didn't provide one, or it was never fetched (Inkbunny
+  /// only populates this via a full submission fetch, not a search sync).
+  final String? sampleUrl;
 
   const BunnyPost({
     required this.id,
@@ -104,6 +108,7 @@ class BunnyPost {
     required this.cachedAt,
     required this.isSeen,
     required this.isFavorited,
+    this.sampleUrl,
   });
 }
 

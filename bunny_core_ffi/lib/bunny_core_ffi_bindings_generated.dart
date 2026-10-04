@@ -1171,6 +1171,9 @@ final class bunny_db_post_t extends ffi.Struct {
 
   @ffi.Bool()
   external bool is_favorited;
+
+  /// medium-quality variant (e621's "sample", Inkbunny's "screen"); may be NULL
+  external ffi.Pointer<ffi.Char> sample_url;
 }
 
 final class bunny_db_post_list_t extends ffi.Struct {

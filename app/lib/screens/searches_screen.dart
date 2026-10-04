@@ -5,6 +5,7 @@ import '../l10n/app_localizations.dart';
 import '../repository/bunny_models.dart';
 import '../repository/bunny_repository.dart';
 import '../settings/app_lock_service.dart';
+import '../settings/display_settings_store.dart';
 import '../settings/sync_settings_store.dart';
 import '../settings/theme_settings_store.dart';
 import 'accounts_screen.dart';
@@ -20,9 +21,17 @@ class SearchesScreen extends StatefulWidget {
   final AppLockService lockService;
   final ThemeSettingsStore themeSettingsStore;
   final SyncSettingsStore syncSettingsStore;
+  final DisplaySettingsStore displaySettingsStore;
   final ValueChanged<ThemeMode> onThemeModeChanged;
 
-  const SearchesScreen({super.key, required this.lockService, required this.themeSettingsStore, required this.syncSettingsStore, required this.onThemeModeChanged});
+  const SearchesScreen({
+    super.key,
+    required this.lockService,
+    required this.themeSettingsStore,
+    required this.syncSettingsStore,
+    required this.displaySettingsStore,
+    required this.onThemeModeChanged,
+  });
 
   @override
   State<SearchesScreen> createState() => _SearchesScreenState();
@@ -154,7 +163,7 @@ class _SearchesScreenState extends State<SearchesScreen> with SingleTickerProvid
                   IconButton(icon: const Icon(Icons.delete), onPressed: () => _removeSearch(search)),
                 ],
               ),
-              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => PostGridScreen(search: search, repository: _repository!))),
+              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => PostGridScreen(search: search, repository: _repository!, displaySettingsStore: widget.displaySettingsStore))),
             ),
           )
           .toList(),
@@ -176,8 +185,13 @@ class _SearchesScreenState extends State<SearchesScreen> with SingleTickerProvid
             onPressed: () => Navigator.push(
               context,
               MaterialPageRoute(
-                builder: (context) =>
-                    SettingsScreen(themeSettingsStore: widget.themeSettingsStore, lockService: widget.lockService, syncSettingsStore: widget.syncSettingsStore, onThemeModeChanged: widget.onThemeModeChanged),
+                builder: (context) => SettingsScreen(
+                  themeSettingsStore: widget.themeSettingsStore,
+                  lockService: widget.lockService,
+                  syncSettingsStore: widget.syncSettingsStore,
+                  displaySettingsStore: widget.displaySettingsStore,
+                  onThemeModeChanged: widget.onThemeModeChanged,
+                ),
               ),
             ),
           ),
