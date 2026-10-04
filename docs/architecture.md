@@ -958,6 +958,35 @@ the same fake, so `fake_e621_send` now inspects `request->url` for `/posts/42.js
 `/pools/5.json` substrings and serves the matching fixture, falling back to the search-results
 fixture otherwise.
 
+**Pools tab + create-pool-search flow (M8.5.5b)**: the UI half of M8.5.5, landed as its own PR
+after M8.5.5a's backend. `SearchesScreen` already had exactly one list and one FAB action; this
+adds a `TabController`-driven `TabBar`/`TabBarView` pair ("Searches"/"Pools") over the *same*
+`listSearches()` future, split client-side by `_isPoolSearch` (`site == e621 &&
+query.startsWith('pool:')`). No new repository method was needed for the split itself — this
+is a direct payoff of the original M8.5 planning finding that e621's own tag-search syntax
+already treats `pool:<id>` as a literal, functioning query string, so "a pool search" has
+never needed to be anything other than a `BunnySearch` with a recognizable query shape.
+
+The FAB's `onPressed`/tooltip swap based on `_tabController.index` rather than being two
+separate buttons, since only one FAB can be visible at a time regardless. The "add pool"
+dialog is a plain `AlertDialog` (not a new screen) since it's a single numeric field — `
+CreateSearchScreen` already exists for the general case and gains no new parameters here
+(an `initialSite`/`initialQuery`-based reuse was considered but deferred to M8.5.10, which
+needs the same mechanism for tag-click browsing and can introduce it once, for both uses).
+The dialog calls `fetchPool` (M8.5.5a) to look up a friendly label but treats any failure
+there as non-fatal -- catches the exception and falls back to a `pool:$id` label -- since
+`fetchPool` is a pure cosmetic nicety per M8.5.5a's own design, not load-bearing for the pool
+search actually working.
+
+Adding the "Searches" tab label introduced the session's first instance of a pre-existing
+widget test breaking from an ambiguous `find.text()` match purely due to new UI, rather than a
+constructor-signature change (the far more common cause up to this point, e.g. M8.5.13's
+`SyncSettingsStore` threading) -- `widget_test.dart`'s boot-screen test asserted
+`find.text('Searches')` with `findsOneWidget`, which the new tab label (coincidentally the
+exact same string as the `AppBar` title) turned into two matches. Fixed with
+`findsNWidgets(2)` plus a comment, rather than restructuring the finder to be more specific,
+since both matches are legitimately expected UI.
+
 ## Inkbunny API constraints (found in M2)
 
 Verified against the live API and the official docs while building `libinkbunny`:

@@ -28,15 +28,34 @@ class SearchesScreen extends StatefulWidget {
   State<SearchesScreen> createState() => _SearchesScreenState();
 }
 
-class _SearchesScreenState extends State<SearchesScreen> {
+/// e621's own tag-search syntax treats `pool:<id>` as a literal query string
+/// -- `bunny_core_search_create(site: e621, query: 'pool:$id')` already works
+/// today with no new backend logic, so a "pool search" is just a regular
+/// [BunnySearch] with a recognizable query shape, filtered into its own tab.
+bool _isPoolSearch(BunnySearch search) => search.site == BunnySite.e621 && search.query.startsWith('pool:');
+
+class _SearchesScreenState extends State<SearchesScreen> with SingleTickerProviderStateMixin {
   BunnyRepository? _repository;
   Future<List<BunnySearch>>? _searchesFuture;
+  late final TabController _tabController;
+
+  @override
+  void initState() {
+    super.initState();
+    _tabController = TabController(length: 2, vsync: this)..addListener(() => setState(() {}));
+  }
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
     _repository = BunnyRepositoryScope.of(context);
     _searchesFuture ??= _repository!.listSearches();
+  }
+
+  @override
+  void dispose() {
+    _tabController.dispose();
+    super.dispose();
   }
 
   void _refresh() {
@@ -50,6 +69,45 @@ class _SearchesScreenState extends State<SearchesScreen> {
     if (created == true) {
       _refresh();
     }
+  }
+
+  Future<void> _createPoolSearch() async {
+    final l10n = AppLocalizations.of(context)!;
+    final poolIdText = await showDialog<String>(
+      context: context,
+      builder: (context) {
+        final controller = TextEditingController();
+        return AlertDialog(
+          title: Text(l10n.createPoolSearchDialogTitle),
+          content: TextField(controller: controller, keyboardType: TextInputType.number, decoration: InputDecoration(labelText: l10n.createPoolSearchIdLabel), autofocus: true),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(context), child: Text(l10n.commonCancel)),
+            TextButton(onPressed: () => Navigator.pop(context, controller.text), child: Text(l10n.createPoolSearchSubmit)),
+          ],
+        );
+      },
+    );
+    final poolId = poolIdText == null ? null : int.tryParse(poolIdText);
+    if (poolId == null) {
+      return;
+    }
+
+    // The pool's own name makes a far more useful label than the raw id, but
+    // this works purely as a nice-to-have -- a failed lookup (network error,
+    // deleted pool, etc.) still creates a perfectly functional pool search
+    // with a fallback label, rather than blocking the whole action on it.
+    String label = 'pool:$poolId';
+    try {
+      final info = await _repository!.fetchPool(poolId);
+      if (info.name != null && info.name!.isNotEmpty) {
+        label = info.name!;
+      }
+    } catch (_) {
+      // Fall back to the default label above.
+    }
+
+    await _repository!.createSearch(BunnySite.e621, label, 'pool:$poolId');
+    _refresh();
   }
 
   Future<void> _removeSearch(BunnySearch search) async {
@@ -72,9 +130,41 @@ class _SearchesScreenState extends State<SearchesScreen> {
     _refresh();
   }
 
+  Widget _searchList(List<BunnySearch> searches, String emptyState) {
+    final l10n = AppLocalizations.of(context)!;
+    if (searches.isEmpty) {
+      return Center(child: Text(emptyState));
+    }
+    return ListView(
+      children: searches
+          .map(
+            (search) => ListTile(
+              title: Text(search.label),
+              subtitle: Text(l10n.searchesIntervalSubtitle(search.site.toWireString(), search.intervalHours)),
+              trailing: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (search.unseenCount > 0)
+                    Container(
+                      margin: const EdgeInsets.only(right: 8),
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                      decoration: BoxDecoration(color: Theme.of(context).colorScheme.primary, borderRadius: BorderRadius.circular(12)),
+                      child: Text('${search.unseenCount}', style: TextStyle(color: Theme.of(context).colorScheme.onPrimary, fontSize: 12)),
+                    ),
+                  IconButton(icon: const Icon(Icons.delete), onPressed: () => _removeSearch(search)),
+                ],
+              ),
+              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => PostGridScreen(search: search, repository: _repository!))),
+            ),
+          )
+          .toList(),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
+    final onPoolsTab = _tabController.index == 1;
     return Scaffold(
       appBar: AppBar(
         title: Text(l10n.searchesScreenTitle),
@@ -92,6 +182,7 @@ class _SearchesScreenState extends State<SearchesScreen> {
             ),
           ),
         ],
+        bottom: TabBar(controller: _tabController, tabs: [Tab(text: l10n.searchesTabSearches), Tab(text: l10n.searchesTabPools)]),
       ),
       body: FutureBuilder<List<BunnySearch>>(
         future: _searchesFuture,
@@ -99,37 +190,17 @@ class _SearchesScreenState extends State<SearchesScreen> {
           if (!snapshot.hasData) {
             return const Center(child: CircularProgressIndicator());
           }
-          final searches = snapshot.data!;
-          if (searches.isEmpty) {
-            return Center(child: Text(l10n.searchesEmptyState));
-          }
-          return ListView(
-            children: searches
-                .map(
-                  (search) => ListTile(
-                    title: Text(search.label),
-                    subtitle: Text(l10n.searchesIntervalSubtitle(search.site.toWireString(), search.intervalHours)),
-                    trailing: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        if (search.unseenCount > 0)
-                          Container(
-                            margin: const EdgeInsets.only(right: 8),
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                            decoration: BoxDecoration(color: Theme.of(context).colorScheme.primary, borderRadius: BorderRadius.circular(12)),
-                            child: Text('${search.unseenCount}', style: TextStyle(color: Theme.of(context).colorScheme.onPrimary, fontSize: 12)),
-                          ),
-                        IconButton(icon: const Icon(Icons.delete), onPressed: () => _removeSearch(search)),
-                      ],
-                    ),
-                    onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => PostGridScreen(search: search, repository: _repository!))),
-                  ),
-                )
-                .toList(),
-          );
+          final all = snapshot.data!;
+          final searches = all.where((search) => !_isPoolSearch(search)).toList();
+          final pools = all.where(_isPoolSearch).toList();
+          return TabBarView(controller: _tabController, children: [_searchList(searches, l10n.searchesEmptyState), _searchList(pools, l10n.searchesPoolsEmptyState)]);
         },
       ),
-      floatingActionButton: FloatingActionButton(onPressed: _createSearch, tooltip: l10n.searchesNewSearchTooltip, child: const Icon(Icons.add)),
+      floatingActionButton: FloatingActionButton(
+        onPressed: onPoolsTab ? _createPoolSearch : _createSearch,
+        tooltip: onPoolsTab ? l10n.searchesNewPoolTooltip : l10n.searchesNewSearchTooltip,
+        child: const Icon(Icons.add),
+      ),
     );
   }
 }
