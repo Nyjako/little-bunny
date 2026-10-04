@@ -720,6 +720,91 @@ void test_migrations_apply_cleanly_and_are_idempotent_on_reopen(void)
     remove(path);
 }
 
+void test_post_get_tags_by_category(void)
+{
+    const char *tags[] = {"forest", "wolf", "some_artist"};
+    const char *categories[] = {"general", "species", "artist"};
+    bunny_db_post_upsert_t post;
+    make_test_post(&post, 601, 1);
+    post.tags = tags;
+    post.tag_count = 3;
+    post.tag_categories = categories;
+
+    int64_t post_id = 0;
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, bunny_db_post_upsert(g_db, &post, &post_id));
+
+    bunny_db_post_tag_list_t list;
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, bunny_db_post_get_tags_by_category(g_db, post_id, &list));
+    TEST_ASSERT_EQUAL(3, list.count);
+
+    for (size_t i = 0; i < list.count; i++) {
+        if (strcmp(list.items[i].name, "forest") == 0) {
+            TEST_ASSERT_EQUAL_STRING("general", list.items[i].category);
+        } else if (strcmp(list.items[i].name, "wolf") == 0) {
+            TEST_ASSERT_EQUAL_STRING("species", list.items[i].category);
+        } else if (strcmp(list.items[i].name, "some_artist") == 0) {
+            TEST_ASSERT_EQUAL_STRING("artist", list.items[i].category);
+        } else {
+            TEST_FAIL_MESSAGE("unexpected tag name");
+        }
+    }
+
+    bunny_db_post_tag_list_free(&list);
+}
+
+void test_post_get_tags_by_category_uncategorized_when_no_category_given(void)
+{
+    const char *tags[] = {"some_keyword"};
+    bunny_db_post_upsert_t post;
+    make_test_post(&post, 602, 1);
+    post.tags = tags;
+    post.tag_count = 1;
+    post.tag_categories = NULL; /* Inkbunny-style: no category info at all */
+
+    int64_t post_id = 0;
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, bunny_db_post_upsert(g_db, &post, &post_id));
+
+    bunny_db_post_tag_list_t list;
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, bunny_db_post_get_tags_by_category(g_db, post_id, &list));
+    TEST_ASSERT_EQUAL(1, list.count);
+    TEST_ASSERT_EQUAL_STRING("some_keyword", list.items[0].name);
+    TEST_ASSERT_NULL(list.items[0].category);
+
+    bunny_db_post_tag_list_free(&list);
+}
+
+void test_post_get_tags_by_category_tag_category_is_shared_across_posts(void)
+{
+    /* A tag's category is a property of the tag itself (see schema.h), not
+     * a given post -- upserting it again for a different post referencing
+     * the same tag name should not require re-specifying the category. */
+    const char *tags1[] = {"shared_tag"};
+    const char *categories1[] = {"meta"};
+    bunny_db_post_upsert_t post1;
+    make_test_post(&post1, 603, 1);
+    post1.tags = tags1;
+    post1.tag_count = 1;
+    post1.tag_categories = categories1;
+    int64_t post1_id = 0;
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, bunny_db_post_upsert(g_db, &post1, &post1_id));
+
+    const char *tags2[] = {"shared_tag"};
+    bunny_db_post_upsert_t post2;
+    make_test_post(&post2, 604, 1);
+    post2.tags = tags2;
+    post2.tag_count = 1;
+    post2.tag_categories = NULL;
+    int64_t post2_id = 0;
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, bunny_db_post_upsert(g_db, &post2, &post2_id));
+
+    bunny_db_post_tag_list_t list;
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, bunny_db_post_get_tags_by_category(g_db, post2_id, &list));
+    TEST_ASSERT_EQUAL(1, list.count);
+    TEST_ASSERT_EQUAL_STRING("meta", list.items[0].category);
+
+    bunny_db_post_tag_list_free(&list);
+}
+
 int main(void)
 {
     UNITY_BEGIN();
@@ -754,5 +839,8 @@ int main(void)
     RUN_TEST(test_tag_autocomplete_is_per_site);
     RUN_TEST(test_tag_autocomplete_escapes_literal_underscore);
     RUN_TEST(test_migrations_apply_cleanly_and_are_idempotent_on_reopen);
+    RUN_TEST(test_post_get_tags_by_category);
+    RUN_TEST(test_post_get_tags_by_category_uncategorized_when_no_category_given);
+    RUN_TEST(test_post_get_tags_by_category_tag_category_is_shared_across_posts);
     return UNITY_END();
 }

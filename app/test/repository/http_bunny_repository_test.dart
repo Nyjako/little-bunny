@@ -214,6 +214,26 @@ void main() {
       expect(stats.first.count, 3);
     });
 
+    test('getPostTagsByCategory sends GET to the right path and maps results', () async {
+      respond = (_) => http.Response(
+        jsonEncode([
+          {'name': 'one', 'category': 'general'},
+          {'name': 'someartist', 'category': 'artist'},
+          {'name': 'some_keyword', 'category': null},
+        ]),
+        200,
+      );
+
+      final tags = await buildRepository().getPostTagsByCategory(5);
+
+      expect(capturedMethod, 'GET');
+      expect(capturedUri.path, '/posts/5/tags');
+      expect(tags, hasLength(3));
+      expect(tags[0].name, 'one');
+      expect(tags[0].category, 'general');
+      expect(tags[2].category, isNull);
+    });
+
     test('markPostSeen sends POST to the right path', () async {
       respond = (_) => http.Response(jsonEncode({'ok': true}), 200);
 

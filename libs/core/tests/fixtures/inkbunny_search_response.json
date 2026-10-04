@@ -29,7 +29,10 @@
       "type_name": "Picture/Pinup",
       "friends_only": "f",
       "guest_block": "f",
-      "scraps": "f"
+      "scraps": "f",
+      "keywords": [
+        {"keyword_id": "1", "keyword_name": "tribute"}
+      ]
     }
   ]
 }

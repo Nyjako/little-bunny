@@ -153,6 +153,46 @@ void test_sync_e621_search_upserts_post(void)
     free(fixture);
 }
 
+void test_sync_e621_search_upserts_post_tag_categories(void)
+{
+    char *fixture = read_fixture("e621_posts_search.json");
+    TEST_ASSERT_NOT_NULL(fixture);
+    g_e621_state.bodies[0] = fixture;
+    g_e621_state.body_count = 1;
+
+    int64_t search_id = 0;
+    bunny_core_result_t result = bunny_core_search_create(g_core, BUNNY_DB_SITE_E621, "wolves", "wolf", 24, &search_id);
+    TEST_ASSERT_EQUAL(BUNNY_CORE_OK, result);
+
+    bunny_core_sync_stats_t stats;
+    result = bunny_core_sync_due_searches(g_core, &stats);
+    TEST_ASSERT_EQUAL(BUNNY_CORE_OK, result);
+
+    bunny_db_post_list_t posts;
+    result = bunny_core_search_list_posts(g_core, search_id, false, &posts);
+    TEST_ASSERT_EQUAL(BUNNY_CORE_OK, result);
+    TEST_ASSERT_EQUAL(1, (int)posts.count);
+    int64_t post_id = posts.items[0].id;
+    bunny_db_post_list_free(&posts);
+
+    bunny_db_post_tag_list_t tags;
+    result = bunny_core_post_get_tags_by_category(g_core, post_id, &tags);
+    TEST_ASSERT_EQUAL(BUNNY_CORE_OK, result);
+    TEST_ASSERT_EQUAL(2, (int)tags.count);
+    for (size_t i = 0; i < tags.count; i++) {
+        if (strcmp(tags.items[i].name, "one") == 0) {
+            TEST_ASSERT_EQUAL_STRING("general", tags.items[i].category);
+        } else if (strcmp(tags.items[i].name, "someartist") == 0) {
+            TEST_ASSERT_EQUAL_STRING("artist", tags.items[i].category);
+        } else {
+            TEST_FAIL_MESSAGE("unexpected tag name");
+        }
+    }
+    bunny_db_post_tag_list_free(&tags);
+
+    free(fixture);
+}
+
 void test_sync_e621_search_fetches_a_second_page_when_the_first_is_full(void)
 {
     char *page1 = build_e621_posts_page_json(TEST_E621_FULL_PAGE_SIZE, 1);
@@ -302,7 +342,19 @@ void test_sync_inkbunny_search_upserts_post(void)
     TEST_ASSERT_EQUAL(3955918, posts.items[0].external_id);
     TEST_ASSERT_EQUAL_STRING("OvineSatanOMG", posts.items[0].artist);
     TEST_ASSERT_EQUAL_STRING("Thank you, Digimon Beatbreak", posts.items[0].title);
+    int64_t post_id = posts.items[0].id;
     bunny_db_post_list_free(&posts);
+
+    /* Inkbunny keywords have no category concept at all -- unlike e621 tags
+     * (see test_sync_e621_search_upserts_post_tag_categories above), the
+     * category comes back NULL, not some default/fallback string. */
+    bunny_db_post_tag_list_t tags;
+    result = bunny_core_post_get_tags_by_category(g_core, post_id, &tags);
+    TEST_ASSERT_EQUAL(BUNNY_CORE_OK, result);
+    TEST_ASSERT_EQUAL(1, (int)tags.count);
+    TEST_ASSERT_EQUAL_STRING("tribute", tags.items[0].name);
+    TEST_ASSERT_NULL(tags.items[0].category);
+    bunny_db_post_tag_list_free(&tags);
 
     free(login_fixture);
     free(search_fixture);
@@ -389,6 +441,7 @@ int main(void)
 {
     UNITY_BEGIN();
     RUN_TEST(test_sync_e621_search_upserts_post);
+    RUN_TEST(test_sync_e621_search_upserts_post_tag_categories);
     RUN_TEST(test_sync_e621_search_fetches_a_second_page_when_the_first_is_full);
     RUN_TEST(test_sync_e621_search_stops_after_a_single_short_page);
     RUN_TEST(test_tag_autocomplete_finds_tags_from_synced_posts);

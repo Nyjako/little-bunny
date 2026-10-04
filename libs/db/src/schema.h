@@ -60,6 +60,15 @@ static const char *const BUNNY_DB_SCHEMA_SQL = "PRAGMA foreign_keys = ON;"
                                                "    tag_id INTEGER NOT NULL REFERENCES tags(id) ON DELETE CASCADE,"
                                                "    PRIMARY KEY (post_id, tag_id)"
                                                ");"
+                                               /* A tag's category is a global property of the tag itself (e621's own
+                                                * model -- a given tag name is always the same category site-wide), not
+                                                * per-post, so this keys on tag_id alone. Inkbunny keywords have no
+                                                * category concept and simply never get a row here. */
+                                               "CREATE TABLE IF NOT EXISTS tag_categories ("
+                                               "    tag_id INTEGER PRIMARY KEY REFERENCES tags(id) ON DELETE CASCADE,"
+                                               "    category TEXT NOT NULL CHECK (category IN "
+                                               "        ('general', 'artist', 'copyright', 'character', 'species', 'invalid', 'lore', 'meta'))"
+                                               ");"
                                                "CREATE TABLE IF NOT EXISTS search_results ("
                                                "    search_id INTEGER NOT NULL REFERENCES searches(id) ON DELETE CASCADE,"
                                                "    post_id INTEGER NOT NULL REFERENCES posts(id) ON DELETE CASCADE,"

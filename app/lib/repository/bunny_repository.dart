@@ -74,6 +74,12 @@ abstract interface class BunnyRepository {
   /// action.
   Future<void> markAllSeen(int searchId);
 
+  /// A post's tags with their categories, for a post detail view's
+  /// sectioned tag display (Artists/Characters/Copyrights/Species/General/
+  /// Meta for e621; a single uncategorized group for Inkbunny, whose
+  /// keywords have no category concept at all).
+  Future<List<BunnyPostTag>> getPostTagsByCategory(int postId);
+
   /// Manually triggers a sync pass (runs every due search). The server also
   /// does this on its own schedule (M5.3); this is for an explicit
   /// "refresh now" action.

@@ -227,6 +227,15 @@ void test_full_account_search_sync_favorite_flow(void)
     free(response.data);
     memset(&response, 0, sizeof(response));
 
+    status = do_request("GET", "/posts/1/tags", NULL, &response, true, NULL);
+    TEST_ASSERT_EQUAL(200, status);
+    TEST_ASSERT_NOT_NULL(strstr(response.data, "\"name\":\"one\""));
+    TEST_ASSERT_NOT_NULL(strstr(response.data, "\"category\":\"general\""));
+    TEST_ASSERT_NOT_NULL(strstr(response.data, "\"name\":\"someartist\""));
+    TEST_ASSERT_NOT_NULL(strstr(response.data, "\"category\":\"artist\""));
+    free(response.data);
+    memset(&response, 0, sizeof(response));
+
     /* The synced post's local id is 1 (first row in a fresh :memory: db). */
     status = do_request("POST", "/posts/1/seen", NULL, &response, true, NULL);
     TEST_ASSERT_EQUAL(200, status);

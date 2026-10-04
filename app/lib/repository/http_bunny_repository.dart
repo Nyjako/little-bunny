@@ -54,6 +54,8 @@ BunnyPost _postFromJson(Map<String, Object?> j) => BunnyPost(
 
 BunnyTagStat _tagStatFromJson(Map<String, Object?> j) => BunnyTagStat(name: j['name'] as String, count: (j['count'] as num).toInt());
 
+BunnyPostTag _postTagFromJson(Map<String, Object?> j) => BunnyPostTag(name: j['name'] as String, category: j['category'] as String?);
+
 BunnySyncStats _syncStatsFromJson(Map<String, Object?> j) => BunnySyncStats(
   searchesChecked: (j['searches_checked'] as num).toInt(),
   searchesSynced: (j['searches_synced'] as num).toInt(),
@@ -231,6 +233,15 @@ class HttpBunnyRepository implements BunnyRepository {
     if (response.statusCode != 200) {
       _throwError(response);
     }
+  }
+
+  @override
+  Future<List<BunnyPostTag>> getPostTagsByCategory(int postId) async {
+    final response = await _client.get(_uri('/posts/$postId/tags'), headers: _headers);
+    if (response.statusCode != 200) {
+      _throwError(response);
+    }
+    return _decodeList(response).map(_postTagFromJson).toList();
   }
 
   @override
