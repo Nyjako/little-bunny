@@ -16,14 +16,16 @@ bunny_db_result_t bunny_db_post_upsert(bunny_db_t *db, const bunny_db_post_upser
     }
 
     const char *sql = "INSERT INTO posts (site, external_id, artist, title, description, rating, score, fav_count, "
-                      "comment_count, file_url, file_ext, file_md5, preview_url, width, height, created_at_site) "
-                      "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) "
+                      "comment_count, file_url, file_ext, file_md5, preview_url, width, height, created_at_site, "
+                      "score_up, score_down) "
+                      "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) "
                       "ON CONFLICT(site, external_id) DO UPDATE SET "
                       "  artist = excluded.artist, title = excluded.title, description = excluded.description, "
                       "  rating = excluded.rating, score = excluded.score, fav_count = excluded.fav_count, "
                       "  comment_count = excluded.comment_count, file_url = excluded.file_url, file_ext = excluded.file_ext, "
                       "  file_md5 = excluded.file_md5, preview_url = excluded.preview_url, width = excluded.width, "
                       "  height = excluded.height, created_at_site = excluded.created_at_site, "
+                      "  score_up = excluded.score_up, score_down = excluded.score_down, "
                       "  cached_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') "
                       "RETURNING id;";
 
@@ -48,6 +50,8 @@ bunny_db_result_t bunny_db_post_upsert(bunny_db_t *db, const bunny_db_post_upser
     sqlite3_bind_int(stmt, 14, post->width);
     sqlite3_bind_int(stmt, 15, post->height);
     bunny_db_bind_text_or_null(stmt, 16, post->created_at_site);
+    sqlite3_bind_int(stmt, 17, post->score_up);
+    sqlite3_bind_int(stmt, 18, post->score_down);
 
     int rc = sqlite3_step(stmt);
     int64_t post_id = 0;
@@ -133,6 +137,8 @@ void bunny_db_fill_post_from_row(sqlite3_stmt *stmt, bunny_db_post_t *out)
     out->cached_at = bunny_db_column_text_dup(stmt, 17);
     out->is_seen = sqlite3_column_int(stmt, 18) != 0;
     out->is_favorited = sqlite3_column_int(stmt, 19) != 0;
+    out->score_up = sqlite3_column_int(stmt, 20);
+    out->score_down = sqlite3_column_int(stmt, 21);
 }
 
 bunny_db_result_t bunny_db_post_get(bunny_db_t *db, bunny_db_site_t site, int64_t external_id, bunny_db_post_t *out_post)

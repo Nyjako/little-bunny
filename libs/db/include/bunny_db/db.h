@@ -51,6 +51,8 @@ typedef struct
     const char *description; /* may be NULL */
     const char *rating;      /* may be NULL */
     int score;
+    int score_up;   /* 0 for Inkbunny -- no vote concept there */
+    int score_down; /* 0 for Inkbunny -- no vote concept there */
     int fav_count;
     int comment_count;
     const char *file_url;    /* may be NULL */

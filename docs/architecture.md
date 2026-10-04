@@ -700,6 +700,47 @@ either screen needing to know about the other's internal state.
   file extension, not actual playback"); real decoding is verified by the Linux build launch
   above and by manual testing against a real server instead.
 
+## Rich metadata, browsing UX & bug fixes (M8.5)
+
+A hands-on pass over M8 surfaced a large batch of feedback — real bugs plus missing richness
+in the browse/detail flow — scoped into sequential sub-milestones, M8.5.0 onward.
+
+**Minimal schema migration runner + score up/down split (M8.5.0)**: `libs/db/src/schema.h`
+is entirely `CREATE TABLE IF NOT EXISTS`, safe to re-run on every `bunny_db_open()` — but
+SQLite's `IF NOT EXISTS` can't add a *column* to a table that already exists, and a
+`schema_migrations` table had sat scaffolded (from the original M3 schema) but genuinely
+unused ever since. Splitting `posts.score` (a single total) into separate `score_up`/
+`score_down` columns — needed so the grid can show likes/dislikes rather than one combined
+number — was the first change in the project's history that actually needed a real migration
+path rather than a new table.
+
+- **The migration runner** (`bunny_db_apply_migrations()`, `libs/db/src/db.c`, called from
+  `bunny_db_open()` right after the schema SQL): a static array of `{version, sql}` pairs.
+  For each, `SELECT 1 FROM schema_migrations WHERE version = ?` decides whether to skip it or
+  run the SQL and record it — so re-opening an already-migrated database is a no-op, and a
+  fresh database gets every migration applied in order on first open. Deliberately minimal:
+  no rollback, no batching, no versioned schema snapshots — just enough to let `ALTER TABLE`
+  statements run exactly once each, which is all this project needs today.
+- **Score up/down**: `upsert_e621_post` (`libs/core/src/sync.c`) now reads `e621_score_t.up`/
+  `.down` (previously only `.total` survived into `bunny_db`); Inkbunny has no voting concept
+  at all, so both columns stay their `0` default for Inkbunny posts. The new fields were
+  appended to the end of the shared `BUNNY_DB_POST_SELECT_COLUMNS` macro
+  (`libs/db/src/internal.h`) that every post-reading query (`post_get`, `post_get_by_id`,
+  `search_list_posts`, `favorite_list`) already shares — one macro edit covers all of them,
+  since `bunny_db_fill_post_from_row` reads columns by explicit index, not struct layout
+  order, so where the new fields live inside `bunny_db_post_t` itself doesn't need to match
+  their position in the SELECT list.
+- **FFI bindings needed regeneration** (`dart run ffigen --config ffigen.yaml`) since
+  `bunny_db_post_t` is one of ffigen's entry-point structs — any field added there flows
+  straight into the generated Dart struct, then into `_postToMap`
+  (`bunny_core_ffi/lib/src/bunny_core_isolate.dart`), same as every prior post field.
+- **Testing a real migration** needs a real file, not `:memory:` — an in-memory SQLite
+  connection is wiped the moment it's closed, so "does reopening an already-migrated database
+  skip re-applying the migration" can only be tested by opening a real file path twice across
+  two separate `bunny_db_open()`/`bunny_db_close()` pairs. This is the one test in
+  `libs/db/tests/test_db.c` that doesn't use the shared `:memory:` `setUp()`/`tearDown()`
+  fixture — it manages its own temp file path directly, removing it before and after.
+
 ## Inkbunny API constraints (found in M2)
 
 Verified against the live API and the official docs while building `libinkbunny`:

@@ -29,6 +29,8 @@ BunnyPost _postFromMap(Map<String, Object?> m) => BunnyPost(
   description: m['description'] as String?,
   rating: m['rating'] as String?,
   score: m['score'] as int,
+  scoreUp: m['scoreUp'] as int,
+  scoreDown: m['scoreDown'] as int,
   favCount: m['favCount'] as int,
   commentCount: m['commentCount'] as int,
   fileUrl: m['fileUrl'] as String?,

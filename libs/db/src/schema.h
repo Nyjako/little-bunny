@@ -2,9 +2,11 @@
 #define BUNNY_DB_SCHEMA_H
 
 /* Idempotent: every statement is IF NOT EXISTS, so this is safe to run on
- * every bunny_db_open() against an already-populated database. Migrations
- * (schema changes to an existing table) are M4's concern, tracked via
- * schema_migrations once they're needed -- there are none yet. */
+ * every bunny_db_open() against an already-populated database. New tables
+ * can always go here directly; a change to an existing table (new column,
+ * etc.) needs an ALTER TABLE instead, which IF NOT EXISTS can't express --
+ * those live in db.c's bunny_db_apply_migrations(), tracked via
+ * schema_migrations (defined below) so each runs exactly once. */
 static const char *const BUNNY_DB_SCHEMA_SQL = "PRAGMA foreign_keys = ON;"
                                                "CREATE TABLE IF NOT EXISTS schema_migrations ("
                                                "    version INTEGER PRIMARY KEY,"
