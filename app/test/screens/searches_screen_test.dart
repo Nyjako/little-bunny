@@ -125,4 +125,79 @@ void main() {
     expect(find.text('Foxes'), findsOneWidget);
     expect(repository.searches, hasLength(1));
   });
+
+  testWidgets('pool searches only show up in the Pools tab, regular searches only in the Searches tab', (WidgetTester tester) async {
+    final repository = FakeBunnyRepository();
+    await repository.createSearch(BunnySite.e621, 'Foxes', 'fox');
+    await repository.createSearch(BunnySite.e621, 'a_pool', 'pool:5');
+
+    await tester.pumpWidget(_wrap(repository));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Foxes'), findsOneWidget);
+    expect(find.text('a_pool'), findsNothing);
+
+    await tester.tap(find.text('Pools'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('a_pool'), findsOneWidget);
+    expect(find.text('Foxes'), findsNothing);
+  });
+
+  testWidgets('shows the pools empty state on the Pools tab when there are no pool searches', (WidgetTester tester) async {
+    final repository = FakeBunnyRepository();
+    await repository.createSearch(BunnySite.e621, 'Foxes', 'fox');
+
+    await tester.pumpWidget(_wrap(repository));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Pools'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('No saved pools yet. Tap + to add one.'), findsOneWidget);
+  });
+
+  testWidgets('tapping the FAB on the Pools tab opens the add-pool dialog and uses the fetched pool name as the label', (WidgetTester tester) async {
+    final repository = FakeBunnyRepository();
+    repository.poolInfoById[5] = const BunnyPoolInfo(id: 5, name: 'a_fetched_pool', postCount: 3);
+
+    await tester.pumpWidget(_wrap(repository));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Pools'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byType(FloatingActionButton));
+    await tester.pumpAndSettle();
+    expect(find.text('Add pool'), findsOneWidget);
+
+    await tester.enterText(find.widgetWithText(TextField, 'Pool ID'), '5');
+    await tester.tap(find.text('Add'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('a_fetched_pool'), findsOneWidget);
+    expect(repository.searches, hasLength(1));
+    expect(repository.searches.single.query, 'pool:5');
+  });
+
+  testWidgets('add-pool dialog falls back to a default label when the pool lookup fails', (WidgetTester tester) async {
+    final repository = FakeBunnyRepository();
+    // No poolInfoById[5] seeded -- fetchPool throws.
+
+    await tester.pumpWidget(_wrap(repository));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Pools'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byType(FloatingActionButton));
+    await tester.pumpAndSettle();
+
+    await tester.enterText(find.widgetWithText(TextField, 'Pool ID'), '5');
+    await tester.tap(find.text('Add'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('pool:5'), findsOneWidget);
+    expect(repository.searches, hasLength(1));
+  });
 }

@@ -286,6 +286,30 @@ abstract class AppLocalizations {
   /// **'This removes the saved search \"{label}\" from this app.'**
   String searchesRemoveDialogContent(String label);
 
+  /// No description provided for @searchesTabSearches.
+  ///
+  /// In en, this message translates to:
+  /// **'Searches'**
+  String get searchesTabSearches;
+
+  /// No description provided for @searchesTabPools.
+  ///
+  /// In en, this message translates to:
+  /// **'Pools'**
+  String get searchesTabPools;
+
+  /// No description provided for @searchesPoolsEmptyState.
+  ///
+  /// In en, this message translates to:
+  /// **'No saved pools yet. Tap + to add one.'**
+  String get searchesPoolsEmptyState;
+
+  /// No description provided for @searchesNewPoolTooltip.
+  ///
+  /// In en, this message translates to:
+  /// **'Add pool'**
+  String get searchesNewPoolTooltip;
+
   /// No description provided for @createSearchScreenTitle.
   ///
   /// In en, this message translates to:
@@ -315,6 +339,24 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Create'**
   String get createSearchSubmit;
+
+  /// No description provided for @createPoolSearchDialogTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Add pool'**
+  String get createPoolSearchDialogTitle;
+
+  /// No description provided for @createPoolSearchIdLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Pool ID'**
+  String get createPoolSearchIdLabel;
+
+  /// No description provided for @createPoolSearchSubmit.
+  ///
+  /// In en, this message translates to:
+  /// **'Add'**
+  String get createPoolSearchSubmit;
 
   /// No description provided for @postGridUnseenOnlyTooltip.
   ///
