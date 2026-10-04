@@ -5,16 +5,22 @@ import 'package:flutter/material.dart';
 import '../l10n/app_localizations.dart';
 import '../repository/bunny_models.dart';
 import '../repository/bunny_repository.dart';
+import '../settings/sync_settings_store.dart';
 
 /// Creates a new saved search. The query field's tag-autocomplete
 /// (`BunnyRepository.tagAutocomplete`, M8.1) is debounced and only
 /// re-completes the word currently being typed -- e621-style multi-tag
 /// queries -- appending the picked tag rather than replacing the whole
-/// field. Pops `true` on success so [SearchesScreen] knows to refresh.
+/// field. The label field mirrors the query until the user types into it
+/// directly (classic slug-follows-title UX), and the interval field
+/// pre-fills from [syncSettingsStore]'s stored default rather than a
+/// hardcoded value. Pops `true` on success so [SearchesScreen] knows to
+/// refresh.
 class CreateSearchScreen extends StatefulWidget {
   final BunnyRepository repository;
+  final SyncSettingsStore syncSettingsStore;
 
-  const CreateSearchScreen({super.key, required this.repository});
+  const CreateSearchScreen({super.key, required this.repository, required this.syncSettingsStore});
 
   @override
   State<CreateSearchScreen> createState() => _CreateSearchScreenState();
@@ -24,26 +30,56 @@ class _CreateSearchScreenState extends State<CreateSearchScreen> {
   final _formKey = GlobalKey<FormState>();
   final _labelController = TextEditingController();
   final _queryController = TextEditingController();
-  final _intervalController = TextEditingController(text: '24');
+  final _intervalController = TextEditingController();
   BunnySite _site = BunnySite.e621;
   List<BunnyTagStat> _suggestions = [];
   Timer? _debounce;
   bool _submitting = false;
+  bool _labelManuallyEdited = false;
+  bool _mirroringLabel = false;
 
   @override
   void initState() {
     super.initState();
     _queryController.addListener(_onQueryChanged);
+    _queryController.addListener(_mirrorQueryIntoLabel);
+    _labelController.addListener(_onLabelChanged);
+    _loadDefaultInterval();
+  }
+
+  Future<void> _loadDefaultInterval() async {
+    final hours = await widget.syncSettingsStore.loadDefaultIntervalHours();
+    if (mounted) {
+      _intervalController.text = '$hours';
+    }
   }
 
   @override
   void dispose() {
     _debounce?.cancel();
     _queryController.removeListener(_onQueryChanged);
+    _queryController.removeListener(_mirrorQueryIntoLabel);
+    _labelController.removeListener(_onLabelChanged);
     _labelController.dispose();
     _queryController.dispose();
     _intervalController.dispose();
     super.dispose();
+  }
+
+  void _mirrorQueryIntoLabel() {
+    if (_labelManuallyEdited) {
+      return;
+    }
+    _mirroringLabel = true;
+    _labelController.text = _queryController.text;
+    _mirroringLabel = false;
+  }
+
+  void _onLabelChanged() {
+    if (_mirroringLabel) {
+      return;
+    }
+    _labelManuallyEdited = true;
   }
 
   String get _currentWord {

@@ -108,5 +108,7 @@
   "settingsThemeDark": "Dark",
   "settingsThemeSystem": "System",
   "settingsAppLockSection": "App lock",
-  "settingsAppLockEntry": "Manage app lock"
+  "settingsAppLockEntry": "Manage app lock",
+  "settingsSyncSection": "Sync",
+  "settingsDefaultIntervalLabel": "Default sync interval (hours)"
 }
