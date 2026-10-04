@@ -10,7 +10,7 @@
       "tags": {"general": ["one"], "species": [], "character": [], "copyright": [], "artist": ["someartist"], "invalid": [], "lore": [], "meta": []},
       "rating": "s",
       "fav_count": 1,
-      "sources": [],
+      "sources": ["https://example.com/original"],
       "description": "a test post",
       "comment_count": 0,
       "is_favorited": false,

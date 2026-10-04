@@ -143,6 +143,9 @@ class FfiBunnyRepository implements BunnyRepository {
   }
 
   @override
+  Future<List<String>> getPostSources(int postId) => _wrapped(() => _native.getPostSources(postId));
+
+  @override
   Future<BunnySyncStats> syncDueSearches() async {
     final map = await _wrapped(() => _native.syncDueSearches());
     return _syncStatsFromMap(map);

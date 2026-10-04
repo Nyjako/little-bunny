@@ -96,6 +96,10 @@ bunny_core_result_t bunny_core_search_mark_all_seen(bunny_core_t *core, int64_t 
  * concept at all) -- a thin pass-through to bunny_db. */
 bunny_core_result_t bunny_core_post_get_tags_by_category(bunny_core_t *core, int64_t post_id, bunny_db_post_tag_list_t *out_list);
 
+/* A post's source URLs, in the site's own order -- a thin pass-through to
+ * bunny_db. Empty for a post with none (e.g. every Inkbunny submission). */
+bunny_core_result_t bunny_core_post_get_sources(bunny_core_t *core, int64_t post_id, bunny_db_string_list_t *out_list);
+
 /* --- Scheduled search sync --------------------------------------------------- */
 
 typedef struct

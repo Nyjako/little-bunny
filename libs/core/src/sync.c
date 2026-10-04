@@ -179,6 +179,8 @@ static bunny_core_result_t upsert_e621_post(bunny_db_t *db, const e621_post_t *p
     upsert.tags = tags.items;
     upsert.tag_count = tags.count;
     upsert.tag_categories = tags.categories;
+    upsert.sources = (const char **)post->sources.items;
+    upsert.source_count = post->sources.count;
 
     bunny_db_result_t result = bunny_db_post_upsert(db, &upsert, out_post_id);
 

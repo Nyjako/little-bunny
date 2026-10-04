@@ -127,6 +127,19 @@ void bunny_db_post_tag_list_free(bunny_db_post_tag_list_t *list)
     list->count = 0;
 }
 
+void bunny_db_string_list_free(bunny_db_string_list_t *list)
+{
+    if (!list) {
+        return;
+    }
+    for (size_t i = 0; i < list->count; i++) {
+        free(list->items[i]);
+    }
+    free(list->items);
+    list->items = NULL;
+    list->count = 0;
+}
+
 void bunny_db_download_free(bunny_db_download_t *download)
 {
     if (!download) {
