@@ -23,6 +23,14 @@ typedef struct
     size_t count;
 } flat_tag_list_t;
 
+/* e621's real API allows up to 320 posts/page; Inkbunny has no explicit
+ * per-page limit param (the site's own implicit page size applies), so its
+ * loop below instead keeps paging until a page comes back empty. Both loops
+ * are capped at this many pages so one sync pass can't run unboundedly long
+ * against a search matching an enormous number of posts. */
+#define BUNNY_CORE_SYNC_E621_PAGE_LIMIT 320
+#define BUNNY_CORE_SYNC_MAX_PAGES 20
+
 static bool search_is_due(const bunny_db_search_t *search)
 {
     if (!search->last_run_at) {
@@ -202,23 +210,32 @@ static bunny_core_result_t sync_e621_search(bunny_core_t *core, const bunny_db_s
         return BUNNY_CORE_ERR_SITE;
     }
 
-    e621_post_list_t posts;
-    e621_result_t search_result = e621_search_posts(client, search->query, 1, 0, &posts);
-    e621_client_destroy(client);
-    if (search_result != E621_OK) {
-        return BUNNY_CORE_ERR_SITE;
-    }
+    for (int page = 1; page <= BUNNY_CORE_SYNC_MAX_PAGES; page++) {
+        e621_post_list_t posts;
+        e621_result_t search_result = e621_search_posts(client, search->query, page, BUNNY_CORE_SYNC_E621_PAGE_LIMIT, &posts);
+        if (search_result != E621_OK) {
+            e621_client_destroy(client);
+            return BUNNY_CORE_ERR_SITE;
+        }
 
-    for (size_t i = 0; i < posts.count; i++) {
-        int64_t post_id = 0;
-        if (upsert_e621_post(core->db, &posts.items[i], &post_id) == BUNNY_CORE_OK) {
-            bunny_db_search_add_result(core->db, search->id, post_id);
-            if (stats) {
-                stats->posts_upserted++;
+        for (size_t i = 0; i < posts.count; i++) {
+            int64_t post_id = 0;
+            if (upsert_e621_post(core->db, &posts.items[i], &post_id) == BUNNY_CORE_OK) {
+                bunny_db_search_add_result(core->db, search->id, post_id);
+                if (stats) {
+                    stats->posts_upserted++;
+                }
             }
         }
+
+        bool last_page = posts.count < BUNNY_CORE_SYNC_E621_PAGE_LIMIT;
+        e621_post_list_free(&posts);
+        if (last_page) {
+            break;
+        }
     }
-    e621_post_list_free(&posts);
+
+    e621_client_destroy(client);
     return BUNNY_CORE_OK;
 }
 
@@ -229,28 +246,40 @@ static bunny_core_result_t sync_inkbunny_search(bunny_core_t *core, const bunny_
         return BUNNY_CORE_ERR_SITE;
     }
 
-    inkbunny_search_params_t params;
-    memset(&params, 0, sizeof(params));
-    params.text = search->query;
-    params.page = 1;
+    /* Inkbunny's search has no explicit per-page limit param (unlike e621's),
+     * so there's no "requested vs. returned count" signal for the last page
+     * -- keep paging until one comes back empty instead. */
+    for (int page = 1; page <= BUNNY_CORE_SYNC_MAX_PAGES; page++) {
+        inkbunny_search_params_t params;
+        memset(&params, 0, sizeof(params));
+        params.text = search->query;
+        params.page = page;
 
-    inkbunny_submission_list_t submissions;
-    inkbunny_result_t search_result = inkbunny_search(client, &params, &submissions);
-    inkbunny_client_destroy(client);
-    if (search_result != INKBUNNY_OK) {
-        return BUNNY_CORE_ERR_SITE;
-    }
+        inkbunny_submission_list_t submissions;
+        inkbunny_result_t search_result = inkbunny_search(client, &params, &submissions);
+        if (search_result != INKBUNNY_OK) {
+            inkbunny_client_destroy(client);
+            return BUNNY_CORE_ERR_SITE;
+        }
 
-    for (size_t i = 0; i < submissions.count; i++) {
-        int64_t post_id = 0;
-        if (upsert_inkbunny_submission(core->db, &submissions.items[i], &post_id) == BUNNY_CORE_OK) {
-            bunny_db_search_add_result(core->db, search->id, post_id);
-            if (stats) {
-                stats->posts_upserted++;
+        if (submissions.count == 0) {
+            inkbunny_submission_list_free(&submissions);
+            break;
+        }
+
+        for (size_t i = 0; i < submissions.count; i++) {
+            int64_t post_id = 0;
+            if (upsert_inkbunny_submission(core->db, &submissions.items[i], &post_id) == BUNNY_CORE_OK) {
+                bunny_db_search_add_result(core->db, search->id, post_id);
+                if (stats) {
+                    stats->posts_upserted++;
+                }
             }
         }
+        inkbunny_submission_list_free(&submissions);
     }
-    inkbunny_submission_list_free(&submissions);
+
+    inkbunny_client_destroy(client);
     return BUNNY_CORE_OK;
 }
 

@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import '../l10n/app_localizations.dart';
 import '../repository/bunny_models.dart';
 import '../repository/bunny_repository.dart';
+import '../util/image_headers.dart';
 import 'post_detail_screen.dart';
 
 /// Shows a [BunnySearch]'s cached posts as a thumbnail grid, with an unseen
@@ -99,7 +100,7 @@ class _PostGridScreenState extends State<PostGridScreen> {
                 child: Stack(
                   fit: StackFit.expand,
                   children: [
-                    if (post.previewUrl != null) CachedNetworkImage(imageUrl: post.previewUrl!, fit: BoxFit.cover) else const ColoredBox(color: Colors.black12),
+                    if (post.previewUrl != null) CachedNetworkImage(imageUrl: post.previewUrl!, httpHeaders: imageHeadersFor(post.site), fit: BoxFit.cover) else const ColoredBox(color: Colors.black12),
                     if (!post.isSeen) Positioned(top: 4, right: 4, child: Container(width: 10, height: 10, decoration: const BoxDecoration(color: Colors.redAccent, shape: BoxShape.circle))),
                   ],
                 ),

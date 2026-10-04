@@ -741,6 +741,63 @@ path rather than a new table.
   `libs/db/tests/test_db.c` that doesn't use the shared `:memory:` `setUp()`/`tearDown()`
   fixture — it manages its own temp file path directly, removing it before and after.
 
+**Bug fixes: pagination, Inkbunny thumbnail 403, sort order (M8.5.1)**: three independent,
+user-reported bugs.
+
+- **Pagination.** `sync_e621_search`/`sync_inkbunny_search` (`libs/core/src/sync.c`) each made
+  exactly one `page=1` request with no loop — a search matching hundreds of posts only ever
+  cached e621's default page size (~75, since `limit=0` was always passed). Both now loop up
+  to `BUNNY_CORE_SYNC_MAX_PAGES` (20) pages: e621 requests `BUNNY_CORE_SYNC_E621_PAGE_LIMIT`
+  (320, the site's real per-request max) each page and stops the first time a page returns
+  fewer than that; Inkbunny's `inkbunny_search_params_t` has no per-page limit parameter at
+  all (confirmed — only `text`/`keywords_only`/`favorited_by_user_id`/`page`), so its loop
+  instead pages until a response comes back with zero submissions. This means a real Inkbunny
+  sync always makes one "probe" request past the true last page to confirm there's nothing
+  more — a deliberate trade-off given there's no total-count/total-pages signal exposed by
+  `inkbunny_submission_list_t` to detect the last page any other way.
+  - **Testing a 320-item page** needed a JSON body no one should hand-author into a fixture
+    file — `libs/core/tests/test_sync.c`'s `build_e621_posts_page_json(count, first_id)`
+    constructs one at test time instead, reusing the same minimal post shape as the existing
+    `e621_posts_search.json` fixture.
+  - **A real regression this caught in its own test writing**: the *existing*
+    `test_sync_inkbunny_search_upserts_post` test broke the moment the pagination loop
+    landed, because its fake transport only had two canned bodies (login + one page of
+    results) — the loop's mandatory "probe the next page" request got the fake transport's
+    out-of-bodies fallback (an empty string), which fails to *parse* as JSON at all (not the
+    same as a valid "zero results" document), so the whole sync reported a site failure where
+    it previously reported success. Fixed by adding a third canned fixture
+    (`inkbunny_search_response_empty.json`, a real `"submissions": []` response) to that
+    test, matching what a real second request now actually gets. Worth remembering for any
+    future Inkbunny sync test: the fake transport needs to account for this extra probe
+    request, not just the "real" results page.
+- **Inkbunny thumbnail 403s.** `CachedNetworkImage(imageUrl: ...)` in `PostGridScreen`/
+  `PostDetailScreen` sent no headers at all; libcurl-backed C-side requests never touch this
+  code path (that's a separate HTTP stack entirely — `libs/common/src/http.c` — used only by
+  the Flutter FFI/HTTP repository's *API* calls, not by the Flutter widgets' own direct image
+  fetches). Inkbunny's `metapix.net` CDN rejects such bare requests. New
+  `app/lib/util/image_headers.dart`'s `imageHeadersFor(BunnySite)` returns a `User-Agent`/
+  `Referer` pair for Inkbunny, `null` for e621 (no such requirement observed there) — passed
+  to every `CachedNetworkImage.httpHeaders` and to `VideoPlayerController.networkUrl`'s own
+  `httpHeaders` param for Inkbunny videos (same CDN, same fix applies).
+- **Sort order.** `bunny_db_search_list_posts` (`libs/db/src/posts.c`) ordered by
+  `sr.found_at DESC` — when *this app* linked the post to the search, not when the post was
+  actually created on the site. A single sync pass can link posts spanning a wide date range
+  all at once, so `found_at` values cluster together and don't track real recency. Changed to
+  `ORDER BY COALESCE(p.created_at_site, p.cached_at) DESC` (falling back to `cached_at` for
+  the rare post with no site timestamp, rather than sorting it to the very end).
+
+**Still open: the Inkbunny search-by-tag/author 403 itself.** Investigating (not fixing)
+surfaced two findings that reframe the bug rather than resolve it: (1) Inkbunny signals *all*
+of its own API errors — including auth failures — as HTTP 200 with a JSON `error_code` body,
+never a real non-2xx status, so a literal 403 the user observed is plausibly coming from a
+layer `libinkbunny` doesn't control (a CDN/edge in front of `inkbunny.net` itself) rather than
+from the API responding normally; (2) `inkbunny_search_params_t` has no author/username field
+at all today — only `text`, `keywords_only`, and `favorited_by_user_id` (which lists an
+*existing* favorites list, not "this user's submissions"). If "search by author" was ever
+expected to work, it may need an entirely new parameter/endpoint wired into `libinkbunny`,
+not a bug fix to existing code. This needs a live debugging session against a real configured
+account to pin down before any fix is written — tracked as open, not guessed at.
+
 ## Inkbunny API constraints (found in M2)
 
 Verified against the live API and the official docs while building `libinkbunny`:
