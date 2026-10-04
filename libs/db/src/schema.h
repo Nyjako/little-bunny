@@ -69,6 +69,15 @@ static const char *const BUNNY_DB_SCHEMA_SQL = "PRAGMA foreign_keys = ON;"
                                                "    category TEXT NOT NULL CHECK (category IN "
                                                "        ('general', 'artist', 'copyright', 'character', 'species', 'invalid', 'lore', 'meta'))"
                                                ");"
+                                               /* position preserves the site's own source ordering (sources[0] is
+                                                * usually "the" canonical source) -- plain row order isn't reliable
+                                                * once rows get replaced across re-syncs. */
+                                               "CREATE TABLE IF NOT EXISTS post_sources ("
+                                               "    post_id INTEGER NOT NULL REFERENCES posts(id) ON DELETE CASCADE,"
+                                               "    position INTEGER NOT NULL,"
+                                               "    url TEXT NOT NULL,"
+                                               "    PRIMARY KEY (post_id, position)"
+                                               ");"
                                                "CREATE TABLE IF NOT EXISTS search_results ("
                                                "    search_id INTEGER NOT NULL REFERENCES searches(id) ON DELETE CASCADE,"
                                                "    post_id INTEGER NOT NULL REFERENCES posts(id) ON DELETE CASCADE,"

@@ -44,6 +44,10 @@ void main() {
     expect(await repository.getPostTagsByCategory(1), isEmpty);
   });
 
+  test('getPostSources returns an empty list for a nonexistent post', () async {
+    expect(await repository.getPostSources(1), isEmpty);
+  });
+
   test('verifyAccount rejects bogus e621 credentials', () async {
     // See bunny_core_ffi/test/bunny_core_native_test.dart for why this hits
     // real e621 network: standalone mode has no fake-transport override.

@@ -549,6 +549,28 @@ this file is the single source of truth for "what's done" across sessions.
   dispatch chain instead, matching the identical precedent already set by M8.1's `/posts/{id}/
   seen` route and explicitly noted there for the same reason.
 
+- [x] **M8.5.4 — Sources**
+  New `post_sources` table (`libs/db/src/schema.h`): `post_id, position, url`, `PRIMARY KEY
+  (post_id, position)` — `position` preserves the site's own source ordering (sources[0] is
+  usually "the" canonical source), since plain row order isn't reliable once rows get replaced
+  across re-syncs. New generic `bunny_db_string_list_t` type (`char **items`/`size_t count`,
+  nothing existing fit a bare list of strings) + `bunny_db_string_list_free`.
+  `bunny_db_post_upsert_t` gained a parallel `const char **sources`/`size_t source_count`;
+  `bunny_db_post_upsert` wholesale-replaces a post's `post_sources` rows on every upsert
+  (`DELETE` then re-`INSERT` with position), exactly the same pattern already used for
+  `post_tags`. New read function `bunny_db_post_get_sources(db, post_id, out_list)` returns
+  URLs ordered by `position ASC`. `sync.c`'s `upsert_e621_post` wires `e621_post_t.sources`
+  straight through (previously parsed but discarded entirely); Inkbunny submissions have no
+  source-URL field at all, so `upsert_inkbunny_submission` leaves it unset (`NULL`/`0` via the
+  existing `memset`). Core wrapper `bunny_core_post_get_sources`; `GET /posts/{id}/sources`
+  added to the same `routes_queue.c` `posts_handler` dispatch chain as M8.5.3's tags route (not
+  a new file, for the identical civetweb-route-ownership reason documented there).
+  `BunnyRepository.getPostSources(int) -> Future<List<String>>` implemented in both
+  `FfiBunnyRepository`/`HttpBunnyRepository`, `FakeBunnyRepository.sourcesByPostId`. Tests at
+  every layer: `:memory:` (order preservation, empty-when-none, wholesale-replace-on-resync),
+  a fake-transport sync test, the server integration test's shared e621 fixture extended with
+  a real source URL, and new FFI/HTTP repository tests.
+
 - [ ] **M9 — Actions & downloads**
   Single + mass like/favorite/download, commenting, download manager writing to
   `%artist%/%id%.%extension%`, checksum (md5) verification of downloaded files against the

@@ -193,6 +193,38 @@ void test_sync_e621_search_upserts_post_tag_categories(void)
     free(fixture);
 }
 
+void test_sync_e621_search_upserts_post_sources(void)
+{
+    char *fixture = read_fixture("e621_posts_search.json");
+    TEST_ASSERT_NOT_NULL(fixture);
+    g_e621_state.bodies[0] = fixture;
+    g_e621_state.body_count = 1;
+
+    int64_t search_id = 0;
+    bunny_core_result_t result = bunny_core_search_create(g_core, BUNNY_DB_SITE_E621, "wolves", "wolf", 24, &search_id);
+    TEST_ASSERT_EQUAL(BUNNY_CORE_OK, result);
+
+    bunny_core_sync_stats_t stats;
+    result = bunny_core_sync_due_searches(g_core, &stats);
+    TEST_ASSERT_EQUAL(BUNNY_CORE_OK, result);
+
+    bunny_db_post_list_t posts;
+    result = bunny_core_search_list_posts(g_core, search_id, false, &posts);
+    TEST_ASSERT_EQUAL(BUNNY_CORE_OK, result);
+    TEST_ASSERT_EQUAL(1, (int)posts.count);
+    int64_t post_id = posts.items[0].id;
+    bunny_db_post_list_free(&posts);
+
+    bunny_db_string_list_t sources;
+    result = bunny_core_post_get_sources(g_core, post_id, &sources);
+    TEST_ASSERT_EQUAL(BUNNY_CORE_OK, result);
+    TEST_ASSERT_EQUAL(1, (int)sources.count);
+    TEST_ASSERT_EQUAL_STRING("https://example.com/original", sources.items[0]);
+    bunny_db_string_list_free(&sources);
+
+    free(fixture);
+}
+
 void test_sync_e621_search_fetches_a_second_page_when_the_first_is_full(void)
 {
     char *page1 = build_e621_posts_page_json(TEST_E621_FULL_PAGE_SIZE, 1);
@@ -442,6 +474,7 @@ int main(void)
     UNITY_BEGIN();
     RUN_TEST(test_sync_e621_search_upserts_post);
     RUN_TEST(test_sync_e621_search_upserts_post_tag_categories);
+    RUN_TEST(test_sync_e621_search_upserts_post_sources);
     RUN_TEST(test_sync_e621_search_fetches_a_second_page_when_the_first_is_full);
     RUN_TEST(test_sync_e621_search_stops_after_a_single_short_page);
     RUN_TEST(test_tag_autocomplete_finds_tags_from_synced_posts);

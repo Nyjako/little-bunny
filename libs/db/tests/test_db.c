@@ -805,6 +805,71 @@ void test_post_get_tags_by_category_tag_category_is_shared_across_posts(void)
     bunny_db_post_tag_list_free(&list);
 }
 
+void test_post_get_sources_preserves_order(void)
+{
+    const char *sources[] = {"https://example.com/a", "https://example.com/b", "https://example.com/c"};
+    bunny_db_post_upsert_t post;
+    make_test_post(&post, 605, 1);
+    post.sources = sources;
+    post.source_count = 3;
+
+    int64_t post_id = 0;
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, bunny_db_post_upsert(g_db, &post, &post_id));
+
+    bunny_db_string_list_t list;
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, bunny_db_post_get_sources(g_db, post_id, &list));
+    TEST_ASSERT_EQUAL(3, list.count);
+    TEST_ASSERT_EQUAL_STRING("https://example.com/a", list.items[0]);
+    TEST_ASSERT_EQUAL_STRING("https://example.com/b", list.items[1]);
+    TEST_ASSERT_EQUAL_STRING("https://example.com/c", list.items[2]);
+
+    bunny_db_string_list_free(&list);
+}
+
+void test_post_get_sources_empty_when_none_given(void)
+{
+    bunny_db_post_upsert_t post;
+    make_test_post(&post, 606, 1);
+    /* sources/source_count left at their memset-zero defaults (NULL/0) --
+     * the Inkbunny case, which has no source field at all. */
+
+    int64_t post_id = 0;
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, bunny_db_post_upsert(g_db, &post, &post_id));
+
+    bunny_db_string_list_t list;
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, bunny_db_post_get_sources(g_db, post_id, &list));
+    TEST_ASSERT_EQUAL(0, list.count);
+
+    bunny_db_string_list_free(&list);
+}
+
+void test_post_upsert_replaces_sources_wholesale_on_resync(void)
+{
+    const char *sources1[] = {"https://example.com/old"};
+    bunny_db_post_upsert_t post;
+    make_test_post(&post, 607, 1);
+    post.sources = sources1;
+    post.source_count = 1;
+
+    int64_t post_id = 0;
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, bunny_db_post_upsert(g_db, &post, &post_id));
+
+    const char *sources2[] = {"https://example.com/new1", "https://example.com/new2"};
+    post.sources = sources2;
+    post.source_count = 2;
+    int64_t second_id = 0;
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, bunny_db_post_upsert(g_db, &post, &second_id));
+    TEST_ASSERT_EQUAL(post_id, second_id);
+
+    bunny_db_string_list_t list;
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, bunny_db_post_get_sources(g_db, post_id, &list));
+    TEST_ASSERT_EQUAL(2, list.count);
+    TEST_ASSERT_EQUAL_STRING("https://example.com/new1", list.items[0]);
+    TEST_ASSERT_EQUAL_STRING("https://example.com/new2", list.items[1]);
+
+    bunny_db_string_list_free(&list);
+}
+
 int main(void)
 {
     UNITY_BEGIN();
@@ -842,5 +907,8 @@ int main(void)
     RUN_TEST(test_post_get_tags_by_category);
     RUN_TEST(test_post_get_tags_by_category_uncategorized_when_no_category_given);
     RUN_TEST(test_post_get_tags_by_category_tag_category_is_shared_across_posts);
+    RUN_TEST(test_post_get_sources_preserves_order);
+    RUN_TEST(test_post_get_sources_empty_when_none_given);
+    RUN_TEST(test_post_upsert_replaces_sources_wholesale_on_resync);
     return UNITY_END();
 }

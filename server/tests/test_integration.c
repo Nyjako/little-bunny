@@ -18,7 +18,7 @@ static const char *E621_FIXTURE = "{\"posts\":[{\"id\":1,\"created_at\":\"2024-0
                                   "\"preview\":{\"width\":50,\"height\":50,\"url\":\"https://static1.e621.net/data/preview/1.png\"},"
                                   "\"sample\":{\"has\":false},\"score\":{\"up\":1,\"down\":0,\"total\":1},"
                                   "\"tags\":{\"general\":[\"one\"],\"species\":[],\"character\":[],\"copyright\":[],\"artist\":[\"someartist\"],\"invalid\":[],\"lore\":[],\"meta\":[]},"
-                                  "\"rating\":\"s\",\"fav_count\":1,\"sources\":[],\"description\":\"a test post\",\"comment_count\":0,\"is_favorited\":false,\"pools\":[]}]}";
+                                  "\"rating\":\"s\",\"fav_count\":1,\"sources\":[\"https://example.com/original\"],\"description\":\"a test post\",\"comment_count\":0,\"is_favorited\":false,\"pools\":[]}]}";
 
 static bunny_http_result_t fake_e621_send(void *user_data, const bunny_http_request_t *request, bunny_http_response_t *out_response)
 {
@@ -233,6 +233,12 @@ void test_full_account_search_sync_favorite_flow(void)
     TEST_ASSERT_NOT_NULL(strstr(response.data, "\"category\":\"general\""));
     TEST_ASSERT_NOT_NULL(strstr(response.data, "\"name\":\"someartist\""));
     TEST_ASSERT_NOT_NULL(strstr(response.data, "\"category\":\"artist\""));
+    free(response.data);
+    memset(&response, 0, sizeof(response));
+
+    status = do_request("GET", "/posts/1/sources", NULL, &response, true, NULL);
+    TEST_ASSERT_EQUAL(200, status);
+    TEST_ASSERT_EQUAL_STRING("[\"https://example.com/original\"]", response.data);
     free(response.data);
     memset(&response, 0, sizeof(response));
 

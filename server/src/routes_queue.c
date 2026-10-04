@@ -131,6 +131,28 @@ static int handle_get_post_tags(struct mg_connection *conn, server_context_t *ct
     return status;
 }
 
+static int handle_get_post_sources(struct mg_connection *conn, server_context_t *ctx, int64_t post_id)
+{
+    bunny_db_string_list_t list;
+    pthread_mutex_lock(&ctx->core_mutex);
+    bunny_core_result_t result = bunny_core_post_get_sources(ctx->core, post_id, &list);
+    pthread_mutex_unlock(&ctx->core_mutex);
+
+    if (result != BUNNY_CORE_OK) {
+        return server_json_respond_error(conn, result);
+    }
+
+    cJSON *response = cJSON_CreateArray();
+    for (size_t i = 0; i < list.count; i++) {
+        cJSON_AddItemToArray(response, cJSON_CreateString(list.items[i]));
+    }
+    bunny_db_string_list_free(&list);
+
+    int status = server_json_respond(conn, 200, response);
+    cJSON_Delete(response);
+    return status;
+}
+
 static int handle_mark_seen(struct mg_connection *conn, server_context_t *ctx, int64_t post_id)
 {
     pthread_mutex_lock(&ctx->core_mutex);
@@ -180,6 +202,9 @@ static int posts_handler(struct mg_connection *conn, void *cbdata)
     }
     if (strcmp(method, "GET") == 0 && server_route_parse_id_with_suffix(sub_path, "tags", &post_id)) {
         return handle_get_post_tags(conn, ctx, post_id);
+    }
+    if (strcmp(method, "GET") == 0 && server_route_parse_id_with_suffix(sub_path, "sources", &post_id)) {
+        return handle_get_post_sources(conn, ctx, post_id);
     }
 
     return server_json_respond_error(conn, BUNNY_CORE_ERR_NOT_FOUND);
