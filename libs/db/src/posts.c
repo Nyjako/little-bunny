@@ -8,6 +8,7 @@
 #include "internal.h"
 
 GOBLIN_DYN_ARRAY_DECL(bunny_db_post, bunny_db_post_t)
+GOBLIN_DYN_ARRAY_DECL(bunny_db_post_tag, bunny_db_post_tag_t)
 
 bunny_db_result_t bunny_db_post_upsert(bunny_db_t *db, const bunny_db_post_upsert_t *post, int64_t *out_id)
 {
@@ -105,6 +106,22 @@ bunny_db_result_t bunny_db_post_upsert(bunny_db_t *db, const bunny_db_post_upser
                 sqlite3_bind_int64(link_stmt, 2, tag_id);
                 sqlite3_step(link_stmt);
                 sqlite3_finalize(link_stmt);
+            }
+
+            /* A tag's category is a property of the tag itself (see
+             * schema.h), not this post -- upsert it once per tag regardless
+             * of how many posts reference it. */
+            const char *category = post->tag_categories ? post->tag_categories[i] : NULL;
+            if (category && category[0]) {
+                const char *category_sql = "INSERT INTO tag_categories (tag_id, category) VALUES (?, ?) "
+                                           "ON CONFLICT(tag_id) DO UPDATE SET category = excluded.category;";
+                sqlite3_stmt *category_stmt = NULL;
+                if (sqlite3_prepare_v2(db->handle, category_sql, -1, &category_stmt, NULL) == SQLITE_OK) {
+                    sqlite3_bind_int64(category_stmt, 1, tag_id);
+                    sqlite3_bind_text(category_stmt, 2, category, -1, SQLITE_TRANSIENT);
+                    sqlite3_step(category_stmt);
+                    sqlite3_finalize(category_stmt);
+                }
             }
         }
     }
@@ -260,6 +277,58 @@ bunny_db_result_t bunny_db_search_list_posts(bunny_db_t *db, int64_t search_id, 
             bunny_db_post_free(&arr.items[i]);
         }
         bunny_db_post_array_free(&arr);
+        return bunny_db_sqlite_rc_to_result(rc);
+    }
+
+    out_list->items = arr.items;
+    out_list->count = arr.count;
+    return BUNNY_DB_OK;
+}
+
+bunny_db_result_t bunny_db_post_get_tags_by_category(bunny_db_t *db, int64_t post_id, bunny_db_post_tag_list_t *out_list)
+{
+    if (!db || !out_list) {
+        return BUNNY_DB_ERR_INVALID_ARG;
+    }
+    memset(out_list, 0, sizeof(*out_list));
+
+    const char *sql = "SELECT t.name, tc.category "
+                      "FROM post_tags pt "
+                      "JOIN tags t ON t.id = pt.tag_id "
+                      "LEFT JOIN tag_categories tc ON tc.tag_id = t.id "
+                      "WHERE pt.post_id = ? "
+                      "ORDER BY t.name ASC;";
+    sqlite3_stmt *stmt = NULL;
+    if (sqlite3_prepare_v2(db->handle, sql, -1, &stmt, NULL) != SQLITE_OK) {
+        return BUNNY_DB_ERR_QUERY_FAILED;
+    }
+    sqlite3_bind_int64(stmt, 1, post_id);
+
+    bunny_db_post_tag_array arr;
+    bunny_db_post_tag_array_init(&arr);
+
+    int rc;
+    while ((rc = sqlite3_step(stmt)) == SQLITE_ROW) {
+        bunny_db_post_tag_t item;
+        item.name = bunny_db_column_text_dup(stmt, 0);
+        item.category = bunny_db_column_text_dup(stmt, 1);
+        if (!bunny_db_post_tag_array_push(&arr, item)) {
+            sqlite3_finalize(stmt);
+            bunny_db_post_tag_free(&item);
+            for (size_t i = 0; i < arr.count; i++) {
+                bunny_db_post_tag_free(&arr.items[i]);
+            }
+            bunny_db_post_tag_array_free(&arr);
+            return BUNNY_DB_ERR_UNKNOWN;
+        }
+    }
+    sqlite3_finalize(stmt);
+
+    if (rc != SQLITE_DONE) {
+        for (size_t i = 0; i < arr.count; i++) {
+            bunny_db_post_tag_free(&arr.items[i]);
+        }
+        bunny_db_post_tag_array_free(&arr);
         return bunny_db_sqlite_rc_to_result(rc);
     }
 

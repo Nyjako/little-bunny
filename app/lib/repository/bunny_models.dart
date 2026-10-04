@@ -116,6 +116,16 @@ class BunnyTagStat {
   const BunnyTagStat({required this.name, required this.count});
 }
 
+/// One of a post's tags, with its category (e621: general/artist/copyright/
+/// character/species/invalid/lore/meta; `null` for Inkbunny keywords, which
+/// have no category concept at all). Mirrors `bunny_db_post_tag_t`.
+class BunnyPostTag {
+  final String name;
+  final String? category;
+
+  const BunnyPostTag({required this.name, this.category});
+}
+
 /// Mirrors `bunny_core_sync_stats_t`.
 class BunnySyncStats {
   final int searchesChecked;

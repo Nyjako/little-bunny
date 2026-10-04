@@ -86,6 +86,8 @@ Map<String, Object?> _postToMap(bunny_db_post_t post) => {
 
 Map<String, Object?> _tagStatToMap(bunny_db_tag_stat_t stat) => {'name': _readNullableString(stat.name), 'count': stat.count};
 
+Map<String, Object?> _postTagToMap(bunny_db_post_tag_t tag) => {'name': _readNullableString(tag.name), 'category': _readNullableString(tag.category)};
+
 Map<String, Object?> _syncStatsToMap(bunny_core_sync_stats_t stats) => {'searchesChecked': stats.searches_checked, 'searchesSynced': stats.searches_synced, 'postsUpserted': stats.posts_upserted};
 
 Map<String, Object?> _queueStatsToMap(bunny_core_queue_stats_t stats) => {'actionsProcessed': stats.actions_processed, 'actionsSucceeded': stats.actions_succeeded, 'actionsFailed': stats.actions_failed};
@@ -193,6 +195,12 @@ class _MarkAllSeenRequest extends _Request {
   const _MarkAllSeenRequest(this.searchId);
 }
 
+class _GetPostTagsByCategoryRequest extends _Request {
+  final int postId;
+
+  const _GetPostTagsByCategoryRequest(this.postId);
+}
+
 class _QueueFavoriteAddRequest extends _Request {
   final int postId;
   final int stars;
@@ -296,6 +304,19 @@ List<Map<String, Object?>> _handleTagAutocomplete(Pointer<bunny_core_t> core, _T
   });
 }
 
+List<Map<String, Object?>> _handleGetPostTagsByCategory(Pointer<bunny_core_t> core, _GetPostTagsByCategoryRequest r) {
+  return using((arena) {
+    final out = arena<bunny_db_post_tag_list_t>();
+    _check(_bindings.bunny_core_post_get_tags_by_category(core, r.postId, out));
+    final items = <Map<String, Object?>>[];
+    for (var i = 0; i < out.ref.count; i++) {
+      items.add(_postTagToMap(out.ref.items[i]));
+    }
+    _bindings.bunny_db_post_tag_list_free(out);
+    return items;
+  });
+}
+
 List<Map<String, Object?>> _handleListSearchPosts(Pointer<bunny_core_t> core, _ListSearchPostsRequest r) {
   return using((arena) {
     final out = arena<bunny_db_post_list_t>();
@@ -364,6 +385,8 @@ Object? _dispatch(Pointer<bunny_core_t>? core, _Request request, void Function(P
       case _MarkAllSeenRequest r:
         _check(_bindings.bunny_core_search_mark_all_seen(c, r.searchId));
         return null;
+      case _GetPostTagsByCategoryRequest r:
+        return _handleGetPostTagsByCategory(c, r);
       case _QueueFavoriteAddRequest r:
         _check(_bindings.bunny_core_queue_favorite_add(c, r.postId, r.stars));
         return null;
@@ -483,6 +506,8 @@ class BunnyCoreNative {
   Future<void> markPostSeen(int postId) => _send<void>(_MarkPostSeenRequest(postId));
 
   Future<void> markAllSeen(int searchId) => _send<void>(_MarkAllSeenRequest(searchId));
+
+  Future<List<Map<String, Object?>>> getPostTagsByCategory(int postId) => _send<List<Map<String, Object?>>>(_GetPostTagsByCategoryRequest(postId));
 
   Future<void> queueFavoriteAdd(int postId, int stars) => _send<void>(_QueueFavoriteAddRequest(postId, stars));
 
