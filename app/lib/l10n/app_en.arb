@@ -57,12 +57,20 @@
   "@searchesRemoveDialogContent": {
     "placeholders": {"label": {"type": "String"}}
   },
+  "searchesTabSearches": "Searches",
+  "searchesTabPools": "Pools",
+  "searchesPoolsEmptyState": "No saved pools yet. Tap + to add one.",
+  "searchesNewPoolTooltip": "Add pool",
 
   "createSearchScreenTitle": "New search",
   "createSearchLabelField": "Label",
   "createSearchQueryField": "Query",
   "createSearchIntervalLabel": "Sync interval (hours)",
   "createSearchSubmit": "Create",
+
+  "createPoolSearchDialogTitle": "Add pool",
+  "createPoolSearchIdLabel": "Pool ID",
+  "createPoolSearchSubmit": "Add",
 
   "postGridUnseenOnlyTooltip": "Show unseen only",
   "postGridRefreshTooltip": "Refresh",
