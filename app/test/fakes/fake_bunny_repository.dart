@@ -16,6 +16,13 @@ class FakeBunnyRepository implements BunnyRepository {
   final List<BunnyTagStat> tagStats = [];
   final Map<int, List<BunnyPostTag>> tagsByPostId = {};
   final Map<int, List<String>> sourcesByPostId = {};
+  final Map<int, BunnyPostRelationships> relationshipsByPostId = {};
+  final Map<int, List<int>> poolIdsByPostId = {};
+
+  /// Keyed by `'${site.toWireString()}:$externalId'` -- the post id
+  /// [fetchPost] returns for that (site, externalId) pair.
+  final Map<String, int> fetchPostResults = {};
+  final Map<int, BunnyPoolInfo> poolInfoById = {};
   int _nextSearchId = 1;
   int syncCallCount = 0;
 
@@ -133,6 +140,31 @@ class FakeBunnyRepository implements BunnyRepository {
 
   @override
   Future<List<String>> getPostSources(int postId) async => List.of(sourcesByPostId[postId] ?? const []);
+
+  @override
+  Future<BunnyPostRelationships> getPostRelationships(int postId) async => relationshipsByPostId[postId] ?? const BunnyPostRelationships(hasParent: false, hasActiveChildren: false, children: []);
+
+  @override
+  Future<List<int>> getPostPoolIds(int postId) async => List.of(poolIdsByPostId[postId] ?? const []);
+
+  @override
+  Future<int> fetchPost(BunnySite site, int externalId) async {
+    final key = '${site.toWireString()}:$externalId';
+    final postId = fetchPostResults[key];
+    if (postId == null) {
+      throw BunnyRepositoryException('no fake fetchPost result registered for $key');
+    }
+    return postId;
+  }
+
+  @override
+  Future<BunnyPoolInfo> fetchPool(int poolId) async {
+    final info = poolInfoById[poolId];
+    if (info == null) {
+      throw BunnyRepositoryException('no fake pool registered for $poolId');
+    }
+    return info;
+  }
 
   @override
   Future<BunnySyncStats> syncDueSearches() async {

@@ -78,6 +78,26 @@ static const char *const BUNNY_DB_SCHEMA_SQL = "PRAGMA foreign_keys = ON;"
                                                "    url TEXT NOT NULL,"
                                                "    PRIMARY KEY (post_id, position)"
                                                ");"
+                                               /* parent_external_id/has_active_children/child_external_id are the
+                                                * *site's own* ids, not local posts.id -- a parent/child may never
+                                                * have been synced locally, so there's nothing to foreign-key against.
+                                                * e621 only; Inkbunny posts never get rows in any of these three
+                                                * tables (no relationship/pool concept there). */
+                                               "CREATE TABLE IF NOT EXISTS post_relationships ("
+                                               "    post_id INTEGER PRIMARY KEY REFERENCES posts(id) ON DELETE CASCADE,"
+                                               "    parent_external_id INTEGER,"
+                                               "    has_active_children INTEGER NOT NULL DEFAULT 0"
+                                               ");"
+                                               "CREATE TABLE IF NOT EXISTS post_children ("
+                                               "    post_id INTEGER NOT NULL REFERENCES posts(id) ON DELETE CASCADE,"
+                                               "    child_external_id INTEGER NOT NULL,"
+                                               "    PRIMARY KEY (post_id, child_external_id)"
+                                               ");"
+                                               "CREATE TABLE IF NOT EXISTS post_pools ("
+                                               "    post_id INTEGER NOT NULL REFERENCES posts(id) ON DELETE CASCADE,"
+                                               "    pool_id INTEGER NOT NULL,"
+                                               "    PRIMARY KEY (post_id, pool_id)"
+                                               ");"
                                                "CREATE TABLE IF NOT EXISTS search_results ("
                                                "    search_id INTEGER NOT NULL REFERENCES searches(id) ON DELETE CASCADE,"
                                                "    post_id INTEGER NOT NULL REFERENCES posts(id) ON DELETE CASCADE,"

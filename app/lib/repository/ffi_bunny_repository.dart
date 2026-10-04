@@ -50,6 +50,15 @@ BunnyTagStat _tagStatFromMap(Map<String, Object?> m) => BunnyTagStat(name: m['na
 
 BunnyPostTag _postTagFromMap(Map<String, Object?> m) => BunnyPostTag(name: m['name'] as String, category: m['category'] as String?);
 
+BunnyPostRelationships _relationshipsFromMap(Map<String, Object?> m) => BunnyPostRelationships(
+  hasParent: m['hasParent'] as bool,
+  parentExternalId: m['parentExternalId'] as int?,
+  hasActiveChildren: m['hasActiveChildren'] as bool,
+  children: (m['children'] as List).cast<int>(),
+);
+
+BunnyPoolInfo _poolInfoFromMap(Map<String, Object?> m) => BunnyPoolInfo(id: m['id'] as int, name: m['name'] as String?, postCount: m['postCount'] as int);
+
 BunnySyncStats _syncStatsFromMap(Map<String, Object?> m) => BunnySyncStats(
   searchesChecked: m['searchesChecked'] as int,
   searchesSynced: m['searchesSynced'] as int,
@@ -144,6 +153,24 @@ class FfiBunnyRepository implements BunnyRepository {
 
   @override
   Future<List<String>> getPostSources(int postId) => _wrapped(() => _native.getPostSources(postId));
+
+  @override
+  Future<BunnyPostRelationships> getPostRelationships(int postId) async {
+    final map = await _wrapped(() => _native.getPostRelationships(postId));
+    return _relationshipsFromMap(map);
+  }
+
+  @override
+  Future<List<int>> getPostPoolIds(int postId) => _wrapped(() => _native.getPostPoolIds(postId));
+
+  @override
+  Future<int> fetchPost(BunnySite site, int externalId) => _wrapped(() => _native.fetchAndCachePost(site.toWireString(), externalId));
+
+  @override
+  Future<BunnyPoolInfo> fetchPool(int poolId) async {
+    final map = await _wrapped(() => _native.fetchPool(poolId));
+    return _poolInfoFromMap(map);
+  }
 
   @override
   Future<BunnySyncStats> syncDueSearches() async {

@@ -225,6 +225,96 @@ void test_sync_e621_search_upserts_post_sources(void)
     free(fixture);
 }
 
+void test_sync_e621_search_upserts_post_relationships_and_pools(void)
+{
+    char *fixture = read_fixture("e621_posts_search.json");
+    TEST_ASSERT_NOT_NULL(fixture);
+    g_e621_state.bodies[0] = fixture;
+    g_e621_state.body_count = 1;
+
+    int64_t search_id = 0;
+    bunny_core_result_t result = bunny_core_search_create(g_core, BUNNY_DB_SITE_E621, "wolves", "wolf", 24, &search_id);
+    TEST_ASSERT_EQUAL(BUNNY_CORE_OK, result);
+
+    bunny_core_sync_stats_t stats;
+    result = bunny_core_sync_due_searches(g_core, &stats);
+    TEST_ASSERT_EQUAL(BUNNY_CORE_OK, result);
+
+    bunny_db_post_list_t posts;
+    result = bunny_core_search_list_posts(g_core, search_id, false, &posts);
+    TEST_ASSERT_EQUAL(BUNNY_CORE_OK, result);
+    TEST_ASSERT_EQUAL(1, (int)posts.count);
+    int64_t post_id = posts.items[0].id;
+    bunny_db_post_list_free(&posts);
+
+    bunny_db_post_relationships_t relationships;
+    result = bunny_core_post_get_relationships(g_core, post_id, &relationships);
+    TEST_ASSERT_EQUAL(BUNNY_CORE_OK, result);
+    TEST_ASSERT_TRUE(relationships.has_parent);
+    TEST_ASSERT_EQUAL(999, relationships.parent_external_id);
+    TEST_ASSERT_TRUE(relationships.has_active_children);
+    TEST_ASSERT_EQUAL(2, relationships.children.count);
+    bunny_db_post_relationships_free(&relationships);
+
+    bunny_db_int64_list_t pool_ids;
+    result = bunny_core_post_get_pool_ids(g_core, post_id, &pool_ids);
+    TEST_ASSERT_EQUAL(BUNNY_CORE_OK, result);
+    TEST_ASSERT_EQUAL(2, pool_ids.count);
+    bunny_db_int64_list_free(&pool_ids);
+
+    free(fixture);
+}
+
+void test_fetch_and_cache_post_upserts_live_e621_post(void)
+{
+    char *fixture1 = read_fixture("e621_post_single.json");
+    char *fixture2 = read_fixture("e621_post_single.json");
+    TEST_ASSERT_NOT_NULL(fixture1);
+    TEST_ASSERT_NOT_NULL(fixture2);
+    g_e621_state.bodies[0] = fixture1;
+    g_e621_state.bodies[1] = fixture2;
+    g_e621_state.body_count = 2;
+
+    int64_t post_id = 0;
+    bunny_core_result_t result = bunny_core_fetch_and_cache_post(g_core, BUNNY_DB_SITE_E621, 42, &post_id);
+    TEST_ASSERT_EQUAL(BUNNY_CORE_OK, result);
+    TEST_ASSERT_TRUE(post_id > 0);
+
+    bunny_db_post_tag_list_t tags;
+    result = bunny_core_post_get_tags_by_category(g_core, post_id, &tags);
+    TEST_ASSERT_EQUAL(BUNNY_CORE_OK, result);
+    TEST_ASSERT_EQUAL(2, (int)tags.count);
+    bunny_db_post_tag_list_free(&tags);
+
+    /* Fetching again (e.g. a second chip tap) must upsert in place, not
+     * duplicate the post. */
+    int64_t second_id = 0;
+    result = bunny_core_fetch_and_cache_post(g_core, BUNNY_DB_SITE_E621, 42, &second_id);
+    TEST_ASSERT_EQUAL(BUNNY_CORE_OK, result);
+    TEST_ASSERT_EQUAL(post_id, second_id);
+
+    free(fixture1);
+    free(fixture2);
+}
+
+void test_fetch_pool_returns_live_pool_info(void)
+{
+    char *fixture = read_fixture("e621_pool_single.json");
+    TEST_ASSERT_NOT_NULL(fixture);
+    g_e621_state.bodies[0] = fixture;
+    g_e621_state.body_count = 1;
+
+    bunny_core_pool_info_t info;
+    bunny_core_result_t result = bunny_core_fetch_pool(g_core, 5, &info);
+    TEST_ASSERT_EQUAL(BUNNY_CORE_OK, result);
+    TEST_ASSERT_EQUAL(5, info.id);
+    TEST_ASSERT_EQUAL_STRING("a_test_pool", info.name);
+    TEST_ASSERT_EQUAL(3, info.post_count);
+    bunny_core_pool_info_free(&info);
+
+    free(fixture);
+}
+
 void test_sync_e621_search_fetches_a_second_page_when_the_first_is_full(void)
 {
     char *page1 = build_e621_posts_page_json(TEST_E621_FULL_PAGE_SIZE, 1);
@@ -475,6 +565,9 @@ int main(void)
     RUN_TEST(test_sync_e621_search_upserts_post);
     RUN_TEST(test_sync_e621_search_upserts_post_tag_categories);
     RUN_TEST(test_sync_e621_search_upserts_post_sources);
+    RUN_TEST(test_sync_e621_search_upserts_post_relationships_and_pools);
+    RUN_TEST(test_fetch_and_cache_post_upserts_live_e621_post);
+    RUN_TEST(test_fetch_pool_returns_live_pool_info);
     RUN_TEST(test_sync_e621_search_fetches_a_second_page_when_the_first_is_full);
     RUN_TEST(test_sync_e621_search_stops_after_a_single_short_page);
     RUN_TEST(test_tag_autocomplete_finds_tags_from_synced_posts);

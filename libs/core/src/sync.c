@@ -8,6 +8,7 @@
 #include "bunny_core/core.h"
 
 #include <e621/client.h>
+#include <goblin/cstr.h>
 #include <inkbunny/client.h>
 
 #include <stdbool.h>
@@ -181,6 +182,13 @@ static bunny_core_result_t upsert_e621_post(bunny_db_t *db, const e621_post_t *p
     upsert.tag_categories = tags.categories;
     upsert.sources = (const char **)post->sources.items;
     upsert.source_count = post->sources.count;
+    upsert.has_parent = post->relationships.has_parent;
+    upsert.parent_external_id = post->relationships.parent_id;
+    upsert.has_active_children = post->relationships.has_active_children;
+    upsert.child_external_ids = post->relationships.children;
+    upsert.child_count = post->relationships.child_count;
+    upsert.pool_ids = post->pool_ids;
+    upsert.pool_count = post->pool_count;
 
     bunny_db_result_t result = bunny_db_post_upsert(db, &upsert, out_post_id);
 
@@ -299,6 +307,87 @@ static bunny_core_result_t sync_inkbunny_search(bunny_core_t *core, const bunny_
     }
 
     inkbunny_client_destroy(client);
+    return BUNNY_CORE_OK;
+}
+
+bunny_core_result_t bunny_core_fetch_and_cache_post(bunny_core_t *core, bunny_db_site_t site, int64_t external_id, int64_t *out_post_id)
+{
+    if (!core) {
+        return BUNNY_CORE_ERR_INVALID_ARG;
+    }
+
+    if (site == BUNNY_DB_SITE_E621) {
+        e621_client_t *client = bunny_core_build_e621_client(core);
+        if (!client) {
+            return BUNNY_CORE_ERR_SITE;
+        }
+
+        e621_post_t post;
+        memset(&post, 0, sizeof(post));
+        e621_result_t fetch_result = e621_get_post(client, external_id, &post);
+        if (fetch_result != E621_OK) {
+            e621_client_destroy(client);
+            return BUNNY_CORE_ERR_SITE;
+        }
+
+        bunny_core_result_t result = upsert_e621_post(core->db, &post, out_post_id);
+        e621_post_free(&post);
+        e621_client_destroy(client);
+        return result;
+    }
+
+    inkbunny_client_t *client = bunny_core_build_inkbunny_client(core);
+    if (!client) {
+        return BUNNY_CORE_ERR_SITE;
+    }
+
+    inkbunny_submission_t submission;
+    memset(&submission, 0, sizeof(submission));
+    inkbunny_result_t fetch_result = inkbunny_get_submission(client, external_id, &submission);
+    if (fetch_result != INKBUNNY_OK) {
+        inkbunny_client_destroy(client);
+        return BUNNY_CORE_ERR_SITE;
+    }
+
+    bunny_core_result_t result = upsert_inkbunny_submission(core->db, &submission, out_post_id);
+    inkbunny_submission_free(&submission);
+    inkbunny_client_destroy(client);
+    return result;
+}
+
+void bunny_core_pool_info_free(bunny_core_pool_info_t *info)
+{
+    if (!info) {
+        return;
+    }
+    free(info->name);
+    memset(info, 0, sizeof(*info));
+}
+
+bunny_core_result_t bunny_core_fetch_pool(bunny_core_t *core, int64_t pool_id, bunny_core_pool_info_t *out_info)
+{
+    if (!core || !out_info) {
+        return BUNNY_CORE_ERR_INVALID_ARG;
+    }
+    memset(out_info, 0, sizeof(*out_info));
+
+    e621_client_t *client = bunny_core_build_e621_client(core);
+    if (!client) {
+        return BUNNY_CORE_ERR_SITE;
+    }
+
+    e621_pool_t pool;
+    memset(&pool, 0, sizeof(pool));
+    e621_result_t fetch_result = e621_get_pool(client, pool_id, &pool);
+    e621_client_destroy(client);
+    if (fetch_result != E621_OK) {
+        return BUNNY_CORE_ERR_SITE;
+    }
+
+    out_info->id = pool.id;
+    out_info->name = pool.name ? goblin_copy_cstr(pool.name) : NULL;
+    out_info->post_count = (int64_t)pool.post_count;
+    e621_pool_free(&pool);
     return BUNNY_CORE_OK;
 }
 

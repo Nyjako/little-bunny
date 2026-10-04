@@ -571,6 +571,46 @@ this file is the single source of truth for "what's done" across sessions.
   a fake-transport sync test, the server integration test's shared e621 fixture extended with
   a real source URL, and new FFI/HTTP repository tests.
 
+- [x] **M8.5.5a — Pools + parent/child relationships (backend)**
+  The original plan bundled backend plumbing and UI (a "Pools" tab + "create pool search"
+  flow) into one M8.5.5 sub-milestone; split here the same way M8.5.1 was split when a plan
+  item grew unwieldy — this lands the backend first, the UI as a follow-up. New tables, all
+  keyed on e621's own *external* ids rather than local `posts.id` (a parent/child/pool member
+  may never have been synced locally, so there's nothing to foreign-key against):
+  `post_relationships(post_id PK, parent_external_id NULL-able, has_active_children)`,
+  `post_children(post_id, child_external_id)`, `post_pools(post_id, pool_id)`. New generic
+  `bunny_db_int64_list_t` (nothing existing fit a bare list of 64-bit ids) and
+  `bunny_db_post_relationships_t {has_parent, parent_external_id, has_active_children,
+  children}`. `bunny_db_post_upsert_t` gained `has_parent`/`parent_external_id`/
+  `has_active_children`/`child_external_ids`+count/`pool_ids`+count; `bunny_db_post_upsert`
+  always upserts the relationships row (so a resync that drops a parent reflects that, not a
+  stale value) and wholesale-replaces `post_children`/`post_pools`, same pattern M8.5.4's
+  sources already established. New read functions `bunny_db_post_get_relationships`/
+  `bunny_db_post_get_pool_ids` return an all-empty/OK result (not `NOT_FOUND`) when a post has
+  no row — "no relationships" is a normal state. `sync.c`'s `upsert_e621_post` wires
+  `e621_post_t.relationships`/`.pool_ids` through; Inkbunny has no equivalent, left unset.
+  New `bunny_core_fetch_and_cache_post(core, site, external_id, out_post_id)` factors the
+  single-post upsert logic out of `upsert_e621_post`/`upsert_inkbunny_submission` so it's
+  callable standalone against a live `e621_get_post`/`inkbunny_get_submission` call — lets a
+  parent/child/pool chip that was never independently synced be fetched and cached on demand.
+  New `bunny_core_pool_info_t {id, name, post_count}` + `bunny_core_fetch_pool` (a thin,
+  non-persisting `e621_get_pool` wrapper, used only to auto-fill a pool search's label).
+  Server: `GET /posts/{id}/relationships` and `GET /posts/{id}/pools` added to the existing
+  `routes_queue.c` `posts_handler` dispatch (same civetweb-ownership precedent as M8.5.3/4);
+  `POST /posts/fetch?site=&external_id=` added there too (a new sub-path, not an id route);
+  new `server/src/routes_pools.c`/`.h` registers `GET /pools/{id}` — unlike `/posts`, nothing
+  owns `/pools` yet, so a new dedicated resource file is the right shape here (matching
+  `routes_searches.c`/`routes_tags.c`'s precedent), not a deviation. `BunnyRepository` gained
+  `getPostRelationships`/`getPostPoolIds`/`fetchPost`/`fetchPool` with new
+  `BunnyPostRelationships`/`BunnyPoolInfo` models, implemented in both `FfiBunnyRepository`/
+  `HttpBunnyRepository`/`FakeBunnyRepository`. Tests at every layer: `:memory:`
+  (relationships/pools read + wholesale-replace-on-resync), a fake-transport sync test, a
+  live-fetch test for both `bunny_core_fetch_and_cache_post` and `bunny_core_fetch_pool`, the
+  server integration test (made the shared fake e621 transport path-aware so it can serve a
+  single-post and a pool fixture alongside the existing search fixture), and new FFI/HTTP
+  repository tests. **No UI in this sub-milestone** — the "Pools" tab and "create pool search"
+  flow are a separate follow-up.
+
 - [ ] **M9 — Actions & downloads**
   Single + mass like/favorite/download, commenting, download manager writing to
   `%artist%/%id%.%extension%`, checksum (md5) verification of downloaded files against the

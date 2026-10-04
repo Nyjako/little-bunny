@@ -20,13 +20,29 @@ static const char *E621_FIXTURE = "{\"posts\":[{\"id\":1,\"created_at\":\"2024-0
                                   "\"tags\":{\"general\":[\"one\"],\"species\":[],\"character\":[],\"copyright\":[],\"artist\":[\"someartist\"],\"invalid\":[],\"lore\":[],\"meta\":[]},"
                                   "\"rating\":\"s\",\"fav_count\":1,\"sources\":[\"https://example.com/original\"],\"description\":\"a test post\",\"comment_count\":0,\"is_favorited\":false,\"pools\":[]}]}";
 
+static const char *E621_SINGLE_POST_FIXTURE = "{\"post\":{\"id\":42,\"created_at\":\"2024-01-01T00:00:00.000-05:00\","
+                                              "\"file\":{\"width\":100,\"height\":100,\"ext\":\"png\",\"size\":1000,\"md5\":\"bbb\",\"url\":\"https://static1.e621.net/data/42.png\"},"
+                                              "\"preview\":{\"width\":50,\"height\":50,\"url\":\"https://static1.e621.net/data/preview/42.png\"},"
+                                              "\"sample\":{\"has\":false},\"score\":{\"up\":2,\"down\":0,\"total\":2},"
+                                              "\"tags\":{\"general\":[\"two\"],\"species\":[],\"character\":[],\"copyright\":[],\"artist\":[\"anotherartist\"],\"invalid\":[],\"lore\":[],\"meta\":[]},"
+                                              "\"rating\":\"s\",\"fav_count\":2,\"sources\":[],\"description\":\"a fetched post\",\"comment_count\":0,\"is_favorited\":false,\"pools\":[]}}";
+
+static const char *E621_POOL_FIXTURE = "{\"id\":5,\"name\":\"a_test_pool\",\"description\":\"a test pool\",\"created_at\":\"2024-01-01T00:00:00.000-05:00\","
+                                       "\"updated_at\":\"2024-01-02T00:00:00.000-05:00\",\"creator_id\":1,\"creator_name\":\"someone\",\"is_active\":true,"
+                                       "\"category\":\"series\",\"post_ids\":[1,2,3]}";
+
 static bunny_http_result_t fake_e621_send(void *user_data, const bunny_http_request_t *request, bunny_http_response_t *out_response)
 {
     (void)user_data;
-    (void)request;
+    const char *body = E621_FIXTURE;
+    if (strstr(request->url, "/posts/42.json")) {
+        body = E621_SINGLE_POST_FIXTURE;
+    } else if (strstr(request->url, "/pools/5.json")) {
+        body = E621_POOL_FIXTURE;
+    }
     out_response->status = 200;
-    out_response->body = strdup(E621_FIXTURE);
-    out_response->body_len = strlen(E621_FIXTURE);
+    out_response->body = strdup(body);
+    out_response->body_len = strlen(body);
     return BUNNY_HTTP_OK;
 }
 
@@ -239,6 +255,33 @@ void test_full_account_search_sync_favorite_flow(void)
     status = do_request("GET", "/posts/1/sources", NULL, &response, true, NULL);
     TEST_ASSERT_EQUAL(200, status);
     TEST_ASSERT_EQUAL_STRING("[\"https://example.com/original\"]", response.data);
+    free(response.data);
+    memset(&response, 0, sizeof(response));
+
+    status = do_request("GET", "/posts/1/relationships", NULL, &response, true, NULL);
+    TEST_ASSERT_EQUAL(200, status);
+    TEST_ASSERT_NOT_NULL(strstr(response.data, "\"has_parent\":false"));
+    free(response.data);
+    memset(&response, 0, sizeof(response));
+
+    status = do_request("GET", "/posts/1/pools", NULL, &response, true, NULL);
+    TEST_ASSERT_EQUAL(200, status);
+    TEST_ASSERT_EQUAL_STRING("[]", response.data);
+    free(response.data);
+    memset(&response, 0, sizeof(response));
+
+    /* Fetches post external_id 42 live (never synced via any search) and
+     * caches it -- the fake transport routes this to E621_SINGLE_POST_FIXTURE. */
+    status = do_request("POST", "/posts/fetch?site=e621&external_id=42", NULL, &response, true, NULL);
+    TEST_ASSERT_EQUAL(200, status);
+    TEST_ASSERT_NOT_NULL(strstr(response.data, "\"id\":2")); /* second row in this fresh :memory: db */
+    free(response.data);
+    memset(&response, 0, sizeof(response));
+
+    status = do_request("GET", "/pools/5", NULL, &response, true, NULL);
+    TEST_ASSERT_EQUAL(200, status);
+    TEST_ASSERT_NOT_NULL(strstr(response.data, "\"name\":\"a_test_pool\""));
+    TEST_ASSERT_NOT_NULL(strstr(response.data, "\"post_count\":3"));
     free(response.data);
     memset(&response, 0, sizeof(response));
 
