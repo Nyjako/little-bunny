@@ -64,6 +64,8 @@ class BunnyPost {
   final String? description;
   final String? rating;
   final int score;
+  final int scoreUp;
+  final int scoreDown;
   final int favCount;
   final int commentCount;
   final String? fileUrl;
@@ -86,6 +88,8 @@ class BunnyPost {
     this.description,
     this.rating,
     required this.score,
+    this.scoreUp = 0,
+    this.scoreDown = 0,
     required this.favCount,
     required this.commentCount,
     this.fileUrl,

@@ -142,6 +142,8 @@ static bunny_core_result_t upsert_e621_post(bunny_db_t *db, const e621_post_t *p
     upsert.description = post->description;
     upsert.rating = e621_rating_to_text(post->rating);
     upsert.score = post->score.total;
+    upsert.score_up = post->score.up;
+    upsert.score_down = post->score.down;
     upsert.fav_count = post->fav_count;
     upsert.comment_count = post->comment_count;
     upsert.file_url = post->file.url;

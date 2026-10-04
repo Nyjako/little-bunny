@@ -44,6 +44,8 @@ static cJSON *post_to_json(const bunny_db_post_t *post)
     add_optional_string(json, "description", post->description);
     add_optional_string(json, "rating", post->rating);
     cJSON_AddNumberToObject(json, "score", post->score);
+    cJSON_AddNumberToObject(json, "score_up", post->score_up);
+    cJSON_AddNumberToObject(json, "score_down", post->score_down);
     cJSON_AddNumberToObject(json, "fav_count", post->fav_count);
     cJSON_AddNumberToObject(json, "comment_count", post->comment_count);
     add_optional_string(json, "file_url", post->file_url);

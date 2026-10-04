@@ -115,6 +115,8 @@ void test_sync_e621_search_upserts_post(void)
     TEST_ASSERT_EQUAL_STRING("s", posts.items[0].rating);
     TEST_ASSERT_EQUAL_STRING("aaa", posts.items[0].file_md5);
     TEST_ASSERT_EQUAL(1, posts.items[0].score);
+    TEST_ASSERT_EQUAL(1, posts.items[0].score_up);
+    TEST_ASSERT_EQUAL(0, posts.items[0].score_down);
     bunny_db_post_list_free(&posts);
 
     free(fixture);

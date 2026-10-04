@@ -409,6 +409,36 @@ this file is the single source of truth for "what's done" across sessions.
     covered by the real Linux build launching and by manual verification against a real
     server).
 
+- [ ] **M8.5 — Rich post metadata, browsing UX & bug fixes**
+  A hands-on pass over M8 surfaced a large batch of real feedback: three concrete bugs
+  (Inkbunny 403s on search and thumbnails, incomplete sync pagination, no usable default
+  sync interval) plus a long list of richness the detail/grid views were missing (categorized
+  tags, sources, pool/parent/child links, settings for quality/grid size, rating badges, a
+  full-screen zoomable viewer, tag-click browsing, unseen counts, bulk mark-seen, and —
+  since the backend plumbing for it already exists from M4.3 — favorite/vote buttons on the
+  detail page, pulling forward a thin slice of M9 without touching M9's remaining scope of
+  mass actions/downloads/comments). Delivered as sequential sub-milestones, M8.5.0 onward.
+
+- [x] **M8.5.0 — Minimal schema migration runner + score up/down split**
+  `libs/db/src/schema.h` was all `CREATE TABLE IF NOT EXISTS`, re-applied on every
+  `bunny_db_open()`; a `schema_migrations` table was scaffolded since M3 but never used —
+  SQLite's `IF NOT EXISTS` can't add a column to an already-existing table, so a real
+  migration path was needed before `posts.score` (a single total) could be split into
+  separate up/down vote counts the grid can show as likes/dislikes. `bunny_db_open()` now
+  calls a small `bunny_db_apply_migrations()` (`libs/db/src/db.c`): a static
+  `{version, sql}` list, each checked against `schema_migrations` and run (then recorded)
+  at most once. First and only migration so far: `ALTER TABLE posts ADD COLUMN score_up/
+  score_down INTEGER NOT NULL DEFAULT 0`. `sync.c`'s `upsert_e621_post` now reads
+  `e621_score_t.up`/`.down` (previously only `.total` was kept); Inkbunny has no vote concept
+  so both stay 0. Plumbed through `bunny_db_post_t`/`bunny_db_post_upsert_t`, the shared
+  `BUNNY_DB_POST_SELECT_COLUMNS` macro all post-reading queries share, FFI bindings
+  (regenerated via `dart run ffigen`), the server's `post_to_json`, and `BunnyPost` in both
+  repository implementations.
+  **This is the project's first real schema migration** — tested by opening a real (not
+  `:memory:`) database file twice across two separate `bunny_db_open()` calls, confirming the
+  second open doesn't fail or re-run the `ALTER TABLE` against a database that already has
+  the columns.
+
 - [ ] **M9 — Actions & downloads**
   Single + mass like/favorite/download, commenting, download manager writing to
   `%artist%/%id%.%extension%`, checksum (md5) verification of downloaded files against the
