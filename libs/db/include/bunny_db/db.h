@@ -69,6 +69,8 @@ typedef struct
      * Inkbunny keywords, which have no category concept). May be NULL
      * wholesale if no category info is available at all. */
     const char **tag_categories;
+    const char **sources; /* may be NULL; order is preserved */
+    size_t source_count;
 } bunny_db_post_upsert_t;
 
 bunny_db_result_t bunny_db_post_upsert(bunny_db_t *db, const bunny_db_post_upsert_t *post, int64_t *out_id);
@@ -90,6 +92,11 @@ bunny_db_result_t bunny_db_search_list_posts(bunny_db_t *db, int64_t search_id, 
  * a single uncategorized group for Inkbunny, whose keywords have no
  * category concept at all). */
 bunny_db_result_t bunny_db_post_get_tags_by_category(bunny_db_t *db, int64_t post_id, bunny_db_post_tag_list_t *out_list);
+
+/* A post's source URLs, in the site's own order (see post_sources' schema
+ * comment). Empty for a post with none (e.g. every Inkbunny submission --
+ * no such field there). */
+bunny_db_result_t bunny_db_post_get_sources(bunny_db_t *db, int64_t post_id, bunny_db_string_list_t *out_list);
 
 /* --- Seen state (global per post, not per search) ------------------------- */
 

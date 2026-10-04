@@ -887,6 +887,29 @@ per-purpose. `GET /posts/{id}/tags` was added as one more case in that same `pos
 dispatch chain instead, exactly matching the precedent M8.1 already set (and documented) when
 it added `POST /posts/{id}/seen` to this same file for the same reason.
 
+**Sources (M8.5.4)**: new `post_sources` table (`post_id, position, url`) parallels
+`tag_categories`'s wholesale-replace approach rather than `post_tags`/`tag_categories`'s
+upsert-once-per-tag approach — sources are a property of *this post's cached state*, not
+shared across posts the way a tag name is, so `bunny_db_post_upsert` deletes a post's existing
+`post_sources` rows and re-inserts the current list on every upsert (same pattern the
+pre-existing `post_tags` replace already used, just newly applied to a second table). `position`
+exists because plain SQLite row order isn't a reliable substitute for "the order the site gave
+these URLs in" once rows get deleted and re-inserted across repeated re-syncs.
+
+New `bunny_db_string_list_t` (`char **items`/`size_t count`) is the first genuinely generic
+list type in `bunny_db` — `bunny_db_tag_stat_t`/`bunny_db_post_tag_t` both carry per-item
+metadata (a count, a category) that a bare list of source URLs has no equivalent for, so
+reusing either would mean a dummy field. `GOBLIN_DYN_ARRAY_DECL(bunny_db_string, char *)` in
+`posts.c` proves the macro works unmodified for a pointer element type (`TYPE *items` expands
+to `char **items`), despite every prior use in this codebase being a value struct.
+
+`e621_post_t.sources` (parsed since M2.1) was simply never read by `sync.c` until now --
+`upsert_e621_post` passes `(const char **)post->sources.items` straight through (a cast is
+needed since `e621_string_list_t.items` is `char **`, not `const char **`, and C doesn't allow
+an implicit `T** -> const T**` conversion). Inkbunny submissions have no source-URL concept at
+all, so `upsert_inkbunny_submission` needed no change -- `sources`/`source_count` stay at the
+upsert struct's existing zero-initialization.
+
 ## Inkbunny API constraints (found in M2)
 
 Verified against the live API and the official docs while building `libinkbunny`:

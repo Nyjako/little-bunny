@@ -80,6 +80,10 @@ abstract interface class BunnyRepository {
   /// keywords have no category concept at all).
   Future<List<BunnyPostTag>> getPostTagsByCategory(int postId);
 
+  /// A post's source URLs, in the site's own order. Empty for a post with
+  /// none (e.g. every Inkbunny submission -- no such field there).
+  Future<List<String>> getPostSources(int postId);
+
   /// Manually triggers a sync pass (runs every due search). The server also
   /// does this on its own schedule (M5.3); this is for an explicit
   /// "refresh now" action.
