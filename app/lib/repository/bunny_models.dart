@@ -126,6 +126,32 @@ class BunnyPostTag {
   const BunnyPostTag({required this.name, this.category});
 }
 
+/// A post's e621 parent/child relationships (site's own external ids --
+/// always empty/false for Inkbunny). Mirrors `bunny_db_post_relationships_t`.
+class BunnyPostRelationships {
+  final bool hasParent;
+  final int? parentExternalId;
+  final bool hasActiveChildren;
+  final List<int> children;
+
+  const BunnyPostRelationships({
+    required this.hasParent,
+    this.parentExternalId,
+    required this.hasActiveChildren,
+    required this.children,
+  });
+}
+
+/// A pool's own metadata, fetched live (e621 only) -- used to auto-fill a
+/// pool search's label at creation time. Mirrors `bunny_core_pool_info_t`.
+class BunnyPoolInfo {
+  final int id;
+  final String? name;
+  final int postCount;
+
+  const BunnyPoolInfo({required this.id, this.name, required this.postCount});
+}
+
 /// Mirrors `bunny_core_sync_stats_t`.
 class BunnySyncStats {
   final int searchesChecked;

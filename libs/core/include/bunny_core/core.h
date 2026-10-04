@@ -100,6 +100,37 @@ bunny_core_result_t bunny_core_post_get_tags_by_category(bunny_core_t *core, int
  * bunny_db. Empty for a post with none (e.g. every Inkbunny submission). */
 bunny_core_result_t bunny_core_post_get_sources(bunny_core_t *core, int64_t post_id, bunny_db_string_list_t *out_list);
 
+/* A post's parent/child relationships (e621 only) -- a thin pass-through to
+ * bunny_db. See bunny_db_post_get_relationships's doc comment for the
+ * "no row = all-empty/OK, not NOT_FOUND" convention this follows. */
+bunny_core_result_t bunny_core_post_get_relationships(bunny_core_t *core, int64_t post_id, bunny_db_post_relationships_t *out_relationships);
+
+/* The e621 pool ids a post belongs to (empty for Inkbunny, or an e621 post
+ * in no pools) -- a thin pass-through to bunny_db. */
+bunny_core_result_t bunny_core_post_get_pool_ids(bunny_core_t *core, int64_t post_id, bunny_db_int64_list_t *out_list);
+
+/* Fetches a single post live from its site and caches it (upserting into the
+ * local post cache exactly like a sync pass would for one post), without
+ * requiring it to already be linked to any saved search. Used when a
+ * parent/child/pool chip on the detail page points at a post that was never
+ * independently synced. Returns the (possibly pre-existing) local post id. */
+bunny_core_result_t bunny_core_fetch_and_cache_post(bunny_core_t *core, bunny_db_site_t site, int64_t external_id, int64_t *out_post_id);
+
+/* A pool's own metadata, fetched live (e621 only -- no persistence, no
+ * equivalent on Inkbunny). Used only to auto-fill a pool search's label at
+ * creation time; the pool's posts themselves are fetched via a normal
+ * tag search for "pool:<id>" (bunny_core_search_create), not through this. */
+typedef struct
+{
+    int64_t id;
+    char *name;
+    int64_t post_count;
+} bunny_core_pool_info_t;
+
+void bunny_core_pool_info_free(bunny_core_pool_info_t *info);
+
+bunny_core_result_t bunny_core_fetch_pool(bunny_core_t *core, int64_t pool_id, bunny_core_pool_info_t *out_info);
+
 /* --- Scheduled search sync --------------------------------------------------- */
 
 typedef struct

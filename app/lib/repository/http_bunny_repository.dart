@@ -56,6 +56,15 @@ BunnyTagStat _tagStatFromJson(Map<String, Object?> j) => BunnyTagStat(name: j['n
 
 BunnyPostTag _postTagFromJson(Map<String, Object?> j) => BunnyPostTag(name: j['name'] as String, category: j['category'] as String?);
 
+BunnyPostRelationships _relationshipsFromJson(Map<String, Object?> j) => BunnyPostRelationships(
+  hasParent: j['has_parent'] as bool,
+  parentExternalId: (j['parent_external_id'] as num?)?.toInt(),
+  hasActiveChildren: j['has_active_children'] as bool,
+  children: (j['children'] as List).map((e) => (e as num).toInt()).toList(),
+);
+
+BunnyPoolInfo _poolInfoFromJson(Map<String, Object?> j) => BunnyPoolInfo(id: (j['id'] as num).toInt(), name: j['name'] as String?, postCount: (j['post_count'] as num).toInt());
+
 BunnySyncStats _syncStatsFromJson(Map<String, Object?> j) => BunnySyncStats(
   searchesChecked: (j['searches_checked'] as num).toInt(),
   searchesSynced: (j['searches_synced'] as num).toInt(),
@@ -251,6 +260,42 @@ class HttpBunnyRepository implements BunnyRepository {
       _throwError(response);
     }
     return (jsonDecode(response.body) as List).cast<String>();
+  }
+
+  @override
+  Future<BunnyPostRelationships> getPostRelationships(int postId) async {
+    final response = await _client.get(_uri('/posts/$postId/relationships'), headers: _headers);
+    if (response.statusCode != 200) {
+      _throwError(response);
+    }
+    return _relationshipsFromJson(_decodeObject(response));
+  }
+
+  @override
+  Future<List<int>> getPostPoolIds(int postId) async {
+    final response = await _client.get(_uri('/posts/$postId/pools'), headers: _headers);
+    if (response.statusCode != 200) {
+      _throwError(response);
+    }
+    return (jsonDecode(response.body) as List).map((e) => (e as num).toInt()).toList();
+  }
+
+  @override
+  Future<int> fetchPost(BunnySite site, int externalId) async {
+    final response = await _client.post(_uri('/posts/fetch', {'site': site.toWireString(), 'external_id': externalId.toString()}), headers: _headers);
+    if (response.statusCode != 200) {
+      _throwError(response);
+    }
+    return (_decodeObject(response)['id'] as num).toInt();
+  }
+
+  @override
+  Future<BunnyPoolInfo> fetchPool(int poolId) async {
+    final response = await _client.get(_uri('/pools/$poolId'), headers: _headers);
+    if (response.statusCode != 200) {
+      _throwError(response);
+    }
+    return _poolInfoFromJson(_decodeObject(response));
   }
 
   @override

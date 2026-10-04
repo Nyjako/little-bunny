@@ -207,6 +207,31 @@ class _GetPostSourcesRequest extends _Request {
   const _GetPostSourcesRequest(this.postId);
 }
 
+class _GetPostRelationshipsRequest extends _Request {
+  final int postId;
+
+  const _GetPostRelationshipsRequest(this.postId);
+}
+
+class _GetPostPoolIdsRequest extends _Request {
+  final int postId;
+
+  const _GetPostPoolIdsRequest(this.postId);
+}
+
+class _FetchAndCachePostRequest extends _Request {
+  final String site;
+  final int externalId;
+
+  const _FetchAndCachePostRequest(this.site, this.externalId);
+}
+
+class _FetchPoolRequest extends _Request {
+  final int poolId;
+
+  const _FetchPoolRequest(this.poolId);
+}
+
 class _QueueFavoriteAddRequest extends _Request {
   final int postId;
   final int stars;
@@ -336,6 +361,51 @@ List<String> _handleGetPostSources(Pointer<bunny_core_t> core, _GetPostSourcesRe
   });
 }
 
+Map<String, Object?> _handleGetPostRelationships(Pointer<bunny_core_t> core, _GetPostRelationshipsRequest r) {
+  return using((arena) {
+    final out = arena<bunny_db_post_relationships_t>();
+    _check(_bindings.bunny_core_post_get_relationships(core, r.postId, out));
+    final children = <int>[];
+    for (var i = 0; i < out.ref.children.count; i++) {
+      children.add(out.ref.children.items[i]);
+    }
+    final map = {'hasParent': out.ref.has_parent, 'parentExternalId': out.ref.has_parent ? out.ref.parent_external_id : null, 'hasActiveChildren': out.ref.has_active_children, 'children': children};
+    _bindings.bunny_db_post_relationships_free(out);
+    return map;
+  });
+}
+
+List<int> _handleGetPostPoolIds(Pointer<bunny_core_t> core, _GetPostPoolIdsRequest r) {
+  return using((arena) {
+    final out = arena<bunny_db_int64_list_t>();
+    _check(_bindings.bunny_core_post_get_pool_ids(core, r.postId, out));
+    final items = <int>[];
+    for (var i = 0; i < out.ref.count; i++) {
+      items.add(out.ref.items[i]);
+    }
+    _bindings.bunny_db_int64_list_free(out);
+    return items;
+  });
+}
+
+int _handleFetchAndCachePost(Pointer<bunny_core_t> core, _FetchAndCachePostRequest r) {
+  return using((arena) {
+    final outId = arena<Int64>();
+    _check(_bindings.bunny_core_fetch_and_cache_post(core, _siteFromWire(r.site), r.externalId, outId));
+    return outId.value;
+  });
+}
+
+Map<String, Object?> _handleFetchPool(Pointer<bunny_core_t> core, _FetchPoolRequest r) {
+  return using((arena) {
+    final out = arena<bunny_core_pool_info_t>();
+    _check(_bindings.bunny_core_fetch_pool(core, r.poolId, out));
+    final map = {'id': out.ref.id, 'name': _readNullableString(out.ref.name), 'postCount': out.ref.post_count};
+    _bindings.bunny_core_pool_info_free(out);
+    return map;
+  });
+}
+
 List<Map<String, Object?>> _handleListSearchPosts(Pointer<bunny_core_t> core, _ListSearchPostsRequest r) {
   return using((arena) {
     final out = arena<bunny_db_post_list_t>();
@@ -408,6 +478,14 @@ Object? _dispatch(Pointer<bunny_core_t>? core, _Request request, void Function(P
         return _handleGetPostTagsByCategory(c, r);
       case _GetPostSourcesRequest r:
         return _handleGetPostSources(c, r);
+      case _GetPostRelationshipsRequest r:
+        return _handleGetPostRelationships(c, r);
+      case _GetPostPoolIdsRequest r:
+        return _handleGetPostPoolIds(c, r);
+      case _FetchAndCachePostRequest r:
+        return _handleFetchAndCachePost(c, r);
+      case _FetchPoolRequest r:
+        return _handleFetchPool(c, r);
       case _QueueFavoriteAddRequest r:
         _check(_bindings.bunny_core_queue_favorite_add(c, r.postId, r.stars));
         return null;
@@ -531,6 +609,14 @@ class BunnyCoreNative {
   Future<List<Map<String, Object?>>> getPostTagsByCategory(int postId) => _send<List<Map<String, Object?>>>(_GetPostTagsByCategoryRequest(postId));
 
   Future<List<String>> getPostSources(int postId) => _send<List<String>>(_GetPostSourcesRequest(postId));
+
+  Future<Map<String, Object?>> getPostRelationships(int postId) => _send<Map<String, Object?>>(_GetPostRelationshipsRequest(postId));
+
+  Future<List<int>> getPostPoolIds(int postId) => _send<List<int>>(_GetPostPoolIdsRequest(postId));
+
+  Future<int> fetchAndCachePost(String site, int externalId) => _send<int>(_FetchAndCachePostRequest(site, externalId));
+
+  Future<Map<String, Object?>> fetchPool(int poolId) => _send<Map<String, Object?>>(_FetchPoolRequest(poolId));
 
   Future<void> queueFavoriteAdd(int postId, int stars) => _send<void>(_QueueFavoriteAddRequest(postId, stars));
 

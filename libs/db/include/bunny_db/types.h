@@ -113,6 +113,28 @@ typedef struct
     size_t count;
 } bunny_db_string_list_t;
 
+/* A generic list of 64-bit ids -- feeds bunny_db_post_get_pool_ids and
+ * bunny_db_post_relationships_t.children below. */
+typedef struct
+{
+    int64_t *items;
+    size_t count;
+} bunny_db_int64_list_t;
+
+/* e621 parent/child post relationships (site's own external ids -- a parent
+ * or child post may never have been synced locally, so these aren't local
+ * posts.id values). has_active_children mirrors e621's own flag: a post can
+ * have_children=false in e621's model while a deleted child still exists, so
+ * "active" is the meaningful signal for whether to show a children link at
+ * all. Always all-false/empty for Inkbunny, which has no such concept. */
+typedef struct
+{
+    bool has_parent;
+    int64_t parent_external_id; /* valid only when has_parent */
+    bool has_active_children;
+    bunny_db_int64_list_t children; /* child external ids */
+} bunny_db_post_relationships_t;
+
 typedef struct
 {
     int64_t id;
@@ -174,6 +196,8 @@ void bunny_db_tag_stat_list_free(bunny_db_tag_stat_list_t *list);
 void bunny_db_post_tag_free(bunny_db_post_tag_t *tag);
 void bunny_db_post_tag_list_free(bunny_db_post_tag_list_t *list);
 void bunny_db_string_list_free(bunny_db_string_list_t *list);
+void bunny_db_int64_list_free(bunny_db_int64_list_t *list);
+void bunny_db_post_relationships_free(bunny_db_post_relationships_t *relationships);
 void bunny_db_download_free(bunny_db_download_t *download);
 void bunny_db_download_list_free(bunny_db_download_list_t *list);
 void bunny_db_action_free(bunny_db_action_t *action);

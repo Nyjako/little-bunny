@@ -153,6 +153,88 @@ static int handle_get_post_sources(struct mg_connection *conn, server_context_t 
     return status;
 }
 
+static int handle_get_post_relationships(struct mg_connection *conn, server_context_t *ctx, int64_t post_id)
+{
+    bunny_db_post_relationships_t relationships;
+    pthread_mutex_lock(&ctx->core_mutex);
+    bunny_core_result_t result = bunny_core_post_get_relationships(ctx->core, post_id, &relationships);
+    pthread_mutex_unlock(&ctx->core_mutex);
+
+    if (result != BUNNY_CORE_OK) {
+        return server_json_respond_error(conn, result);
+    }
+
+    cJSON *response = cJSON_CreateObject();
+    cJSON_AddBoolToObject(response, "has_parent", relationships.has_parent);
+    if (relationships.has_parent) {
+        cJSON_AddNumberToObject(response, "parent_external_id", (double)relationships.parent_external_id);
+    } else {
+        cJSON_AddNullToObject(response, "parent_external_id");
+    }
+    cJSON_AddBoolToObject(response, "has_active_children", relationships.has_active_children);
+    cJSON *children = cJSON_CreateArray();
+    for (size_t i = 0; i < relationships.children.count; i++) {
+        cJSON_AddItemToArray(children, cJSON_CreateNumber((double)relationships.children.items[i]));
+    }
+    cJSON_AddItemToObject(response, "children", children);
+    bunny_db_post_relationships_free(&relationships);
+
+    int status = server_json_respond(conn, 200, response);
+    cJSON_Delete(response);
+    return status;
+}
+
+static int handle_get_post_pools(struct mg_connection *conn, server_context_t *ctx, int64_t post_id)
+{
+    bunny_db_int64_list_t list;
+    pthread_mutex_lock(&ctx->core_mutex);
+    bunny_core_result_t result = bunny_core_post_get_pool_ids(ctx->core, post_id, &list);
+    pthread_mutex_unlock(&ctx->core_mutex);
+
+    if (result != BUNNY_CORE_OK) {
+        return server_json_respond_error(conn, result);
+    }
+
+    cJSON *response = cJSON_CreateArray();
+    for (size_t i = 0; i < list.count; i++) {
+        cJSON_AddItemToArray(response, cJSON_CreateNumber((double)list.items[i]));
+    }
+    bunny_db_int64_list_free(&list);
+
+    int status = server_json_respond(conn, 200, response);
+    cJSON_Delete(response);
+    return status;
+}
+
+static int handle_fetch_post(struct mg_connection *conn, server_context_t *ctx, const char *query_string)
+{
+    char site_value[16];
+    char external_id_value[32];
+    bool has_site = query_string && mg_get_var(query_string, strlen(query_string), "site", site_value, sizeof(site_value)) > 0;
+    bool has_external_id = query_string && mg_get_var(query_string, strlen(query_string), "external_id", external_id_value, sizeof(external_id_value)) > 0;
+
+    bunny_db_site_t site;
+    int64_t external_id = 0;
+    if (!has_site || !server_route_parse_site(site_value, &site) || !has_external_id || !server_route_parse_id(external_id_value, &external_id)) {
+        return server_json_respond_error(conn, BUNNY_CORE_ERR_INVALID_ARG);
+    }
+
+    int64_t post_id = 0;
+    pthread_mutex_lock(&ctx->core_mutex);
+    bunny_core_result_t result = bunny_core_fetch_and_cache_post(ctx->core, site, external_id, &post_id);
+    pthread_mutex_unlock(&ctx->core_mutex);
+
+    if (result != BUNNY_CORE_OK) {
+        return server_json_respond_error(conn, result);
+    }
+
+    cJSON *response = cJSON_CreateObject();
+    cJSON_AddNumberToObject(response, "id", (double)post_id);
+    int status = server_json_respond(conn, 200, response);
+    cJSON_Delete(response);
+    return status;
+}
+
 static int handle_mark_seen(struct mg_connection *conn, server_context_t *ctx, int64_t post_id)
 {
     pthread_mutex_lock(&ctx->core_mutex);
@@ -205,6 +287,15 @@ static int posts_handler(struct mg_connection *conn, void *cbdata)
     }
     if (strcmp(method, "GET") == 0 && server_route_parse_id_with_suffix(sub_path, "sources", &post_id)) {
         return handle_get_post_sources(conn, ctx, post_id);
+    }
+    if (strcmp(method, "GET") == 0 && server_route_parse_id_with_suffix(sub_path, "relationships", &post_id)) {
+        return handle_get_post_relationships(conn, ctx, post_id);
+    }
+    if (strcmp(method, "GET") == 0 && server_route_parse_id_with_suffix(sub_path, "pools", &post_id)) {
+        return handle_get_post_pools(conn, ctx, post_id);
+    }
+    if (strcmp(method, "POST") == 0 && strcmp(sub_path, "fetch") == 0) {
+        return handle_fetch_post(conn, ctx, info->query_string);
     }
 
     return server_json_respond_error(conn, BUNNY_CORE_ERR_NOT_FOUND);
