@@ -166,6 +166,23 @@ static int handle_get_search_posts(struct mg_connection *conn, server_context_t 
     return status;
 }
 
+static int handle_mark_all_seen(struct mg_connection *conn, server_context_t *ctx, int64_t search_id)
+{
+    pthread_mutex_lock(&ctx->core_mutex);
+    bunny_core_result_t result = bunny_core_search_mark_all_seen(ctx->core, search_id);
+    pthread_mutex_unlock(&ctx->core_mutex);
+
+    if (result != BUNNY_CORE_OK) {
+        return server_json_respond_error(conn, result);
+    }
+
+    cJSON *response = cJSON_CreateObject();
+    cJSON_AddBoolToObject(response, "ok", true);
+    int status = server_json_respond(conn, 200, response);
+    cJSON_Delete(response);
+    return status;
+}
+
 static int searches_handler(struct mg_connection *conn, void *cbdata)
 {
     server_context_t *ctx = (server_context_t *)cbdata;
@@ -188,6 +205,9 @@ static int searches_handler(struct mg_connection *conn, void *cbdata)
         int64_t search_id = 0;
         if (strcmp(method, "GET") == 0 && server_route_parse_id_with_suffix(sub_path, "posts", &search_id)) {
             return handle_get_search_posts(conn, ctx, search_id, info->query_string);
+        }
+        if (strcmp(method, "POST") == 0 && server_route_parse_id_with_suffix(sub_path, "mark_all_seen", &search_id)) {
+            return handle_mark_all_seen(conn, ctx, search_id);
         }
         if (strcmp(method, "DELETE") == 0 && server_route_parse_id(sub_path, &search_id)) {
             return handle_delete_search(conn, ctx, search_id);

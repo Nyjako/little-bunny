@@ -132,6 +132,9 @@ class FfiBunnyRepository implements BunnyRepository {
   Future<void> markPostSeen(int postId) => _wrapped(() => _native.markPostSeen(postId));
 
   @override
+  Future<void> markAllSeen(int searchId) => _wrapped(() => _native.markAllSeen(searchId));
+
+  @override
   Future<BunnySyncStats> syncDueSearches() async {
     final map = await _wrapped(() => _native.syncDueSearches());
     return _syncStatsFromMap(map);

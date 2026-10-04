@@ -81,6 +81,29 @@ class FakeBunnyRepository implements BunnyRepository {
     return matches.length > limit ? matches.sublist(0, limit) : matches;
   }
 
+  BunnyPost _markedSeen(BunnyPost post) => BunnyPost(
+    id: post.id,
+    site: post.site,
+    externalId: post.externalId,
+    artist: post.artist,
+    title: post.title,
+    description: post.description,
+    rating: post.rating,
+    score: post.score,
+    favCount: post.favCount,
+    commentCount: post.commentCount,
+    fileUrl: post.fileUrl,
+    fileExt: post.fileExt,
+    fileMd5: post.fileMd5,
+    previewUrl: post.previewUrl,
+    width: post.width,
+    height: post.height,
+    createdAtSite: post.createdAtSite,
+    cachedAt: post.cachedAt,
+    isSeen: true,
+    isFavorited: post.isFavorited,
+  );
+
   @override
   Future<void> markPostSeen(int postId) async {
     for (final entry in postsBySearchId.entries) {
@@ -88,29 +111,18 @@ class FakeBunnyRepository implements BunnyRepository {
       if (index == -1) {
         continue;
       }
-      final post = entry.value[index];
-      entry.value[index] = BunnyPost(
-        id: post.id,
-        site: post.site,
-        externalId: post.externalId,
-        artist: post.artist,
-        title: post.title,
-        description: post.description,
-        rating: post.rating,
-        score: post.score,
-        favCount: post.favCount,
-        commentCount: post.commentCount,
-        fileUrl: post.fileUrl,
-        fileExt: post.fileExt,
-        fileMd5: post.fileMd5,
-        previewUrl: post.previewUrl,
-        width: post.width,
-        height: post.height,
-        createdAtSite: post.createdAtSite,
-        cachedAt: post.cachedAt,
-        isSeen: true,
-        isFavorited: post.isFavorited,
-      );
+      entry.value[index] = _markedSeen(entry.value[index]);
+    }
+  }
+
+  @override
+  Future<void> markAllSeen(int searchId) async {
+    final posts = postsBySearchId[searchId];
+    if (posts == null) {
+      return;
+    }
+    for (var i = 0; i < posts.length; i++) {
+      posts[i] = _markedSeen(posts[i]);
     }
   }
 

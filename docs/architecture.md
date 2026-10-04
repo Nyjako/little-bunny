@@ -809,6 +809,27 @@ delete icon when `unseenCount > 0`. `FakeBunnyRepository.listSearches` computes 
 count from its own `postsBySearchId` map (rather than hardcoding a stored value) so widget
 tests exercise the same "count unseen posts" behavior the real implementations have.
 
+**Mark-all-seen (M8.5.12)**: `bunny_db_search_mark_all_seen(db, search_id)`
+(`libs/db/src/posts.c`, next to `bunny_db_post_mark_seen`) is the bulk counterpart to the
+existing single-post version — `INSERT OR IGNORE INTO seen_posts SELECT post_id FROM
+search_results WHERE search_id = ?`, same idempotent "insert or skip" shape, just selecting
+every post linked to a search instead of taking one explicit id. Full plumbing follows the
+established pattern exactly: `bunny_core_search_mark_all_seen` wrapper, `POST /searches/{id}/
+mark_all_seen` added to the existing `routes_searches.c` dispatch (it already owns
+`/searches` and its sub-paths), `BunnyRepository.markAllSeen(int)` in both implementations.
+`PostGridScreen`'s app bar gained its first overflow menu (`PopupMenuButton`) for this action,
+reloading the grid afterward so cleared markers show immediately.
+
+- **A real behavioral asymmetry worth noting against `markPostSeen`'s own documented
+  quirk** (see M8.1 above): `bunny_core_post_mark_seen` on a *nonexistent post id* is a
+  foreign-key violation, mapped to `BUNNY_CORE_ERR_INVALID_ARG`. `bunny_core_search_mark_all_seen`
+  has no equivalent failure mode — a search with zero linked posts, or a search id that
+  doesn't exist at all, just makes the inner `SELECT` return zero rows, so the `INSERT`
+  affects nothing and the call succeeds trivially. There's no caller-input mistake to reject
+  here, since "mark zero posts as seen" isn't a meaningful error even when the search id was
+  typed wrong — it only matters in that it means the two "mark seen" functions have
+  deliberately different failure semantics for a bad id, not an oversight in either one.
+
 ## Inkbunny API constraints (found in M2)
 
 Verified against the live API and the official docs while building `libinkbunny`:

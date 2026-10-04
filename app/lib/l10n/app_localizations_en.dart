@@ -140,6 +140,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get postGridEmptyState => 'No posts cached yet. Tap refresh to sync.';
 
   @override
+  String get postGridMarkAllSeen => 'Mark all as seen';
+
+  @override
   String get postDetailScreenTitle => 'Post';
 
   @override

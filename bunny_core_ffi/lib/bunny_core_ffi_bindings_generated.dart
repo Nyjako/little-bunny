@@ -546,6 +546,28 @@ class BunnyCoreFfiBindings {
   late final _bunny_core_post_mark_seen = _bunny_core_post_mark_seenPtr
       .asFunction<int Function(ffi.Pointer<bunny_core_t>, int)>();
 
+  /// Bulk counterpart to bunny_core_post_mark_seen -- marks every post
+  /// currently linked to `search_id` as seen in one call, for a post grid's
+  /// "mark all as seen" action.
+  bunny_core_result_t bunny_core_search_mark_all_seen(
+    ffi.Pointer<bunny_core_t> core,
+    int search_id,
+  ) {
+    return bunny_core_result_t.fromValue(
+      _bunny_core_search_mark_all_seen(core, search_id),
+    );
+  }
+
+  late final _bunny_core_search_mark_all_seenPtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.UnsignedInt Function(ffi.Pointer<bunny_core_t>, ffi.Int64)
+        >
+      >('bunny_core_search_mark_all_seen');
+  late final _bunny_core_search_mark_all_seen =
+      _bunny_core_search_mark_all_seenPtr
+          .asFunction<int Function(ffi.Pointer<bunny_core_t>, int)>();
+
   /// Runs every saved search whose last run is NULL or older than its
   /// interval_hours: builds a client for that search's site (authenticated via
   /// the stored account if one exists, or anonymous/guest otherwise), fetches

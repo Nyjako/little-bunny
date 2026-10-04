@@ -85,6 +85,11 @@ bunny_core_result_t bunny_core_tag_autocomplete(bunny_core_t *core, bunny_db_sit
  * sense -- see bunny_core_map_db_result). */
 bunny_core_result_t bunny_core_post_mark_seen(bunny_core_t *core, int64_t post_id);
 
+/* Bulk counterpart to bunny_core_post_mark_seen -- marks every post
+ * currently linked to `search_id` as seen in one call, for a post grid's
+ * "mark all as seen" action. */
+bunny_core_result_t bunny_core_search_mark_all_seen(bunny_core_t *core, int64_t search_id);
+
 /* --- Scheduled search sync --------------------------------------------------- */
 
 typedef struct

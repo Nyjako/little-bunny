@@ -395,6 +395,47 @@ void test_search_list_posts_orders_newest_first_by_site_date(void)
     bunny_db_post_list_free(&results);
 }
 
+void test_search_mark_all_seen_only_affects_that_searchs_posts(void)
+{
+    int64_t search1_id = 0;
+    int64_t search2_id = 0;
+    bunny_db_search_create(g_db, BUNNY_DB_SITE_E621, "wolves", "wolf", 24, &search1_id);
+    bunny_db_search_create(g_db, BUNNY_DB_SITE_E621, "foxes", "fox", 24, &search2_id);
+
+    bunny_db_post_upsert_t post1;
+    bunny_db_post_upsert_t post2;
+    bunny_db_post_upsert_t post3;
+    make_test_post(&post1, 921, 1);
+    make_test_post(&post2, 922, 1);
+    make_test_post(&post3, 923, 1);
+    int64_t post1_id = 0;
+    int64_t post2_id = 0;
+    int64_t post3_id = 0;
+    bunny_db_post_upsert(g_db, &post1, &post1_id);
+    bunny_db_post_upsert(g_db, &post2, &post2_id);
+    bunny_db_post_upsert(g_db, &post3, &post3_id);
+
+    bunny_db_search_add_result(g_db, search1_id, post1_id);
+    bunny_db_search_add_result(g_db, search1_id, post2_id);
+    bunny_db_search_add_result(g_db, search2_id, post3_id);
+
+    bunny_db_result_t result = bunny_db_search_mark_all_seen(g_db, search1_id);
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, result);
+
+    bunny_db_post_t fetched1;
+    bunny_db_post_t fetched2;
+    bunny_db_post_t fetched3;
+    bunny_db_post_get_by_id(g_db, post1_id, &fetched1);
+    bunny_db_post_get_by_id(g_db, post2_id, &fetched2);
+    bunny_db_post_get_by_id(g_db, post3_id, &fetched3);
+    TEST_ASSERT_TRUE(fetched1.is_seen);
+    TEST_ASSERT_TRUE(fetched2.is_seen);
+    TEST_ASSERT_FALSE(fetched3.is_seen);
+    bunny_db_post_free(&fetched1);
+    bunny_db_post_free(&fetched2);
+    bunny_db_post_free(&fetched3);
+}
+
 void test_download_record_and_list(void)
 {
     bunny_db_post_upsert_t post;
@@ -697,6 +738,7 @@ int main(void)
     RUN_TEST(test_post_upsert_updates_existing_row);
     RUN_TEST(test_post_get_not_found);
     RUN_TEST(test_seen_state);
+    RUN_TEST(test_search_mark_all_seen_only_affects_that_searchs_posts);
     RUN_TEST(test_favorite_add_remove_list);
     RUN_TEST(test_search_results_and_list_posts);
     RUN_TEST(test_search_list_posts_orders_newest_first_by_site_date);
