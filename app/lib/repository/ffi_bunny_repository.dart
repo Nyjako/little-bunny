@@ -18,6 +18,7 @@ BunnySearch _searchFromMap(Map<String, Object?> m) => BunnySearch(
   intervalHours: m['intervalHours'] as int,
   createdAt: m['createdAt'] as String,
   lastRunAt: m['lastRunAt'] as String?,
+  unseenCount: m['unseenCount'] as int,
 );
 
 BunnyPost _postFromMap(Map<String, Object?> m) => BunnyPost(

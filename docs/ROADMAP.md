@@ -471,6 +471,17 @@ this file is the single source of truth for "what's done" across sessions.
   debugging session against a real account before a fix can be written with confidence,
   tracked separately rather than guessed at here.
 
+- [x] **M8.5.11 — Unseen count per search**
+  `bunny_db_search_list`'s SQL (`libs/db/src/searches.c`) now computes a per-search
+  `unseen_count` via a correlated subquery (`search_results` rows with no matching
+  `seen_posts` row), added as a new `int unseen_count` field on `bunny_db_search_t` —
+  additive, not a schema change, so no migration needed. Threads through unchanged
+  core/FFI/server signatures (the struct just carries more data): `BunnySearch` gains
+  `unseenCount`, and `SearchesScreen`'s row shows a small colored badge next to the delete
+  icon when it's greater than 0. `FakeBunnyRepository.listSearches` computes the same count
+  from its own `postsBySearchId` map to stay behaviorally consistent with the real
+  implementations rather than hardcoding it.
+
 - [ ] **M9 — Actions & downloads**
   Single + mass like/favorite/download, commenting, download manager writing to
   `%artist%/%id%.%extension%`, checksum (md5) verification of downloaded files against the

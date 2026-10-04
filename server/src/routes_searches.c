@@ -30,6 +30,7 @@ static cJSON *search_to_json(const bunny_db_search_t *search)
     cJSON_AddNumberToObject(json, "interval_hours", search->interval_hours);
     cJSON_AddStringToObject(json, "created_at", search->created_at);
     add_optional_string(json, "last_run_at", search->last_run_at);
+    cJSON_AddNumberToObject(json, "unseen_count", search->unseen_count);
     return json;
 }
 

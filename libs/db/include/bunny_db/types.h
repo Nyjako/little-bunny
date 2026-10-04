@@ -35,6 +35,7 @@ typedef struct
     int interval_hours;
     char *created_at;
     char *last_run_at; /* NULL if this search has never run */
+    int unseen_count;  /* posts linked to this search with no seen_posts row */
 } bunny_db_search_t;
 
 typedef struct
