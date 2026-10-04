@@ -790,6 +790,10 @@ final class bunny_db_search_t extends ffi.Struct {
 
   /// NULL if this search has never run
   external ffi.Pointer<ffi.Char> last_run_at;
+
+  /// posts linked to this search with no seen_posts row
+  @ffi.Int()
+  external int unseen_count;
 }
 
 final class bunny_db_search_list_t extends ffi.Struct {

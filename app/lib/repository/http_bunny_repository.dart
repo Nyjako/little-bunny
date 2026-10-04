@@ -24,6 +24,7 @@ BunnySearch _searchFromJson(Map<String, Object?> j) => BunnySearch(
   intervalHours: (j['interval_hours'] as num).toInt(),
   createdAt: j['created_at'] as String,
   lastRunAt: j['last_run_at'] as String?,
+  unseenCount: (j['unseen_count'] as num).toInt(),
 );
 
 BunnyPost _postFromJson(Map<String, Object?> j) => BunnyPost(

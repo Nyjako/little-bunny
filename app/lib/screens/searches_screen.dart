@@ -101,7 +101,19 @@ class _SearchesScreenState extends State<SearchesScreen> {
                   (search) => ListTile(
                     title: Text(search.label),
                     subtitle: Text(l10n.searchesIntervalSubtitle(search.site.toWireString(), search.intervalHours)),
-                    trailing: IconButton(icon: const Icon(Icons.delete), onPressed: () => _removeSearch(search)),
+                    trailing: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (search.unseenCount > 0)
+                          Container(
+                            margin: const EdgeInsets.only(right: 8),
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                            decoration: BoxDecoration(color: Theme.of(context).colorScheme.primary, borderRadius: BorderRadius.circular(12)),
+                            child: Text('${search.unseenCount}', style: TextStyle(color: Theme.of(context).colorScheme.onPrimary, fontSize: 12)),
+                          ),
+                        IconButton(icon: const Icon(Icons.delete), onPressed: () => _removeSearch(search)),
+                      ],
+                    ),
                     onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => PostGridScreen(search: search, repository: _repository!))),
                   ),
                 )

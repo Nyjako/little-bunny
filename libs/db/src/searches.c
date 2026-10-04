@@ -65,6 +65,7 @@ static void fill_search_from_row(sqlite3_stmt *stmt, bunny_db_search_t *out)
     out->interval_hours = sqlite3_column_int(stmt, 4);
     out->created_at = bunny_db_column_text_dup(stmt, 5);
     out->last_run_at = bunny_db_column_text_dup(stmt, 6);
+    out->unseen_count = sqlite3_column_int(stmt, 7);
 }
 
 bunny_db_result_t bunny_db_search_list(bunny_db_t *db, bunny_db_search_list_t *out_list)
@@ -74,7 +75,13 @@ bunny_db_result_t bunny_db_search_list(bunny_db_t *db, bunny_db_search_list_t *o
     }
     memset(out_list, 0, sizeof(*out_list));
 
-    const char *sql = "SELECT id, site, label, query, interval_hours, created_at, last_run_at FROM searches ORDER BY id;";
+    /* unseen_count: how many of this search's linked posts have no
+     * seen_posts row -- feeds SearchesScreen's "N new" badge without a
+     * separate round trip per row. */
+    const char *sql = "SELECT s.id, s.site, s.label, s.query, s.interval_hours, s.created_at, s.last_run_at, "
+                      "(SELECT COUNT(*) FROM search_results sr LEFT JOIN seen_posts seen ON seen.post_id = sr.post_id "
+                      " WHERE sr.search_id = s.id AND seen.post_id IS NULL) AS unseen_count "
+                      "FROM searches s ORDER BY s.id;";
     sqlite3_stmt *stmt = NULL;
     if (sqlite3_prepare_v2(db->handle, sql, -1, &stmt, NULL) != SQLITE_OK) {
         return BUNNY_DB_ERR_QUERY_FAILED;

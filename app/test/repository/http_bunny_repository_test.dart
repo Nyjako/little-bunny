@@ -121,7 +121,7 @@ void main() {
     test('listSearches maps a JSON array into BunnySearch objects', () async {
       respond = (_) => http.Response(
         jsonEncode([
-          {'id': 1, 'site': 'e621', 'label': 'my search', 'query': 'rating:safe', 'interval_hours': 24, 'created_at': '2026-01-01T00:00:00Z', 'last_run_at': null},
+          {'id': 1, 'site': 'e621', 'label': 'my search', 'query': 'rating:safe', 'interval_hours': 24, 'created_at': '2026-01-01T00:00:00Z', 'last_run_at': null, 'unseen_count': 3},
         ]),
         200,
       );
@@ -132,6 +132,7 @@ void main() {
       expect(searches.single.id, 1);
       expect(searches.single.label, 'my search');
       expect(searches.single.lastRunAt, isNull);
+      expect(searches.single.unseenCount, 3);
     });
 
     test('deleteSearch sends DELETE to the right path', () async {
