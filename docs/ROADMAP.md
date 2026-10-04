@@ -482,6 +482,20 @@ this file is the single source of truth for "what's done" across sessions.
   from its own `postsBySearchId` map to stay behaviorally consistent with the real
   implementations rather than hardcoding it.
 
+- [x] **M8.5.12 — Mark-all-seen**
+  New `bunny_db_search_mark_all_seen(db, search_id)` (`libs/db/src/posts.c`, alongside
+  `bunny_db_post_mark_seen`): `INSERT OR IGNORE INTO seen_posts SELECT post_id FROM
+  search_results WHERE search_id = ?` — the bulk counterpart to the existing single-post
+  version, same idempotent shape. `bunny_core_search_mark_all_seen` wrapper, `POST
+  /searches/{id}/mark_all_seen` added to the existing `routes_searches.c` dispatch,
+  `BunnyRepository.markAllSeen(int)` implemented in both `FfiBunnyRepository`/
+  `HttpBunnyRepository`. `PostGridScreen`'s app bar gets an overflow menu (`PopupMenuButton`)
+  with the action, reloading the grid afterward so cleared markers show immediately. Unlike
+  `markPostSeen` (which rejects a nonexistent post id as a foreign-key violation),
+  `markAllSeen` against a search with no linked posts — or a nonexistent search id — is a
+  harmless no-op, since the underlying `INSERT` just selects zero rows; there's nothing to
+  reject.
+
 - [ ] **M9 — Actions & downloads**
   Single + mass like/favorite/download, commenting, download manager writing to
   `%artist%/%id%.%extension%`, checksum (md5) verification of downloaded files against the

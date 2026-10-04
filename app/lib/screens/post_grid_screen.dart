@@ -53,6 +53,16 @@ class _PostGridScreenState extends State<PostGridScreen> {
     });
   }
 
+  Future<void> _markAllSeen() async {
+    await widget.repository.markAllSeen(widget.search.id);
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      _postsFuture = _loadPosts();
+    });
+  }
+
   Future<void> _openPost(BunnyPost post) async {
     await Navigator.push(context, MaterialPageRoute(builder: (context) => PostDetailScreen(post: post, repository: widget.repository)));
     if (!mounted) {
@@ -75,6 +85,9 @@ class _PostGridScreenState extends State<PostGridScreen> {
             icon: _syncing ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.refresh),
             tooltip: l10n.postGridRefreshTooltip,
             onPressed: _syncing ? null : _refresh,
+          ),
+          PopupMenuButton<void>(
+            itemBuilder: (context) => [PopupMenuItem(onTap: _markAllSeen, child: Text(l10n.postGridMarkAllSeen))],
           ),
         ],
       ),
