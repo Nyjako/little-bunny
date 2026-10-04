@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:little_bunny/screens/settings_screen.dart';
 import 'package:little_bunny/settings/app_lock_service.dart';
+import 'package:little_bunny/settings/display_settings_store.dart';
 import 'package:little_bunny/settings/sync_settings_store.dart';
 import 'package:little_bunny/settings/theme_settings_store.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -18,7 +19,7 @@ void main() {
     const themeStore = ThemeSettingsStore();
     await themeStore.save(ThemeMode.light);
 
-    await tester.pumpWidget(wrapWithLocalization(SettingsScreen(themeSettingsStore: themeStore, lockService: AppLockService(FakeSecretStore()), syncSettingsStore: const SyncSettingsStore(), onThemeModeChanged: (_) {})));
+    await tester.pumpWidget(wrapWithLocalization(SettingsScreen(themeSettingsStore: themeStore, lockService: AppLockService(FakeSecretStore()), syncSettingsStore: const SyncSettingsStore(), displaySettingsStore: const DisplaySettingsStore(), onThemeModeChanged: (_) {})));
     await tester.pumpAndSettle();
 
     final button = tester.widget<SegmentedButton<ThemeMode>>(find.byType(SegmentedButton<ThemeMode>));
@@ -29,7 +30,7 @@ void main() {
     const themeStore = ThemeSettingsStore();
     ThemeMode? notified;
 
-    await tester.pumpWidget(wrapWithLocalization(SettingsScreen(themeSettingsStore: themeStore, lockService: AppLockService(FakeSecretStore()), syncSettingsStore: const SyncSettingsStore(), onThemeModeChanged: (mode) => notified = mode)));
+    await tester.pumpWidget(wrapWithLocalization(SettingsScreen(themeSettingsStore: themeStore, lockService: AppLockService(FakeSecretStore()), syncSettingsStore: const SyncSettingsStore(), displaySettingsStore: const DisplaySettingsStore(), onThemeModeChanged: (mode) => notified = mode)));
     await tester.pumpAndSettle();
 
     await tester.tap(find.text('Light'));
@@ -40,7 +41,7 @@ void main() {
   });
 
   testWidgets('tapping the app lock entry opens LockSetupScreen', (WidgetTester tester) async {
-    await tester.pumpWidget(wrapWithLocalization(SettingsScreen(themeSettingsStore: const ThemeSettingsStore(), lockService: AppLockService(FakeSecretStore()), syncSettingsStore: const SyncSettingsStore(), onThemeModeChanged: (_) {})));
+    await tester.pumpWidget(wrapWithLocalization(SettingsScreen(themeSettingsStore: const ThemeSettingsStore(), lockService: AppLockService(FakeSecretStore()), syncSettingsStore: const SyncSettingsStore(), displaySettingsStore: const DisplaySettingsStore(), onThemeModeChanged: (_) {})));
     await tester.pumpAndSettle();
 
     await tester.tap(find.text('Manage app lock'));
@@ -54,7 +55,7 @@ void main() {
 
     await tester.pumpWidget(
       wrapWithLocalization(
-        SettingsScreen(themeSettingsStore: const ThemeSettingsStore(), lockService: AppLockService(FakeSecretStore()), syncSettingsStore: const SyncSettingsStore(), onThemeModeChanged: (_) {}),
+        SettingsScreen(themeSettingsStore: const ThemeSettingsStore(), lockService: AppLockService(FakeSecretStore()), syncSettingsStore: const SyncSettingsStore(), displaySettingsStore: const DisplaySettingsStore(), onThemeModeChanged: (_) {}),
       ),
     );
     await tester.pumpAndSettle();
@@ -66,7 +67,7 @@ void main() {
     const syncStore = SyncSettingsStore();
 
     await tester.pumpWidget(
-      wrapWithLocalization(SettingsScreen(themeSettingsStore: const ThemeSettingsStore(), lockService: AppLockService(FakeSecretStore()), syncSettingsStore: syncStore, onThemeModeChanged: (_) {})),
+      wrapWithLocalization(SettingsScreen(themeSettingsStore: const ThemeSettingsStore(), lockService: AppLockService(FakeSecretStore()), syncSettingsStore: syncStore, displaySettingsStore: const DisplaySettingsStore(), onThemeModeChanged: (_) {})),
     );
     await tester.pumpAndSettle();
 
@@ -74,5 +75,51 @@ void main() {
     await tester.pump();
 
     expect(await syncStore.loadDefaultIntervalHours(), 12);
+  });
+
+  testWidgets('shows the persisted preview quality and grid columns', (WidgetTester tester) async {
+    SharedPreferences.setMockInitialValues({'preview_quality': 'medium', 'grid_columns': 4});
+
+    await tester.pumpWidget(
+      wrapWithLocalization(
+        SettingsScreen(
+          themeSettingsStore: const ThemeSettingsStore(),
+          lockService: AppLockService(FakeSecretStore()),
+          syncSettingsStore: const SyncSettingsStore(),
+          displaySettingsStore: const DisplaySettingsStore(),
+          onThemeModeChanged: (_) {},
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    final button = tester.widget<SegmentedButton<PreviewQuality>>(find.byType(SegmentedButton<PreviewQuality>));
+    expect(button.selected, {PreviewQuality.medium});
+    expect(tester.widget<TextField>(find.widgetWithText(TextField, 'Grid columns')).controller!.text, '4');
+  });
+
+  testWidgets('picking a preview quality and editing grid columns persists both', (WidgetTester tester) async {
+    const displayStore = DisplaySettingsStore();
+
+    await tester.pumpWidget(
+      wrapWithLocalization(
+        SettingsScreen(
+          themeSettingsStore: const ThemeSettingsStore(),
+          lockService: AppLockService(FakeSecretStore()),
+          syncSettingsStore: const SyncSettingsStore(),
+          displaySettingsStore: displayStore,
+          onThemeModeChanged: (_) {},
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Medium'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.widgetWithText(TextField, 'Grid columns'), '5');
+    await tester.pump();
+
+    expect(await displayStore.loadPreviewQuality(), PreviewQuality.medium);
+    expect(await displayStore.loadGridColumns(), 5);
   });
 }

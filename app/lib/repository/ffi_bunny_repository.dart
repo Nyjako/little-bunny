@@ -44,6 +44,7 @@ BunnyPost _postFromMap(Map<String, Object?> m) => BunnyPost(
   cachedAt: m['cachedAt'] as String,
   isSeen: m['isSeen'] as bool,
   isFavorited: m['isFavorited'] as bool,
+  sampleUrl: m['sampleUrl'] as String?,
 );
 
 BunnyTagStat _tagStatFromMap(Map<String, Object?> m) => BunnyTagStat(name: m['name'] as String, count: m['count'] as int);

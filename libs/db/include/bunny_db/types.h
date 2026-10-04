@@ -68,6 +68,7 @@ typedef struct
     char *cached_at;       /* when we last upserted this row */
     bool is_seen;
     bool is_favorited;
+    char *sample_url; /* medium-quality variant (e621's "sample", Inkbunny's "screen"); may be NULL */
 } bunny_db_post_t;
 
 typedef struct

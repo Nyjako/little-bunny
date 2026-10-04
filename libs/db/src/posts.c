@@ -174,6 +174,20 @@ bunny_db_result_t bunny_db_post_upsert(bunny_db_t *db, const bunny_db_post_upser
         sqlite3_finalize(relationships_stmt);
     }
 
+    /* Always upsert the media-variants row too, same one-to-one reasoning as
+     * post_relationships above -- a resync that loses a sample/screen URL
+     * (e.g. the site stopped providing one) should clear it, not leave a
+     * stale value. */
+    const char *media_sql = "INSERT INTO post_media_variants (post_id, sample_url) VALUES (?, ?) "
+                            "ON CONFLICT(post_id) DO UPDATE SET sample_url = excluded.sample_url;";
+    sqlite3_stmt *media_stmt = NULL;
+    if (sqlite3_prepare_v2(db->handle, media_sql, -1, &media_stmt, NULL) == SQLITE_OK) {
+        sqlite3_bind_int64(media_stmt, 1, post_id);
+        bunny_db_bind_text_or_null(media_stmt, 2, post->sample_url);
+        sqlite3_step(media_stmt);
+        sqlite3_finalize(media_stmt);
+    }
+
     /* Replace this post's children/pools wholesale, same reasoning as
      * post_sources above. */
     const char *del_children_sql = "DELETE FROM post_children WHERE post_id = ?;";
@@ -337,6 +351,7 @@ void bunny_db_fill_post_from_row(sqlite3_stmt *stmt, bunny_db_post_t *out)
     out->is_favorited = sqlite3_column_int(stmt, 19) != 0;
     out->score_up = sqlite3_column_int(stmt, 20);
     out->score_down = sqlite3_column_int(stmt, 21);
+    out->sample_url = bunny_db_column_text_dup(stmt, 22);
 }
 
 bunny_db_result_t bunny_db_post_get(bunny_db_t *db, bunny_db_site_t site, int64_t external_id, bunny_db_post_t *out_post)

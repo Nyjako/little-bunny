@@ -66,6 +66,7 @@ void bunny_db_post_free(bunny_db_post_t *post)
     free(post->preview_url);
     free(post->created_at_site);
     free(post->cached_at);
+    free(post->sample_url);
     memset(post, 0, sizeof(*post));
 }
 

@@ -3,11 +3,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:little_bunny/repository/bunny_models.dart';
 import 'package:little_bunny/screens/post_grid_screen.dart';
+import 'package:little_bunny/settings/display_settings_store.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../fakes/fake_bunny_repository.dart';
 import '../fakes/test_app.dart';
 
-BunnyPost _post({required int id, required bool isSeen, BunnySite site = BunnySite.e621, String? previewUrl}) => BunnyPost(
+BunnyPost _post({required int id, required bool isSeen, BunnySite site = BunnySite.e621, String? previewUrl, String? sampleUrl}) => BunnyPost(
   id: id,
   site: site,
   externalId: id,
@@ -15,6 +17,7 @@ BunnyPost _post({required int id, required bool isSeen, BunnySite site = BunnySi
   favCount: 0,
   commentCount: 0,
   previewUrl: previewUrl,
+  sampleUrl: sampleUrl,
   width: 100,
   height: 100,
   cachedAt: '2026-01-01T00:00:00Z',
@@ -27,7 +30,7 @@ void main() {
 
   testWidgets('shows the empty state when there are no cached posts', (WidgetTester tester) async {
     final repository = FakeBunnyRepository();
-    await tester.pumpWidget(wrapWithLocalization(PostGridScreen(search: search, repository: repository)));
+    await tester.pumpWidget(wrapWithLocalization(PostGridScreen(search: search, repository: repository, displaySettingsStore: const DisplaySettingsStore())));
     await tester.pumpAndSettle();
 
     expect(find.text('No posts cached yet. Tap refresh to sync.'), findsOneWidget);
@@ -37,7 +40,7 @@ void main() {
     final repository = FakeBunnyRepository();
     repository.postsBySearchId[1] = [_post(id: 1, isSeen: false), _post(id: 2, isSeen: true)];
 
-    await tester.pumpWidget(wrapWithLocalization(PostGridScreen(search: search, repository: repository)));
+    await tester.pumpWidget(wrapWithLocalization(PostGridScreen(search: search, repository: repository, displaySettingsStore: const DisplaySettingsStore())));
     await tester.pumpAndSettle();
 
     expect(find.byKey(const ValueKey(1)), findsOneWidget);
@@ -48,7 +51,7 @@ void main() {
     final repository = FakeBunnyRepository();
     repository.postsBySearchId[1] = [_post(id: 1, isSeen: false), _post(id: 2, isSeen: true)];
 
-    await tester.pumpWidget(wrapWithLocalization(PostGridScreen(search: search, repository: repository)));
+    await tester.pumpWidget(wrapWithLocalization(PostGridScreen(search: search, repository: repository, displaySettingsStore: const DisplaySettingsStore())));
     await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey(1)), findsOneWidget);
     expect(find.byKey(const ValueKey(2)), findsOneWidget);
@@ -64,7 +67,7 @@ void main() {
     final repository = FakeBunnyRepository();
     repository.postsBySearchId[1] = [_post(id: 1, isSeen: false)];
 
-    await tester.pumpWidget(wrapWithLocalization(PostGridScreen(search: search, repository: repository)));
+    await tester.pumpWidget(wrapWithLocalization(PostGridScreen(search: search, repository: repository, displaySettingsStore: const DisplaySettingsStore())));
     await tester.pumpAndSettle();
 
     await tester.tap(find.byKey(const ValueKey(1)));
@@ -82,7 +85,7 @@ void main() {
   testWidgets('tapping refresh calls syncDueSearches then reloads', (WidgetTester tester) async {
     final repository = FakeBunnyRepository();
 
-    await tester.pumpWidget(wrapWithLocalization(PostGridScreen(search: search, repository: repository)));
+    await tester.pumpWidget(wrapWithLocalization(PostGridScreen(search: search, repository: repository, displaySettingsStore: const DisplaySettingsStore())));
     await tester.pumpAndSettle();
 
     await tester.tap(find.byIcon(Icons.refresh));
@@ -98,7 +101,7 @@ void main() {
       _post(id: 2, isSeen: false, site: BunnySite.inkbunny, previewUrl: 'https://nl1.ib.metapix.net/thumbnails/large/thumb.jpg'),
     ];
 
-    await tester.pumpWidget(wrapWithLocalization(PostGridScreen(search: search, repository: repository)));
+    await tester.pumpWidget(wrapWithLocalization(PostGridScreen(search: search, repository: repository, displaySettingsStore: const DisplaySettingsStore())));
     await tester.pumpAndSettle();
 
     final e621Image = tester.widget<CachedNetworkImage>(find.descendant(of: find.byKey(const ValueKey(1)), matching: find.byType(CachedNetworkImage)));
@@ -113,7 +116,7 @@ void main() {
     final repository = FakeBunnyRepository();
     repository.postsBySearchId[1] = [_post(id: 1, isSeen: false), _post(id: 2, isSeen: false)];
 
-    await tester.pumpWidget(wrapWithLocalization(PostGridScreen(search: search, repository: repository)));
+    await tester.pumpWidget(wrapWithLocalization(PostGridScreen(search: search, repository: repository, displaySettingsStore: const DisplaySettingsStore())));
     await tester.pumpAndSettle();
 
     await tester.tap(find.byType(PopupMenuButton<void>));
@@ -122,5 +125,48 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(repository.postsBySearchId[1]!.every((post) => post.isSeen), isTrue);
+  });
+
+  testWidgets('honors a non-default grid column count from settings', (WidgetTester tester) async {
+    SharedPreferences.setMockInitialValues({'grid_columns': 5});
+    final repository = FakeBunnyRepository();
+    repository.postsBySearchId[1] = [_post(id: 1, isSeen: false)];
+
+    await tester.pumpWidget(wrapWithLocalization(PostGridScreen(search: search, repository: repository, displaySettingsStore: const DisplaySettingsStore())));
+    await tester.pumpAndSettle();
+
+    final gridView = tester.widget<GridView>(find.byType(GridView));
+    final delegate = gridView.gridDelegate as SliverGridDelegateWithFixedCrossAxisCount;
+    expect(delegate.crossAxisCount, 5);
+  });
+
+  testWidgets('medium preview quality prefers sampleUrl when present, falls back to previewUrl otherwise', (WidgetTester tester) async {
+    SharedPreferences.setMockInitialValues({'preview_quality': 'medium'});
+    final repository = FakeBunnyRepository();
+    repository.postsBySearchId[1] = [
+      _post(id: 1, isSeen: false, previewUrl: 'https://example.com/1_preview.jpg', sampleUrl: 'https://example.com/1_sample.jpg'),
+      _post(id: 2, isSeen: false, previewUrl: 'https://example.com/2_preview.jpg'),
+    ];
+
+    await tester.pumpWidget(wrapWithLocalization(PostGridScreen(search: search, repository: repository, displaySettingsStore: const DisplaySettingsStore())));
+    await tester.pumpAndSettle();
+
+    final withSample = tester.widget<CachedNetworkImage>(find.descendant(of: find.byKey(const ValueKey(1)), matching: find.byType(CachedNetworkImage)));
+    final withoutSample = tester.widget<CachedNetworkImage>(find.descendant(of: find.byKey(const ValueKey(2)), matching: find.byType(CachedNetworkImage)));
+
+    expect(withSample.imageUrl, 'https://example.com/1_sample.jpg');
+    expect(withoutSample.imageUrl, 'https://example.com/2_preview.jpg');
+  });
+
+  testWidgets('thumbnail preview quality always uses previewUrl, even when sampleUrl is present', (WidgetTester tester) async {
+    SharedPreferences.setMockInitialValues({'preview_quality': 'thumbnail'});
+    final repository = FakeBunnyRepository();
+    repository.postsBySearchId[1] = [_post(id: 1, isSeen: false, previewUrl: 'https://example.com/1_preview.jpg', sampleUrl: 'https://example.com/1_sample.jpg')];
+
+    await tester.pumpWidget(wrapWithLocalization(PostGridScreen(search: search, repository: repository, displaySettingsStore: const DisplaySettingsStore())));
+    await tester.pumpAndSettle();
+
+    final image = tester.widget<CachedNetworkImage>(find.descendant(of: find.byKey(const ValueKey(1)), matching: find.byType(CachedNetworkImage)));
+    expect(image.imageUrl, 'https://example.com/1_preview.jpg');
   });
 }

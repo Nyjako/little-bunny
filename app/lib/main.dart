@@ -10,6 +10,7 @@ import 'screens/lock_screen.dart';
 import 'screens/searches_screen.dart';
 import 'screens/setup_screen.dart';
 import 'settings/app_lock_service.dart';
+import 'settings/display_settings_store.dart';
 import 'settings/repository_settings_store.dart';
 import 'settings/secret_store.dart';
 import 'settings/sync_settings_store.dart';
@@ -28,6 +29,7 @@ Future<void> main() async {
       lockService: AppLockService(secretStore),
       themeSettingsStore: const ThemeSettingsStore(),
       syncSettingsStore: const SyncSettingsStore(),
+      displaySettingsStore: const DisplaySettingsStore(),
     ),
   );
 }
@@ -45,8 +47,16 @@ class LittleBunnyApp extends StatefulWidget {
   final AppLockService lockService;
   final ThemeSettingsStore themeSettingsStore;
   final SyncSettingsStore syncSettingsStore;
+  final DisplaySettingsStore displaySettingsStore;
 
-  const LittleBunnyApp({super.key, required this.settingsStore, required this.lockService, required this.themeSettingsStore, required this.syncSettingsStore});
+  const LittleBunnyApp({
+    super.key,
+    required this.settingsStore,
+    required this.lockService,
+    required this.themeSettingsStore,
+    required this.syncSettingsStore,
+    required this.displaySettingsStore,
+  });
 
   @override
   State<LittleBunnyApp> createState() => _LittleBunnyAppState();
@@ -126,6 +136,7 @@ class _LittleBunnyAppState extends State<LittleBunnyApp> {
           lockService: widget.lockService,
           themeSettingsStore: widget.themeSettingsStore,
           syncSettingsStore: widget.syncSettingsStore,
+          displaySettingsStore: widget.displaySettingsStore,
           onThemeModeChanged: (mode) => setState(() => _themeMode = mode),
         ),
       );

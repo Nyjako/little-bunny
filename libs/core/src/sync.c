@@ -189,6 +189,7 @@ static bunny_core_result_t upsert_e621_post(bunny_db_t *db, const e621_post_t *p
     upsert.child_count = post->relationships.child_count;
     upsert.pool_ids = post->pool_ids;
     upsert.pool_count = post->pool_count;
+    upsert.sample_url = post->sample.url;
 
     bunny_db_result_t result = bunny_db_post_upsert(db, &upsert, out_post_id);
 
@@ -222,6 +223,7 @@ static bunny_core_result_t upsert_inkbunny_submission(bunny_db_t *db, const inkb
     upsert.created_at_site = submission->created_at;
     upsert.tags = tags.items;
     upsert.tag_count = tags.count;
+    upsert.sample_url = file ? file->url_screen : NULL;
 
     bunny_db_result_t result = bunny_db_post_upsert(db, &upsert, out_post_id);
 

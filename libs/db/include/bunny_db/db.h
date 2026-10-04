@@ -81,6 +81,7 @@ typedef struct
     size_t child_count;
     const int64_t *pool_ids; /* may be NULL */
     size_t pool_count;
+    const char *sample_url; /* medium-quality variant (e621's "sample", Inkbunny's "screen"); may be NULL */
 } bunny_db_post_upsert_t;
 
 bunny_db_result_t bunny_db_post_upsert(bunny_db_t *db, const bunny_db_post_upsert_t *post, int64_t *out_id);
