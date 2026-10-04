@@ -439,6 +439,38 @@ this file is the single source of truth for "what's done" across sessions.
   second open doesn't fail or re-run the `ALTER TABLE` against a database that already has
   the columns.
 
+- [x] **M8.5.1 — Bug fixes: pagination, Inkbunny thumbnail 403, sort order**
+  Three independent, user-reported bugs fixed in one sub-milestone:
+  - **Pagination.** `sync_e621_search`/`sync_inkbunny_search` (`libs/core/src/sync.c`) each
+    made exactly one hardcoded `page=1` request before this — a search matching hundreds of
+    posts only ever cached the first ~75 (e621's default page size when no explicit limit is
+    passed). Both now loop: e621 requests `limit=320` (the site's real per-request max) each
+    page and stops once a page returns fewer than that; Inkbunny's search API has no
+    per-page-limit parameter at all, so its loop instead keeps paging until a page comes back
+    completely empty — meaning a real sync now always makes one extra "probe" request past
+    the true last page to confirm there's nothing more. Both loops are capped at 20 pages so
+    one sync pass can't run unboundedly long. Tested with a 320-post-then-5-post two-page
+    e621 fixture (generated at test time — hand-authoring a 320-entry JSON fixture file
+    wasn't practical) and an Inkbunny fixture extended with a third, empty-results page.
+  - **Inkbunny thumbnail 403s.** `CachedNetworkImage(imageUrl: ...)` in `PostGridScreen`/
+    `PostDetailScreen` sent no headers at all; Inkbunny's `metapix.net` CDN rejects bare
+    requests. New `app/lib/util/image_headers.dart`'s `imageHeadersFor(site)` returns a
+    `User-Agent`/`Referer` pair for Inkbunny posts, `null` for e621 (no such requirement
+    there) — passed to every `CachedNetworkImage` and to `VideoPlayerController.networkUrl`'s
+    own `httpHeaders` param for Inkbunny videos, same CDN.
+  - **Sort order.** `bunny_db_search_list_posts` (`libs/db/src/posts.c`) ordered by
+    `sr.found_at DESC` (when a sync linked the post to the search) rather than the post's own
+    site creation date — a single sync pass can link posts spanning months all at once, so
+    `found_at` didn't track actual recency. Changed to
+    `ORDER BY COALESCE(p.created_at_site, p.cached_at) DESC`.
+  **The Inkbunny search-by-tag/author 403 itself is still open** — investigating confirmed
+  `inkbunny_search_params_t` has no author/username search field at all today (only
+  `text`/`keywords_only`/`favorited_by_user_id`, the last being "list an *existing*
+  favorites list," not "list a user's submissions"), and Inkbunny signals its own auth
+  failures as HTTP 200 + JSON `error_code` rather than a real 403 — so this needs a live
+  debugging session against a real account before a fix can be written with confidence,
+  tracked separately rather than guessed at here.
+
 - [ ] **M9 — Actions & downloads**
   Single + mass like/favorite/download, commenting, download manager writing to
   `%artist%/%id%.%extension%`, checksum (md5) verification of downloaded files against the

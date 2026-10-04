@@ -216,12 +216,17 @@ bunny_db_result_t bunny_db_search_list_posts(bunny_db_t *db, int64_t search_id, 
     }
     memset(out_list, 0, sizeof(*out_list));
 
+    /* Newest-post-first by the site's own creation date, not by when this
+     * app happened to find it (sr.found_at) -- a single sync pass can link
+     * posts spanning a wide date range all at once, so found_at doesn't
+     * track actual recency. Falls back to cached_at for the rare post with
+     * no created_at_site rather than sorting it to the very end. */
     const char *sql_seen = "SELECT " BUNNY_DB_POST_SELECT_COLUMNS BUNNY_DB_POST_SELECT_FROM_JOIN "JOIN search_results sr ON sr.post_id = p.id "
                            "WHERE sr.search_id = ? "
-                           "ORDER BY sr.found_at DESC;";
+                           "ORDER BY COALESCE(p.created_at_site, p.cached_at) DESC;";
     const char *sql_unseen = "SELECT " BUNNY_DB_POST_SELECT_COLUMNS BUNNY_DB_POST_SELECT_FROM_JOIN "JOIN search_results sr ON sr.post_id = p.id "
                              "WHERE sr.search_id = ? AND seen.post_id IS NULL "
-                             "ORDER BY sr.found_at DESC;";
+                             "ORDER BY COALESCE(p.created_at_site, p.cached_at) DESC;";
 
     const char *sql = unseen_only ? sql_unseen : sql_seen;
     sqlite3_stmt *stmt = NULL;

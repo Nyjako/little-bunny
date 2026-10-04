@@ -5,6 +5,7 @@ import 'package:video_player/video_player.dart';
 import '../l10n/app_localizations.dart';
 import '../repository/bunny_models.dart';
 import '../repository/bunny_repository.dart';
+import '../util/image_headers.dart';
 
 const _imageExtensions = {'jpg', 'jpeg', 'png', 'gif', 'webp'};
 const _videoExtensions = {'webm', 'mp4'};
@@ -35,7 +36,7 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
     final ext = widget.post.fileExt?.toLowerCase();
     final url = widget.post.fileUrl;
     if (ext != null && _videoExtensions.contains(ext) && url != null) {
-      final controller = VideoPlayerController.networkUrl(Uri.parse(url));
+      final controller = VideoPlayerController.networkUrl(Uri.parse(url), httpHeaders: imageHeadersFor(widget.post.site) ?? const {});
       _videoController = controller;
       _videoInitFuture = controller.initialize().then((_) {
         if (!mounted) {
@@ -71,7 +72,7 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
       return const SizedBox(height: 200);
     }
     if (_imageExtensions.contains(ext)) {
-      return SizedBox(height: 400, child: CachedNetworkImage(imageUrl: post.fileUrl!, fit: BoxFit.contain));
+      return SizedBox(height: 400, child: CachedNetworkImage(imageUrl: post.fileUrl!, httpHeaders: imageHeadersFor(post.site), fit: BoxFit.contain));
     }
     if (_videoExtensions.contains(ext)) {
       return FutureBuilder<void>(
