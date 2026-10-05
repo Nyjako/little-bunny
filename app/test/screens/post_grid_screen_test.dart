@@ -184,4 +184,102 @@ void main() {
     expect(find.descendant(of: tile, matching: find.text('12')), findsOneWidget);
     expect(find.descendant(of: tile, matching: find.text('34')), findsOneWidget);
   });
+
+  testWidgets('long-pressing a tile enters selection mode and selects it', (WidgetTester tester) async {
+    final repository = FakeBunnyRepository();
+    repository.postsBySearchId[1] = [_post(id: 1, isSeen: false), _post(id: 2, isSeen: false)];
+
+    await tester.pumpWidget(wrapWithLocalization(PostGridScreen(search: search, repository: repository, displaySettingsStore: const DisplaySettingsStore(), syncSettingsStore: const SyncSettingsStore())));
+    await tester.pumpAndSettle();
+
+    await tester.longPress(find.byKey(const ValueKey(1)));
+    await tester.pumpAndSettle();
+
+    expect(find.text('1 selected'), findsOneWidget);
+    expect(find.byIcon(Icons.check_circle), findsOneWidget);
+
+    await tester.tap(find.byKey(const ValueKey(2)));
+    await tester.pumpAndSettle();
+
+    expect(find.text('2 selected'), findsOneWidget);
+    expect(find.byIcon(Icons.check_circle), findsNWidgets(2));
+
+    await tester.tap(find.byKey(const ValueKey(2)));
+    await tester.pumpAndSettle();
+
+    expect(find.text('1 selected'), findsOneWidget);
+  });
+
+  testWidgets('exiting selection mode clears the selection and restores the normal app bar', (WidgetTester tester) async {
+    final repository = FakeBunnyRepository();
+    repository.postsBySearchId[1] = [_post(id: 1, isSeen: false)];
+
+    await tester.pumpWidget(wrapWithLocalization(PostGridScreen(search: search, repository: repository, displaySettingsStore: const DisplaySettingsStore(), syncSettingsStore: const SyncSettingsStore())));
+    await tester.pumpAndSettle();
+
+    await tester.longPress(find.byKey(const ValueKey(1)));
+    await tester.pumpAndSettle();
+    expect(find.text('1 selected'), findsOneWidget);
+
+    await tester.tap(find.byIcon(Icons.close));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Foxes'), findsOneWidget);
+    expect(find.byIcon(Icons.check_circle), findsNothing);
+  });
+
+  testWidgets('mass-favorite queues every selected post once then processes the queue once', (WidgetTester tester) async {
+    final repository = FakeBunnyRepository();
+    repository.postsBySearchId[1] = [_post(id: 1, isSeen: false), _post(id: 2, isSeen: false), _post(id: 3, isSeen: false)];
+
+    await tester.pumpWidget(wrapWithLocalization(PostGridScreen(search: search, repository: repository, displaySettingsStore: const DisplaySettingsStore(), syncSettingsStore: const SyncSettingsStore())));
+    await tester.pumpAndSettle();
+
+    await tester.longPress(find.byKey(const ValueKey(1)));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey(2)));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.descendant(of: find.byType(AppBar), matching: find.byIcon(Icons.favorite)));
+    await tester.pumpAndSettle();
+
+    expect(repository.favoriteAddCalls, unorderedEquals([1, 2]));
+    expect(repository.processQueueCallCount, 1);
+    expect(find.text('Foxes'), findsOneWidget);
+  });
+
+  testWidgets('mass-vote queues every selected post once with the given score', (WidgetTester tester) async {
+    final repository = FakeBunnyRepository();
+    repository.postsBySearchId[1] = [_post(id: 1, isSeen: false), _post(id: 2, isSeen: false)];
+
+    await tester.pumpWidget(wrapWithLocalization(PostGridScreen(search: search, repository: repository, displaySettingsStore: const DisplaySettingsStore(), syncSettingsStore: const SyncSettingsStore())));
+    await tester.pumpAndSettle();
+
+    await tester.longPress(find.byKey(const ValueKey(1)));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey(2)));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.descendant(of: find.byType(AppBar), matching: find.byIcon(Icons.arrow_upward)));
+    await tester.pumpAndSettle();
+
+    expect(repository.voteCalls, unorderedEquals([(1, 1), (2, 1)]));
+    expect(repository.processQueueCallCount, 1);
+  });
+
+  testWidgets('vote actions are absent in selection mode for an Inkbunny search', (WidgetTester tester) async {
+    final inkbunnySearch = const BunnySearch(id: 2, site: BunnySite.inkbunny, label: 'Wolves', query: 'wolf', intervalHours: 24, createdAt: '2026-01-01T00:00:00Z');
+    final repository = FakeBunnyRepository();
+    repository.postsBySearchId[2] = [_post(id: 1, isSeen: false, site: BunnySite.inkbunny)];
+
+    await tester.pumpWidget(wrapWithLocalization(PostGridScreen(search: inkbunnySearch, repository: repository, displaySettingsStore: const DisplaySettingsStore(), syncSettingsStore: const SyncSettingsStore())));
+    await tester.pumpAndSettle();
+
+    await tester.longPress(find.byKey(const ValueKey(1)));
+    await tester.pumpAndSettle();
+
+    expect(find.descendant(of: find.byType(AppBar), matching: find.byIcon(Icons.favorite)), findsOneWidget);
+    expect(find.descendant(of: find.byType(AppBar), matching: find.byIcon(Icons.arrow_upward)), findsNothing);
+    expect(find.descendant(of: find.byType(AppBar), matching: find.byIcon(Icons.arrow_downward)), findsNothing);
+  });
 }

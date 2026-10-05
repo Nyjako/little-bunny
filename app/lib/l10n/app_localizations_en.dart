@@ -164,6 +164,23 @@ class AppLocalizationsEn extends AppLocalizations {
   String get postGridMarkAllSeen => 'Mark all as seen';
 
   @override
+  String postGridSelectionCount(int count) {
+    return '$count selected';
+  }
+
+  @override
+  String get postGridExitSelectionTooltip => 'Cancel selection';
+
+  @override
+  String get postGridMassFavoriteTooltip => 'Favorite selected';
+
+  @override
+  String get postGridMassUpvoteTooltip => 'Upvote selected';
+
+  @override
+  String get postGridMassDownvoteTooltip => 'Downvote selected';
+
+  @override
   String get tagBrowseEmptyState => 'No posts found for this search.';
 
   @override
