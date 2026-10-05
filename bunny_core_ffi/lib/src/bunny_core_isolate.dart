@@ -242,8 +242,9 @@ class _FetchPoolRequest extends _Request {
 class _PreviewSearchRequest extends _Request {
   final String site;
   final String query;
+  final int page;
 
-  const _PreviewSearchRequest(this.site, this.query);
+  const _PreviewSearchRequest(this.site, this.query, this.page);
 }
 
 class _ListCommentsRequest extends _Request {
@@ -444,7 +445,7 @@ Map<String, Object?> _handleFetchPool(Pointer<bunny_core_t> core, _FetchPoolRequ
 List<Map<String, Object?>> _handlePreviewSearch(Pointer<bunny_core_t> core, _PreviewSearchRequest r) {
   return using((arena) {
     final out = arena<bunny_db_post_list_t>();
-    _check(_bindings.bunny_core_preview_search(core, _siteFromWire(r.site), r.query.toNativeUtf8(allocator: arena).cast(), out));
+    _check(_bindings.bunny_core_preview_search(core, _siteFromWire(r.site), r.query.toNativeUtf8(allocator: arena).cast(), r.page, out));
     final items = <Map<String, Object?>>[];
     for (var i = 0; i < out.ref.count; i++) {
       items.add(_postToMap(out.ref.items[i]));
@@ -733,7 +734,7 @@ class BunnyCoreNative {
 
   Future<Map<String, Object?>> fetchPool(int poolId) => _send<Map<String, Object?>>(_FetchPoolRequest(poolId));
 
-  Future<List<Map<String, Object?>>> previewSearch(String site, String query) => _send<List<Map<String, Object?>>>(_PreviewSearchRequest(site, query));
+  Future<List<Map<String, Object?>>> previewSearch(String site, String query, {int page = 1}) => _send<List<Map<String, Object?>>>(_PreviewSearchRequest(site, query, page));
 
   Future<List<Map<String, Object?>>> listComments(int postId) => _send<List<Map<String, Object?>>>(_ListCommentsRequest(postId));
 

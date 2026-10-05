@@ -107,11 +107,12 @@ abstract interface class BunnyRepository {
   /// pool-mate post, this is how its full data gets loaded for display).
   Future<BunnyPost> getPost(int postId);
 
-  /// Runs one page of [query] live against [site] and caches whatever comes
-  /// back (so thumbnails/ids work immediately), without creating a saved
-  /// search -- used by the tag/artist click-through browse screen, which
-  /// shows results for a query the user hasn't (yet) chosen to save.
-  Future<List<BunnyPost>> previewSearch(BunnySite site, String query);
+  /// Runs one 1-indexed [page] of [query] live against [site] and caches
+  /// whatever comes back (so thumbnails/ids work immediately), without
+  /// creating a saved search -- used by the tag/artist click-through browse
+  /// screen, which shows results for a query the user hasn't (yet) chosen to
+  /// save. [page] beyond 1 drives that screen's infinite scroll (M9.6.2).
+  Future<List<BunnyPost>> previewSearch(BunnySite site, String query, {int page = 1});
 
   /// A post's existing comments, fetched live (e621 only -- Inkbunny has no
   /// comment concept at all, so this throws [BunnyRepositoryException] for

@@ -1525,6 +1525,38 @@ itself or to any of the existing mass favorite/vote/download actions -- they alr
 purely off `_selectedPostIds`, indifferent to whether it was populated by individually
 long-pressing tiles or by this new bulk action.
 
+**Tag/pool browse pagination (M9.6.2)**: `bunny_core_preview_search` had hardcoded page 1 for
+both sites since M8.5.10 -- fine for a one-shot preview, but useless for a tag with hundreds of
+thousands of matches. The fix threads a 1-indexed `page` parameter straight through to
+`e621_search_posts`/`inkbunny_search`'s own existing `page` arguments (both site clients already
+supported arbitrary pages; only the scheduled-sync path, `sync_e621_search`/`sync_inkbunny_search`,
+was looping them -- `bunny_core_preview_search` itself never had), with a server-side default of
+`1` when the query param is absent so every pre-M9.6.2 caller (and test) keeps working unchanged.
+
+`TagBrowseScreen` changed from a one-shot `FutureBuilder` to a page-accumulating `StatefulWidget`:
+a `List<BunnyPost> _posts` plus a parallel `Set<int> _seenPostIds` (de-duplication by id, since a
+later page can resurface a post already shown on an earlier one when a heavily-churning tag
+shifts rankings between requests), an `int _nextPage`/`bool _loadingMore`/`bool _hasMore` trio,
+and a `ScrollController` listener that fires `_loadMore()` once the scroll position comes within
+400px of the grid's bottom. Whether there's more to fetch is inferred purely from whether the
+just-fetched page came back non-empty, rather than comparing the page's length against a
+hardcoded mirror of e621's own page-size constant (`BUNNY_CORE_SYNC_E621_PAGE_LIMIT`, which lives
+only in `libs/core/src/sync.c`) -- hardcoding a second copy of that number in Dart would silently
+drift if the C-side constant ever changed; the only cost of the empty-page heuristic is one extra
+request that comes back empty right before `_hasMore` flips to `false`.
+
+**Test gotcha, GridView cache-extent vs. large synthetic scrolls**: the first attempt at the
+pagination widget tests drove the scroll position with a single massive `tester.drag(...,
+Offset(0, -100000))` and then asserted on tile presence via `find.byKey` for both the newly loaded
+page and the originally loaded one -- both assertions failed, because overshooting that far past
+the sliver's actual content pushes distant items outside `GridView`'s build+cache range, evicting
+their `Element`s from the tree entirely (the same category of issue as the `ListView` cache-extent
+gotcha hit during `SettingsScreen` testing in M9.4, just triggered by an oversized drag instead of
+a long static list). Fixed two ways at once: bounding the drag to `-5000` (reaches the grid's real
+bottom without wild overshoot), and switching the assertions from widget-tree presence to the
+newly-added `FakeBunnyRepository.previewSearchCalls` tracking list, which records `(site, query,
+page)` tuples and stays reliable regardless of what the `GridView` has or hasn't materialized.
+
 ## Inkbunny API constraints (found in M2)
 
 Verified against the live API and the official docs while building `libinkbunny`:
