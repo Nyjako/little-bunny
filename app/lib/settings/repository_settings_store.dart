@@ -18,7 +18,13 @@ class RepositorySettingsStore {
   static const _secretKeyBearerToken = 'repository_bearer_token';
   static const _secretKeyCertFingerprint = 'repository_cert_fingerprint';
   static const _standaloneDbFileName = 'bunny.db';
-  static const _standaloneUserAgent = 'little_bunny/1.0.0';
+  /// e621's own API etiquette wants an app name/version plus a contact
+  /// identifier (e.g. "LittleBunny/1.0.0 (by someuser on e621)") -- this is
+  /// only the bare app name/version half; `bunny_core_build_e621_client`
+  /// (libs/core/src/site_clients.c) appends "(by " + username + " on e621)" per
+  /// client construction once an e621 account is configured, since that's
+  /// the only place the account is actually known.
+  static const _standaloneUserAgent = 'LittleBunny/1.0.0';
 
   final SecretStore _secrets;
 

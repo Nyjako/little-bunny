@@ -303,6 +303,7 @@ class _PostGridScreenState extends State<PostGridScreen> {
                 selected: _selectedPostIds.contains(post.id),
                 onTap: () => _onTileTap(posts, post),
                 onLongPress: () => _toggleSelection(post.id),
+                selectionMode: _selectionMode,
               );
             },
           );
