@@ -309,6 +309,15 @@ class HttpBunnyRepository implements BunnyRepository {
   }
 
   @override
+  Future<List<BunnyPost>> previewSearch(BunnySite site, String query) async {
+    final response = await _client.post(_uri('/search/preview', {'site': site.toWireString(), 'query': query}), headers: _headers);
+    if (response.statusCode != 200) {
+      _throwError(response);
+    }
+    return _decodeList(response).map(_postFromJson).toList();
+  }
+
+  @override
   Future<BunnySyncStats> syncDueSearches() async {
     final response = await _client.post(_uri('/sync'), headers: _headers);
     if (response.statusCode != 200) {

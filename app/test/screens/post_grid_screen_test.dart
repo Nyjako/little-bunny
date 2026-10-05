@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:little_bunny/repository/bunny_models.dart';
 import 'package:little_bunny/screens/post_grid_screen.dart';
 import 'package:little_bunny/settings/display_settings_store.dart';
+import 'package:little_bunny/settings/sync_settings_store.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../fakes/fake_bunny_repository.dart';
@@ -31,7 +32,7 @@ void main() {
 
   testWidgets('shows the empty state when there are no cached posts', (WidgetTester tester) async {
     final repository = FakeBunnyRepository();
-    await tester.pumpWidget(wrapWithLocalization(PostGridScreen(search: search, repository: repository, displaySettingsStore: const DisplaySettingsStore())));
+    await tester.pumpWidget(wrapWithLocalization(PostGridScreen(search: search, repository: repository, displaySettingsStore: const DisplaySettingsStore(), syncSettingsStore: const SyncSettingsStore())));
     await tester.pumpAndSettle();
 
     expect(find.text('No posts cached yet. Tap refresh to sync.'), findsOneWidget);
@@ -41,7 +42,7 @@ void main() {
     final repository = FakeBunnyRepository();
     repository.postsBySearchId[1] = [_post(id: 1, isSeen: false), _post(id: 2, isSeen: true)];
 
-    await tester.pumpWidget(wrapWithLocalization(PostGridScreen(search: search, repository: repository, displaySettingsStore: const DisplaySettingsStore())));
+    await tester.pumpWidget(wrapWithLocalization(PostGridScreen(search: search, repository: repository, displaySettingsStore: const DisplaySettingsStore(), syncSettingsStore: const SyncSettingsStore())));
     await tester.pumpAndSettle();
 
     expect(find.byKey(const ValueKey(1)), findsOneWidget);
@@ -52,7 +53,7 @@ void main() {
     final repository = FakeBunnyRepository();
     repository.postsBySearchId[1] = [_post(id: 1, isSeen: false), _post(id: 2, isSeen: true)];
 
-    await tester.pumpWidget(wrapWithLocalization(PostGridScreen(search: search, repository: repository, displaySettingsStore: const DisplaySettingsStore())));
+    await tester.pumpWidget(wrapWithLocalization(PostGridScreen(search: search, repository: repository, displaySettingsStore: const DisplaySettingsStore(), syncSettingsStore: const SyncSettingsStore())));
     await tester.pumpAndSettle();
     expect(find.byKey(const ValueKey(1)), findsOneWidget);
     expect(find.byKey(const ValueKey(2)), findsOneWidget);
@@ -68,7 +69,7 @@ void main() {
     final repository = FakeBunnyRepository();
     repository.postsBySearchId[1] = [_post(id: 1, isSeen: false)];
 
-    await tester.pumpWidget(wrapWithLocalization(PostGridScreen(search: search, repository: repository, displaySettingsStore: const DisplaySettingsStore())));
+    await tester.pumpWidget(wrapWithLocalization(PostGridScreen(search: search, repository: repository, displaySettingsStore: const DisplaySettingsStore(), syncSettingsStore: const SyncSettingsStore())));
     await tester.pumpAndSettle();
 
     await tester.tap(find.byKey(const ValueKey(1)));
@@ -86,7 +87,7 @@ void main() {
   testWidgets('tapping refresh calls syncDueSearches then reloads', (WidgetTester tester) async {
     final repository = FakeBunnyRepository();
 
-    await tester.pumpWidget(wrapWithLocalization(PostGridScreen(search: search, repository: repository, displaySettingsStore: const DisplaySettingsStore())));
+    await tester.pumpWidget(wrapWithLocalization(PostGridScreen(search: search, repository: repository, displaySettingsStore: const DisplaySettingsStore(), syncSettingsStore: const SyncSettingsStore())));
     await tester.pumpAndSettle();
 
     await tester.tap(find.byIcon(Icons.refresh));
@@ -102,7 +103,7 @@ void main() {
       _post(id: 2, isSeen: false, site: BunnySite.inkbunny, previewUrl: 'https://nl1.ib.metapix.net/thumbnails/large/thumb.jpg'),
     ];
 
-    await tester.pumpWidget(wrapWithLocalization(PostGridScreen(search: search, repository: repository, displaySettingsStore: const DisplaySettingsStore())));
+    await tester.pumpWidget(wrapWithLocalization(PostGridScreen(search: search, repository: repository, displaySettingsStore: const DisplaySettingsStore(), syncSettingsStore: const SyncSettingsStore())));
     await tester.pumpAndSettle();
 
     final e621Image = tester.widget<CachedNetworkImage>(find.descendant(of: find.byKey(const ValueKey(1)), matching: find.byType(CachedNetworkImage)));
@@ -117,7 +118,7 @@ void main() {
     final repository = FakeBunnyRepository();
     repository.postsBySearchId[1] = [_post(id: 1, isSeen: false), _post(id: 2, isSeen: false)];
 
-    await tester.pumpWidget(wrapWithLocalization(PostGridScreen(search: search, repository: repository, displaySettingsStore: const DisplaySettingsStore())));
+    await tester.pumpWidget(wrapWithLocalization(PostGridScreen(search: search, repository: repository, displaySettingsStore: const DisplaySettingsStore(), syncSettingsStore: const SyncSettingsStore())));
     await tester.pumpAndSettle();
 
     await tester.tap(find.byType(PopupMenuButton<void>));
@@ -133,7 +134,7 @@ void main() {
     final repository = FakeBunnyRepository();
     repository.postsBySearchId[1] = [_post(id: 1, isSeen: false)];
 
-    await tester.pumpWidget(wrapWithLocalization(PostGridScreen(search: search, repository: repository, displaySettingsStore: const DisplaySettingsStore())));
+    await tester.pumpWidget(wrapWithLocalization(PostGridScreen(search: search, repository: repository, displaySettingsStore: const DisplaySettingsStore(), syncSettingsStore: const SyncSettingsStore())));
     await tester.pumpAndSettle();
 
     final gridView = tester.widget<GridView>(find.byType(GridView));
@@ -149,7 +150,7 @@ void main() {
       _post(id: 2, isSeen: false, previewUrl: 'https://example.com/2_preview.jpg'),
     ];
 
-    await tester.pumpWidget(wrapWithLocalization(PostGridScreen(search: search, repository: repository, displaySettingsStore: const DisplaySettingsStore())));
+    await tester.pumpWidget(wrapWithLocalization(PostGridScreen(search: search, repository: repository, displaySettingsStore: const DisplaySettingsStore(), syncSettingsStore: const SyncSettingsStore())));
     await tester.pumpAndSettle();
 
     final withSample = tester.widget<CachedNetworkImage>(find.descendant(of: find.byKey(const ValueKey(1)), matching: find.byType(CachedNetworkImage)));
@@ -164,7 +165,7 @@ void main() {
     final repository = FakeBunnyRepository();
     repository.postsBySearchId[1] = [_post(id: 1, isSeen: false, previewUrl: 'https://example.com/1_preview.jpg', sampleUrl: 'https://example.com/1_sample.jpg')];
 
-    await tester.pumpWidget(wrapWithLocalization(PostGridScreen(search: search, repository: repository, displaySettingsStore: const DisplaySettingsStore())));
+    await tester.pumpWidget(wrapWithLocalization(PostGridScreen(search: search, repository: repository, displaySettingsStore: const DisplaySettingsStore(), syncSettingsStore: const SyncSettingsStore())));
     await tester.pumpAndSettle();
 
     final image = tester.widget<CachedNetworkImage>(find.descendant(of: find.byKey(const ValueKey(1)), matching: find.byType(CachedNetworkImage)));
@@ -175,7 +176,7 @@ void main() {
     final repository = FakeBunnyRepository();
     repository.postsBySearchId[1] = [_post(id: 1, isSeen: false, rating: 'e', score: 12, favCount: 34)];
 
-    await tester.pumpWidget(wrapWithLocalization(PostGridScreen(search: search, repository: repository, displaySettingsStore: const DisplaySettingsStore())));
+    await tester.pumpWidget(wrapWithLocalization(PostGridScreen(search: search, repository: repository, displaySettingsStore: const DisplaySettingsStore(), syncSettingsStore: const SyncSettingsStore())));
     await tester.pumpAndSettle();
 
     final tile = find.byKey(const ValueKey(1));

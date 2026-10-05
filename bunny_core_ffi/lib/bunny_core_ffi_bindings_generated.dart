@@ -884,6 +884,43 @@ class BunnyCoreFfiBindings {
         )
       >();
 
+  /// Runs a single page of `query` live against `site` and upserts whatever
+  /// comes back into the local post cache (so thumbnails/ids are immediately
+  /// usable), *without* creating a searches/search_results row -- a stateless
+  /// "fetch and cache posts matching this query" call, used for the tag/artist
+  /// click-through browse screen rather than a saved search.
+  bunny_core_result_t bunny_core_preview_search(
+    ffi.Pointer<bunny_core_t> core,
+    bunny_db_site_t site,
+    ffi.Pointer<ffi.Char> query,
+    ffi.Pointer<bunny_db_post_list_t> out_list,
+  ) {
+    return bunny_core_result_t.fromValue(
+      _bunny_core_preview_search(core, site.value, query, out_list),
+    );
+  }
+
+  late final _bunny_core_preview_searchPtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.UnsignedInt Function(
+            ffi.Pointer<bunny_core_t>,
+            ffi.UnsignedInt,
+            ffi.Pointer<ffi.Char>,
+            ffi.Pointer<bunny_db_post_list_t>,
+          )
+        >
+      >('bunny_core_preview_search');
+  late final _bunny_core_preview_search = _bunny_core_preview_searchPtr
+      .asFunction<
+        int Function(
+          ffi.Pointer<bunny_core_t>,
+          int,
+          ffi.Pointer<ffi.Char>,
+          ffi.Pointer<bunny_db_post_list_t>,
+        )
+      >();
+
   /// Runs every saved search whose last run is NULL or older than its
   /// interval_hours: builds a client for that search's site (authenticated via
   /// the stored account if one exists, or anonymous/guest otherwise), fetches

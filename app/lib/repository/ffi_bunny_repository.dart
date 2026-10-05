@@ -180,6 +180,12 @@ class FfiBunnyRepository implements BunnyRepository {
   }
 
   @override
+  Future<List<BunnyPost>> previewSearch(BunnySite site, String query) async {
+    final items = await _wrapped(() => _native.previewSearch(site.toWireString(), query));
+    return items.map(_postFromMap).toList();
+  }
+
+  @override
   Future<BunnySyncStats> syncDueSearches() async {
     final map = await _wrapped(() => _native.syncDueSearches());
     return _syncStatsFromMap(map);

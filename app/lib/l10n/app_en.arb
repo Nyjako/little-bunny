@@ -77,6 +77,9 @@
   "postGridEmptyState": "No posts cached yet. Tap refresh to sync.",
   "postGridMarkAllSeen": "Mark all as seen",
 
+  "tagBrowseEmptyState": "No posts found for this search.",
+  "tagBrowseAddToSearchesTooltip": "Save as a search",
+
   "postDetailScreenTitle": "Post",
   "postDetailUnsupportedFormat": "This file format ({extension}) isn't supported yet",
   "@postDetailUnsupportedFormat": {

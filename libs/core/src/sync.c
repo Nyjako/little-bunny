@@ -9,6 +9,7 @@
 
 #include <e621/client.h>
 #include <goblin/cstr.h>
+#include <goblin/dyn_array.h>
 #include <inkbunny/client.h>
 
 #include <stdbool.h>
@@ -35,6 +36,12 @@ typedef struct
  * against a search matching an enormous number of posts. */
 #define BUNNY_CORE_SYNC_E621_PAGE_LIMIT 320
 #define BUNNY_CORE_SYNC_MAX_PAGES 20
+
+/* Used only to accumulate bunny_core_preview_search's results below --
+ * file-local, like every GOBLIN_DYN_ARRAY_DECL instantiation in this
+ * codebase (the macro expands to `static inline` functions, so there's no
+ * link collision with libs/db's own identically-shaped bunny_db_post_array). */
+GOBLIN_DYN_ARRAY_DECL(bunny_core_post, bunny_db_post_t)
 
 static bool search_is_due(const bunny_db_search_t *search)
 {
@@ -355,6 +362,74 @@ bunny_core_result_t bunny_core_fetch_and_cache_post(bunny_core_t *core, bunny_db
     inkbunny_submission_free(&submission);
     inkbunny_client_destroy(client);
     return result;
+}
+
+bunny_core_result_t bunny_core_preview_search(bunny_core_t *core, bunny_db_site_t site, const char *query, bunny_db_post_list_t *out_list)
+{
+    if (!core || !query || !out_list) {
+        return BUNNY_CORE_ERR_INVALID_ARG;
+    }
+    memset(out_list, 0, sizeof(*out_list));
+
+    bunny_core_post_array arr;
+    bunny_core_post_array_init(&arr);
+
+    if (site == BUNNY_DB_SITE_E621) {
+        e621_client_t *client = bunny_core_build_e621_client(core);
+        if (!client) {
+            return BUNNY_CORE_ERR_SITE;
+        }
+
+        e621_post_list_t posts;
+        e621_result_t search_result = e621_search_posts(client, query, 1, BUNNY_CORE_SYNC_E621_PAGE_LIMIT, &posts);
+        if (search_result != E621_OK) {
+            e621_client_destroy(client);
+            return BUNNY_CORE_ERR_SITE;
+        }
+
+        for (size_t i = 0; i < posts.count; i++) {
+            int64_t post_id = 0;
+            bunny_db_post_t item;
+            memset(&item, 0, sizeof(item));
+            if (upsert_e621_post(core->db, &posts.items[i], &post_id) == BUNNY_CORE_OK && bunny_db_post_get_by_id(core->db, post_id, &item) == BUNNY_DB_OK) {
+                bunny_core_post_array_push(&arr, item);
+            }
+        }
+        e621_post_list_free(&posts);
+        e621_client_destroy(client);
+    } else {
+        inkbunny_client_t *client = bunny_core_build_inkbunny_client(core);
+        if (!client) {
+            return BUNNY_CORE_ERR_SITE;
+        }
+
+        inkbunny_search_params_t params;
+        memset(&params, 0, sizeof(params));
+        params.text = query;
+        params.page = 1;
+
+        inkbunny_submission_list_t submissions;
+        inkbunny_result_t search_result = inkbunny_search(client, &params, &submissions);
+        if (search_result != INKBUNNY_OK) {
+            inkbunny_client_destroy(client);
+            return BUNNY_CORE_ERR_SITE;
+        }
+
+        for (size_t i = 0; i < submissions.count; i++) {
+            int64_t post_id = 0;
+            bunny_db_post_t item;
+            memset(&item, 0, sizeof(item));
+            if (upsert_inkbunny_submission(core->db, &submissions.items[i], &post_id) == BUNNY_CORE_OK && bunny_db_post_get_by_id(core->db, post_id, &item) == BUNNY_DB_OK) {
+                bunny_core_post_array_push(&arr, item);
+            }
+        }
+        inkbunny_submission_list_free(&submissions);
+        inkbunny_client_destroy(client);
+    }
+
+    out_list->items = arr.items;
+    out_list->count = arr.count;
+    return BUNNY_CORE_OK;
 }
 
 void bunny_core_pool_info_free(bunny_core_pool_info_t *info)
