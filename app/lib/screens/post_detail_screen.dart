@@ -9,10 +9,13 @@ import '../repository/bunny_models.dart';
 import '../repository/bunny_repository.dart';
 import '../settings/display_settings_store.dart';
 import '../util/image_headers.dart';
+import 'full_screen_post_viewer_screen.dart';
 import 'post_grid_screen.dart';
 
 const _imageExtensions = {'jpg', 'jpeg', 'png', 'gif', 'webp'};
 const _videoExtensions = {'webm', 'mp4'};
+
+bool _isImage(BunnyPost post) => post.fileExt != null && _imageExtensions.contains(post.fileExt!.toLowerCase());
 
 /// Full read-only metadata + media viewer for a single post (M8.4, redesigned
 /// in M8.5.8 to surface categorized tags, sources, and e621 pool/parent/
@@ -24,7 +27,15 @@ class PostDetailScreen extends StatefulWidget {
   final BunnyRepository repository;
   final DisplaySettingsStore displaySettingsStore;
 
-  const PostDetailScreen({super.key, required this.post, required this.repository, required this.displaySettingsStore});
+  /// The post list this post was opened from (e.g. a grid's currently loaded
+  /// posts), used to seed [FullScreenPostViewerScreen]'s swipeable gallery
+  /// when the media is tapped (M8.5.9) -- filtered down to image posts only,
+  /// since videos keep using the in-place player here. `null` (the default,
+  /// used when opening a post standalone, e.g. via a parent/child/pool chip)
+  /// falls back to a single-post gallery of just [post].
+  final List<BunnyPost>? siblingPosts;
+
+  const PostDetailScreen({super.key, required this.post, required this.repository, required this.displaySettingsStore, this.siblingPosts});
 
   @override
   State<PostDetailScreen> createState() => _PostDetailScreenState();
@@ -83,6 +94,15 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
     });
   }
 
+  void _openFullScreenViewer() {
+    final images = (widget.siblingPosts ?? [widget.post]).where(_isImage).toList();
+    final index = images.indexWhere((p) => p.id == widget.post.id);
+    if (index == -1) {
+      return;
+    }
+    Navigator.push(context, MaterialPageRoute(builder: (context) => FullScreenPostViewerScreen(posts: images, initialIndex: index, repository: widget.repository)));
+  }
+
   Widget _buildMedia(AppLocalizations l10n) {
     final post = widget.post;
     final ext = post.fileExt?.toLowerCase();
@@ -96,7 +116,7 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
     final maxHeight = MediaQuery.sizeOf(context).height * 0.6;
     Widget bounded(Widget child) => ConstrainedBox(constraints: BoxConstraints(maxHeight: maxHeight), child: AspectRatio(aspectRatio: aspectRatio, child: child));
     if (_imageExtensions.contains(ext)) {
-      return bounded(CachedNetworkImage(imageUrl: post.fileUrl!, httpHeaders: imageHeadersFor(post.site), fit: BoxFit.contain));
+      return GestureDetector(onTap: _openFullScreenViewer, child: bounded(CachedNetworkImage(imageUrl: post.fileUrl!, httpHeaders: imageHeadersFor(post.site), fit: BoxFit.contain)));
     }
     if (_videoExtensions.contains(ext)) {
       return FutureBuilder<void>(
