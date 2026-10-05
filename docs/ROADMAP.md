@@ -799,7 +799,7 @@ this file is the single source of truth for "what's done" across sessions.
   that didn't need the user present; only **M8.5.2** (the Inkbunny search 403, a live-debugging
   step against a real account) remains before M8.5 as a whole is done.
 
-- [ ] **M9 — Actions & downloads**
+- [x] **M9 — Actions & downloads**
   Single + mass favorite/download, commenting, and a download manager with checksum
   verification. Single-post favorite/vote was already pulled forward into M8.5.14; what's
   left here is commenting, multi-select, and the download manager itself. Delivered as
@@ -901,6 +901,22 @@ this file is the single source of truth for "what's done" across sessions.
   match/mismatch, directory creation, a real temp directory per test) and widget tests for all
   three button outcomes plus the already-downloaded state, via a `FakeBunnyRepository` and an
   injected fake `DownloadManager`.
+
+- [x] **M9.5 — Mass download**
+  Wires M9.2's selection mode to M9.4's `DownloadManager` -- the last piece of M9. A download
+  icon in the contextual action bar loops `DownloadManager.downloadPost` sequentially over
+  every selected post (deliberately sequential, no parallel queue or throttling -- adequate
+  for a personal-use app, and a parallel download manager is complexity this scope doesn't
+  ask for), updating a `(done, total)` progress title in place of the "N selected" text while
+  running (every other contextual action disabled for the duration), then a `SnackBar`
+  summarizing succeeded/checksum-mismatched/failed counts and reloading the grid. A post with
+  no `fileUrl` folds into the "failed" bucket rather than getting its own message, same
+  simplification `PostDetailScreen`'s single-download button uses. `PostGridScreen` gained its
+  own `downloadManager` field (`const DownloadManager()` default, same no-required-deps
+  reasoning as `PostDetailScreen`'s), overridden in the widget test with a fake HTTP client.
+  Widget test seeds three posts (two real file URLs, one without) and asserts: exactly one
+  `recordDownload` call (the only one that actually succeeds), the correct three-way summary
+  text, and that selection mode exits afterward.
 
 - [ ] **M10 — Automation & recommendations**
   "Auto-like/auto-favorite on download" setting, most-liked/most-favorited tag stats,

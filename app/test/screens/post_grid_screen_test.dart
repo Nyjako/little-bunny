@@ -1,8 +1,13 @@
+import 'dart:io';
+
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
 import 'package:little_bunny/repository/bunny_models.dart';
 import 'package:little_bunny/screens/post_grid_screen.dart';
+import 'package:little_bunny/services/download_manager.dart';
 import 'package:little_bunny/settings/display_settings_store.dart';
 import 'package:little_bunny/settings/download_settings_store.dart';
 import 'package:little_bunny/settings/sync_settings_store.dart';
@@ -11,16 +16,31 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../fakes/fake_bunny_repository.dart';
 import '../fakes/test_app.dart';
 
-BunnyPost _post({required int id, required bool isSeen, BunnySite site = BunnySite.e621, String? previewUrl, String? sampleUrl, String? rating, int score = 0, int favCount = 0}) => BunnyPost(
+BunnyPost _post({
+  required int id,
+  required bool isSeen,
+  BunnySite site = BunnySite.e621,
+  String? previewUrl,
+  String? sampleUrl,
+  String? rating,
+  int score = 0,
+  int favCount = 0,
+  String? fileUrl,
+  String? fileExt,
+  String? artist,
+}) => BunnyPost(
   id: id,
   site: site,
   externalId: id,
+  artist: artist,
   rating: rating,
   score: score,
   favCount: favCount,
   commentCount: 0,
   previewUrl: previewUrl,
   sampleUrl: sampleUrl,
+  fileUrl: fileUrl,
+  fileExt: fileExt,
   width: 100,
   height: 100,
   cachedAt: '2026-01-01T00:00:00Z',
@@ -282,5 +302,63 @@ void main() {
     expect(find.descendant(of: find.byType(AppBar), matching: find.byIcon(Icons.favorite)), findsOneWidget);
     expect(find.descendant(of: find.byType(AppBar), matching: find.byIcon(Icons.arrow_upward)), findsNothing);
     expect(find.descendant(of: find.byType(AppBar), matching: find.byIcon(Icons.arrow_downward)), findsNothing);
+  });
+
+  group('mass download (M9.5)', () {
+    late Directory tempDir;
+
+    setUp(() async {
+      tempDir = await Directory.systemTemp.createTemp('post_grid_mass_download_test');
+      SharedPreferences.setMockInitialValues({'download_destination_folder': tempDir.path});
+    });
+
+    tearDown(() async {
+      if (await tempDir.exists()) {
+        await tempDir.delete(recursive: true);
+      }
+    });
+
+    testWidgets('downloads every selected post and shows a summary with mixed outcomes', (WidgetTester tester) async {
+      final repository = FakeBunnyRepository();
+      repository.postsBySearchId[1] = [
+        _post(id: 1, isSeen: false, fileUrl: 'https://example.invalid/1.jpg', fileExt: 'jpg', artist: 'wolf'),
+        _post(id: 2, isSeen: false, fileUrl: 'https://example.invalid/2.jpg', fileExt: 'jpg', artist: 'fox'),
+        _post(id: 3, isSeen: false), // no fileUrl -- counts as failed
+      ];
+      final downloadManager = DownloadManager(client: MockClient((request) async => http.Response.bytes([1, 2, 3], request.url.path.endsWith('2.jpg') ? 500 : 200)));
+
+      await tester.pumpWidget(
+        wrapWithLocalization(
+          PostGridScreen(
+            search: search,
+            repository: repository,
+            displaySettingsStore: const DisplaySettingsStore(),
+            syncSettingsStore: const SyncSettingsStore(),
+            downloadSettingsStore: const DownloadSettingsStore(),
+            downloadManager: downloadManager,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.longPress(find.byKey(const ValueKey(1)));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey(2)));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey(3)));
+      await tester.pumpAndSettle();
+
+      await tester.runAsync(() async {
+        await tester.tap(find.descendant(of: find.byType(AppBar), matching: find.byIcon(Icons.download)));
+        await tester.pump();
+        await Future<void>.delayed(const Duration(milliseconds: 100));
+        await tester.pump();
+      });
+      await tester.pumpAndSettle();
+
+      expect(repository.recordDownloadCalls, hasLength(1)); // only post 1 succeeded
+      expect(find.text('1 downloaded, 0 checksum mismatch, 2 failed'), findsOneWidget);
+      expect(find.text('Foxes'), findsOneWidget); // selection mode exited
+    });
   });
 }
