@@ -116,6 +116,16 @@ bunny_core_result_t bunny_core_post_get_relationships(bunny_core_t *core, int64_
  * in no pools) -- a thin pass-through to bunny_db. */
 bunny_core_result_t bunny_core_post_get_pool_ids(bunny_core_t *core, int64_t post_id, bunny_db_int64_list_t *out_list);
 
+/* Records that a file was downloaded for a post -- a thin pass-through to
+ * bunny_db_download_record. The actual HTTP fetch, disk write, and checksum
+ * computation are entirely client-side (never proxied through the server);
+ * this call only persists the bookkeeping row afterward. */
+bunny_core_result_t bunny_core_record_download(bunny_core_t *core, int64_t post_id, const char *file_path, const char *checksum_md5, bool verified, int64_t *out_id);
+
+/* A post's download history, newest first -- a thin pass-through to
+ * bunny_db_download_list_for_post. Empty for a post never downloaded. */
+bunny_core_result_t bunny_core_list_downloads_for_post(bunny_core_t *core, int64_t post_id, bunny_db_download_list_t *out_list);
+
 /* Fetches a single post live from its site and caches it (upserting into the
  * local post cache exactly like a sync pass would for one post), without
  * requiring it to already be linked to any saved search. Used when a
