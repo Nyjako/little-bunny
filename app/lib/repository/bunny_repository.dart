@@ -102,6 +102,11 @@ abstract interface class BunnyRepository {
   /// auto-fill a pool search's label at creation time.
   Future<BunnyPoolInfo> fetchPool(int poolId);
 
+  /// A single cached post by its local id -- used to open a *different*
+  /// post's detail view (e.g. after [fetchPost] caches a parent/child/
+  /// pool-mate post, this is how its full data gets loaded for display).
+  Future<BunnyPost> getPost(int postId);
+
   /// Manually triggers a sync pass (runs every due search). The server also
   /// does this on its own schedule (M5.3); this is for an explicit
   /// "refresh now" action.

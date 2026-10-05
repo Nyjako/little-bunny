@@ -235,6 +235,54 @@ static int handle_fetch_post(struct mg_connection *conn, server_context_t *ctx, 
     return status;
 }
 
+static cJSON *post_to_json(const bunny_db_post_t *post)
+{
+    cJSON *json = cJSON_CreateObject();
+    cJSON_AddNumberToObject(json, "id", (double)post->id);
+    cJSON_AddStringToObject(json, "site", bunny_db_site_to_string(post->site));
+    cJSON_AddNumberToObject(json, "external_id", (double)post->external_id);
+    add_optional_string(json, "artist", post->artist);
+    add_optional_string(json, "title", post->title);
+    add_optional_string(json, "description", post->description);
+    add_optional_string(json, "rating", post->rating);
+    cJSON_AddNumberToObject(json, "score", post->score);
+    cJSON_AddNumberToObject(json, "score_up", post->score_up);
+    cJSON_AddNumberToObject(json, "score_down", post->score_down);
+    cJSON_AddNumberToObject(json, "fav_count", post->fav_count);
+    cJSON_AddNumberToObject(json, "comment_count", post->comment_count);
+    add_optional_string(json, "file_url", post->file_url);
+    add_optional_string(json, "file_ext", post->file_ext);
+    add_optional_string(json, "file_md5", post->file_md5);
+    add_optional_string(json, "preview_url", post->preview_url);
+    add_optional_string(json, "sample_url", post->sample_url);
+    cJSON_AddNumberToObject(json, "width", post->width);
+    cJSON_AddNumberToObject(json, "height", post->height);
+    add_optional_string(json, "created_at_site", post->created_at_site);
+    cJSON_AddStringToObject(json, "cached_at", post->cached_at);
+    cJSON_AddBoolToObject(json, "is_seen", post->is_seen);
+    cJSON_AddBoolToObject(json, "is_favorited", post->is_favorited);
+    return json;
+}
+
+static int handle_get_post_by_id(struct mg_connection *conn, server_context_t *ctx, int64_t post_id)
+{
+    bunny_db_post_t post;
+    pthread_mutex_lock(&ctx->core_mutex);
+    bunny_core_result_t result = bunny_core_post_get_by_id(ctx->core, post_id, &post);
+    pthread_mutex_unlock(&ctx->core_mutex);
+
+    if (result != BUNNY_CORE_OK) {
+        return server_json_respond_error(conn, result);
+    }
+
+    cJSON *response = post_to_json(&post);
+    bunny_db_post_free(&post);
+
+    int status = server_json_respond(conn, 200, response);
+    cJSON_Delete(response);
+    return status;
+}
+
 static int handle_mark_seen(struct mg_connection *conn, server_context_t *ctx, int64_t post_id)
 {
     pthread_mutex_lock(&ctx->core_mutex);
@@ -296,6 +344,9 @@ static int posts_handler(struct mg_connection *conn, void *cbdata)
     }
     if (strcmp(method, "POST") == 0 && strcmp(sub_path, "fetch") == 0) {
         return handle_fetch_post(conn, ctx, info->query_string);
+    }
+    if (strcmp(method, "GET") == 0 && server_route_parse_id(sub_path, &post_id)) {
+        return handle_get_post_by_id(conn, ctx, post_id);
     }
 
     return server_json_respond_error(conn, BUNNY_CORE_ERR_NOT_FOUND);

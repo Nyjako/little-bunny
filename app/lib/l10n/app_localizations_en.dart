@@ -202,6 +202,38 @@ class AppLocalizationsEn extends AppLocalizations {
   String get postDetailUnknownValue => 'Unknown';
 
   @override
+  String get postDetailIdLabel => 'Post ID';
+
+  @override
+  String get postDetailIdCopied => 'Post ID copied to clipboard';
+
+  @override
+  String get postDetailTagsLabel => 'Tags';
+
+  @override
+  String get postDetailSourcesLabel => 'Sources';
+
+  @override
+  String get postDetailParentLabel => 'Parent';
+
+  @override
+  String get postDetailChildrenLabel => 'Children';
+
+  @override
+  String get postDetailPoolsLabel => 'Pools';
+
+  @override
+  String get postDetailOpenPostFailed => 'Couldn\'t open that post';
+
+  @override
+  String get postDetailCreatePoolSearchDialogTitle => 'Add pool';
+
+  @override
+  String postDetailCreatePoolSearchDialogContent(int poolId) {
+    return 'This post belongs to pool $poolId, but there\'s no saved search for it yet. Create one?';
+  }
+
+  @override
   String get lockScreenMessage => 'LittleBunny is locked';
 
   @override
