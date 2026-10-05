@@ -711,6 +711,30 @@ this file is the single source of truth for "what's done" across sessions.
   `pumpWidget`) doesn't hit this since it isn't running inside the fake-async zone, which is
   why the gap wasn't visible until a widget test actually tapped the copy-id row.
 
+- [x] **M8.5.9 — Full-screen zoomable viewer**
+  New `photo_view` dependency, used exactly as originally planned (`PhotoViewGallery.builder`
+  for pinch-zoom + swipe-between-posts together). New
+  `app/lib/screens/full_screen_post_viewer_screen.dart`: a `Scaffold` wrapping
+  `PhotoViewGallery.builder` over a caller-supplied `posts`/`initialIndex`, with its own
+  `PageController` and an `onPageChanged` that calls `repository.markPostSeen` for whichever
+  post the gallery just scrolled onto. `PostDetailScreen` gained an optional `siblingPosts`
+  constructor parameter (`null` by default, e.g. when opened standalone via a parent/child/pool
+  chip — falls back to a single-post gallery of just the current post); `PostGridScreen` now
+  passes its currently loaded `posts` list through on every tile tap. Tapping the detail
+  screen's own image media (not video — videos keep the existing in-place player and never
+  route here) filters `siblingPosts` down to image-extension posts, finds the current post's
+  position in that filtered list, and pushes the full-screen viewer at that index. Because
+  `PostDetailScreen` already imports `post_grid_screen.dart` (for pool-chip navigation, M8.5.8)
+  and `PostGridScreen` already imports `post_detail_screen.dart` (to open a tapped tile), this
+  is simply one more screen in that same mutual-import pair — Dart has no cycle restriction
+  between library files, so no extraction was needed. Widget tests cover the initial
+  page/index and that swiping fires `markPostSeen` for the newly-visible post only (spied via
+  `FakeBunnyRepository.postsBySearchId`'s in-place mutation, same pattern every other
+  `markPostSeen` test in this suite already uses) — `pumpAndSettle()` after the drag timed out
+  (`PhotoViewGallery`'s internal scale/gesture animations don't fully quiesce within its
+  retry budget), so the test uses an explicit `pump()` + fixed-duration `pump()` instead, the
+  same workaround pattern already used for `SnackBar`-involving tests in this suite.
+
 - [ ] **M9 — Actions & downloads**
   Single + mass like/favorite/download, commenting, download manager writing to
   `%artist%/%id%.%extension%`, checksum (md5) verification of downloaded files against the

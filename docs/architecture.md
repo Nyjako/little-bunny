@@ -1097,6 +1097,47 @@ hit this, since it isn't running inside `TestWidgetsFlutterBinding`'s fake-async
 discrepancy is exactly why this went unnoticed until a widget test actually exercised the
 copy-id tap.
 
+**Full-screen zoomable viewer (M8.5.8's intended follow-up, M8.5.9)**: no backend/FFI/server
+changes -- this is purely a new Flutter screen plus a routing change into it. `photo_view`'s
+`PhotoViewGallery.builder` was picked (over hand-rolling `InteractiveViewer` + `PageView`)
+specifically because it bundles pinch-zoom-per-page and swipe-between-pages together, which is
+exactly M8.5's original decision record for this sub-milestone. `FullScreenPostViewerScreen`
+owns its own `PageController` so it can both seed the gallery's starting page (`initialPage:
+initialIndex`) and observe page changes via `onPageChanged`, calling `repository.markPostSeen`
+for whichever post the user just swiped onto -- the same "mark seen as the user actually looks
+at it" principle `PostDetailScreen.initState` already applies on open, just re-triggered per
+swipe instead of once per screen push.
+
+Wiring this in required `PostDetailScreen` to know its siblings, which it didn't before --
+previously it only ever received a single `BunnyPost`. Rather than making this required (which
+would break the parent/child/pool-chip navigation path added in M8.5.8, where there genuinely
+is no sibling list -- just one post fetched standalone), `siblingPosts` is an optional
+constructor parameter defaulting to `null`, with the detail screen falling back to a
+single-element list of just the current post. This keeps `FullScreenPostViewerScreen`'s own
+contract simple (it always receives a non-empty, already-filtered list) without forcing every
+caller to fabricate a fake sibling list. The media tap handler does the filtering --
+`(siblingPosts ?? [post]).where(_isImage)` -- rather than pre-filtering at the call site in
+`PostGridScreen`, so that a grid's mixed image/video post list can be handed through unchanged
+and each `PostDetailScreen` instance decides for itself, based on `post.fileExt`, whether it's
+even eligible to open the gallery at all (video posts never attach the tap handler in the
+first place).
+
+This is the first sub-milestone where `PostDetailScreen` and `PostGridScreen` import each
+other in both directions (`PostDetailScreen` already pulled in `post_grid_screen.dart` for
+M8.5.8's pool-chip navigation; `PostGridScreen` has always imported `post_detail_screen.dart`
+to open a tapped tile) -- confirmed this compiles and analyzes cleanly with no cycle-breaking
+needed, since Dart resolves mutual library imports structurally rather than rejecting them
+like some languages do with circular module graphs.
+
+**Test gotcha**: a widget test that drags `PhotoViewGallery` to trigger a page change can't
+follow up with `pumpAndSettle()` -- it times out, because `photo_view`'s internal scale/gesture
+animation controllers apparently never fully quiesce within `pumpAndSettle`'s retry budget in
+a test environment. Worked around with an explicit `pump()` followed by a fixed-duration
+`pump(Duration(milliseconds: 500))` instead, the same shape already used elsewhere in this
+suite for `SnackBar`-involving assertions that can't use `pumpAndSettle` either (that one for a
+different reason -- the `SnackBar`'s own auto-dismiss duration would've fully elapsed by the
+time `pumpAndSettle` considers the tree idle).
+
 ## Inkbunny API constraints (found in M2)
 
 Verified against the live API and the official docs while building `libinkbunny`:

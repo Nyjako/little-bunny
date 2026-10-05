@@ -90,8 +90,8 @@ class _PostGridScreenState extends State<PostGridScreen> {
     });
   }
 
-  Future<void> _openPost(BunnyPost post) async {
-    await Navigator.push(context, MaterialPageRoute(builder: (context) => PostDetailScreen(post: post, repository: widget.repository, displaySettingsStore: widget.displaySettingsStore)));
+  Future<void> _openPost(List<BunnyPost> posts, BunnyPost post) async {
+    await Navigator.push(context, MaterialPageRoute(builder: (context) => PostDetailScreen(post: post, repository: widget.repository, displaySettingsStore: widget.displaySettingsStore, siblingPosts: posts)));
     if (!mounted) {
       return;
     }
@@ -137,7 +137,7 @@ class _PostGridScreenState extends State<PostGridScreen> {
               final imageUrl = _imageUrlFor(post);
               return GestureDetector(
                 key: ValueKey(post.id),
-                onTap: () => _openPost(post),
+                onTap: () => _openPost(posts, post),
                 child: Stack(
                   fit: StackFit.expand,
                   children: [
