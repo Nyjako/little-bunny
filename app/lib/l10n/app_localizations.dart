@@ -526,6 +526,30 @@ abstract class AppLocalizations {
   /// **'This post belongs to pool {poolId}, but there\'s no saved search for it yet. Create one?'**
   String postDetailCreatePoolSearchDialogContent(int poolId);
 
+  /// No description provided for @postDetailFavoriteAddTooltip.
+  ///
+  /// In en, this message translates to:
+  /// **'Add to favorites'**
+  String get postDetailFavoriteAddTooltip;
+
+  /// No description provided for @postDetailFavoriteRemoveTooltip.
+  ///
+  /// In en, this message translates to:
+  /// **'Remove from favorites'**
+  String get postDetailFavoriteRemoveTooltip;
+
+  /// No description provided for @postDetailUpvoteTooltip.
+  ///
+  /// In en, this message translates to:
+  /// **'Upvote'**
+  String get postDetailUpvoteTooltip;
+
+  /// No description provided for @postDetailDownvoteTooltip.
+  ///
+  /// In en, this message translates to:
+  /// **'Downvote'**
+  String get postDetailDownvoteTooltip;
+
   /// No description provided for @lockScreenMessage.
   ///
   /// In en, this message translates to:
