@@ -382,6 +382,36 @@ abstract class AppLocalizations {
   /// **'Mark all as seen'**
   String get postGridMarkAllSeen;
 
+  /// No description provided for @postGridSelectionCount.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} selected'**
+  String postGridSelectionCount(int count);
+
+  /// No description provided for @postGridExitSelectionTooltip.
+  ///
+  /// In en, this message translates to:
+  /// **'Cancel selection'**
+  String get postGridExitSelectionTooltip;
+
+  /// No description provided for @postGridMassFavoriteTooltip.
+  ///
+  /// In en, this message translates to:
+  /// **'Favorite selected'**
+  String get postGridMassFavoriteTooltip;
+
+  /// No description provided for @postGridMassUpvoteTooltip.
+  ///
+  /// In en, this message translates to:
+  /// **'Upvote selected'**
+  String get postGridMassUpvoteTooltip;
+
+  /// No description provided for @postGridMassDownvoteTooltip.
+  ///
+  /// In en, this message translates to:
+  /// **'Downvote selected'**
+  String get postGridMassDownvoteTooltip;
+
   /// No description provided for @tagBrowseEmptyState.
   ///
   /// In en, this message translates to:
