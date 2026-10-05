@@ -164,6 +164,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get postGridMarkAllSeen => 'Mark all as seen';
 
   @override
+  String get postGridSelectAll => 'Select all';
+
+  @override
   String postGridSelectionCount(int count) {
     return '$count selected';
   }
