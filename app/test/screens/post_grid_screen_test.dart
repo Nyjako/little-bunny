@@ -206,6 +206,22 @@ void main() {
     expect(find.descendant(of: tile, matching: find.text('34')), findsOneWidget);
   });
 
+  testWidgets('no selection indicator is shown before selection mode is entered', (WidgetTester tester) async {
+    // Regression test (M9.6.1): PostGridTile used to key the checkmark/circle
+    // overlay off onLongPress being non-null, but PostGridScreen always wires
+    // up onLongPress (so long-pressing can enter selection mode from normal
+    // browsing) -- the circle was visible on every tile well before M9.2's
+    // selection mode was ever active.
+    final repository = FakeBunnyRepository();
+    repository.postsBySearchId[1] = [_post(id: 1, isSeen: false)];
+
+    await tester.pumpWidget(wrapWithLocalization(PostGridScreen(search: search, repository: repository, displaySettingsStore: const DisplaySettingsStore(), syncSettingsStore: const SyncSettingsStore(), downloadSettingsStore: const DownloadSettingsStore())));
+    await tester.pumpAndSettle();
+
+    expect(find.byIcon(Icons.radio_button_unchecked), findsNothing);
+    expect(find.byIcon(Icons.check_circle), findsNothing);
+  });
+
   testWidgets('long-pressing a tile enters selection mode and selects it', (WidgetTester tester) async {
     final repository = FakeBunnyRepository();
     repository.postsBySearchId[1] = [_post(id: 1, isSeen: false), _post(id: 2, isSeen: false)];
