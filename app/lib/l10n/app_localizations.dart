@@ -783,6 +783,54 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Grid columns'**
   String get settingsGridColumnsLabel;
+
+  /// No description provided for @settingsDownloadsSection.
+  ///
+  /// In en, this message translates to:
+  /// **'Downloads'**
+  String get settingsDownloadsSection;
+
+  /// No description provided for @settingsDownloadsFolderLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Destination folder'**
+  String get settingsDownloadsFolderLabel;
+
+  /// No description provided for @settingsDownloadsFolderUnset.
+  ///
+  /// In en, this message translates to:
+  /// **'Not set'**
+  String get settingsDownloadsFolderUnset;
+
+  /// No description provided for @settingsDownloadsChooseFolderButton.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose folder'**
+  String get settingsDownloadsChooseFolderButton;
+
+  /// No description provided for @postDetailDownloadTooltip.
+  ///
+  /// In en, this message translates to:
+  /// **'Download'**
+  String get postDetailDownloadTooltip;
+
+  /// No description provided for @postDetailDownloadVerified.
+  ///
+  /// In en, this message translates to:
+  /// **'Downloaded and checksum verified'**
+  String get postDetailDownloadVerified;
+
+  /// No description provided for @postDetailDownloadMismatch.
+  ///
+  /// In en, this message translates to:
+  /// **'Downloaded, but the checksum didn\'t match'**
+  String get postDetailDownloadMismatch;
+
+  /// No description provided for @postDetailDownloadFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Download failed'**
+  String get postDetailDownloadFailed;
 }
 
 class _AppLocalizationsDelegate

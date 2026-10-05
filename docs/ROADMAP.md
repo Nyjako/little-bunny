@@ -871,6 +871,37 @@ this file is the single source of truth for "what's done" across sessions.
   post id), a server integration test extending the existing full-flow test, and FFI/HTTP
   repository tests.
 
+- [x] **M9.4 — Download manager: Flutter UI + settings**
+  New `file_picker` dependency (bumped to `^13.1.0` -- the originally-planned `^8.x` range
+  conflicts with the already-pinned `flutter_secure_storage`'s `win32` constraint). New
+  `app/lib/settings/download_settings_store.dart` (`destinationFolder`, nullable,
+  `shared_preferences`-backed like every other store) falls back to `getDownloadsDirectory()`
+  (`path_provider`) when unset, recomputed fresh each call. New `app/lib/services/
+  download_manager.dart` -- the first class in a new `services/` directory (pure logic, no
+  widget, reused identically by M9.5's mass download): `DownloadManager.downloadPost(post,
+  repository, destinationFolder)` HTTP-GETs `post.fileUrl`, writes the bytes to
+  `<destinationFolder>/<sanitized artist>/<externalId>.<fileExt>` (creating the directory
+  recursively first), computes an MD5 checksum and compares it against `post.fileMd5` when
+  present (a post with no published checksum is treated as verified -- nothing to contradict),
+  then calls `BunnyRepository.recordDownload` with the outcome. Returns one of
+  `DownloadOutcome.{noFileUrl, verified, checksumMismatch, failed}`.
+  `SettingsScreen` gained a "Downloads" section (current folder path + a "Choose folder"
+  button via `FilePicker.getDirectoryPath()`). `PostDetailScreen` gained a download
+  `IconButton` next to favorite/vote -- disabled when `post.fileUrl` is null (the
+  Inkbunny-search-sync gap M8.5.6 already documented), showing a progress spinner while in
+  flight, a checkmark icon when the post has prior download history (checked once via
+  `listDownloadsForPost` on open, same "not late final" pattern as the comments future so a
+  fresh download updates it), and a `SnackBar` reflecting the outcome. `downloadSettingsStore`
+  threads through every screen that can reach `PostDetailScreen` (`SearchesScreen` →
+  `PostGridScreen`/`TagBrowseScreen` → `PostDetailScreen`'s own internal navigation), matching
+  the established `displaySettingsStore`/`syncSettingsStore` convention; `DownloadManager`
+  itself needs no such threading since it has no required construction dependencies --
+  `PostDetailScreen` defaults it to `const DownloadManager()`, overridden in widget tests with
+  a fake HTTP client. Tests: `DownloadManager` unit tests (filename sanitization, checksum
+  match/mismatch, directory creation, a real temp directory per test) and widget tests for all
+  three button outcomes plus the already-downloaded state, via a `FakeBunnyRepository` and an
+  injected fake `DownloadManager`.
+
 - [ ] **M10 — Automation & recommendations**
   "Auto-like/auto-favorite on download" setting, most-liked/most-favorited tag stats,
   recommended new searches based on that history.

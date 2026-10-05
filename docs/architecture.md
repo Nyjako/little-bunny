@@ -1364,6 +1364,79 @@ mints sequential ids via a private `_nextDownloadId` counter and appends to a ne
 store a record, unlike the four M8.5.14/M9.1 queue fakes which only needed to record that a
 call happened.
 
+**Download manager: Flutter UI + settings (M9.4)**: the first sub-milestone to add a new
+top-level `app/lib/services/` directory, distinct from `screens/` and `widgets/` -- `services/
+download_manager.dart`'s `DownloadManager` is pure logic with no `build()` method and no
+widget lifecycle, used identically from both the single-post detail button here and the
+mass-download action M9.5 adds to the grid's contextual action bar. `DownloadOutcome` has four
+values (`noFileUrl`, `verified`, `checksumMismatch`, `failed`) rather than treating "verified"
+as a separate bool field -- a post with no published `fileMd5` at all is folded into
+`verified` (`expected == null || expected.toLowerCase() == checksum`), since there's nothing
+to contradict; this keeps the UI's three-way `switch` on outcome exhaustive without a
+redundant `noFileUrl` message (the button is disabled whenever `fileUrl` is null, so that
+branch is defensive-only, never actually reached through the UI).
+
+Adding `file_picker` surfaced a real dependency conflict: the plan's `^8.x` range requires
+`win32 ^5.x`, but `flutter_secure_storage ^11.2.0` (already pinned, M7.3) requires
+`flutter_secure_storage_windows ^4.2.2`, which requires `win32 ^6.0.1` -- incompatible ranges,
+confirmed by `flutter pub get`'s own version-solving error message, which directly suggested
+the fix (`file_picker ^13.1.0`, the next major compatible with the already-pinned chain).
+Resolved by bumping to `^13.1.0` rather than downgrading `flutter_secure_storage`, since the
+latter is load-bearing for M7.3's account credential storage and Windows isn't a build target
+this project verifies yet (M12's cross-compilation gap already covers that). `FilePicker.
+getDirectoryPath()` (file_picker 13's API) is a static method directly on `FilePicker`, not
+`FilePicker.platform.getDirectoryPath()` as in some older major versions -- caught immediately
+by `flutter analyze`.
+
+`downloadSettingsStore` threads through every screen on the path to `PostDetailScreen`
+(`main.dart` → `SearchesScreen` → `PostGridScreen`/`TagBrowseScreen` → `PostDetailScreen`'s own
+internal pool/parent/child/tag navigation back to itself), the same ripple pattern
+`displaySettingsStore`/`syncSettingsStore` caused in M8.5.6/M8.5.10 -- `flutter analyze` catches
+every missed call site as a `missing_required_argument` error, letting `sed` bulk-fix the
+uniform ones across test files and leaving only the handful with non-literal arguments (a named
+local variable instead of `const SyncSettingsStore()`) to fix by hand. `DownloadManager` itself
+is *not* threaded this way despite living next to these stores -- it has no required
+construction dependencies (no settings to load, no shared state), so `PostDetailScreen` simply
+defaults it to `const DownloadManager()`, with widget tests overriding it via the constructor
+to inject a fake `http.Client`.
+
+**Test gotcha, ListView cache-extent cutoff**: adding the whole new "Downloads" section to
+`SettingsScreen` pushed the existing "Manage app lock" `ListTile` far enough down the page that
+an existing, previously-passing widget test (`tapping the app lock entry opens LockSetupScreen`)
+started failing with `find.text` reporting zero matches -- not merely invisible, genuinely
+**not built**. Flutter's `ListView(children: [...])` is still a sliver under the hood; even
+though the child widgets are supplied as a concrete list (not a lazy `.builder` callback), the
+sliver protocol only materializes `Element`s for children within the viewport plus a fixed
+cache extent (~250 logical pixels by default) -- a child further down than that is never added
+to the tree at all, so no amount of `ensureVisible`/`scrollUntilVisible` can find it first (both
+require the element to already exist to compute its scroll offset). A debug test dumping every
+built `Text` widget confirmed this directly: the "App lock" section header rendered, but its
+own `ListTile`'s title text one widget below it did not. Fixed with `tester.dragUntilVisible`,
+which scrolls incrementally and re-checks the finder after each scroll step (so the element
+gets built once it enters the cache range) rather than requiring it to already exist.
+
+**Test gotcha, real `dart:io` I/O inside `testWidgets`**: `DownloadManager`'s unit tests (plain
+`test()`, no widget involved) pass real file I/O (`Directory.create`, `File.writeAsBytes`) to a
+real `Directory.systemTemp` without issue. The same calls triggered indirectly through a
+`PostDetailScreen` widget test (tapping the download button) hang **indefinitely** --
+`pumpAndSettle` eventually times out with no further diagnostic. `WidgetTester.pump()`/
+`pumpAndSettle()` drain Flutter's own frame-scheduling microtasks but do not drive the real
+OS-level event loop that genuine asynchronous `dart:io` operations complete through; a bare
+`await tester.pump()` after a tap that kicks off real file I/O never actually lets that I/O's
+completion callback run, so the awaited `Future` inside the widget's state never resolves and
+no further frames are ever scheduled -- indistinguishable from a true deadlock from the test's
+perspective. The fix is `tester.runAsync(() async { ... })`, which temporarily hands control to
+the real zone/event loop for the duration of its callback; wrapping the tap *and* a short
+explicit `Future.delayed` *and* an interior `pump()` inside one `runAsync` block (rather than
+calling `runAsync` for the delay alone, after the tap) is what actually let the pending real I/O
+progress -- the tap must be issued from inside the same `runAsync` callback it needs real-async
+time to complete within, not before entering it. An additional plain `tester.pump()` after the
+`runAsync` block was still needed to let the `FutureBuilder` watching `_downloadsFuture` (which
+`DownloadManager` success paths reassign to show the already-downloaded icon) rebuild with the
+newly-resolved data. `MockClient` (from `package:http/testing.dart`) needed none of this --
+being a pure in-memory fake with no real I/O, it resolves on ordinary microtasks like everything
+else in a standard widget test.
+
 ## Inkbunny API constraints (found in M2)
 
 Verified against the live API and the official docs while building `libinkbunny`:

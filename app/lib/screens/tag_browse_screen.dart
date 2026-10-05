@@ -4,6 +4,7 @@ import '../l10n/app_localizations.dart';
 import '../repository/bunny_models.dart';
 import '../repository/bunny_repository.dart';
 import '../settings/display_settings_store.dart';
+import '../settings/download_settings_store.dart';
 import '../settings/sync_settings_store.dart';
 import '../widgets/post_grid_tile.dart';
 import 'create_search_screen.dart';
@@ -20,8 +21,17 @@ class TagBrowseScreen extends StatefulWidget {
   final BunnyRepository repository;
   final DisplaySettingsStore displaySettingsStore;
   final SyncSettingsStore syncSettingsStore;
+  final DownloadSettingsStore downloadSettingsStore;
 
-  const TagBrowseScreen({super.key, required this.site, required this.query, required this.repository, required this.displaySettingsStore, required this.syncSettingsStore});
+  const TagBrowseScreen({
+    super.key,
+    required this.site,
+    required this.query,
+    required this.repository,
+    required this.displaySettingsStore,
+    required this.syncSettingsStore,
+    required this.downloadSettingsStore,
+  });
 
   @override
   State<TagBrowseScreen> createState() => _TagBrowseScreenState();
@@ -59,7 +69,19 @@ class _TagBrowseScreenState extends State<TagBrowseScreen> {
   }
 
   Future<void> _openPost(List<BunnyPost> posts, BunnyPost post) async {
-    await Navigator.push(context, MaterialPageRoute(builder: (context) => PostDetailScreen(post: post, repository: widget.repository, displaySettingsStore: widget.displaySettingsStore, syncSettingsStore: widget.syncSettingsStore, siblingPosts: posts)));
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => PostDetailScreen(
+          post: post,
+          repository: widget.repository,
+          displaySettingsStore: widget.displaySettingsStore,
+          syncSettingsStore: widget.syncSettingsStore,
+          downloadSettingsStore: widget.downloadSettingsStore,
+          siblingPosts: posts,
+        ),
+      ),
+    );
   }
 
   Future<void> _addToSearches() async {
