@@ -370,9 +370,17 @@ void main() {
 
       expect(capturedMethod, 'POST');
       expect(capturedUri.path, '/search/preview');
-      expect(capturedUri.queryParameters, {'site': 'e621', 'query': 'someartist'});
+      expect(capturedUri.queryParameters, {'site': 'e621', 'query': 'someartist', 'page': '1'});
       expect(posts, hasLength(1));
       expect(posts.single.externalId, 7);
+    });
+
+    test('previewSearch sends the given page number', () async {
+      respond = (_) => http.Response(jsonEncode(<Object?>[]), 200);
+
+      await buildRepository().previewSearch(BunnySite.e621, 'someartist', page: 3);
+
+      expect(capturedUri.queryParameters, {'site': 'e621', 'query': 'someartist', 'page': '3'});
     });
 
     test('getPostComments sends GET to the right path and maps the response', () async {

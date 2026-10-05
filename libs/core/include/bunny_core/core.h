@@ -148,12 +148,13 @@ void bunny_core_pool_info_free(bunny_core_pool_info_t *info);
 
 bunny_core_result_t bunny_core_fetch_pool(bunny_core_t *core, int64_t pool_id, bunny_core_pool_info_t *out_info);
 
-/* Runs a single page of `query` live against `site` and upserts whatever
- * comes back into the local post cache (so thumbnails/ids are immediately
- * usable), *without* creating a searches/search_results row -- a stateless
- * "fetch and cache posts matching this query" call, used for the tag/artist
- * click-through browse screen rather than a saved search. */
-bunny_core_result_t bunny_core_preview_search(bunny_core_t *core, bunny_db_site_t site, const char *query, bunny_db_post_list_t *out_list);
+/* Runs a single page (1-indexed) of `query` live against `site` and upserts
+ * whatever comes back into the local post cache (so thumbnails/ids are
+ * immediately usable), *without* creating a searches/search_results row -- a
+ * stateless "fetch and cache posts matching this query" call, used for the
+ * tag/artist click-through browse screen's infinite scroll rather than a
+ * saved search. Returns BUNNY_CORE_ERR_INVALID_ARG for page < 1. */
+bunny_core_result_t bunny_core_preview_search(bunny_core_t *core, bunny_db_site_t site, const char *query, int page, bunny_db_post_list_t *out_list);
 
 /* A post's existing comments, fetched live (e621 only -- no persistence, no
  * equivalent on Inkbunny, same reasoning as bunny_core_pool_info_t above).

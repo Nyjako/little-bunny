@@ -965,19 +965,21 @@ class BunnyCoreFfiBindings {
         )
       >();
 
-  /// Runs a single page of `query` live against `site` and upserts whatever
-  /// comes back into the local post cache (so thumbnails/ids are immediately
-  /// usable), *without* creating a searches/search_results row -- a stateless
-  /// "fetch and cache posts matching this query" call, used for the tag/artist
-  /// click-through browse screen rather than a saved search.
+  /// Runs a single page (1-indexed) of `query` live against `site` and upserts
+  /// whatever comes back into the local post cache (so thumbnails/ids are
+  /// immediately usable), *without* creating a searches/search_results row -- a
+  /// stateless "fetch and cache posts matching this query" call, used for the
+  /// tag/artist click-through browse screen's infinite scroll rather than a
+  /// saved search. Returns BUNNY_CORE_ERR_INVALID_ARG for page < 1.
   bunny_core_result_t bunny_core_preview_search(
     ffi.Pointer<bunny_core_t> core,
     bunny_db_site_t site,
     ffi.Pointer<ffi.Char> query,
+    int page,
     ffi.Pointer<bunny_db_post_list_t> out_list,
   ) {
     return bunny_core_result_t.fromValue(
-      _bunny_core_preview_search(core, site.value, query, out_list),
+      _bunny_core_preview_search(core, site.value, query, page, out_list),
     );
   }
 
@@ -988,6 +990,7 @@ class BunnyCoreFfiBindings {
             ffi.Pointer<bunny_core_t>,
             ffi.UnsignedInt,
             ffi.Pointer<ffi.Char>,
+            ffi.Int,
             ffi.Pointer<bunny_db_post_list_t>,
           )
         >
@@ -998,6 +1001,7 @@ class BunnyCoreFfiBindings {
           ffi.Pointer<bunny_core_t>,
           int,
           ffi.Pointer<ffi.Char>,
+          int,
           ffi.Pointer<bunny_db_post_list_t>,
         )
       >();

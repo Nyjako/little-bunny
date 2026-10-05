@@ -321,8 +321,8 @@ class HttpBunnyRepository implements BunnyRepository {
   }
 
   @override
-  Future<List<BunnyPost>> previewSearch(BunnySite site, String query) async {
-    final response = await _client.post(_uri('/search/preview', {'site': site.toWireString(), 'query': query}), headers: _headers);
+  Future<List<BunnyPost>> previewSearch(BunnySite site, String query, {int page = 1}) async {
+    final response = await _client.post(_uri('/search/preview', {'site': site.toWireString(), 'query': query, 'page': '$page'}), headers: _headers);
     if (response.statusCode != 200) {
       _throwError(response);
     }

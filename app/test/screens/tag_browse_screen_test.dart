@@ -54,7 +54,7 @@ void main() {
 
   testWidgets('renders a tile per previewed post and opens it on tap', (WidgetTester tester) async {
     final repository = FakeBunnyRepository();
-    repository.previewSearchResults['e621:someartist'] = [_post(1), _post(2)];
+    repository.previewSearchResults['e621:someartist:1'] = [_post(1), _post(2)];
 
     await tester.pumpWidget(wrap(repository));
     await tester.pumpAndSettle();
@@ -73,9 +73,47 @@ void main() {
     expect(find.byType(PostDetailScreen), findsOneWidget);
   });
 
+  testWidgets('scrolling near the bottom requests and appends the next page', (WidgetTester tester) async {
+    final repository = FakeBunnyRepository();
+    repository.previewSearchResults['e621:someartist:1'] = List.generate(30, (i) => _post(i + 1));
+    repository.previewSearchResults['e621:someartist:2'] = [_post(31), _post(32)];
+
+    await tester.pumpWidget(wrap(repository));
+    await tester.pumpAndSettle();
+
+    expect(repository.previewSearchCalls, [(BunnySite.e621, 'someartist', 1)]);
+
+    // A bounded drag (rather than an enormous one) keeps the scroll position
+    // at the grid's real bottom without overshooting past it -- a huge jump
+    // can push earlier tiles outside the GridView's build+cache range,
+    // making key-based finders unreliable for assertions made afterward.
+    await tester.drag(find.byType(GridView), const Offset(0, -5000));
+    await tester.pumpAndSettle();
+
+    expect(repository.previewSearchCalls, contains((BunnySite.e621, 'someartist', 2)));
+  });
+
+  testWidgets('a short/empty page stops further loading', (WidgetTester tester) async {
+    final repository = FakeBunnyRepository();
+    repository.previewSearchResults['e621:someartist:1'] = List.generate(30, (i) => _post(i + 1));
+    // No entry for page 2 -- previewSearch returns an empty list for it.
+
+    await tester.pumpWidget(wrap(repository));
+    await tester.pumpAndSettle();
+
+    await tester.drag(find.byType(GridView), const Offset(0, -5000));
+    await tester.pumpAndSettle();
+    await tester.drag(find.byType(GridView), const Offset(0, -5000));
+    await tester.pumpAndSettle();
+
+    // Only ever asked for page 2 once -- an empty page flips _hasMore to
+    // false, so further scroll-triggered loads are skipped entirely.
+    expect(repository.previewSearchCalls.where((call) => call.$3 == 2), hasLength(1));
+  });
+
   testWidgets('add-to-searches action opens a pre-filled CreateSearchScreen', (WidgetTester tester) async {
     final repository = FakeBunnyRepository();
-    repository.previewSearchResults['e621:someartist'] = [_post(1)];
+    repository.previewSearchResults['e621:someartist:1'] = [_post(1)];
 
     await tester.pumpWidget(wrap(repository));
     await tester.pumpAndSettle();

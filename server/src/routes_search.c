@@ -52,17 +52,24 @@ static int handle_preview_search(struct mg_connection *conn, server_context_t *c
 {
     char site_value[16];
     char query_value[1024];
+    char page_value[16];
     bool has_site = query_string && mg_get_var(query_string, strlen(query_string), "site", site_value, sizeof(site_value)) > 0;
     bool has_query = query_string && mg_get_var(query_string, strlen(query_string), "query", query_value, sizeof(query_value)) > 0;
+    bool has_page = query_string && mg_get_var(query_string, strlen(query_string), "page", page_value, sizeof(page_value)) > 0;
 
     bunny_db_site_t site;
     if (!has_site || !server_route_parse_site(site_value, &site) || !has_query) {
         return server_json_respond_error(conn, BUNNY_CORE_ERR_INVALID_ARG);
     }
 
+    int64_t page = 1;
+    if (has_page && !server_route_parse_id(page_value, &page)) {
+        return server_json_respond_error(conn, BUNNY_CORE_ERR_INVALID_ARG);
+    }
+
     bunny_db_post_list_t posts;
     pthread_mutex_lock(&ctx->core_mutex);
-    bunny_core_result_t result = bunny_core_preview_search(ctx->core, site, query_value, &posts);
+    bunny_core_result_t result = bunny_core_preview_search(ctx->core, site, query_value, (int)page, &posts);
     pthread_mutex_unlock(&ctx->core_mutex);
 
     if (result != BUNNY_CORE_OK) {

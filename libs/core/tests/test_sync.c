@@ -39,6 +39,8 @@ static bunny_http_result_t fake_send(void *user_data, const bunny_http_request_t
 static char g_captured_user_agent[256];
 static bool g_captured_user_agent_found;
 
+static char g_captured_url[512];
+
 static bunny_http_result_t capturing_fake_send(void *user_data, const bunny_http_request_t *request, bunny_http_response_t *out_response)
 {
     for (size_t i = 0; i < request->header_count; i++) {
@@ -47,6 +49,7 @@ static bunny_http_result_t capturing_fake_send(void *user_data, const bunny_http
             g_captured_user_agent_found = true;
         }
     }
+    snprintf(g_captured_url, sizeof(g_captured_url), "%s", request->url);
     return fake_send(user_data, request, out_response);
 }
 
@@ -423,7 +426,7 @@ void test_preview_search_upserts_posts_without_creating_a_search(void)
     g_e621_state.body_count = 1;
 
     bunny_db_post_list_t posts;
-    bunny_core_result_t result = bunny_core_preview_search(g_core, BUNNY_DB_SITE_E621, "wolf", &posts);
+    bunny_core_result_t result = bunny_core_preview_search(g_core, BUNNY_DB_SITE_E621, "wolf", 1, &posts);
     TEST_ASSERT_EQUAL(BUNNY_CORE_OK, result);
     TEST_ASSERT_EQUAL(1, (int)posts.count);
     TEST_ASSERT_EQUAL(1, posts.items[0].external_id);
@@ -441,6 +444,53 @@ void test_preview_search_upserts_posts_without_creating_a_search(void)
     free(fixture);
 }
 
+void test_preview_search_requests_the_given_e621_page(void)
+{
+    g_e621_transport.send = capturing_fake_send;
+
+    char *fixture = read_fixture("e621_posts_search.json");
+    TEST_ASSERT_NOT_NULL(fixture);
+    g_e621_state.bodies[0] = fixture;
+    g_e621_state.body_count = 1;
+
+    bunny_db_post_list_t posts;
+    bunny_core_result_t result = bunny_core_preview_search(g_core, BUNNY_DB_SITE_E621, "wolf", 3, &posts);
+    TEST_ASSERT_EQUAL(BUNNY_CORE_OK, result);
+    bunny_db_post_list_free(&posts);
+    free(fixture);
+
+    TEST_ASSERT_NOT_NULL(strstr(g_captured_url, "page=3"));
+}
+
+void test_preview_search_requests_the_given_inkbunny_page(void)
+{
+    g_inkbunny_transport.send = capturing_fake_send;
+
+    char *login_fixture = read_fixture("inkbunny_login_success.json");
+    char *search_fixture = read_fixture("inkbunny_search_response.json");
+    TEST_ASSERT_NOT_NULL(login_fixture);
+    TEST_ASSERT_NOT_NULL(search_fixture);
+    g_inkbunny_state.bodies[0] = login_fixture;
+    g_inkbunny_state.bodies[1] = search_fixture;
+    g_inkbunny_state.body_count = 2;
+
+    bunny_db_post_list_t posts;
+    bunny_core_result_t result = bunny_core_preview_search(g_core, BUNNY_DB_SITE_INKBUNNY, "tribute", 2, &posts);
+    TEST_ASSERT_EQUAL(BUNNY_CORE_OK, result);
+    bunny_db_post_list_free(&posts);
+    free(login_fixture);
+    free(search_fixture);
+
+    TEST_ASSERT_NOT_NULL(strstr(g_captured_url, "page=2"));
+}
+
+void test_preview_search_rejects_a_page_below_one(void)
+{
+    bunny_db_post_list_t posts;
+    bunny_core_result_t result = bunny_core_preview_search(g_core, BUNNY_DB_SITE_E621, "wolf", 0, &posts);
+    TEST_ASSERT_EQUAL(BUNNY_CORE_ERR_INVALID_ARG, result);
+}
+
 void test_e621_requests_use_the_bare_user_agent_without_an_account(void)
 {
     g_captured_user_agent_found = false;
@@ -452,7 +502,7 @@ void test_e621_requests_use_the_bare_user_agent_without_an_account(void)
     g_e621_state.body_count = 1;
 
     bunny_db_post_list_t posts;
-    bunny_core_result_t result = bunny_core_preview_search(g_core, BUNNY_DB_SITE_E621, "wolf", &posts);
+    bunny_core_result_t result = bunny_core_preview_search(g_core, BUNNY_DB_SITE_E621, "wolf", 1, &posts);
     TEST_ASSERT_EQUAL(BUNNY_CORE_OK, result);
     bunny_db_post_list_free(&posts);
     free(fixture);
@@ -473,7 +523,7 @@ void test_e621_requests_include_the_configured_username_in_the_user_agent(void)
     g_e621_state.body_count = 1;
 
     bunny_db_post_list_t posts;
-    bunny_core_result_t result = bunny_core_preview_search(g_core, BUNNY_DB_SITE_E621, "wolf", &posts);
+    bunny_core_result_t result = bunny_core_preview_search(g_core, BUNNY_DB_SITE_E621, "wolf", 1, &posts);
     TEST_ASSERT_EQUAL(BUNNY_CORE_OK, result);
     bunny_db_post_list_free(&posts);
     free(fixture);
@@ -770,6 +820,9 @@ int main(void)
     RUN_TEST(test_list_comments_rejects_inkbunny_posts);
     RUN_TEST(test_fetch_pool_returns_live_pool_info);
     RUN_TEST(test_preview_search_upserts_posts_without_creating_a_search);
+    RUN_TEST(test_preview_search_requests_the_given_e621_page);
+    RUN_TEST(test_preview_search_requests_the_given_inkbunny_page);
+    RUN_TEST(test_preview_search_rejects_a_page_below_one);
     RUN_TEST(test_e621_requests_use_the_bare_user_agent_without_an_account);
     RUN_TEST(test_e621_requests_include_the_configured_username_in_the_user_agent);
     RUN_TEST(test_sync_e621_search_fetches_a_second_page_when_the_first_is_full);
