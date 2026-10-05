@@ -1600,6 +1600,26 @@ rework anyway), the test was adjusted to pump 600px instead -- still comfortably
 720px wide-screen breakpoint this sub-milestone cares about, but above the width where the
 unrelated bug triggers.
 
+**Tag autocomplete token isolation (M9.6.7)**: `CreateSearchScreen`'s `_currentWord` getter
+(now removed) computed `text.lastIndexOf(' ')` against the *entire* query string every time,
+which only ever matches the trailing word -- correct for the common case of typing straight
+through, but wrong the moment the user edits an earlier tag, and unaware of e621's own
+single-character search-syntax prefixes (`-tag` negation, `~tag` "or", `(tag` grouping). Rather
+than growing that logic in place, it moved into `app/lib/util/tag_query.dart` as four small
+pure functions with no `BuildContext`/widget dependency, each independently testable:
+`tagTokenRangeAt` walks outward from `TextEditingController.selection`'s cursor offset to the
+nearest whitespace on either side (not the end of the string), `splitTagPrefix` peels off a
+leading run of `-`/`~`/`(` characters, `tagHasWildcard` flags a `*` anywhere in the remaining
+tag text, and `applyTagSuggestion` composes the first two to splice a chosen suggestion back
+into exactly the token under the cursor. `CreateSearchScreen` itself shrank to a thin
+`_cursorOffset` getter plus calls into these functions from `_onQueryChanged`/
+`_applySuggestion` -- no behavior change for the plain trailing-tag case every existing test
+already covered, since `TextField`/`enterText` leaves the cursor at the string's end, which is
+exactly what the old last-space logic assumed unconditionally. Per the user's confirmed scope,
+there's no real parser for balanced parenthesized boolean groups (e.g.
+`( ~cat ~tiger ) ( ~dog ~wolf )`) -- `(` is treated purely as one more prefix character on
+whatever token it's attached to, same as `-`/`~`.
+
 ## Inkbunny API constraints (found in M2)
 
 Verified against the live API and the official docs while building `libinkbunny`:
