@@ -18,6 +18,7 @@ class FakeBunnyRepository implements BunnyRepository {
   final Map<int, List<String>> sourcesByPostId = {};
   final Map<int, BunnyPostRelationships> relationshipsByPostId = {};
   final Map<int, List<int>> poolIdsByPostId = {};
+  final Map<int, List<BunnyComment>> commentsByPostId = {};
 
   /// Keyed by `'${site.toWireString()}:$externalId'` -- the post id
   /// [fetchPost] returns for that (site, externalId) pair.
@@ -198,6 +199,9 @@ class FakeBunnyRepository implements BunnyRepository {
   Future<List<BunnyPost>> previewSearch(BunnySite site, String query) async => List.of(previewSearchResults['${site.toWireString()}:$query'] ?? const []);
 
   @override
+  Future<List<BunnyComment>> getPostComments(int postId) async => List.of(commentsByPostId[postId] ?? const []);
+
+  @override
   Future<BunnySyncStats> syncDueSearches() async {
     syncCallCount++;
     return const BunnySyncStats(searchesChecked: 0, searchesSynced: 0, postsUpserted: 0);
@@ -211,6 +215,9 @@ class FakeBunnyRepository implements BunnyRepository {
 
   /// Each entry is the `(postId, score)` passed to [queueVote].
   final List<(int, int)> voteCalls = [];
+
+  /// Each entry is the `(postId, body, anonymous)` passed to [queueComment].
+  final List<(int, String, bool)> queueCommentCalls = [];
   int processQueueCallCount = 0;
 
   @override
@@ -229,7 +236,9 @@ class FakeBunnyRepository implements BunnyRepository {
   }
 
   @override
-  Future<void> queueComment(int postId, String body, {bool anonymous = false}) => throw UnimplementedError();
+  Future<void> queueComment(int postId, String body, {bool anonymous = false}) async {
+    queueCommentCalls.add((postId, body, anonymous));
+  }
 
   @override
   Future<BunnyQueueStats> processQueue() async {

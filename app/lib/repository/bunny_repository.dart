@@ -113,6 +113,14 @@ abstract interface class BunnyRepository {
   /// shows results for a query the user hasn't (yet) chosen to save.
   Future<List<BunnyPost>> previewSearch(BunnySite site, String query);
 
+  /// A post's existing comments, fetched live (e621 only -- Inkbunny has no
+  /// comment concept at all, so this throws [BunnyRepositoryException] for
+  /// an Inkbunny post; callers must gate on [BunnyPost.site] themselves, same
+  /// as every other e621-only method here). Used to populate the detail
+  /// screen's comments section; posting a new one via [queueComment] then
+  /// re-calling this is how the new comment appears.
+  Future<List<BunnyComment>> getPostComments(int postId);
+
   /// Manually triggers a sync pass (runs every due search). The server also
   /// does this on its own schedule (M5.3); this is for an explicit
   /// "refresh now" action.
