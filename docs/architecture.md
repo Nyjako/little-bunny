@@ -1437,6 +1437,24 @@ newly-resolved data. `MockClient` (from `package:http/testing.dart`) needed none
 being a pure in-memory fake with no real I/O, it resolves on ordinary microtasks like everything
 else in a standard widget test.
 
+**Mass download (M9.5, completes M9)**: pure wiring, no new backend or service logic -- loops
+the same `DownloadManager.downloadPost` M9.4 already built over every post in `PostGridScreen`'s
+selection, sequentially (explicitly not parallelized; a personal-use app's download volume
+doesn't justify a parallel queue, and the sequential loop already gives a natural progress
+counter for free). `PostGridScreen` picks up its own `downloadManager` field with the identical
+`const DownloadManager()` default and test-injection story as `PostDetailScreen`'s. The
+contextual app bar's title swaps between "N selected" and a live "`done`/`total` downloaded"
+string based on a single `(int, int)?` record field (`_massDownloadProgress`, null when idle) --
+a record type rather than two separate nullable ints, since "has progress" and "has a total"
+are never independently true/false. A nonexistent/unconfigured destination folder is reported
+as every selected post failing (same simplification `PostDetailScreen`'s own download button
+uses for the single-post case) rather than a distinct "no folder configured" message, keeping
+the outcome tally exhaustive over exactly the three buckets the summary `SnackBar` reports.
+Because `_massDownload` needs each selected id's full `BunnyPost` (file URL, artist, md5, ext)
+rather than just the id `_massFavorite`/`_massVote` are content with, it awaits the grid's
+current `_postsFuture` directly rather than threading posts through as a parameter -- the same
+list already backing the `GridView.builder`, so no extra fetch.
+
 ## Inkbunny API constraints (found in M2)
 
 Verified against the live API and the official docs while building `libinkbunny`:

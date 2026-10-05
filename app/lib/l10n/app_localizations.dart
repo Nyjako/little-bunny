@@ -412,6 +412,24 @@ abstract class AppLocalizations {
   /// **'Downvote selected'**
   String get postGridMassDownvoteTooltip;
 
+  /// No description provided for @postGridMassDownloadTooltip.
+  ///
+  /// In en, this message translates to:
+  /// **'Download selected'**
+  String get postGridMassDownloadTooltip;
+
+  /// No description provided for @postGridMassDownloadProgress.
+  ///
+  /// In en, this message translates to:
+  /// **'{done}/{total} downloaded'**
+  String postGridMassDownloadProgress(int done, int total);
+
+  /// No description provided for @postGridMassDownloadSummary.
+  ///
+  /// In en, this message translates to:
+  /// **'{succeeded} downloaded, {mismatched} checksum mismatch, {failed} failed'**
+  String postGridMassDownloadSummary(int succeeded, int mismatched, int failed);
+
   /// No description provided for @tagBrowseEmptyState.
   ///
   /// In en, this message translates to:

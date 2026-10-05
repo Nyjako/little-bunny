@@ -181,6 +181,23 @@ class AppLocalizationsEn extends AppLocalizations {
   String get postGridMassDownvoteTooltip => 'Downvote selected';
 
   @override
+  String get postGridMassDownloadTooltip => 'Download selected';
+
+  @override
+  String postGridMassDownloadProgress(int done, int total) {
+    return '$done/$total downloaded';
+  }
+
+  @override
+  String postGridMassDownloadSummary(
+    int succeeded,
+    int mismatched,
+    int failed,
+  ) {
+    return '$succeeded downloaded, $mismatched checksum mismatch, $failed failed';
+  }
+
+  @override
   String get tagBrowseEmptyState => 'No posts found for this search.';
 
   @override
