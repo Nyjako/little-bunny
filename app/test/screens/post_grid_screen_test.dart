@@ -59,6 +59,25 @@ void main() {
     expect(find.text('No posts cached yet. Tap refresh to sync.'), findsOneWidget);
   });
 
+  testWidgets('app bar shrinks on wide windows (M9.6.6)', (WidgetTester tester) async {
+    final repository = FakeBunnyRepository();
+    final screen = PostGridScreen(search: search, repository: repository, displaySettingsStore: const DisplaySettingsStore(), syncSettingsStore: const SyncSettingsStore(), downloadSettingsStore: const DownloadSettingsStore());
+
+    tester.view.physicalSize = const Size(400, 800);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+    await tester.pumpWidget(wrapWithLocalization(screen));
+    await tester.pumpAndSettle();
+    final narrowHeight = tester.widget<AppBar>(find.byType(AppBar)).toolbarHeight ?? kToolbarHeight;
+
+    tester.view.physicalSize = const Size(1200, 800);
+    await tester.pumpWidget(wrapWithLocalization(screen));
+    await tester.pumpAndSettle();
+    final wideHeight = tester.widget<AppBar>(find.byType(AppBar)).toolbarHeight ?? kToolbarHeight;
+
+    expect(wideHeight, lessThan(narrowHeight));
+  });
+
   testWidgets('renders a tile per cached post', (WidgetTester tester) async {
     final repository = FakeBunnyRepository();
     repository.postsBySearchId[1] = [_post(id: 1, isSeen: false), _post(id: 2, isSeen: true)];

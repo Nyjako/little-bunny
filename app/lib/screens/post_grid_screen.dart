@@ -7,6 +7,7 @@ import '../services/download_manager.dart';
 import '../settings/display_settings_store.dart';
 import '../settings/download_settings_store.dart';
 import '../settings/sync_settings_store.dart';
+import '../util/responsive.dart';
 import '../widgets/post_grid_tile.dart';
 import 'post_detail_screen.dart';
 
@@ -251,12 +252,14 @@ class _PostGridScreenState extends State<PostGridScreen> {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(l10n.postGridMassDownloadSummary(succeeded, mismatched, failed))));
   }
 
-  AppBar _buildAppBar(AppLocalizations l10n) {
+  AppBar _buildAppBar(AppLocalizations l10n, BuildContext context) {
+    final toolbarHeight = isWideScreen(context) ? compactToolbarHeight : null;
     if (_selectionMode) {
       final votingEnabled = widget.search.site != BunnySite.inkbunny;
       final progress = _massDownloadProgress;
       final busy = progress != null;
       return AppBar(
+        toolbarHeight: toolbarHeight,
         leading: IconButton(icon: const Icon(Icons.close), tooltip: l10n.postGridExitSelectionTooltip, onPressed: busy ? null : _exitSelectionMode),
         title: Text(busy ? l10n.postGridMassDownloadProgress(progress.$1, progress.$2) : l10n.postGridSelectionCount(_selectedPostIds.length)),
         actions: [
@@ -272,6 +275,7 @@ class _PostGridScreenState extends State<PostGridScreen> {
       );
     }
     return AppBar(
+      toolbarHeight: toolbarHeight,
       title: Text(widget.search.label),
       actions: [
         IconButton(icon: Icon(_unseenOnly ? Icons.visibility_off : Icons.visibility), tooltip: l10n.postGridUnseenOnlyTooltip, onPressed: _toggleUnseenOnly),
@@ -294,7 +298,7 @@ class _PostGridScreenState extends State<PostGridScreen> {
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
     return Scaffold(
-      appBar: _buildAppBar(l10n),
+      appBar: _buildAppBar(l10n, context),
       body: FutureBuilder<List<BunnyPost>>(
         future: _postsFuture,
         builder: (context, snapshot) {
