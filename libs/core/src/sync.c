@@ -364,9 +364,9 @@ bunny_core_result_t bunny_core_fetch_and_cache_post(bunny_core_t *core, bunny_db
     return result;
 }
 
-bunny_core_result_t bunny_core_preview_search(bunny_core_t *core, bunny_db_site_t site, const char *query, bunny_db_post_list_t *out_list)
+bunny_core_result_t bunny_core_preview_search(bunny_core_t *core, bunny_db_site_t site, const char *query, int page, bunny_db_post_list_t *out_list)
 {
-    if (!core || !query || !out_list) {
+    if (!core || !query || !out_list || page < 1) {
         return BUNNY_CORE_ERR_INVALID_ARG;
     }
     memset(out_list, 0, sizeof(*out_list));
@@ -381,7 +381,7 @@ bunny_core_result_t bunny_core_preview_search(bunny_core_t *core, bunny_db_site_
         }
 
         e621_post_list_t posts;
-        e621_result_t search_result = e621_search_posts(client, query, 1, BUNNY_CORE_SYNC_E621_PAGE_LIMIT, &posts);
+        e621_result_t search_result = e621_search_posts(client, query, page, BUNNY_CORE_SYNC_E621_PAGE_LIMIT, &posts);
         if (search_result != E621_OK) {
             e621_client_destroy(client);
             return BUNNY_CORE_ERR_SITE;
@@ -406,7 +406,7 @@ bunny_core_result_t bunny_core_preview_search(bunny_core_t *core, bunny_db_site_
         inkbunny_search_params_t params;
         memset(&params, 0, sizeof(params));
         params.text = query;
-        params.page = 1;
+        params.page = page;
 
         inkbunny_submission_list_t submissions;
         inkbunny_result_t search_result = inkbunny_search(client, &params, &submissions);

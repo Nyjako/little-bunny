@@ -11,10 +11,13 @@ import 'create_search_screen.dart';
 import 'post_detail_screen.dart';
 
 /// Click-through browsing for a tag or artist name tapped elsewhere in the
-/// app (M8.5.10): runs a one-page, stateless live search
-/// (`BunnyRepository.previewSearch`) and shows the results as a grid,
-/// without creating a saved search. An app bar action offers to save the
-/// query as a real search via [CreateSearchScreen], pre-filled.
+/// app (M8.5.10): runs a stateless live search (`BunnyRepository.
+/// previewSearch`) and shows the results as a grid, without creating a saved
+/// search. An app bar action offers to save the query as a real search via
+/// [CreateSearchScreen], pre-filled. M9.6.2 turned the originally single-page
+/// preview into an infinite scroll: scrolling near the bottom of the grid
+/// fetches and appends the next page, so a tag with hundreds of thousands of
+/// matches is still fully reachable rather than stuck on the first 320.
 class TagBrowseScreen extends StatefulWidget {
   final BunnySite site;
   final String query;
@@ -38,15 +41,30 @@ class TagBrowseScreen extends StatefulWidget {
 }
 
 class _TagBrowseScreenState extends State<TagBrowseScreen> {
-  late final Future<List<BunnyPost>> _postsFuture;
+  final List<BunnyPost> _posts = [];
+  final Set<int> _seenPostIds = {};
+  final _scrollController = ScrollController();
+  bool _loading = true;
+  bool _loadingMore = false;
+  bool _hasMore = true;
+  int _nextPage = 1;
   PreviewQuality _previewQuality = PreviewQuality.thumbnail;
   int _gridColumns = 3;
 
   @override
   void initState() {
     super.initState();
-    _postsFuture = widget.repository.previewSearch(widget.site, widget.query);
+    _loadInitial();
     _loadDisplaySettings();
+    _scrollController.addListener(_maybeLoadMore);
+  }
+
+  @override
+  void dispose() {
+    _scrollController
+      ..removeListener(_maybeLoadMore)
+      ..dispose();
+    super.dispose();
   }
 
   Future<void> _loadDisplaySettings() async {
@@ -59,6 +77,60 @@ class _TagBrowseScreenState extends State<TagBrowseScreen> {
       _previewQuality = quality;
       _gridColumns = columns;
     });
+  }
+
+  void _appendPage(List<BunnyPost> page) {
+    for (final post in page) {
+      if (_seenPostIds.add(post.id)) {
+        _posts.add(post);
+      }
+    }
+  }
+
+  Future<void> _loadInitial() async {
+    final page = await widget.repository.previewSearch(widget.site, widget.query, page: 1);
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      _appendPage(page);
+      _loading = false;
+      _hasMore = page.isNotEmpty;
+      _nextPage = 2;
+    });
+  }
+
+  // An empty page means there's nothing more to fetch; any non-empty page
+  // (even a short one) is treated as "there might be more" rather than
+  // comparing against the site's own page size -- e621's limit lives only in
+  // bunny_core (see BUNNY_CORE_SYNC_E621_PAGE_LIMIT), not here, and this way
+  // never silently drifts out of sync with it. Worst case: one extra request
+  // that comes back empty before _hasMore flips to false.
+  Future<void> _loadMore() async {
+    if (_loadingMore || !_hasMore) {
+      return;
+    }
+    setState(() => _loadingMore = true);
+    final page = await widget.repository.previewSearch(widget.site, widget.query, page: _nextPage);
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      _appendPage(page);
+      _loadingMore = false;
+      _hasMore = page.isNotEmpty;
+      _nextPage++;
+    });
+  }
+
+  void _maybeLoadMore() {
+    if (!_scrollController.hasClients) {
+      return;
+    }
+    final position = _scrollController.position;
+    if (position.pixels >= position.maxScrollExtent - 400) {
+      _loadMore();
+    }
   }
 
   String? _imageUrlFor(BunnyPost post) {
@@ -102,27 +174,23 @@ class _TagBrowseScreenState extends State<TagBrowseScreen> {
         title: Text(widget.query),
         actions: [IconButton(icon: const Icon(Icons.add), tooltip: l10n.tagBrowseAddToSearchesTooltip, onPressed: _addToSearches)],
       ),
-      body: FutureBuilder<List<BunnyPost>>(
-        future: _postsFuture,
-        builder: (context, snapshot) {
-          if (!snapshot.hasData) {
-            return const Center(child: CircularProgressIndicator());
-          }
-          final posts = snapshot.data!;
-          if (posts.isEmpty) {
-            return Center(child: Text(l10n.tagBrowseEmptyState));
-          }
-          return GridView.builder(
-            padding: const EdgeInsets.all(4),
-            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: _gridColumns, crossAxisSpacing: 4, mainAxisSpacing: 4),
-            itemCount: posts.length,
-            itemBuilder: (context, index) {
-              final post = posts[index];
-              return PostGridTile(key: ValueKey(post.id), post: post, imageUrl: _imageUrlFor(post), onTap: () => _openPost(posts, post));
-            },
-          );
-        },
-      ),
+      body: _loading
+          ? const Center(child: CircularProgressIndicator())
+          : _posts.isEmpty
+          ? Center(child: Text(l10n.tagBrowseEmptyState))
+          : GridView.builder(
+              controller: _scrollController,
+              padding: const EdgeInsets.all(4),
+              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: _gridColumns, crossAxisSpacing: 4, mainAxisSpacing: 4),
+              itemCount: _posts.length + (_loadingMore ? 1 : 0),
+              itemBuilder: (context, index) {
+                if (index >= _posts.length) {
+                  return const Center(child: CircularProgressIndicator());
+                }
+                final post = _posts[index];
+                return PostGridTile(key: ValueKey(post.id), post: post, imageUrl: _imageUrlFor(post), onTap: () => _openPost(_posts, post));
+              },
+            ),
     );
   }
 }
