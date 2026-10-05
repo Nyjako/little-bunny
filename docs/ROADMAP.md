@@ -774,6 +774,31 @@ this file is the single source of truth for "what's done" across sessions.
   instead of a synthetic `tester.tap()`, which still verifies the navigation logic under test
   (the right post opens) without depending on Flutter's hit-testing resolving correctly here.
 
+- [x] **M8.5.14 — Favorite/vote UI on post detail**
+  No new backend at all -- `queueFavoriteAdd`/`queueFavoriteRemove`/`queueVote`/`processQueue`
+  have existed end-to-end since M4.3, just never had a UI calling them. `PostDetailScreen`
+  gained a favorite toggle (filled/outline heart) and up/down vote `IconButton`s, placed right
+  below the title/artist/description block. Vote buttons are disabled (not hidden) for Inkbunny
+  posts -- no vote API exists there at all, same "grey out rather than fail silently" principle
+  already stated for comments; favorite stays enabled for both sites since the unofficial
+  Inkbunny favorite route (M2.2) covers it. Each tap calls the matching `queue*` method, then
+  `processQueue()` immediately (so it reaches the site right away rather than waiting for the
+  next scheduled drain, same reasoning M5.3's background scheduler already established), then
+  optimistically updates a new mutable `_post` state field via a single `_applyOptimisticUpdate`
+  helper that rebuilds a `BunnyPost` with the relevant field(s) adjusted (no `copyWith` exists
+  on the model -- nothing else has needed one -- so this lists every field once, the same
+  manual-reconstruction approach `FakeBunnyRepository._markedSeen` already uses). Only this one
+  mutable copy is used for display; every other method in the screen still reads the original,
+  never-mutated `widget.post` for fields that can't change via these actions (site, externalId,
+  fileExt, ...). `FakeBunnyRepository`'s four queue methods, previously `throw
+  UnimplementedError()` stubs (nothing before this needed them), now record their calls in
+  simple in-memory lists/counters so widget tests can assert on them directly. Widget tests
+  cover: tapping favorite (queues the right action, drains the queue, flips the icon, bumps
+  `favCount`), tapping up/down vote (queues the vote, bumps `score`), and vote buttons being
+  disabled -- but not hidden -- on an Inkbunny post. This was the last **M8.5** sub-milestone
+  that didn't need the user present; only **M8.5.2** (the Inkbunny search 403, a live-debugging
+  step against a real account) remains before M8.5 as a whole is done.
+
 - [ ] **M9 — Actions & downloads**
   Single + mass like/favorite/download, commenting, download manager writing to
   `%artist%/%id%.%extension%`, checksum (md5) verification of downloaded files against the

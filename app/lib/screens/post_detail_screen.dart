@@ -19,11 +19,42 @@ const _videoExtensions = {'webm', 'mp4'};
 
 bool _isImage(BunnyPost post) => post.fileExt != null && _imageExtensions.contains(post.fileExt!.toLowerCase());
 
+/// Rebuilds [post] with the given fields adjusted -- used to optimistically
+/// reflect a favorite/vote action (M8.5.14) in the UI immediately, without
+/// waiting for a resync. No `copyWith` exists on [BunnyPost] (nothing else
+/// needed one), so this just lists every field once, same manual-
+/// reconstruction approach `FakeBunnyRepository._markedSeen` already uses.
+BunnyPost _applyOptimisticUpdate(BunnyPost post, {bool? isFavorited, int favCountDelta = 0, int scoreDelta = 0, int scoreUpDelta = 0, int scoreDownDelta = 0}) => BunnyPost(
+  id: post.id,
+  site: post.site,
+  externalId: post.externalId,
+  artist: post.artist,
+  title: post.title,
+  description: post.description,
+  rating: post.rating,
+  score: post.score + scoreDelta,
+  scoreUp: post.scoreUp + scoreUpDelta,
+  scoreDown: post.scoreDown + scoreDownDelta,
+  favCount: post.favCount + favCountDelta,
+  commentCount: post.commentCount,
+  fileUrl: post.fileUrl,
+  fileExt: post.fileExt,
+  fileMd5: post.fileMd5,
+  previewUrl: post.previewUrl,
+  width: post.width,
+  height: post.height,
+  createdAtSite: post.createdAtSite,
+  cachedAt: post.cachedAt,
+  isSeen: post.isSeen,
+  isFavorited: isFavorited ?? post.isFavorited,
+  sampleUrl: post.sampleUrl,
+);
+
 /// Full read-only metadata + media viewer for a single post (M8.4, redesigned
 /// in M8.5.8 to surface categorized tags, sources, and e621 pool/parent/
-/// child navigation). No favorite/vote/comment actions yet -- that's M8.5.14.
-/// Marks the post seen once, on open, same as tapping it used to in
-/// `PostGridScreen` before this screen existed.
+/// child navigation; M8.5.14 added favorite/vote actions). No comment
+/// actions yet -- that's M9's scope. Marks the post seen once, on open, same
+/// as tapping it used to in `PostGridScreen` before this screen existed.
 class PostDetailScreen extends StatefulWidget {
   final BunnyPost post;
   final BunnyRepository repository;
@@ -53,9 +84,17 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
   Future<BunnyPostRelationships>? _relationshipsFuture;
   Future<List<int>>? _poolIdsFuture;
 
+  /// Mutable local copy of [widget.post], so favorite/vote taps can update
+  /// the displayed score/favCount/isFavorited immediately (M8.5.14) without
+  /// a round trip. Identity-ish fields (site/externalId/fileExt/...) never
+  /// change via these actions, so every other method still reads straight
+  /// from `widget.post`.
+  late BunnyPost _post;
+
   @override
   void initState() {
     super.initState();
+    _post = widget.post;
     widget.repository.markPostSeen(widget.post.id);
 
     _tagsFuture = widget.repository.getPostTagsByCategory(widget.post.id);
@@ -95,6 +134,64 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
     setState(() {
       controller.value.isPlaying ? controller.pause() : controller.play();
     });
+  }
+
+  Future<void> _toggleFavorite() async {
+    final wasFavorited = _post.isFavorited;
+    try {
+      if (wasFavorited) {
+        await widget.repository.queueFavoriteRemove(_post.id);
+      } else {
+        await widget.repository.queueFavoriteAdd(_post.id);
+      }
+      // Drains immediately rather than waiting for the next scheduled pass
+      // (M5.3), so the action actually reaches the site right away.
+      await widget.repository.processQueue();
+    } catch (_) {
+      // The queue itself already has its own retry/backoff (M4.3) for a
+      // failed send; nothing further to show the user here.
+    }
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      _post = _applyOptimisticUpdate(_post, isFavorited: !wasFavorited, favCountDelta: wasFavorited ? -1 : 1);
+    });
+  }
+
+  Future<void> _vote(int score) async {
+    try {
+      await widget.repository.queueVote(_post.id, score);
+      await widget.repository.processQueue();
+    } catch (_) {
+      // See _toggleFavorite.
+    }
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      _post = _applyOptimisticUpdate(_post, scoreDelta: score, scoreUpDelta: score > 0 ? 1 : 0, scoreDownDelta: score < 0 ? 1 : 0);
+    });
+  }
+
+  Widget _actionsRow(AppLocalizations l10n) {
+    // Inkbunny has no vote API at all (unlike favorites, which M2.2's
+    // unofficial route covers for both sites) -- greyed out rather than
+    // hidden or silently failing, same principle the roadmap already states
+    // for comments.
+    final votingEnabled = _post.site != BunnySite.inkbunny;
+    return Row(
+      children: [
+        IconButton(
+          icon: Icon(_post.isFavorited ? Icons.favorite : Icons.favorite_border),
+          color: _post.isFavorited ? Colors.red : null,
+          tooltip: _post.isFavorited ? l10n.postDetailFavoriteRemoveTooltip : l10n.postDetailFavoriteAddTooltip,
+          onPressed: _toggleFavorite,
+        ),
+        IconButton(icon: const Icon(Icons.arrow_upward), tooltip: l10n.postDetailUpvoteTooltip, onPressed: votingEnabled ? () => _vote(1) : null),
+        IconButton(icon: const Icon(Icons.arrow_downward), tooltip: l10n.postDetailDownvoteTooltip, onPressed: votingEnabled ? () => _vote(-1) : null),
+      ],
+    );
   }
 
   void _openFullScreenViewer() {
@@ -343,7 +440,7 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
-    final post = widget.post;
+    final post = _post;
     return Scaffold(
       appBar: AppBar(title: Text(l10n.postDetailScreenTitle)),
       body: ListView(
@@ -359,6 +456,7 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
                     ? InkWell(onTap: () => _openTagBrowse(post.artist!), child: _metadataRow(l10n.postDetailArtistLabel, post.artist!))
                     : _metadataRow(l10n.postDetailArtistLabel, l10n.postDetailUnknownValue),
                 if (post.description != null && post.description!.isNotEmpty) Padding(padding: const EdgeInsets.only(top: 8, bottom: 8), child: Text(post.description!)),
+                _actionsRow(l10n),
                 const Divider(),
                 InkWell(onTap: () => _copyPostId(l10n), child: _metadataRow(l10n.postDetailIdLabel, '${post.externalId}')),
                 _metadataRow(l10n.postDetailRatingLabel, post.rating ?? l10n.postDetailUnknownValue),

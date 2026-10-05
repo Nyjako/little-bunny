@@ -108,6 +108,10 @@
   "@postDetailCreatePoolSearchDialogContent": {
     "placeholders": {"poolId": {"type": "int"}}
   },
+  "postDetailFavoriteAddTooltip": "Add to favorites",
+  "postDetailFavoriteRemoveTooltip": "Remove from favorites",
+  "postDetailUpvoteTooltip": "Upvote",
+  "postDetailDownvoteTooltip": "Downvote",
 
   "lockScreenMessage": "LittleBunny is locked",
   "lockScreenBiometricReason": "Unlock LittleBunny",

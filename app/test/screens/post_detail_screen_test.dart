@@ -168,6 +168,7 @@ void main() {
 
     await tester.pumpWidget(wrapWithLocalization(PostDetailScreen(post: post, repository: repository, displaySettingsStore: const DisplaySettingsStore(), syncSettingsStore: const SyncSettingsStore())));
     await tester.pumpAndSettle();
+    await scrollToEnd(tester);
 
     await tester.tap(find.text('12345'));
     await tester.pump();
@@ -252,5 +253,65 @@ void main() {
     expect(repository.searches, hasLength(1));
     expect(repository.searches.single.query, 'pool:9');
     expect(find.text('pool:9'), findsOneWidget);
+  });
+
+  testWidgets('tapping favorite queues the action, drains the queue, and flips the icon', (WidgetTester tester) async {
+    final repository = FakeBunnyRepository();
+    final post = _post(fileExt: 'jpg');
+
+    await tester.pumpWidget(wrapWithLocalization(PostDetailScreen(post: post, repository: repository, displaySettingsStore: const DisplaySettingsStore(), syncSettingsStore: const SyncSettingsStore())));
+    await tester.pumpAndSettle();
+
+    expect(find.byTooltip('Add to favorites'), findsOneWidget);
+
+    await tester.tap(find.byTooltip('Add to favorites'));
+    await tester.pumpAndSettle();
+
+    expect(repository.favoriteAddCalls, [1]);
+    expect(repository.processQueueCallCount, 1);
+    expect(find.byTooltip('Remove from favorites'), findsOneWidget);
+    expect(find.text('11'), findsOneWidget); // favCount optimistically bumped from 10
+
+    await tester.tap(find.byTooltip('Remove from favorites'));
+    await tester.pumpAndSettle();
+
+    expect(repository.favoriteRemoveCalls, [1]);
+    expect(repository.processQueueCallCount, 2);
+    expect(find.byTooltip('Add to favorites'), findsOneWidget);
+  });
+
+  testWidgets('tapping upvote/downvote queues a vote and updates the displayed score', (WidgetTester tester) async {
+    final repository = FakeBunnyRepository();
+    final post = _post(fileExt: 'jpg');
+
+    await tester.pumpWidget(wrapWithLocalization(PostDetailScreen(post: post, repository: repository, displaySettingsStore: const DisplaySettingsStore(), syncSettingsStore: const SyncSettingsStore())));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byTooltip('Upvote'));
+    await tester.pumpAndSettle();
+
+    expect(repository.voteCalls, [(1, 1)]);
+    expect(repository.processQueueCallCount, 1);
+    expect(find.text('43'), findsOneWidget); // score optimistically bumped from 42
+
+    await tester.tap(find.byTooltip('Downvote'));
+    await tester.pumpAndSettle();
+
+    expect(repository.voteCalls, [(1, 1), (1, -1)]);
+    expect(find.text('42'), findsOneWidget);
+  });
+
+  testWidgets('vote buttons are disabled for Inkbunny posts, favorite stays enabled', (WidgetTester tester) async {
+    final repository = FakeBunnyRepository();
+    final post = _post(fileExt: 'jpg', site: BunnySite.inkbunny);
+
+    await tester.pumpWidget(wrapWithLocalization(PostDetailScreen(post: post, repository: repository, displaySettingsStore: const DisplaySettingsStore(), syncSettingsStore: const SyncSettingsStore())));
+    await tester.pumpAndSettle();
+
+    Finder iconButtonFor(String tooltip) => find.ancestor(of: find.byTooltip(tooltip), matching: find.byType(IconButton));
+
+    expect(tester.widget<IconButton>(iconButtonFor('Upvote')).onPressed, isNull);
+    expect(tester.widget<IconButton>(iconButtonFor('Downvote')).onPressed, isNull);
+    expect(tester.widget<IconButton>(iconButtonFor('Add to favorites')).onPressed, isNotNull);
   });
 }

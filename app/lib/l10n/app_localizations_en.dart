@@ -240,6 +240,18 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String get postDetailFavoriteAddTooltip => 'Add to favorites';
+
+  @override
+  String get postDetailFavoriteRemoveTooltip => 'Remove from favorites';
+
+  @override
+  String get postDetailUpvoteTooltip => 'Upvote';
+
+  @override
+  String get postDetailDownvoteTooltip => 'Downvote';
+
+  @override
   String get lockScreenMessage => 'LittleBunny is locked';
 
   @override
