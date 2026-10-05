@@ -9,6 +9,7 @@ import '../settings/display_settings_store.dart';
 import '../settings/download_settings_store.dart';
 import '../settings/sync_settings_store.dart';
 import '../settings/theme_settings_store.dart';
+import '../util/responsive.dart';
 import 'accounts_screen.dart';
 import 'create_search_screen.dart';
 import 'post_grid_screen.dart';
@@ -183,8 +184,10 @@ class _SearchesScreenState extends State<SearchesScreen> with SingleTickerProvid
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
     final onPoolsTab = _tabController.index == 1;
+    final wide = isWideScreen(context);
     return Scaffold(
       appBar: AppBar(
+        toolbarHeight: wide ? compactToolbarHeight : null,
         title: Text(l10n.searchesScreenTitle),
         actions: [
           IconButton(icon: const Icon(Icons.person_outline), tooltip: l10n.searchesAccountsTooltip, onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (context) => AccountsScreen(repository: _repository!)))),
@@ -206,7 +209,11 @@ class _SearchesScreenState extends State<SearchesScreen> with SingleTickerProvid
             ),
           ),
         ],
-        bottom: TabBar(controller: _tabController, tabs: [Tab(text: l10n.searchesTabSearches), Tab(text: l10n.searchesTabPools)]),
+        bottom: TabBar(
+          controller: _tabController,
+          labelPadding: wide ? const EdgeInsets.symmetric(horizontal: 16, vertical: 4) : null,
+          tabs: [Tab(text: l10n.searchesTabSearches), Tab(text: l10n.searchesTabPools)],
+        ),
       ),
       body: FutureBuilder<List<BunnySearch>>(
         future: _searchesFuture,

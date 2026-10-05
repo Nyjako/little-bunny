@@ -6,6 +6,7 @@ import '../repository/bunny_repository.dart';
 import '../settings/display_settings_store.dart';
 import '../settings/download_settings_store.dart';
 import '../settings/sync_settings_store.dart';
+import '../util/responsive.dart';
 import '../widgets/post_grid_tile.dart';
 import 'create_search_screen.dart';
 import 'post_detail_screen.dart';
@@ -180,6 +181,7 @@ class _TagBrowseScreenState extends State<TagBrowseScreen> {
     final l10n = AppLocalizations.of(context)!;
     return Scaffold(
       appBar: AppBar(
+        toolbarHeight: isWideScreen(context) ? compactToolbarHeight : null,
         title: Text(widget.query),
         actions: [IconButton(icon: const Icon(Icons.add), tooltip: l10n.tagBrowseAddToSearchesTooltip, onPressed: _addToSearches)],
       ),

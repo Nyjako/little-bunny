@@ -64,6 +64,30 @@ void main() {
     expect(repository.postsBySearchId[1]!.single.isSeen, isTrue);
   });
 
+  testWidgets('app bar shrinks on wide windows (M9.6.6)', (WidgetTester tester) async {
+    final repository = FakeBunnyRepository();
+    final post = _post(fileExt: 'jpg');
+    final screen = PostDetailScreen(post: post, repository: repository, displaySettingsStore: const DisplaySettingsStore(), syncSettingsStore: const SyncSettingsStore(), downloadSettingsStore: const DownloadSettingsStore());
+
+    // 600 rather than a typical 400-ish phone width -- at 400 the comments
+    // section's anonymous-checkbox row (pre-existing, unrelated to this
+    // sub-milestone) overflows regardless of app bar height, which isn't
+    // what this test is checking.
+    tester.view.physicalSize = const Size(600, 800);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+    await tester.pumpWidget(wrapWithLocalization(screen));
+    await tester.pumpAndSettle();
+    final narrowHeight = tester.widget<AppBar>(find.byType(AppBar)).toolbarHeight ?? kToolbarHeight;
+
+    tester.view.physicalSize = const Size(1200, 800);
+    await tester.pumpWidget(wrapWithLocalization(screen));
+    await tester.pumpAndSettle();
+    final wideHeight = tester.widget<AppBar>(find.byType(AppBar)).toolbarHeight ?? kToolbarHeight;
+
+    expect(wideHeight, lessThan(narrowHeight));
+  });
+
   testWidgets('shows full metadata', (WidgetTester tester) async {
     final repository = FakeBunnyRepository();
     final post = _post(fileExt: 'jpg');

@@ -52,6 +52,24 @@ void main() {
     expect(find.text('No posts found for this search.'), findsOneWidget);
   });
 
+  testWidgets('app bar shrinks on wide windows (M9.6.6)', (WidgetTester tester) async {
+    final repository = FakeBunnyRepository();
+
+    tester.view.physicalSize = const Size(400, 800);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+    await tester.pumpWidget(wrap(repository));
+    await tester.pumpAndSettle();
+    final narrowHeight = tester.widget<AppBar>(find.byType(AppBar)).toolbarHeight ?? kToolbarHeight;
+
+    tester.view.physicalSize = const Size(1200, 800);
+    await tester.pumpWidget(wrap(repository));
+    await tester.pumpAndSettle();
+    final wideHeight = tester.widget<AppBar>(find.byType(AppBar)).toolbarHeight ?? kToolbarHeight;
+
+    expect(wideHeight, lessThan(narrowHeight));
+  });
+
   testWidgets('renders a tile per previewed post and opens it on tap', (WidgetTester tester) async {
     final repository = FakeBunnyRepository();
     repository.previewSearchResults['e621:someartist:1'] = [_post(1), _post(2)];

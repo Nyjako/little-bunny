@@ -43,6 +43,24 @@ void main() {
     expect(find.text('No saved searches yet. Tap + to add one.'), findsOneWidget);
   });
 
+  testWidgets('app bar shrinks on wide windows (M9.6.6)', (WidgetTester tester) async {
+    final repository = FakeBunnyRepository();
+
+    tester.view.physicalSize = const Size(400, 800);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+    await tester.pumpWidget(_wrap(repository));
+    await tester.pumpAndSettle();
+    final narrowHeight = tester.widget<AppBar>(find.byType(AppBar)).toolbarHeight ?? kToolbarHeight;
+
+    tester.view.physicalSize = const Size(1200, 800);
+    await tester.pumpWidget(_wrap(repository));
+    await tester.pumpAndSettle();
+    final wideHeight = tester.widget<AppBar>(find.byType(AppBar)).toolbarHeight ?? kToolbarHeight;
+
+    expect(wideHeight, lessThan(narrowHeight));
+  });
+
   testWidgets('lists saved searches with their site and interval', (WidgetTester tester) async {
     final repository = FakeBunnyRepository();
     await repository.createSearch(BunnySite.e621, 'Foxes', 'fox', intervalHours: 6);
