@@ -76,6 +76,7 @@
   "postGridRefreshTooltip": "Refresh",
   "postGridEmptyState": "No posts cached yet. Tap refresh to sync.",
   "postGridMarkAllSeen": "Mark all as seen",
+  "postGridSelectAll": "Select all",
   "postGridSelectionCount": "{count} selected",
   "@postGridSelectionCount": {
     "placeholders": {"count": {"type": "int"}}
