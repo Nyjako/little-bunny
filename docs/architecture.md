@@ -1190,6 +1190,32 @@ invoking its `onTap` callback directly rather than synthesizing a tap, which sti
 navigation logic under test (that the correct post opens) without depending on Flutter's
 hit-testing resolving correctly in this specific layout.
 
+**Favorite/vote UI on post detail (M8.5.14)**: zero backend/FFI/server changes -- the entire
+action-queue path (`queueFavoriteAdd`/`queueFavoriteRemove`/`queueVote`/`processQueue`) has
+existed since M4.3 with nothing in the UI calling it. `FakeBunnyRepository`'s four
+corresponding methods had been inert `throw UnimplementedError()` stubs this whole time (noted
+in the class's own doc comment as "unimplemented since nothing under test calls them, that's
+M9's scope") -- this is the sub-milestone that finally needed them, so they became real
+(non-throwing) fakes that just record what was called into plain lists/counters, rather than
+simulating actual site-side state changes, since the widget tests only need to assert "the
+right action was queued and the queue was drained," not reproduce real favorite/vote semantics.
+
+`PostDetailScreen` previously had no mutable state at all tied to the post's own data -- every
+field it displayed came straight from the immutable `widget.post`. Favorite/vote needed
+*some* post-detail field (`isFavorited`/`score`/`favCount`/`scoreUp`/`scoreDown`) to change
+after a tap, so the screen gained a `late BunnyPost _post` field, seeded from `widget.post` in
+`initState` and reassigned via `setState` after each action. Every other method in the screen
+(media loading, tag/source/relationship fetches, the copy-id/tag-browse/pool navigation
+actions) still reads `widget.post` directly rather than `_post`, since none of those depend on
+fields that favorite/vote can change -- using `_post` everywhere would have been harmless but
+pointless churn for fields that are, by construction, immutable for the lifetime of the screen.
+
+Vote is e621-only (Inkbunny has no vote API in any form, official or unofficial) and disabled
+rather than hidden, the same "grey out, don't silently fail or hide" principle the roadmap
+already states for comments; favorite works on both sites, since the unofficial Inkbunny
+favorite route (M2.2) is already wired generically into `queueFavoriteAdd`/`Remove` regardless
+of site.
+
 ## Inkbunny API constraints (found in M2)
 
 Verified against the live API and the official docs while building `libinkbunny`:
