@@ -163,7 +163,7 @@ class _SearchesScreenState extends State<SearchesScreen> with SingleTickerProvid
                   IconButton(icon: const Icon(Icons.delete), onPressed: () => _removeSearch(search)),
                 ],
               ),
-              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => PostGridScreen(search: search, repository: _repository!, displaySettingsStore: widget.displaySettingsStore))),
+              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => PostGridScreen(search: search, repository: _repository!, displaySettingsStore: widget.displaySettingsStore, syncSettingsStore: widget.syncSettingsStore))),
             ),
           )
           .toList(),

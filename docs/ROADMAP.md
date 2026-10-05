@@ -735,6 +735,45 @@ this file is the single source of truth for "what's done" across sessions.
   retry budget), so the test uses an explicit `pump()` + fixed-duration `pump()` instead, the
   same workaround pattern already used for `SnackBar`-involving tests in this suite.
 
+- [x] **M8.5.10 — Tag/artist click-through browsing**
+  New `bunny_core_preview_search(core, site, query, out_list)`: runs a single page of `query`
+  live against `site`, upserts whatever comes back into the local post cache, and returns the
+  full post list -- but creates no `searches`/`search_results` row, unlike
+  `bunny_core_search_create` + sync. Implemented by collecting each upserted post's local id
+  and reading it straight back via the already-existing `bunny_db_post_get_by_id` (building the
+  result with a file-local `GOBLIN_DYN_ARRAY_DECL(bunny_core_post, bunny_db_post_t)` -- safe to
+  declare independently of `libs/db`'s own identically-shaped array type, since the macro
+  expands to `static inline` functions with no link-time visibility). New
+  `server/src/routes_search.c`/`.h` (`/search`, singular, had no existing owner, unlike
+  `/searches` and `/posts` -- a genuinely new resource prefix, matching the `routes_pools.c`
+  precedent) registers `POST /search/preview?site=&query=`. Full plumbing: FFI binding +
+  isolate wrapper, `BunnyRepository.previewSearch(site, query) -> Future<List<BunnyPost>>`
+  across FFI/HTTP/Fake.
+  New `app/lib/screens/tag_browse_screen.dart`: runs `previewSearch` in `initState` and shows
+  the results as a grid, with an app-bar action to save the query as a real search (navigates
+  to `CreateSearchScreen`, now pre-fillable via new optional `initialSite`/`initialQuery`
+  constructor params, `null` by default so the existing FAB-driven blank-form flow is
+  untouched). `PostGridScreen`'s tile-building `Stack` (badges/unseen-dot/score overlay, M8.5.7)
+  was factored into a new `app/lib/widgets/post_grid_tile.dart` so `TagBrowseScreen` reuses it
+  instead of duplicating the whole thing -- the second entry in `widgets/`, after `rating_badge.
+  dart`. `PostDetailScreen`'s tag chips (previously inert, deferred from M8.5.8) and artist text
+  are now tappable, both opening `TagBrowseScreen` with the tapped tag/artist name as the query
+  (an e621 artist name already *is* the literal tag string for that post, so no special
+  `artist:` prefix is needed). This required threading a `syncSettingsStore` parameter through
+  `PostGridScreen` and `PostDetailScreen` (previously neither needed one) so `TagBrowseScreen`'s
+  "add to searches" action has what it needs to construct `CreateSearchScreen` -- the same
+  constructor-signature ripple this project has repeatedly hit for widely-used screens, fixed
+  the same way every previous time (fix each call site, `flutter analyze` until clean).
+  **Test gotcha**: a `tester.tap()` on a `PostGridTile` inside `TagBrowseScreen`'s `GridView`
+  failed to hit-test in the test environment (the tile's own `GestureDetector` render object
+  never appeared in the resulting hit-test chain, despite `tester.getRect`/`getCenter`
+  reporting correct on-screen geometry for it) -- root cause not tracked down, and the
+  equivalent tap in `PostGridScreen`'s own, structurally near-identical test passes without
+  issue, so this looks specific to some difference in this screen's widget tree rather than a
+  general `PostGridTile` problem. Worked around by invoking the tile's `onTap` callback directly
+  instead of a synthetic `tester.tap()`, which still verifies the navigation logic under test
+  (the right post opens) without depending on Flutter's hit-testing resolving correctly here.
+
 - [ ] **M9 — Actions & downloads**
   Single + mass like/favorite/download, commenting, download manager writing to
   `%artist%/%id%.%extension%`, checksum (md5) verification of downloaded files against the

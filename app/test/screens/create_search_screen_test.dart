@@ -110,4 +110,21 @@ void main() {
 
     expect(tester.widget<TextFormField>(find.widgetWithText(TextFormField, 'Sync interval (hours)')).controller!.text, '12');
   });
+
+  testWidgets('initialSite/initialQuery pre-fill the site and query (and mirror into the label)', (WidgetTester tester) async {
+    final repository = FakeBunnyRepository();
+
+    await tester.pumpWidget(wrapWithLocalization(CreateSearchScreen(repository: repository, syncSettingsStore: const SyncSettingsStore(), initialSite: BunnySite.inkbunny, initialQuery: 'someartist')));
+    await tester.pumpAndSettle();
+
+    expect(tester.widget<TextFormField>(find.widgetWithText(TextFormField, 'Query')).controller!.text, 'someartist');
+    expect(tester.widget<TextFormField>(find.widgetWithText(TextFormField, 'Label')).controller!.text, 'someartist');
+
+    await tester.tap(find.text('Create'));
+    await tester.pumpAndSettle();
+
+    expect(repository.searches, hasLength(1));
+    expect(repository.searches.single.site, BunnySite.inkbunny);
+    expect(repository.searches.single.query, 'someartist');
+  });
 }

@@ -345,6 +345,32 @@ void test_fetch_pool_returns_live_pool_info(void)
     free(fixture);
 }
 
+void test_preview_search_upserts_posts_without_creating_a_search(void)
+{
+    char *fixture = read_fixture("e621_posts_search.json");
+    TEST_ASSERT_NOT_NULL(fixture);
+    g_e621_state.bodies[0] = fixture;
+    g_e621_state.body_count = 1;
+
+    bunny_db_post_list_t posts;
+    bunny_core_result_t result = bunny_core_preview_search(g_core, BUNNY_DB_SITE_E621, "wolf", &posts);
+    TEST_ASSERT_EQUAL(BUNNY_CORE_OK, result);
+    TEST_ASSERT_EQUAL(1, (int)posts.count);
+    TEST_ASSERT_EQUAL(1, posts.items[0].external_id);
+    TEST_ASSERT_EQUAL_STRING("someartist", posts.items[0].artist);
+    bunny_db_post_list_free(&posts);
+
+    /* The whole point of a preview search -- unlike bunny_core_search_create
+     * + sync, it must never create a searches row. */
+    bunny_db_search_list_t searches;
+    result = bunny_core_search_list(g_core, &searches);
+    TEST_ASSERT_EQUAL(BUNNY_CORE_OK, result);
+    TEST_ASSERT_EQUAL(0, (int)searches.count);
+    bunny_db_search_list_free(&searches);
+
+    free(fixture);
+}
+
 void test_sync_e621_search_upserts_post_sample_url(void)
 {
     char *fixture = read_fixture("e621_posts_search.json");
@@ -630,6 +656,7 @@ int main(void)
     RUN_TEST(test_fetch_and_cache_post_upserts_live_e621_post);
     RUN_TEST(test_fetch_and_cache_post_upserts_live_inkbunny_submission);
     RUN_TEST(test_fetch_pool_returns_live_pool_info);
+    RUN_TEST(test_preview_search_upserts_posts_without_creating_a_search);
     RUN_TEST(test_sync_e621_search_fetches_a_second_page_when_the_first_is_full);
     RUN_TEST(test_sync_e621_search_stops_after_a_single_short_page);
     RUN_TEST(test_tag_autocomplete_finds_tags_from_synced_posts);

@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:little_bunny/repository/bunny_models.dart';
 import 'package:little_bunny/screens/post_detail_screen.dart';
 import 'package:little_bunny/settings/display_settings_store.dart';
+import 'package:little_bunny/settings/sync_settings_store.dart';
 import 'package:video_player/video_player.dart';
 import 'package:video_player_platform_interface/video_player_platform_interface.dart';
 
@@ -49,7 +50,7 @@ void main() {
     final repository = FakeBunnyRepository();
     repository.postsBySearchId[1] = [_post(fileExt: 'jpg')];
 
-    await tester.pumpWidget(wrapWithLocalization(PostDetailScreen(post: repository.postsBySearchId[1]!.single, repository: repository, displaySettingsStore: const DisplaySettingsStore())));
+    await tester.pumpWidget(wrapWithLocalization(PostDetailScreen(post: repository.postsBySearchId[1]!.single, repository: repository, displaySettingsStore: const DisplaySettingsStore(), syncSettingsStore: const SyncSettingsStore())));
     await tester.pumpAndSettle();
 
     expect(repository.postsBySearchId[1]!.single.isSeen, isTrue);
@@ -59,7 +60,7 @@ void main() {
     final repository = FakeBunnyRepository();
     final post = _post(fileExt: 'jpg');
 
-    await tester.pumpWidget(wrapWithLocalization(PostDetailScreen(post: post, repository: repository, displaySettingsStore: const DisplaySettingsStore())));
+    await tester.pumpWidget(wrapWithLocalization(PostDetailScreen(post: post, repository: repository, displaySettingsStore: const DisplaySettingsStore(), syncSettingsStore: const SyncSettingsStore())));
     await tester.pumpAndSettle();
 
     expect(find.text('A title'), findsOneWidget);
@@ -77,7 +78,7 @@ void main() {
       final repository = FakeBunnyRepository();
       final post = _post(fileExt: ext);
 
-      await tester.pumpWidget(wrapWithLocalization(PostDetailScreen(post: post, repository: repository, displaySettingsStore: const DisplaySettingsStore())));
+      await tester.pumpWidget(wrapWithLocalization(PostDetailScreen(post: post, repository: repository, displaySettingsStore: const DisplaySettingsStore(), syncSettingsStore: const SyncSettingsStore())));
       await tester.pumpAndSettle();
 
       expect(find.byType(CachedNetworkImage), findsOneWidget);
@@ -90,7 +91,7 @@ void main() {
       final repository = FakeBunnyRepository();
       final post = _post(fileExt: ext);
 
-      await tester.pumpWidget(wrapWithLocalization(PostDetailScreen(post: post, repository: repository, displaySettingsStore: const DisplaySettingsStore())));
+      await tester.pumpWidget(wrapWithLocalization(PostDetailScreen(post: post, repository: repository, displaySettingsStore: const DisplaySettingsStore(), syncSettingsStore: const SyncSettingsStore())));
       await tester.pumpAndSettle();
 
       expect(find.byType(VideoPlayer), findsOneWidget);
@@ -102,7 +103,7 @@ void main() {
     final repository = FakeBunnyRepository();
     final post = _post(fileExt: 'swf');
 
-    await tester.pumpWidget(wrapWithLocalization(PostDetailScreen(post: post, repository: repository, displaySettingsStore: const DisplaySettingsStore())));
+    await tester.pumpWidget(wrapWithLocalization(PostDetailScreen(post: post, repository: repository, displaySettingsStore: const DisplaySettingsStore(), syncSettingsStore: const SyncSettingsStore())));
     await tester.pumpAndSettle();
 
     expect(find.textContaining('swf'), findsOneWidget);
@@ -124,7 +125,7 @@ void main() {
       BunnyPostTag(name: 'uncategorized_tag'),
     ];
 
-    await tester.pumpWidget(wrapWithLocalization(PostDetailScreen(post: post, repository: repository, displaySettingsStore: const DisplaySettingsStore())));
+    await tester.pumpWidget(wrapWithLocalization(PostDetailScreen(post: post, repository: repository, displaySettingsStore: const DisplaySettingsStore(), syncSettingsStore: const SyncSettingsStore())));
     await tester.pumpAndSettle();
     await scrollToEnd(tester);
 
@@ -140,7 +141,7 @@ void main() {
     final repository = FakeBunnyRepository();
     final post = _post(fileExt: 'jpg');
 
-    await tester.pumpWidget(wrapWithLocalization(PostDetailScreen(post: post, repository: repository, displaySettingsStore: const DisplaySettingsStore())));
+    await tester.pumpWidget(wrapWithLocalization(PostDetailScreen(post: post, repository: repository, displaySettingsStore: const DisplaySettingsStore(), syncSettingsStore: const SyncSettingsStore())));
     await tester.pumpAndSettle();
     await scrollToEnd(tester);
 
@@ -152,7 +153,7 @@ void main() {
     final post = _post(fileExt: 'jpg');
     repository.sourcesByPostId[1] = ['https://example.invalid/a', 'https://example.invalid/b'];
 
-    await tester.pumpWidget(wrapWithLocalization(PostDetailScreen(post: post, repository: repository, displaySettingsStore: const DisplaySettingsStore())));
+    await tester.pumpWidget(wrapWithLocalization(PostDetailScreen(post: post, repository: repository, displaySettingsStore: const DisplaySettingsStore(), syncSettingsStore: const SyncSettingsStore())));
     await tester.pumpAndSettle();
     await scrollToEnd(tester);
 
@@ -165,7 +166,7 @@ void main() {
     final repository = FakeBunnyRepository();
     final post = _post(fileExt: 'jpg', externalId: 12345);
 
-    await tester.pumpWidget(wrapWithLocalization(PostDetailScreen(post: post, repository: repository, displaySettingsStore: const DisplaySettingsStore())));
+    await tester.pumpWidget(wrapWithLocalization(PostDetailScreen(post: post, repository: repository, displaySettingsStore: const DisplaySettingsStore(), syncSettingsStore: const SyncSettingsStore())));
     await tester.pumpAndSettle();
 
     await tester.tap(find.text('12345'));
@@ -182,7 +183,7 @@ void main() {
     repository.fetchPostResults['e621:55'] = 2;
     repository.postsById[2] = _post(id: 2, externalId: 55, title: 'Parent post');
 
-    await tester.pumpWidget(wrapWithLocalization(PostDetailScreen(post: post, repository: repository, displaySettingsStore: const DisplaySettingsStore())));
+    await tester.pumpWidget(wrapWithLocalization(PostDetailScreen(post: post, repository: repository, displaySettingsStore: const DisplaySettingsStore(), syncSettingsStore: const SyncSettingsStore())));
     await tester.pumpAndSettle();
     await scrollToEnd(tester);
 
@@ -207,7 +208,7 @@ void main() {
     repository.relationshipsByPostId[1] = const BunnyPostRelationships(hasParent: true, parentExternalId: 1, hasActiveChildren: false, children: [2]);
     repository.poolIdsByPostId[1] = [9];
 
-    await tester.pumpWidget(wrapWithLocalization(PostDetailScreen(post: post, repository: repository, displaySettingsStore: const DisplaySettingsStore())));
+    await tester.pumpWidget(wrapWithLocalization(PostDetailScreen(post: post, repository: repository, displaySettingsStore: const DisplaySettingsStore(), syncSettingsStore: const SyncSettingsStore())));
     await tester.pumpAndSettle();
     await scrollToEnd(tester);
 
@@ -222,7 +223,7 @@ void main() {
     repository.poolIdsByPostId[1] = [9];
     repository.searches.add(const BunnySearch(id: 5, site: BunnySite.e621, label: 'My pool', query: 'pool:9', intervalHours: 24, createdAt: '2026-01-01T00:00:00Z'));
 
-    await tester.pumpWidget(wrapWithLocalization(PostDetailScreen(post: post, repository: repository, displaySettingsStore: const DisplaySettingsStore())));
+    await tester.pumpWidget(wrapWithLocalization(PostDetailScreen(post: post, repository: repository, displaySettingsStore: const DisplaySettingsStore(), syncSettingsStore: const SyncSettingsStore())));
     await tester.pumpAndSettle();
     await scrollToEnd(tester);
 
@@ -237,7 +238,7 @@ void main() {
     final post = _post(fileExt: 'jpg');
     repository.poolIdsByPostId[1] = [9];
 
-    await tester.pumpWidget(wrapWithLocalization(PostDetailScreen(post: post, repository: repository, displaySettingsStore: const DisplaySettingsStore())));
+    await tester.pumpWidget(wrapWithLocalization(PostDetailScreen(post: post, repository: repository, displaySettingsStore: const DisplaySettingsStore(), syncSettingsStore: const SyncSettingsStore())));
     await tester.pumpAndSettle();
     await scrollToEnd(tester);
 

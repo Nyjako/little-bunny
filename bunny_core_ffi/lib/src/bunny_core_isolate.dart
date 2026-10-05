@@ -239,6 +239,13 @@ class _FetchPoolRequest extends _Request {
   const _FetchPoolRequest(this.poolId);
 }
 
+class _PreviewSearchRequest extends _Request {
+  final String site;
+  final String query;
+
+  const _PreviewSearchRequest(this.site, this.query);
+}
+
 class _QueueFavoriteAddRequest extends _Request {
   final int postId;
   final int stars;
@@ -413,6 +420,19 @@ Map<String, Object?> _handleFetchPool(Pointer<bunny_core_t> core, _FetchPoolRequ
   });
 }
 
+List<Map<String, Object?>> _handlePreviewSearch(Pointer<bunny_core_t> core, _PreviewSearchRequest r) {
+  return using((arena) {
+    final out = arena<bunny_db_post_list_t>();
+    _check(_bindings.bunny_core_preview_search(core, _siteFromWire(r.site), r.query.toNativeUtf8(allocator: arena).cast(), out));
+    final items = <Map<String, Object?>>[];
+    for (var i = 0; i < out.ref.count; i++) {
+      items.add(_postToMap(out.ref.items[i]));
+    }
+    _bindings.bunny_db_post_list_free(out);
+    return items;
+  });
+}
+
 Map<String, Object?> _handleGetPostById(Pointer<bunny_core_t> core, _GetPostByIdRequest r) {
   return using((arena) {
     final out = arena<bunny_db_post_t>();
@@ -505,6 +525,8 @@ Object? _dispatch(Pointer<bunny_core_t>? core, _Request request, void Function(P
         return _handleFetchAndCachePost(c, r);
       case _FetchPoolRequest r:
         return _handleFetchPool(c, r);
+      case _PreviewSearchRequest r:
+        return _handlePreviewSearch(c, r);
       case _QueueFavoriteAddRequest r:
         _check(_bindings.bunny_core_queue_favorite_add(c, r.postId, r.stars));
         return null;
@@ -638,6 +660,8 @@ class BunnyCoreNative {
   Future<int> fetchAndCachePost(String site, int externalId) => _send<int>(_FetchAndCachePostRequest(site, externalId));
 
   Future<Map<String, Object?>> fetchPool(int poolId) => _send<Map<String, Object?>>(_FetchPoolRequest(poolId));
+
+  Future<List<Map<String, Object?>>> previewSearch(String site, String query) => _send<List<Map<String, Object?>>>(_PreviewSearchRequest(site, query));
 
   Future<void> queueFavoriteAdd(int postId, int stars) => _send<void>(_QueueFavoriteAddRequest(postId, stars));
 

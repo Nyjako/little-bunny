@@ -138,6 +138,13 @@ void bunny_core_pool_info_free(bunny_core_pool_info_t *info);
 
 bunny_core_result_t bunny_core_fetch_pool(bunny_core_t *core, int64_t pool_id, bunny_core_pool_info_t *out_info);
 
+/* Runs a single page of `query` live against `site` and upserts whatever
+ * comes back into the local post cache (so thumbnails/ids are immediately
+ * usable), *without* creating a searches/search_results row -- a stateless
+ * "fetch and cache posts matching this query" call, used for the tag/artist
+ * click-through browse screen rather than a saved search. */
+bunny_core_result_t bunny_core_preview_search(bunny_core_t *core, bunny_db_site_t site, const char *query, bunny_db_post_list_t *out_list);
+
 /* --- Scheduled search sync --------------------------------------------------- */
 
 typedef struct

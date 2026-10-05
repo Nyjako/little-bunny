@@ -107,6 +107,12 @@ abstract interface class BunnyRepository {
   /// pool-mate post, this is how its full data gets loaded for display).
   Future<BunnyPost> getPost(int postId);
 
+  /// Runs one page of [query] live against [site] and caches whatever comes
+  /// back (so thumbnails/ids work immediately), without creating a saved
+  /// search -- used by the tag/artist click-through browse screen, which
+  /// shows results for a query the user hasn't (yet) chosen to save.
+  Future<List<BunnyPost>> previewSearch(BunnySite site, String query);
+
   /// Manually triggers a sync pass (runs every due search). The server also
   /// does this on its own schedule (M5.3); this is for an explicit
   /// "refresh now" action.

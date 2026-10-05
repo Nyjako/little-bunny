@@ -382,6 +382,18 @@ abstract class AppLocalizations {
   /// **'Mark all as seen'**
   String get postGridMarkAllSeen;
 
+  /// No description provided for @tagBrowseEmptyState.
+  ///
+  /// In en, this message translates to:
+  /// **'No posts found for this search.'**
+  String get tagBrowseEmptyState;
+
+  /// No description provided for @tagBrowseAddToSearchesTooltip.
+  ///
+  /// In en, this message translates to:
+  /// **'Save as a search'**
+  String get tagBrowseAddToSearchesTooltip;
+
   /// No description provided for @postDetailScreenTitle.
   ///
   /// In en, this message translates to:
