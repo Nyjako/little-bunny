@@ -112,6 +112,12 @@
   "postDetailFavoriteRemoveTooltip": "Remove from favorites",
   "postDetailUpvoteTooltip": "Upvote",
   "postDetailDownvoteTooltip": "Downvote",
+  "postDetailCommentsSectionLabel": "Discussion",
+  "postDetailNoCommentsYet": "No comments yet.",
+  "postDetailCommentFieldLabel": "Add a comment",
+  "postDetailCommentAnonymousLabel": "Post anonymously",
+  "postDetailCommentSubmit": "Post",
+  "postDetailCommentPostFailed": "Couldn't post that comment",
 
   "lockScreenMessage": "LittleBunny is locked",
   "lockScreenBiometricReason": "Unlock LittleBunny",

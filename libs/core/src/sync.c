@@ -468,6 +468,70 @@ bunny_core_result_t bunny_core_fetch_pool(bunny_core_t *core, int64_t pool_id, b
     return BUNNY_CORE_OK;
 }
 
+void bunny_core_comment_list_free(bunny_core_comment_list_t *list)
+{
+    if (!list) {
+        return;
+    }
+    for (size_t i = 0; i < list->count; i++) {
+        free(list->items[i].creator_name);
+        free(list->items[i].body);
+        free(list->items[i].created_at);
+    }
+    free(list->items);
+    memset(list, 0, sizeof(*list));
+}
+
+bunny_core_result_t bunny_core_list_comments(bunny_core_t *core, int64_t post_id, bunny_core_comment_list_t *out_list)
+{
+    if (!core || !out_list) {
+        return BUNNY_CORE_ERR_INVALID_ARG;
+    }
+    memset(out_list, 0, sizeof(*out_list));
+
+    bunny_db_post_t post;
+    memset(&post, 0, sizeof(post));
+    bunny_core_result_t lookup_result = bunny_core_map_db_result(bunny_db_post_get_by_id(core->db, post_id, &post));
+    if (lookup_result != BUNNY_CORE_OK) {
+        return lookup_result;
+    }
+    if (post.site != BUNNY_DB_SITE_E621) {
+        bunny_db_post_free(&post);
+        return BUNNY_CORE_ERR_SITE;
+    }
+    int64_t external_id = post.external_id;
+    bunny_db_post_free(&post);
+
+    e621_client_t *client = bunny_core_build_e621_client(core);
+    if (!client) {
+        return BUNNY_CORE_ERR_SITE;
+    }
+
+    e621_comment_list_t comments;
+    memset(&comments, 0, sizeof(comments));
+    e621_result_t fetch_result = e621_comment_list(client, external_id, &comments);
+    e621_client_destroy(client);
+    if (fetch_result != E621_OK) {
+        return BUNNY_CORE_ERR_SITE;
+    }
+
+    bunny_core_comment_t *items = comments.count > 0 ? calloc(comments.count, sizeof(bunny_core_comment_t)) : NULL;
+    if (comments.count > 0 && !items) {
+        e621_comment_list_free(&comments);
+        return BUNNY_CORE_ERR_UNKNOWN;
+    }
+    for (size_t i = 0; i < comments.count; i++) {
+        items[i].id = comments.items[i].id;
+        items[i].creator_name = comments.items[i].creator_name ? goblin_copy_cstr(comments.items[i].creator_name) : NULL;
+        items[i].body = comments.items[i].body ? goblin_copy_cstr(comments.items[i].body) : NULL;
+        items[i].created_at = comments.items[i].created_at ? goblin_copy_cstr(comments.items[i].created_at) : NULL;
+    }
+    out_list->items = items;
+    out_list->count = comments.count;
+    e621_comment_list_free(&comments);
+    return BUNNY_CORE_OK;
+}
+
 bunny_core_result_t bunny_core_sync_due_searches(bunny_core_t *core, bunny_core_sync_stats_t *out_stats)
 {
     if (!core) {

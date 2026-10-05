@@ -327,6 +327,57 @@ void test_fetch_and_cache_post_upserts_live_inkbunny_submission(void)
     free(submission_fixture);
 }
 
+void test_list_comments_returns_live_e621_comments(void)
+{
+    char *post_fixture = read_fixture("e621_post_single.json");
+    char *comments_fixture = read_fixture("e621_comments_list.json");
+    TEST_ASSERT_NOT_NULL(post_fixture);
+    TEST_ASSERT_NOT_NULL(comments_fixture);
+    g_e621_state.bodies[0] = post_fixture;
+    g_e621_state.bodies[1] = comments_fixture;
+    g_e621_state.body_count = 2;
+
+    int64_t post_id = 0;
+    bunny_core_result_t result = bunny_core_fetch_and_cache_post(g_core, BUNNY_DB_SITE_E621, 42, &post_id);
+    TEST_ASSERT_EQUAL(BUNNY_CORE_OK, result);
+
+    bunny_core_comment_list_t comments;
+    result = bunny_core_list_comments(g_core, post_id, &comments);
+    TEST_ASSERT_EQUAL(BUNNY_CORE_OK, result);
+    TEST_ASSERT_EQUAL(2, (int)comments.count);
+    TEST_ASSERT_EQUAL_STRING("someone", comments.items[0].creator_name);
+    TEST_ASSERT_EQUAL_STRING("Nice pic!", comments.items[0].body);
+    TEST_ASSERT_EQUAL_STRING("another", comments.items[1].creator_name);
+    bunny_core_comment_list_free(&comments);
+
+    free(post_fixture);
+    free(comments_fixture);
+}
+
+void test_list_comments_rejects_inkbunny_posts(void)
+{
+    char *login_fixture = read_fixture("inkbunny_login_success.json");
+    char *submission_fixture = read_fixture("inkbunny_submission_full.json");
+    TEST_ASSERT_NOT_NULL(login_fixture);
+    TEST_ASSERT_NOT_NULL(submission_fixture);
+    g_inkbunny_state.bodies[0] = login_fixture;
+    g_inkbunny_state.bodies[1] = submission_fixture;
+    g_inkbunny_state.body_count = 2;
+
+    int64_t post_id = 0;
+    bunny_core_result_t result = bunny_core_fetch_and_cache_post(g_core, BUNNY_DB_SITE_INKBUNNY, 3955918, &post_id);
+    TEST_ASSERT_EQUAL(BUNNY_CORE_OK, result);
+
+    /* No further fixture bodies queued -- rejecting a non-e621 post must
+     * happen before any HTTP call is made. */
+    bunny_core_comment_list_t comments;
+    result = bunny_core_list_comments(g_core, post_id, &comments);
+    TEST_ASSERT_EQUAL(BUNNY_CORE_ERR_SITE, result);
+
+    free(login_fixture);
+    free(submission_fixture);
+}
+
 void test_fetch_pool_returns_live_pool_info(void)
 {
     char *fixture = read_fixture("e621_pool_single.json");
@@ -655,6 +706,8 @@ int main(void)
     RUN_TEST(test_sync_e621_search_upserts_post_relationships_and_pools);
     RUN_TEST(test_fetch_and_cache_post_upserts_live_e621_post);
     RUN_TEST(test_fetch_and_cache_post_upserts_live_inkbunny_submission);
+    RUN_TEST(test_list_comments_returns_live_e621_comments);
+    RUN_TEST(test_list_comments_rejects_inkbunny_posts);
     RUN_TEST(test_fetch_pool_returns_live_pool_info);
     RUN_TEST(test_preview_search_upserts_posts_without_creating_a_search);
     RUN_TEST(test_sync_e621_search_fetches_a_second_page_when_the_first_is_full);

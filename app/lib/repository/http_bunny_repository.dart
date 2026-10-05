@@ -66,6 +66,9 @@ BunnyPostRelationships _relationshipsFromJson(Map<String, Object?> j) => BunnyPo
 
 BunnyPoolInfo _poolInfoFromJson(Map<String, Object?> j) => BunnyPoolInfo(id: (j['id'] as num).toInt(), name: j['name'] as String?, postCount: (j['post_count'] as num).toInt());
 
+BunnyComment _commentFromJson(Map<String, Object?> j) =>
+    BunnyComment(id: (j['id'] as num).toInt(), creatorName: j['creator_name'] as String?, body: j['body'] as String?, createdAt: j['created_at'] as String?);
+
 BunnySyncStats _syncStatsFromJson(Map<String, Object?> j) => BunnySyncStats(
   searchesChecked: (j['searches_checked'] as num).toInt(),
   searchesSynced: (j['searches_synced'] as num).toInt(),
@@ -315,6 +318,15 @@ class HttpBunnyRepository implements BunnyRepository {
       _throwError(response);
     }
     return _decodeList(response).map(_postFromJson).toList();
+  }
+
+  @override
+  Future<List<BunnyComment>> getPostComments(int postId) async {
+    final response = await _client.get(_uri('/posts/$postId/comments'), headers: _headers);
+    if (response.statusCode != 200) {
+      _throwError(response);
+    }
+    return _decodeList(response).map(_commentFromJson).toList();
   }
 
   @override
