@@ -269,14 +269,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get postDetailOpenPostFailed => 'Couldn\'t open that post';
 
   @override
-  String get postDetailCreatePoolSearchDialogTitle => 'Add pool';
-
-  @override
-  String postDetailCreatePoolSearchDialogContent(int poolId) {
-    return 'This post belongs to pool $poolId, but there\'s no saved search for it yet. Create one?';
-  }
-
-  @override
   String get postDetailFavoriteAddTooltip => 'Add to favorites';
 
   @override

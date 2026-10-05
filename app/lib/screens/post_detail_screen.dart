@@ -13,7 +13,6 @@ import '../settings/download_settings_store.dart';
 import '../settings/sync_settings_store.dart';
 import '../util/image_headers.dart';
 import 'full_screen_post_viewer_screen.dart';
-import 'post_grid_screen.dart';
 import 'tag_browse_screen.dart';
 
 const _imageExtensions = {'jpg', 'jpeg', 'png', 'gif', 'webp'};
@@ -463,67 +462,41 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
     );
   }
 
+  // Opens a pool directly via TagBrowseScreen's existing stateless preview
+  // (M9.6.3) instead of forcing a saved-search dialog first -- TagBrowseScreen
+  // already offers its own "add to searches" action for anyone who wants to
+  // save it afterward. The pool's own name is fetched best-effort to pre-fill
+  // that action's label; a failure here just falls back to the bare
+  // "pool:<id>" label CreateSearchScreen would otherwise mirror from the
+  // query, so it's swallowed rather than surfaced as an error.
   Future<void> _openPool(AppLocalizations l10n, int poolId) async {
+    String? label;
     try {
-      final searches = await widget.repository.listSearches();
-      final existing = searches.where((search) => search.site == BunnySite.e621 && search.query == 'pool:$poolId');
-      BunnySearch? target = existing.isEmpty ? null : existing.first;
-
-      if (target == null) {
-        if (!mounted) {
-          return;
-        }
-        final create = await showDialog<bool>(
-          context: context,
-          builder: (context) => AlertDialog(
-            title: Text(l10n.postDetailCreatePoolSearchDialogTitle),
-            content: Text(l10n.postDetailCreatePoolSearchDialogContent(poolId)),
-            actions: [
-              TextButton(onPressed: () => Navigator.pop(context, false), child: Text(l10n.commonCancel)),
-              TextButton(onPressed: () => Navigator.pop(context, true), child: Text(l10n.createPoolSearchSubmit)),
-            ],
-          ),
-        );
-        if (create != true) {
-          return;
-        }
-
-        String label = 'pool:$poolId';
-        try {
-          final info = await widget.repository.fetchPool(poolId);
-          if (info.name != null && info.name!.isNotEmpty) {
-            label = info.name!;
-          }
-        } catch (_) {
-          // Fall back to the default label above.
-        }
-
-        final searchId = await widget.repository.createSearch(BunnySite.e621, label, 'pool:$poolId');
-        final refreshed = await widget.repository.listSearches();
-        target = refreshed.firstWhere((search) => search.id == searchId);
+      final info = await widget.repository.fetchPool(poolId);
+      if (info.name != null && info.name!.isNotEmpty) {
+        label = info.name;
       }
-
-      if (!mounted) {
-        return;
-      }
-      await Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (context) => PostGridScreen(
-            search: target!,
-            repository: widget.repository,
-            displaySettingsStore: widget.displaySettingsStore,
-            syncSettingsStore: widget.syncSettingsStore,
-            downloadSettingsStore: widget.downloadSettingsStore,
-          ),
-        ),
-      );
     } catch (_) {
-      if (!mounted) {
-        return;
-      }
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(l10n.postDetailOpenPostFailed)));
+      // Fall back to no pre-filled label.
     }
+
+    if (!mounted) {
+      return;
+    }
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => TagBrowseScreen(
+          site: BunnySite.e621,
+          query: 'pool:$poolId',
+          repository: widget.repository,
+          displaySettingsStore: widget.displaySettingsStore,
+          syncSettingsStore: widget.syncSettingsStore,
+          downloadSettingsStore: widget.downloadSettingsStore,
+          initialLabel: label,
+        ),
+      ),
+    );
   }
 
   Widget _poolsSection(AppLocalizations l10n) {

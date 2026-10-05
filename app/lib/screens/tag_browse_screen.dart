@@ -26,6 +26,11 @@ class TagBrowseScreen extends StatefulWidget {
   final SyncSettingsStore syncSettingsStore;
   final DownloadSettingsStore downloadSettingsStore;
 
+  /// Pre-fills the label field when the user chooses to save this browse as
+  /// a search (e.g. a pool's own title, M9.6.3) -- `null` leaves the label
+  /// field mirroring [query] like every other browse-to-save flow.
+  final String? initialLabel;
+
   const TagBrowseScreen({
     super.key,
     required this.site,
@@ -34,6 +39,7 @@ class TagBrowseScreen extends StatefulWidget {
     required this.displaySettingsStore,
     required this.syncSettingsStore,
     required this.downloadSettingsStore,
+    this.initialLabel,
   });
 
   @override
@@ -159,7 +165,10 @@ class _TagBrowseScreenState extends State<TagBrowseScreen> {
   Future<void> _addToSearches() async {
     final created = await Navigator.push<bool>(
       context,
-      MaterialPageRoute(builder: (context) => CreateSearchScreen(repository: widget.repository, syncSettingsStore: widget.syncSettingsStore, initialSite: widget.site, initialQuery: widget.query)),
+      MaterialPageRoute(
+        builder: (context) =>
+            CreateSearchScreen(repository: widget.repository, syncSettingsStore: widget.syncSettingsStore, initialSite: widget.site, initialQuery: widget.query, initialLabel: widget.initialLabel),
+      ),
     );
     if (created == true && mounted) {
       Navigator.pop(context);
