@@ -1009,6 +1009,28 @@ this file is the single source of truth for "what's done" across sessions.
   bug triggers) rather than a more typical ~400px phone width; the overflow itself is left for
   M9.6.5's planned responsive redesign of that screen to fix.
 
+- [x] **M9.6.7 — Tag autocomplete token isolation**
+  `CreateSearchScreen`'s inline `_currentWord` always split on the *last* space in the whole
+  query string, so autocomplete only ever worked on the trailing word -- editing an earlier tag
+  (or e621 syntax like `-tag`/`~tag`) either completed the wrong word or offered useless
+  suggestions. New `app/lib/util/tag_query.dart` holds four pure functions instead:
+  `tagTokenRangeAt(text, cursorOffset)` finds the whitespace-delimited token actually under the
+  cursor (via `TextEditingController.selection`, not just the end of the string);
+  `splitTagPrefix(token)` strips a leading run of `-`/`~`/`(` characters so autocomplete queries
+  the bare tag and the prefix can be reattached afterward; `tagHasWildcard(tag)` flags a `*`
+  anywhere in the tag (nothing sensible to prefix-complete against a partial wildcard, so
+  autocomplete is skipped entirely rather than querying a fragment of it); and
+  `applyTagSuggestion(text, cursorOffset, suggestion)` combines the first two to replace just the
+  token under the cursor with `prefix + suggestion + ' '`, leaving the rest of the query
+  untouched. No parsing of balanced parenthesized groups beyond treating `(` as one more prefix
+  character to strip/reattach, matching the user's confirmed scope. Tests: a standalone unit
+  test file (`test/util/tag_query_test.dart`, no widget needed) covering plain tags, `-tag`,
+  `~tag`, `(tag`, mixed-prefix tags, mid-string cursor positions, and the wildcard skip case;
+  `CreateSearchScreen`'s existing autocomplete test is unaffected (cursor stays at the string's
+  end for a trailing-word edit, same behavior as before), plus two new widget tests for a
+  negated tag still autocompleting with its `-` kept, and a `*`-containing token suppressing
+  suggestions entirely.
+
 - [ ] **M10 — Automation & recommendations**
   "Auto-like/auto-favorite on download" setting, most-liked/most-favorited tag stats,
   recommended new searches based on that history.
