@@ -1031,6 +1031,32 @@ this file is the single source of truth for "what's done" across sessions.
   negated tag still autocompleting with its `-` kept, and a `*`-containing token suppressing
   suggestions entirely.
 
+- [x] **M9.6.8 — Auto-favorite per saved search**
+  New migration (`ALTER TABLE searches ADD COLUMN auto_favorite INTEGER NOT NULL DEFAULT 0;`) --
+  `bunny_db_search_t`/`bunny_db_search_create`/`bunny_db_search_list` all pick it up, plus a new
+  single-purpose `bunny_db_search_set_auto_favorite(db, search_id, bool)` setter for toggling it
+  on a search that already exists, matching `bunny_db_post_mark_seen`'s setter-not-editor shape
+  (there's still no general "edit search" flow). Sync hook: right after `bunny_db_search_add_
+  result` in both `sync_e621_search`'s and `sync_inkbunny_search`'s per-post loops (`libs/core/
+  src/sync.c`), a search with `auto_favorite` set calls `bunny_core_queue_favorite_add(core,
+  post_id, -1)` for the post it just upserted -- queuing only (no network I/O at sync time), so
+  the next `processQueue()` pass (already scheduled) drains it like any other queued favorite.
+  Both sync paths got the hook, not just e621's, since Inkbunny favorites are already supported
+  end-to-end via `inkbunny/unofficial_favorites.h` -- limiting the toggle to one site would have
+  made it silently do nothing on Inkbunny searches, which isn't how the "Auto-favorite" switch
+  reads in the UI (it doesn't say "e621 only"). Full plumbing: FFI request classes + isolate
+  handlers, an `auto_favorite` field on `POST /searches`'s body plus a new `POST /searches/{id}/
+  auto_favorite` endpoint, `BunnySearch.autoFavorite` + `BunnyRepository.createSearch(...,
+  autoFavorite:)`/`setSearchAutoFavorite(int, bool)` across FFI/HTTP/Fake. UI: `CreateSearchScreen`
+  gets a `SwitchListTile` ("Auto-favorite new posts"); `SearchesScreen`'s list row gets a filled/
+  outlined heart icon next to the existing delete button, toggling the setting directly -- the
+  "editable afterward" affordance, without a separate edit screen. Tests at every layer: C
+  `:memory:` tests for the new column/setter, a dedicated sync+queue test confirming a search
+  with `auto_favorite` set actually queues and (once processed) applies a favorite -- and one
+  confirming a search without it queues nothing -- a server integration test for both the create
+  field and the toggle endpoint, FFI/HTTP repository tests, and widget tests for the creation
+  switch and the list-row toggle.
+
 - [ ] **M10 — Automation & recommendations**
   "Auto-like/auto-favorite on download" setting, most-liked/most-favorited tag stats,
   recommended new searches based on that history.

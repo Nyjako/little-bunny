@@ -74,9 +74,9 @@ class FakeBunnyRepository implements BunnyRepository {
   Future<void> deleteAccount(BunnySite site) async => accounts.remove(site);
 
   @override
-  Future<int> createSearch(BunnySite site, String label, String query, {int intervalHours = 24}) async {
+  Future<int> createSearch(BunnySite site, String label, String query, {int intervalHours = 24, bool autoFavorite = false}) async {
     final id = _nextSearchId++;
-    searches.add(BunnySearch(id: id, site: site, label: label, query: query, intervalHours: intervalHours, createdAt: '2026-01-01T00:00:00Z'));
+    searches.add(BunnySearch(id: id, site: site, label: label, query: query, intervalHours: intervalHours, createdAt: '2026-01-01T00:00:00Z', autoFavorite: autoFavorite));
     return id;
   }
 
@@ -92,6 +92,7 @@ class FakeBunnyRepository implements BunnyRepository {
           createdAt: search.createdAt,
           lastRunAt: search.lastRunAt,
           unseenCount: (postsBySearchId[search.id] ?? const []).where((post) => !post.isSeen).length,
+          autoFavorite: search.autoFavorite,
         ),
       )
       .toList();
@@ -100,6 +101,26 @@ class FakeBunnyRepository implements BunnyRepository {
   Future<void> deleteSearch(int searchId) async {
     searches.removeWhere((search) => search.id == searchId);
     postsBySearchId.remove(searchId);
+  }
+
+  @override
+  Future<void> setSearchAutoFavorite(int searchId, bool autoFavorite) async {
+    final index = searches.indexWhere((search) => search.id == searchId);
+    if (index == -1) {
+      return;
+    }
+    final search = searches[index];
+    searches[index] = BunnySearch(
+      id: search.id,
+      site: search.site,
+      label: search.label,
+      query: search.query,
+      intervalHours: search.intervalHours,
+      createdAt: search.createdAt,
+      lastRunAt: search.lastRunAt,
+      unseenCount: search.unseenCount,
+      autoFavorite: autoFavorite,
+    );
   }
 
   @override

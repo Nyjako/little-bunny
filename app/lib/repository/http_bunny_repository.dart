@@ -25,6 +25,7 @@ BunnySearch _searchFromJson(Map<String, Object?> j) => BunnySearch(
   createdAt: j['created_at'] as String,
   lastRunAt: j['last_run_at'] as String?,
   unseenCount: (j['unseen_count'] as num).toInt(),
+  autoFavorite: j['auto_favorite'] as bool,
 );
 
 BunnyPost _postFromJson(Map<String, Object?> j) => BunnyPost(
@@ -198,8 +199,12 @@ class HttpBunnyRepository implements BunnyRepository {
   }
 
   @override
-  Future<int> createSearch(BunnySite site, String label, String query, {int intervalHours = 24}) async {
-    final response = await _client.post(_uri('/searches'), headers: _headers, body: jsonEncode({'site': site.toWireString(), 'label': label, 'query': query, 'interval_hours': intervalHours}));
+  Future<int> createSearch(BunnySite site, String label, String query, {int intervalHours = 24, bool autoFavorite = false}) async {
+    final response = await _client.post(
+      _uri('/searches'),
+      headers: _headers,
+      body: jsonEncode({'site': site.toWireString(), 'label': label, 'query': query, 'interval_hours': intervalHours, 'auto_favorite': autoFavorite}),
+    );
     if (response.statusCode != 201) {
       _throwError(response);
     }
@@ -218,6 +223,14 @@ class HttpBunnyRepository implements BunnyRepository {
   @override
   Future<void> deleteSearch(int searchId) async {
     final response = await _client.delete(_uri('/searches/$searchId'), headers: _headers);
+    if (response.statusCode != 200) {
+      _throwError(response);
+    }
+  }
+
+  @override
+  Future<void> setSearchAutoFavorite(int searchId, bool autoFavorite) async {
+    final response = await _client.post(_uri('/searches/$searchId/auto_favorite'), headers: _headers, body: jsonEncode({'auto_favorite': autoFavorite}));
     if (response.statusCode != 200) {
       _throwError(response);
     }

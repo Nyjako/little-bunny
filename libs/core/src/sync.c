@@ -258,6 +258,9 @@ static bunny_core_result_t sync_e621_search(bunny_core_t *core, const bunny_db_s
             int64_t post_id = 0;
             if (upsert_e621_post(core->db, &posts.items[i], &post_id) == BUNNY_CORE_OK) {
                 bunny_db_search_add_result(core->db, search->id, post_id);
+                if (search->auto_favorite) {
+                    bunny_core_queue_favorite_add(core, post_id, -1);
+                }
                 if (stats) {
                     stats->posts_upserted++;
                 }
@@ -307,6 +310,9 @@ static bunny_core_result_t sync_inkbunny_search(bunny_core_t *core, const bunny_
             int64_t post_id = 0;
             if (upsert_inkbunny_submission(core->db, &submissions.items[i], &post_id) == BUNNY_CORE_OK) {
                 bunny_db_search_add_result(core->db, search->id, post_id);
+                if (search->auto_favorite) {
+                    bunny_core_queue_favorite_add(core, post_id, -1);
+                }
                 if (stats) {
                     stats->posts_upserted++;
                 }

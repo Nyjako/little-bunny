@@ -34,8 +34,9 @@ typedef struct
     char *query;
     int interval_hours;
     char *created_at;
-    char *last_run_at; /* NULL if this search has never run */
-    int unseen_count;  /* posts linked to this search with no seen_posts row */
+    char *last_run_at;  /* NULL if this search has never run */
+    int unseen_count;   /* posts linked to this search with no seen_posts row */
+    bool auto_favorite; /* queue a favorite for every post this search finds during sync */
 } bunny_db_search_t;
 
 typedef struct
