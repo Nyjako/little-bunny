@@ -76,6 +76,14 @@
   "postGridRefreshTooltip": "Refresh",
   "postGridEmptyState": "No posts cached yet. Tap refresh to sync.",
   "postGridMarkAllSeen": "Mark all as seen",
+  "postGridSelectionCount": "{count} selected",
+  "@postGridSelectionCount": {
+    "placeholders": {"count": {"type": "int"}}
+  },
+  "postGridExitSelectionTooltip": "Cancel selection",
+  "postGridMassFavoriteTooltip": "Favorite selected",
+  "postGridMassUpvoteTooltip": "Upvote selected",
+  "postGridMassDownvoteTooltip": "Downvote selected",
 
   "tagBrowseEmptyState": "No posts found for this search.",
   "tagBrowseAddToSearchesTooltip": "Save as a search",

@@ -8,25 +8,41 @@ import 'rating_badge.dart';
 /// A single thumbnail tile for a post grid -- the rating badge/unseen-dot/
 /// score-favCount overlay [PostGridScreen] originally built inline (M8.3,
 /// badges added M8.5.7), factored out here (M8.5.10) so [TagBrowseScreen]
-/// can reuse it instead of duplicating the whole `Stack`.
+/// can reuse it instead of duplicating the whole `Stack`. [selected]/
+/// [onLongPress] (M9.2) both default to not-selectable, so [TagBrowseScreen]
+/// (which has no selection mode) is unaffected.
 class PostGridTile extends StatelessWidget {
   final BunnyPost post;
   final String? imageUrl;
   final VoidCallback onTap;
+  final bool selected;
+  final VoidCallback? onLongPress;
 
-  const PostGridTile({super.key, required this.post, required this.imageUrl, required this.onTap});
+  const PostGridTile({super.key, required this.post, required this.imageUrl, required this.onTap, this.selected = false, this.onLongPress});
 
   @override
   Widget build(BuildContext context) {
     final url = imageUrl;
     return GestureDetector(
       onTap: onTap,
+      onLongPress: onLongPress,
       child: Stack(
         fit: StackFit.expand,
         children: [
           if (url != null) CachedNetworkImage(imageUrl: url, httpHeaders: imageHeadersFor(post.site), fit: BoxFit.cover) else const ColoredBox(color: Colors.black12),
-          if (!post.isSeen) Positioned(top: 4, right: 4, child: Container(width: 10, height: 10, decoration: const BoxDecoration(color: Colors.redAccent, shape: BoxShape.circle))),
+          if (selected) Container(color: Colors.black45),
+          if (!post.isSeen && onLongPress == null) Positioned(top: 4, right: 4, child: Container(width: 10, height: 10, decoration: const BoxDecoration(color: Colors.redAccent, shape: BoxShape.circle))),
           Positioned(top: 4, left: 4, child: RatingBadge(site: post.site, rating: post.rating)),
+          // Selection mode replaces the unseen dot in this corner with a
+          // (de)selected checkmark -- both are small status markers for the
+          // same corner, and which one matters more depends on whether
+          // selection mode is active.
+          if (onLongPress != null)
+            Positioned(
+              top: 4,
+              right: 4,
+              child: Icon(selected ? Icons.check_circle : Icons.radio_button_unchecked, color: selected ? Colors.lightBlueAccent : Colors.white70),
+            ),
           Positioned(
             bottom: 0,
             left: 0,

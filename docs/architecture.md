@@ -1271,6 +1271,56 @@ its actual target widget (`find.widgetWithText(AppBar, 'Post')` for the app bar 
 claim that `'X'` appears exactly once on the whole screen, which a later, unrelated change can
 silently invalidate from a completely different file.
 
+**Mass selection mode + mass favorite/vote (M9.2)**: unlike every other sub-milestone so far,
+this one needed zero backend changes -- `bunny_core_process_queue`/
+`bunny_db_action_queue_list_pending` have no row-count limit, so queuing N favorite/vote
+actions and calling `processQueue()` once already drains all of them in a single pass. "Mass
+favorite/vote" is therefore pure client-side looping over the same `queueFavoriteAdd`/
+`queueVote` calls M8.5.14 already wired up for the single-post case.
+
+`PostGridTile` (factored out in M8.5.10 for `TagBrowseScreen`'s reuse) gained two optional
+constructor params, `selected` and `onLongPress`, both defaulting to `false`/`null` so
+`TagBrowseScreen`'s existing non-selectable usage needs no changes. When `onLongPress` is
+non-null the tile renders a translucent dark overlay plus a checkmark/empty-circle icon in the
+same top-right corner the unseen-dot already occupied -- the unseen dot is suppressed in that
+state (`if (!post.isSeen && onLongPress == null)`) rather than drawn alongside it, since
+selection status is the more relevant thing to show in that corner once selection mode is
+active.
+
+`PostGridScreen` tracks selection with a single `Set<int> _selectedPostIds` field and a derived
+`bool get _selectionMode => _selectedPostIds.isNotEmpty` -- deliberately no separate boolean
+flag, since "at least one post selected" and "selection mode is active" are the same condition
+here; deselecting the last tile exits the mode automatically as a side effect of the set
+becoming empty, with no extra code needed. A `_onTileTap` dispatcher checks `_selectionMode`
+first: in selection mode a tap toggles membership instead of opening `PostDetailScreen`,
+otherwise it behaves exactly as before. Long-pressing any tile enters selection mode and
+selects that tile in one step, via the same `_toggleSelection` method used for every subsequent
+tap.
+
+While selection mode is active, `_buildAppBar` returns a different `AppBar` entirely rather than
+conditionally swapping individual `actions` entries: a close icon (`_exitSelectionMode`, which
+just clears the set), a live "`N` selected" title, a favorite icon, and up/down-vote icons. The
+vote icons are omitted outright (not disabled) when `widget.search.site == BunnySite.inkbunny`
+-- the exact same per-grid homogeneity reasoning as `PostDetailScreen`'s per-post Inkbunny vote
+handling in M8.5.14, just hidden instead of greyed out since a contextual action bar has no
+good way to show "disabled" short of literally greying an icon out, and omission reads more
+clearly here. `_massFavorite`/`_massVote` each snapshot `_selectedPostIds.toList()` first (so
+the loop isn't iterating a set that `_toggleSelection` could mutate mid-flight), loop the
+matching `queue*` call per id, call `processQueue()` exactly once after the loop, then clear the
+selection and reassign `_postsFuture` to pick up any server-side state changes (e.g. favorite
+counts) on reload.
+
+**Test gotcha, within-screen icon collision**: `PostGridTile`'s own score/fav-count overlay
+already renders `Icons.arrow_upward` and `Icons.favorite` for every tile (10px, as plain status
+text) -- the exact same icons the new contextual `AppBar` actions use. An unscoped
+`find.byIcon(Icons.favorite)` in a grid with any posts present matches both the app bar button
+and every tile's fav-count icon simultaneously, making `tester.tap` throw on ambiguity and
+`findsNothing`/`findsOneWidget` assertions fail for the wrong reason. Every M9.2 test that
+taps or counts a contextual action icon scopes the finder with
+`find.descendant(of: find.byType(AppBar), matching: find.byIcon(...))` rather than a bare
+`find.byIcon(...)` -- the same "scope past a collision" fix as M9.1's `find.widgetWithText`
+gotcha above, just via a different finder combinator.
+
 ## Inkbunny API constraints (found in M2)
 
 Verified against the live API and the official docs while building `libinkbunny`:

@@ -828,6 +828,31 @@ this file is the single source of truth for "what's done" across sessions.
   repository tests, widget tests covering comments rendering, posting refreshing the list, the
   empty state, and the section's absence on an Inkbunny post.
 
+- [x] **M9.2 — Mass selection mode + mass favorite/vote**
+  No new backend -- `bunny_core_process_queue` has no row-count limit, so "mass favorite/vote"
+  is pure UI: loop the existing per-post `queueFavoriteAdd`/`queueVote` calls, then a single
+  `processQueue()`. `PostGridTile` gained optional `selected`/`onLongPress` params (both
+  default to `false`/`null`, so `TagBrowseScreen`'s existing non-selectable usage is
+  untouched) rendering a translucent overlay plus a checkmark/empty-circle icon in the same
+  top-right corner the unseen-dot already used (the dot is suppressed while selection mode is
+  active -- selection status matters more than unseen status in that corner at that point).
+  `PostGridScreen` tracks selection as a single `Set<int> _selectedPostIds` (no separate
+  boolean flag -- "selection mode active" is just "the set is non-empty," so deselecting the
+  last tile exits the mode automatically). Long-pressing a tile enters selection mode and
+  selects it; tapping any tile while active toggles its membership instead of opening it, via
+  a tap dispatcher (`_onTileTap`) that checks the mode first. While active, the normal `AppBar`
+  is replaced by a contextual one: a close icon (`_exitSelectionMode`), a live "N selected"
+  title, a favorite action, and up/down-vote actions -- the vote actions are omitted entirely
+  (not just disabled) when `widget.search.site == BunnySite.inkbunny`, mirroring the single-post
+  detail screen's per-post vote-hiding rule from M8.5.14. Mass-favorite/mass-vote each snapshot
+  the selected ids, loop the matching `queue*` call, call `processQueue()` once, then clear the
+  selection and reload the grid. Widget tests cover: entering selection mode via long-press and
+  toggling tiles in and out, exiting selection mode restoring the normal app bar, mass-favorite
+  firing one `queueFavoriteAdd` per selected post plus exactly one `processQueue` call,
+  mass-vote doing the same with the right score, and vote actions being absent (not just
+  disabled) for an Inkbunny search -- each scoped to `find.descendant(of: find.byType(AppBar),
+  ...)` since `PostGridTile`'s own score/fav-count overlay reuses the same icons.
+
 - [ ] **M10 — Automation & recommendations**
   "Auto-like/auto-favorite on download" setting, most-liked/most-favorited tag stats,
   recommended new searches based on that history.
