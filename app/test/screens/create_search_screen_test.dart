@@ -64,6 +64,38 @@ void main() {
     expect(field.controller!.text, 'canine fox ');
   });
 
+  testWidgets('negated tags still autocomplete and keep their - prefix (M9.6.7)', (WidgetTester tester) async {
+    final repository = FakeBunnyRepository();
+    repository.tagStats.addAll(const [BunnyTagStat(name: 'dog', count: 7)]);
+
+    await tester.pumpWidget(_wrap(repository));
+    await tester.pumpAndSettle();
+
+    await tester.enterText(find.widgetWithText(TextFormField, 'Query'), 'cat -do');
+    await tester.pump(const Duration(milliseconds: 350));
+
+    expect(find.text('dog (7)'), findsOneWidget);
+
+    await tester.tap(find.text('dog (7)'));
+    await tester.pump();
+
+    final field = tester.widget<TextFormField>(find.widgetWithText(TextFormField, 'Query'));
+    expect(field.controller!.text, 'cat -dog ');
+  });
+
+  testWidgets('a wildcard token skips autocomplete entirely (M9.6.7)', (WidgetTester tester) async {
+    final repository = FakeBunnyRepository();
+    repository.tagStats.addAll(const [BunnyTagStat(name: 'african_wild_dog', count: 3)]);
+
+    await tester.pumpWidget(_wrap(repository));
+    await tester.pumpAndSettle();
+
+    await tester.enterText(find.widgetWithText(TextFormField, 'Query'), 'african_*');
+    await tester.pump(const Duration(milliseconds: 350));
+
+    expect(find.text('african_wild_dog (3)'), findsNothing);
+  });
+
   testWidgets('picking a site changes which site the search is created for', (WidgetTester tester) async {
     final repository = FakeBunnyRepository();
     await tester.pumpWidget(_wrap(repository));

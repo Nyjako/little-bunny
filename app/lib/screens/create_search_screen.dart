@@ -6,16 +6,19 @@ import '../l10n/app_localizations.dart';
 import '../repository/bunny_models.dart';
 import '../repository/bunny_repository.dart';
 import '../settings/sync_settings_store.dart';
+import '../util/tag_query.dart';
 
 /// Creates a new saved search. The query field's tag-autocomplete
 /// (`BunnyRepository.tagAutocomplete`, M8.1) is debounced and only
-/// re-completes the word currently being typed -- e621-style multi-tag
-/// queries -- appending the picked tag rather than replacing the whole
-/// field. The label field mirrors the query until the user types into it
-/// directly (classic slug-follows-title UX), and the interval field
-/// pre-fills from [syncSettingsStore]'s stored default rather than a
-/// hardcoded value. Pops `true` on success so [SearchesScreen] knows to
-/// refresh.
+/// re-completes the tag token at the current cursor position (M9.6.7's
+/// `tag_query.dart` pure functions) -- e621-style multi-tag queries --
+/// appending the picked tag rather than replacing the whole field, and
+/// stripping/reattaching a leading `-`/`~`/`(` so negated or grouped tags
+/// still autocomplete correctly. The label field mirrors the query until the
+/// user types into it directly (classic slug-follows-title UX), and the
+/// interval field pre-fills from [syncSettingsStore]'s stored default rather
+/// than a hardcoded value. Pops `true` on success so [SearchesScreen] knows
+/// to refresh.
 class CreateSearchScreen extends StatefulWidget {
   final BunnyRepository repository;
   final SyncSettingsStore syncSettingsStore;
@@ -104,21 +107,22 @@ class _CreateSearchScreenState extends State<CreateSearchScreen> {
     _labelManuallyEdited = true;
   }
 
-  String get _currentWord {
-    final text = _queryController.text;
-    final lastSpace = text.lastIndexOf(' ');
-    return lastSpace == -1 ? text : text.substring(lastSpace + 1);
+  int get _cursorOffset {
+    final selectionOffset = _queryController.selection.baseOffset;
+    return selectionOffset >= 0 ? selectionOffset : _queryController.text.length;
   }
 
   void _onQueryChanged() {
     _debounce?.cancel();
-    final word = _currentWord;
-    if (word.isEmpty) {
+    final text = _queryController.text;
+    final (start, end) = tagTokenRangeAt(text, _cursorOffset);
+    final (_, tag) = splitTagPrefix(text.substring(start, end));
+    if (tag.isEmpty || tagHasWildcard(tag)) {
       setState(() => _suggestions = []);
       return;
     }
     _debounce = Timer(const Duration(milliseconds: 300), () async {
-      final suggestions = await widget.repository.tagAutocomplete(_site, word);
+      final suggestions = await widget.repository.tagAutocomplete(_site, tag);
       if (mounted) {
         setState(() => _suggestions = suggestions);
       }
@@ -126,10 +130,8 @@ class _CreateSearchScreenState extends State<CreateSearchScreen> {
   }
 
   void _applySuggestion(String tag) {
-    final text = _queryController.text;
-    final lastSpace = text.lastIndexOf(' ');
-    final prefix = lastSpace == -1 ? '' : text.substring(0, lastSpace + 1);
-    _queryController.value = TextEditingValue(text: '$prefix$tag ', selection: TextSelection.collapsed(offset: prefix.length + tag.length + 1));
+    final (newText, newCursor) = applyTagSuggestion(_queryController.text, _cursorOffset, tag);
+    _queryController.value = TextEditingValue(text: newText, selection: TextSelection.collapsed(offset: newCursor));
     setState(() => _suggestions = []);
   }
 
