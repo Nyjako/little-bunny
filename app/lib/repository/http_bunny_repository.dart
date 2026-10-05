@@ -300,6 +300,15 @@ class HttpBunnyRepository implements BunnyRepository {
   }
 
   @override
+  Future<BunnyPost> getPost(int postId) async {
+    final response = await _client.get(_uri('/posts/$postId'), headers: _headers);
+    if (response.statusCode != 200) {
+      _throwError(response);
+    }
+    return _postFromJson(_decodeObject(response));
+  }
+
+  @override
   Future<BunnySyncStats> syncDueSearches() async {
     final response = await _client.post(_uri('/sync'), headers: _headers);
     if (response.statusCode != 200) {

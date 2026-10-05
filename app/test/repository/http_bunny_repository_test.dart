@@ -295,6 +295,45 @@ void main() {
       expect(info.postCount, 3);
     });
 
+    test('getPost sends GET to the right path and maps the response', () async {
+      respond = (_) => http.Response(
+        jsonEncode({
+          'id': 2,
+          'site': 'e621',
+          'external_id': 42,
+          'artist': 'anotherartist',
+          'title': null,
+          'description': null,
+          'rating': 's',
+          'score': 1,
+          'score_up': 2,
+          'score_down': 1,
+          'fav_count': 0,
+          'comment_count': 0,
+          'file_url': 'https://example.com/2.png',
+          'file_ext': 'png',
+          'file_md5': 'def',
+          'preview_url': null,
+          'width': 50,
+          'height': 60,
+          'created_at_site': null,
+          'cached_at': '2026-01-01T00:00:00Z',
+          'is_seen': false,
+          'is_favorited': false,
+          'sample_url': null,
+        }),
+        200,
+      );
+
+      final post = await buildRepository().getPost(2);
+
+      expect(capturedMethod, 'GET');
+      expect(capturedUri.path, '/posts/2');
+      expect(post.id, 2);
+      expect(post.externalId, 42);
+      expect(post.artist, 'anotherartist');
+    });
+
     test('markPostSeen sends POST to the right path', () async {
       respond = (_) => http.Response(jsonEncode({'ok': true}), 200);
 

@@ -172,6 +172,12 @@ class _ListSearchPostsRequest extends _Request {
   const _ListSearchPostsRequest(this.searchId, this.unseenOnly);
 }
 
+class _GetPostByIdRequest extends _Request {
+  final int postId;
+
+  const _GetPostByIdRequest(this.postId);
+}
+
 class _SyncDueSearchesRequest extends _Request {
   const _SyncDueSearchesRequest();
 }
@@ -407,6 +413,16 @@ Map<String, Object?> _handleFetchPool(Pointer<bunny_core_t> core, _FetchPoolRequ
   });
 }
 
+Map<String, Object?> _handleGetPostById(Pointer<bunny_core_t> core, _GetPostByIdRequest r) {
+  return using((arena) {
+    final out = arena<bunny_db_post_t>();
+    _check(_bindings.bunny_core_post_get_by_id(core, r.postId, out));
+    final map = _postToMap(out.ref);
+    _bindings.bunny_db_post_free(out);
+    return map;
+  });
+}
+
 List<Map<String, Object?>> _handleListSearchPosts(Pointer<bunny_core_t> core, _ListSearchPostsRequest r) {
   return using((arena) {
     final out = arena<bunny_db_post_list_t>();
@@ -463,6 +479,8 @@ Object? _dispatch(Pointer<bunny_core_t>? core, _Request request, void Function(P
         return null;
       case _ListSearchPostsRequest r:
         return _handleListSearchPosts(c, r);
+      case _GetPostByIdRequest r:
+        return _handleGetPostById(c, r);
       case _SyncDueSearchesRequest():
         final outStats = arena<bunny_core_sync_stats_t>();
         _check(_bindings.bunny_core_sync_due_searches(c, outStats));
@@ -598,6 +616,8 @@ class BunnyCoreNative {
   Future<void> deleteSearch(int searchId) => _send<void>(_DeleteSearchRequest(searchId));
 
   Future<List<Map<String, Object?>>> listSearchPosts(int searchId, bool unseenOnly) => _send<List<Map<String, Object?>>>(_ListSearchPostsRequest(searchId, unseenOnly));
+
+  Future<Map<String, Object?>> getPostById(int postId) => _send<Map<String, Object?>>(_GetPostByIdRequest(postId));
 
   Future<Map<String, Object?>> syncDueSearches() => _send<Map<String, Object?>>(const _SyncDueSearchesRequest());
 

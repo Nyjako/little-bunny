@@ -677,6 +677,40 @@ this file is the single source of truth for "what's done" across sessions.
   an unmapped fallback on each site; a widget test confirms the badge and overlay render on
   grid tiles.
 
+- [x] **M8.5.8 — Post detail redesign**
+  The big UI consumer of M8.5.3/4/5/7, sequenced after all four landed. One small backend
+  gap closed first: nothing exposed "fetch one cached post by its local id" to Flutter, needed
+  so tapping a parent/child/pool chip (after `fetchPost` caches it by external id) can load
+  and display it. Added `bunny_core_post_get_by_id` (thin wrapper around the already-existing
+  `bunny_db_post_get_by_id`), `GET /posts/{id}` (bare id, added as the last dispatch branch in
+  `routes_queue.c`'s existing `posts_handler` — `post_to_json` duplicated from
+  `routes_searches.c`'s, matching the already-duplicated `add_optional_string` precedent
+  between these two files), and `BunnyRepository.getPost(int) -> Future<BunnyPost>` across
+  FFI/HTTP/Fake.
+  `PostDetailScreen.build()` redesigned: media now sized via `AspectRatio` off
+  `post.width`/`.height` instead of a fixed height, capped at 60% of the viewport height so a
+  very tall/narrow image can't push every metadata section below the fold (found via a widget
+  test regression — an uncapped `AspectRatio` at a typical test-viewport width made the media
+  exactly as tall as the whole window, putting the title/metadata outside the `ListView`'s
+  sliver layout+cache range entirely; `find.text` and real rendering treat that as "offstage"
+  identically, since a `SliverList`'s `debugVisitOnstageChildren` only visits children within
+  its laid-out+cache extent). New sections, each calling its M8.5.3-5 repository method in
+  `initState`: categorized tag chips (`Wrap` per category, Inkbunny's single uncategorized
+  group shown as plain "Tags" — not tappable yet, deferred to M8.5.10's tag-browse screen);
+  sources as a tappable link list via a new `url_launcher` dependency (hidden entirely, not
+  empty-shown, when there are none); a post-id row with `Clipboard.setData` copy-on-tap +
+  `SnackBar` confirmation; e621-only parent/children chips (`getPostRelationships`) each
+  tappable → `fetchPost` + `getPost` → push a new `PostDetailScreen`; e621-only pool chips
+  (`getPostPoolIds`) each tappable → `fetchPool` for a label, then reuse-or-create a
+  `pool:<id>` search (same mechanism as M8.5.5b's Pools tab) and navigate into it via
+  `PostGridScreen`. Inkbunny posts get none of the relationships/pools sections (no such
+  concept) and no prev/next sibling nav (still out of scope per the original M8.5.5 notes).
+  **Test gotcha, widget-test-only**: `Clipboard.setData`'s platform channel call never resolves
+  inside a `testWidgets` fake-async pump loop on the headless `flutter_tester` engine unless a
+  mock handler is installed for `SystemChannels.platform` — a plain `test()` body (no
+  `pumpWidget`) doesn't hit this since it isn't running inside the fake-async zone, which is
+  why the gap wasn't visible until a widget test actually tapped the copy-id row.
+
 - [ ] **M9 — Actions & downloads**
   Single + mass like/favorite/download, commenting, download manager writing to
   `%artist%/%id%.%extension%`, checksum (md5) verification of downloaded files against the

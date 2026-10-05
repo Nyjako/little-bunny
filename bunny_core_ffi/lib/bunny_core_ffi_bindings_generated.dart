@@ -551,6 +551,40 @@ class BunnyCoreFfiBindings {
         )
       >();
 
+  /// Fetches a single cached post by its local id -- a thin pass-through to
+  /// bunny_db, used when a post detail view needs to open a *different* post
+  /// it doesn't already have a BunnyPost for (e.g. after bunny_core_fetch_and_
+  /// cache_post caches a parent/child/pool-mate post by external id, this is
+  /// how its full data gets loaded for display).
+  bunny_core_result_t bunny_core_post_get_by_id(
+    ffi.Pointer<bunny_core_t> core,
+    int post_id,
+    ffi.Pointer<bunny_db_post_t> out_post,
+  ) {
+    return bunny_core_result_t.fromValue(
+      _bunny_core_post_get_by_id(core, post_id, out_post),
+    );
+  }
+
+  late final _bunny_core_post_get_by_idPtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.UnsignedInt Function(
+            ffi.Pointer<bunny_core_t>,
+            ffi.Int64,
+            ffi.Pointer<bunny_db_post_t>,
+          )
+        >
+      >('bunny_core_post_get_by_id');
+  late final _bunny_core_post_get_by_id = _bunny_core_post_get_by_idPtr
+      .asFunction<
+        int Function(
+          ffi.Pointer<bunny_core_t>,
+          int,
+          ffi.Pointer<bunny_db_post_t>,
+        )
+      >();
+
   /// Ranks cached tags (from already-synced posts) by usage count, for a
   /// search box's autocomplete -- a thin pass-through to bunny_db, same shape
   /// as the search CRUD above. `prefix`'s characters are matched literally, not

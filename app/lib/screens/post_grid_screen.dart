@@ -91,7 +91,7 @@ class _PostGridScreenState extends State<PostGridScreen> {
   }
 
   Future<void> _openPost(BunnyPost post) async {
-    await Navigator.push(context, MaterialPageRoute(builder: (context) => PostDetailScreen(post: post, repository: widget.repository)));
+    await Navigator.push(context, MaterialPageRoute(builder: (context) => PostDetailScreen(post: post, repository: widget.repository, displaySettingsStore: widget.displaySettingsStore)));
     if (!mounted) {
       return;
     }

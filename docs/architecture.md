@@ -1035,6 +1035,68 @@ server-side without this app's knowledge), the Inkbunny branch does keyword subs
 and always has a safe fallback -- a grey badge showing the literal string -- so an unfamiliar
 rating value degrades gracefully instead of being hidden or crashing the tile.
 
+**Post detail redesign (M8.5.8)**: the big UI consumer of M8.5.3/4/5/7, sequenced after all
+four landed. One backend gap closed first: nothing exposed "fetch one cached post by its local
+id" up to Flutter -- every existing read either returned a list (`listSearchPosts`) or looked
+up by external id (`fetchPost`). Needed so tapping a parent/child/pool chip (after `fetchPost`
+caches that post and returns its local id) can actually load and display it.
+`bunny_core_post_get_by_id` is a two-line wrapper around the already-existing
+`bunny_db_post_get_by_id` (unused by anything above the db layer until now). `GET /posts/{id}`
+(bare numeric id, no suffix) was added as the *last* dispatch branch in `routes_queue.c`'s
+existing `posts_handler` -- `server_route_parse_id` safely returns `false` for the other
+suffixed paths it's tried against first (`/posts/fetch`, `/posts/{id}/tags`, etc.), so ordering
+it last carries no ambiguity risk. `post_to_json` was duplicated into `routes_queue.c` from its
+existing copy in `routes_searches.c`, matching the already-duplicated `add_optional_string`
+precedent between these two files rather than introducing a new shared module for one function.
+
+The redesign itself replaced `PostDetailScreen`'s fixed-height media `SizedBox` with an
+`AspectRatio` keyed off `post.width`/`.height`, **capped at 60% of the viewport height** via an
+outer `ConstrainedBox`. The cap isn't cosmetic -- a widget test regression caught a real bug
+without it: at a typical test-viewport width, a 4:3 image's `AspectRatio` computed a height
+equal to the *entire* viewport, and `ListView` renders as a `SliverList`, whose
+`debugVisitOnstageChildren` (the mechanism `find.text`'s default `skipOffstage: true` relies
+on, and the same layout-and-cache-extent logic that determines what a real device actually
+paints) only visits children within its current laid-out + cache-extent range. Everything
+below the media -- every metadata row, every new section -- fell outside that range and was
+therefore both invisible to `find.text` *and* not actually rendered to a real user without
+scrolling first. This wasn't a test-only artifact; it would have reproduced on any device
+where a tall/narrow image's natural aspect ratio exceeds the available screen height. The fix
+generalizes: cap any aspect-ratio-driven media size against the viewport before trusting a
+`ListView`-based layout to keep content below it reachable without an explicit scroll.
+
+Four new sections were added, each firing its own repository call from `initState` (not
+sequenced against each other -- the four backend reads are independent and each section's
+`FutureBuilder` renders itself null-safely until its own future resolves): categorized tag
+chips (groups `getPostTagsByCategory`'s results by category into a `Wrap` per group, labeling
+the `null`-category group plain "Tags" for Inkbunny; chips are intentionally **not** tappable
+yet, deferred to M8.5.10's not-yet-built tag-browse screen); a tappable source-link list via a
+new `url_launcher` dependency (hidden entirely rather than shown empty when
+`getPostSources` returns nothing); a post-id row using `Clipboard.setData` + a `SnackBar`
+confirmation on tap; and, e621-only, parent/children chips (`getPostRelationships`) and pool
+chips (`getPostPoolIds`). Tapping a parent/child chip calls `fetchPost` then the new `getPost`
+and pushes a fresh `PostDetailScreen` for the result. Tapping a pool chip reuses the exact
+"pool search" mechanism M8.5.5b built for the Pools tab: `listSearches()` is checked for an
+existing `pool:<id>` query first, navigating straight into it via `PostGridScreen` if found;
+otherwise a confirmation dialog offers to create one (optionally calling `fetchPool` for a
+friendly label, falling back to the raw `pool:<id>` string on failure, identical to
+`SearchesScreen`'s own add-pool flow) before creating and navigating. Because
+`PostDetailScreen` can now push a `PostGridScreen` (pool navigation) and `PostGridScreen` can
+push a `PostDetailScreen` (opening a post), the two screen files import each other --
+Dart has no issue with this kind of mutual import between library files, unlike some
+languages, so no extraction was needed to break the cycle. `PostDetailScreen` also gained a
+new required `displaySettingsStore` constructor parameter purely to support that pool
+navigation (`PostGridScreen` needs one); every existing call site needed updating, the same
+constructor-signature ripple this project has hit repeatedly for widely-used screens.
+
+**Test-only gotcha worth remembering**: `Clipboard.setData`'s platform channel round trip never
+resolves inside a `testWidgets` body's fake-async pump loop on the headless `flutter_tester`
+engine, *unless* a mock handler is explicitly installed for `SystemChannels.platform` (`
+TestWidgetsFlutterBinding.ensureInitialized().defaultBinaryMessenger.setMockMethodCallHandler(
+SystemChannels.platform, (call) async => null)`). A bare `test()` body (no `pumpWidget`) doesn't
+hit this, since it isn't running inside `TestWidgetsFlutterBinding`'s fake-async zone -- that
+discrepancy is exactly why this went unnoticed until a widget test actually exercised the
+copy-id tap.
+
 ## Inkbunny API constraints (found in M2)
 
 Verified against the live API and the official docs while building `libinkbunny`:

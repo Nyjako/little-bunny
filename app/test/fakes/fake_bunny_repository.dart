@@ -23,6 +23,12 @@ class FakeBunnyRepository implements BunnyRepository {
   /// [fetchPost] returns for that (site, externalId) pair.
   final Map<String, int> fetchPostResults = {};
   final Map<int, BunnyPoolInfo> poolInfoById = {};
+
+  /// Extra posts [getPost] can resolve by id, for ones that aren't already
+  /// sitting in [postsBySearchId] (e.g. a parent/child/pool-mate post that
+  /// was only ever fetched standalone via [fetchPost], never synced into a
+  /// saved search's results).
+  final Map<int, BunnyPost> postsById = {};
   int _nextSearchId = 1;
   int syncCallCount = 0;
 
@@ -164,6 +170,22 @@ class FakeBunnyRepository implements BunnyRepository {
       throw BunnyRepositoryException('no fake pool registered for $poolId');
     }
     return info;
+  }
+
+  @override
+  Future<BunnyPost> getPost(int postId) async {
+    final direct = postsById[postId];
+    if (direct != null) {
+      return direct;
+    }
+    for (final posts in postsBySearchId.values) {
+      for (final post in posts) {
+        if (post.id == postId) {
+          return post;
+        }
+      }
+    }
+    throw BunnyRepositoryException('no fake post registered for $postId');
   }
 
   @override
