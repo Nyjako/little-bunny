@@ -266,11 +266,10 @@ void main() {
     expect(find.text('No comments yet.'), findsOneWidget);
   });
 
-  testWidgets('pool chip navigates to an existing pool search', (WidgetTester tester) async {
+  testWidgets('pool chip opens a live preview without forcing a saved search', (WidgetTester tester) async {
     final repository = FakeBunnyRepository();
     final post = _post(fileExt: 'jpg');
     repository.poolIdsByPostId[1] = [9];
-    repository.searches.add(const BunnySearch(id: 5, site: BunnySite.e621, label: 'My pool', query: 'pool:9', intervalHours: 24, createdAt: '2026-01-01T00:00:00Z'));
 
     await tester.pumpWidget(wrapWithLocalization(PostDetailScreen(post: post, repository: repository, displaySettingsStore: const DisplaySettingsStore(), syncSettingsStore: const SyncSettingsStore(), downloadSettingsStore: const DownloadSettingsStore())));
     await tester.pumpAndSettle();
@@ -279,13 +278,16 @@ void main() {
     await tester.tap(find.text('#9'));
     await tester.pumpAndSettle();
 
-    expect(find.text('My pool'), findsOneWidget);
+    expect(find.text('pool:9'), findsOneWidget);
+    expect(repository.previewSearchCalls, contains((BunnySite.e621, 'pool:9', 1)));
+    expect(repository.searches, isEmpty);
   });
 
-  testWidgets('pool chip offers to create a search when none exists', (WidgetTester tester) async {
+  testWidgets('pool chip pre-fills the save-as-search label with the pool\'s own name', (WidgetTester tester) async {
     final repository = FakeBunnyRepository();
     final post = _post(fileExt: 'jpg');
     repository.poolIdsByPostId[1] = [9];
+    repository.poolInfoById[9] = const BunnyPoolInfo(id: 9, name: 'My pool', postCount: 3);
 
     await tester.pumpWidget(wrapWithLocalization(PostDetailScreen(post: post, repository: repository, displaySettingsStore: const DisplaySettingsStore(), syncSettingsStore: const SyncSettingsStore(), downloadSettingsStore: const DownloadSettingsStore())));
     await tester.pumpAndSettle();
@@ -294,13 +296,11 @@ void main() {
     await tester.tap(find.text('#9'));
     await tester.pumpAndSettle();
 
-    expect(find.text('This post belongs to pool 9, but there\'s no saved search for it yet. Create one?'), findsOneWidget);
-    await tester.tap(find.text('Add'));
+    await tester.tap(find.byTooltip('Save as a search'));
     await tester.pumpAndSettle();
 
-    expect(repository.searches, hasLength(1));
-    expect(repository.searches.single.query, 'pool:9');
-    expect(find.text('pool:9'), findsOneWidget);
+    final labelField = tester.widget<TextFormField>(find.widgetWithText(TextFormField, 'Label'));
+    expect(labelField.controller!.text, 'My pool');
   });
 
   testWidgets('tapping favorite queues the action, drains the queue, and flips the icon', (WidgetTester tester) async {

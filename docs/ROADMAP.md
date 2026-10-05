@@ -980,6 +980,19 @@ this file is the single source of truth for "what's done" across sessions.
   visually present after a large scroll, since a big scroll jump can push earlier tiles outside
   the `GridView`'s build+cache range the same way the M9.6.1-documented `ListView` gotcha does.
 
+- [x] **M9.6.3 — Pool preview without forcing a saved search**
+  `PostDetailScreen._openPool` no longer looks up-or-creates a saved search and opens
+  `PostGridScreen` -- it fetches the pool's name best-effort (swallowing a failure, same as
+  before) and navigates straight to `TagBrowseScreen(site: e621, query: 'pool:$id')`, which
+  already runs a stateless, now-paginated (M9.6.2) preview and offers its own "add to searches"
+  action for anyone who wants to save it afterward. `CreateSearchScreen`/`TagBrowseScreen` both
+  gained an `initialLabel` param so that save action still pre-fills the pool's friendly name
+  instead of falling back to the raw `pool:$id` query the label would otherwise mirror. The
+  now-unused "create a search for this pool?" dialog and its two ARB strings were deleted
+  rather than left dead. Tests: widget tests confirming a pool chip opens the live preview
+  directly (no dialog, `previewSearchCalls` shows the right query, no search gets created) and
+  that saving from there pre-fills the label with the pool's name.
+
 - [ ] **M10 — Automation & recommendations**
   "Auto-like/auto-favorite on download" setting, most-liked/most-favorited tag stats,
   recommended new searches based on that history.

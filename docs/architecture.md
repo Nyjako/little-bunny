@@ -1557,6 +1557,22 @@ bottom without wild overshoot), and switching the assertions from widget-tree pr
 newly-added `FakeBunnyRepository.previewSearchCalls` tracking list, which records `(site, query,
 page)` tuples and stays reliable regardless of what the `GridView` has or hasn't materialized.
 
+**Pool preview without forcing a saved search (M9.6.3)**: this needed no backend work at
+all -- the pieces already existed, just wired to the wrong screen. e621's own tag-search syntax
+treats `pool:<id>` as a literal query (established back in M8.5's plan), and `TagBrowseScreen`
+(M8.5.10) already runs a stateless preview against any query string, with its own "add to
+searches" action for saving afterward. `PostDetailScreen._openPool` previously forced a
+save-a-search dialog before it would show a pool's contents at all; the fix simply points that
+one navigation call at `TagBrowseScreen(query: 'pool:$id')` instead of the old look-up-or-create
+`PostGridScreen` flow, so pools are now viewable exactly like any other click-through browse
+before ever being saved. The only new surface is `initialLabel` on `CreateSearchScreen`/
+`TagBrowseScreen` (alongside the existing `initialSite`/`initialQuery`), so that
+`_openPool`'s best-effort `fetchPool` call can still pre-fill a friendly label when the user
+does choose to save -- setting the label field's text in `initState` also marks it as
+"manually edited" so the query-mirroring listener (M8.5.13) doesn't immediately overwrite it
+with the raw `pool:$id` string. The old confirmation dialog and its two now-unreachable ARB
+entries were deleted outright rather than left as dead code.
+
 ## Inkbunny API constraints (found in M2)
 
 Verified against the live API and the official docs while building `libinkbunny`:
