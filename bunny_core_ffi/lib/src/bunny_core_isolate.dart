@@ -252,6 +252,21 @@ class _ListCommentsRequest extends _Request {
   const _ListCommentsRequest(this.postId);
 }
 
+class _RecordDownloadRequest extends _Request {
+  final int postId;
+  final String filePath;
+  final String? checksumMd5;
+  final bool verified;
+
+  const _RecordDownloadRequest(this.postId, this.filePath, this.checksumMd5, this.verified);
+}
+
+class _ListDownloadsForPostRequest extends _Request {
+  final int postId;
+
+  const _ListDownloadsForPostRequest(this.postId);
+}
+
 class _QueueFavoriteAddRequest extends _Request {
   final int postId;
   final int stars;
@@ -453,6 +468,37 @@ List<Map<String, Object?>> _handleListComments(Pointer<bunny_core_t> core, _List
   });
 }
 
+Map<String, Object?> _downloadToMap(bunny_db_download_t download) => {
+  'id': download.id,
+  'postId': download.post_id,
+  'filePath': _readNullableString(download.file_path),
+  'checksumMd5': _readNullableString(download.checksum_md5),
+  'checksumVerified': download.checksum_verified,
+  'downloadedAt': _readNullableString(download.downloaded_at),
+};
+
+int _handleRecordDownload(Pointer<bunny_core_t> core, _RecordDownloadRequest r) {
+  return using((arena) {
+    final checksumMd5 = r.checksumMd5 == null ? nullptr : r.checksumMd5!.toNativeUtf8(allocator: arena).cast<Char>();
+    final outId = arena<Int64>();
+    _check(_bindings.bunny_core_record_download(core, r.postId, r.filePath.toNativeUtf8(allocator: arena).cast(), checksumMd5, r.verified, outId));
+    return outId.value;
+  });
+}
+
+List<Map<String, Object?>> _handleListDownloadsForPost(Pointer<bunny_core_t> core, _ListDownloadsForPostRequest r) {
+  return using((arena) {
+    final out = arena<bunny_db_download_list_t>();
+    _check(_bindings.bunny_core_list_downloads_for_post(core, r.postId, out));
+    final items = <Map<String, Object?>>[];
+    for (var i = 0; i < out.ref.count; i++) {
+      items.add(_downloadToMap(out.ref.items[i]));
+    }
+    _bindings.bunny_db_download_list_free(out);
+    return items;
+  });
+}
+
 Map<String, Object?> _handleGetPostById(Pointer<bunny_core_t> core, _GetPostByIdRequest r) {
   return using((arena) {
     final out = arena<bunny_db_post_t>();
@@ -549,6 +595,10 @@ Object? _dispatch(Pointer<bunny_core_t>? core, _Request request, void Function(P
         return _handlePreviewSearch(c, r);
       case _ListCommentsRequest r:
         return _handleListComments(c, r);
+      case _RecordDownloadRequest r:
+        return _handleRecordDownload(c, r);
+      case _ListDownloadsForPostRequest r:
+        return _handleListDownloadsForPost(c, r);
       case _QueueFavoriteAddRequest r:
         _check(_bindings.bunny_core_queue_favorite_add(c, r.postId, r.stars));
         return null;
@@ -686,6 +736,10 @@ class BunnyCoreNative {
   Future<List<Map<String, Object?>>> previewSearch(String site, String query) => _send<List<Map<String, Object?>>>(_PreviewSearchRequest(site, query));
 
   Future<List<Map<String, Object?>>> listComments(int postId) => _send<List<Map<String, Object?>>>(_ListCommentsRequest(postId));
+
+  Future<int> recordDownload(int postId, String filePath, String? checksumMd5, bool verified) => _send<int>(_RecordDownloadRequest(postId, filePath, checksumMd5, verified));
+
+  Future<List<Map<String, Object?>>> listDownloadsForPost(int postId) => _send<List<Map<String, Object?>>>(_ListDownloadsForPostRequest(postId));
 
   Future<void> queueFavoriteAdd(int postId, int stars) => _send<void>(_QueueFavoriteAddRequest(postId, stars));
 

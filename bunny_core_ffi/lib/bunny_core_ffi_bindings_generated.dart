@@ -799,6 +799,87 @@ class BunnyCoreFfiBindings {
         )
       >();
 
+  /// Records that a file was downloaded for a post -- a thin pass-through to
+  /// bunny_db_download_record. The actual HTTP fetch, disk write, and checksum
+  /// computation are entirely client-side (never proxied through the server);
+  /// this call only persists the bookkeeping row afterward.
+  bunny_core_result_t bunny_core_record_download(
+    ffi.Pointer<bunny_core_t> core,
+    int post_id,
+    ffi.Pointer<ffi.Char> file_path,
+    ffi.Pointer<ffi.Char> checksum_md5,
+    bool verified,
+    ffi.Pointer<ffi.Int64> out_id,
+  ) {
+    return bunny_core_result_t.fromValue(
+      _bunny_core_record_download(
+        core,
+        post_id,
+        file_path,
+        checksum_md5,
+        verified,
+        out_id,
+      ),
+    );
+  }
+
+  late final _bunny_core_record_downloadPtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.UnsignedInt Function(
+            ffi.Pointer<bunny_core_t>,
+            ffi.Int64,
+            ffi.Pointer<ffi.Char>,
+            ffi.Pointer<ffi.Char>,
+            ffi.Bool,
+            ffi.Pointer<ffi.Int64>,
+          )
+        >
+      >('bunny_core_record_download');
+  late final _bunny_core_record_download = _bunny_core_record_downloadPtr
+      .asFunction<
+        int Function(
+          ffi.Pointer<bunny_core_t>,
+          int,
+          ffi.Pointer<ffi.Char>,
+          ffi.Pointer<ffi.Char>,
+          bool,
+          ffi.Pointer<ffi.Int64>,
+        )
+      >();
+
+  /// A post's download history, newest first -- a thin pass-through to
+  /// bunny_db_download_list_for_post. Empty for a post never downloaded.
+  bunny_core_result_t bunny_core_list_downloads_for_post(
+    ffi.Pointer<bunny_core_t> core,
+    int post_id,
+    ffi.Pointer<bunny_db_download_list_t> out_list,
+  ) {
+    return bunny_core_result_t.fromValue(
+      _bunny_core_list_downloads_for_post(core, post_id, out_list),
+    );
+  }
+
+  late final _bunny_core_list_downloads_for_postPtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.UnsignedInt Function(
+            ffi.Pointer<bunny_core_t>,
+            ffi.Int64,
+            ffi.Pointer<bunny_db_download_list_t>,
+          )
+        >
+      >('bunny_core_list_downloads_for_post');
+  late final _bunny_core_list_downloads_for_post =
+      _bunny_core_list_downloads_for_postPtr
+          .asFunction<
+            int Function(
+              ffi.Pointer<bunny_core_t>,
+              int,
+              ffi.Pointer<bunny_db_download_list_t>,
+            )
+          >();
+
   /// Fetches a single post live from its site and caches it (upserting into the
   /// local post cache exactly like a sync pass would for one post), without
   /// requiring it to already be linked to any saved search. Used when a

@@ -7,6 +7,7 @@ add_library(bunny_core STATIC
     src/sync.c
     src/queue.c
     src/verify.c
+    src/downloads.c
 )
 
 target_include_directories(bunny_core

@@ -19,6 +19,12 @@ class FakeBunnyRepository implements BunnyRepository {
   final Map<int, BunnyPostRelationships> relationshipsByPostId = {};
   final Map<int, List<int>> poolIdsByPostId = {};
   final Map<int, List<BunnyComment>> commentsByPostId = {};
+  final Map<int, List<BunnyDownload>> downloadsByPostId = {};
+  int _nextDownloadId = 1;
+
+  /// Each entry is the `(postId, filePath, checksumMd5, verified)` passed to
+  /// [recordDownload].
+  final List<(int, String, String?, bool)> recordDownloadCalls = [];
 
   /// Keyed by `'${site.toWireString()}:$externalId'` -- the post id
   /// [fetchPost] returns for that (site, externalId) pair.
@@ -200,6 +206,17 @@ class FakeBunnyRepository implements BunnyRepository {
 
   @override
   Future<List<BunnyComment>> getPostComments(int postId) async => List.of(commentsByPostId[postId] ?? const []);
+
+  @override
+  Future<int> recordDownload(int postId, String filePath, {String? checksumMd5, bool verified = false}) async {
+    recordDownloadCalls.add((postId, filePath, checksumMd5, verified));
+    final id = _nextDownloadId++;
+    downloadsByPostId.putIfAbsent(postId, () => []).add(BunnyDownload(id: id, postId: postId, filePath: filePath, checksumMd5: checksumMd5, checksumVerified: verified, downloadedAt: '2026-01-01T00:00:00Z'));
+    return id;
+  }
+
+  @override
+  Future<List<BunnyDownload>> listDownloadsForPost(int postId) async => List.of(downloadsByPostId[postId] ?? const []);
 
   @override
   Future<BunnySyncStats> syncDueSearches() async {

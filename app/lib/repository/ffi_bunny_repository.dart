@@ -62,6 +62,15 @@ BunnyPoolInfo _poolInfoFromMap(Map<String, Object?> m) => BunnyPoolInfo(id: m['i
 
 BunnyComment _commentFromMap(Map<String, Object?> m) => BunnyComment(id: m['id'] as int, creatorName: m['creatorName'] as String?, body: m['body'] as String?, createdAt: m['createdAt'] as String?);
 
+BunnyDownload _downloadFromMap(Map<String, Object?> m) => BunnyDownload(
+  id: m['id'] as int,
+  postId: m['postId'] as int,
+  filePath: m['filePath'] as String?,
+  checksumMd5: m['checksumMd5'] as String?,
+  checksumVerified: m['checksumVerified'] as bool,
+  downloadedAt: m['downloadedAt'] as String?,
+);
+
 BunnySyncStats _syncStatsFromMap(Map<String, Object?> m) => BunnySyncStats(
   searchesChecked: m['searchesChecked'] as int,
   searchesSynced: m['searchesSynced'] as int,
@@ -191,6 +200,15 @@ class FfiBunnyRepository implements BunnyRepository {
   Future<List<BunnyComment>> getPostComments(int postId) async {
     final items = await _wrapped(() => _native.listComments(postId));
     return items.map(_commentFromMap).toList();
+  }
+
+  @override
+  Future<int> recordDownload(int postId, String filePath, {String? checksumMd5, bool verified = false}) => _wrapped(() => _native.recordDownload(postId, filePath, checksumMd5, verified));
+
+  @override
+  Future<List<BunnyDownload>> listDownloadsForPost(int postId) async {
+    final items = await _wrapped(() => _native.listDownloadsForPost(postId));
+    return items.map(_downloadFromMap).toList();
   }
 
   @override
