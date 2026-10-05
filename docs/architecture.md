@@ -1321,6 +1321,49 @@ taps or counts a contextual action icon scopes the finder with
 `find.byIcon(...)` -- the same "scope past a collision" fix as M9.1's `find.widgetWithText`
 gotcha above, just via a different finder combinator.
 
+**Download manager: backend plumbing (M9.3)**: pure bookkeeping, no UI and no new database
+schema -- `libs/db/src/downloads.c`'s `bunny_db_download_record`/`bunny_db_download_list_for_
+post` against the `downloads` table have existed since M3 (`libs/db/src/schema.h`) with
+literally nothing in `bunny_core` ever calling them, confirmed by grepping for `download`
+across `libs/core/src/*.c` before starting this sub-milestone. New `libs/core/src/downloads.c`
+(its own file -- `libs/core/CMakeLists.txt` lists one source file per concern, and "downloads"
+is a clean, self-contained one, unlike `searches.c` which had already become a general bucket
+for assorted per-post read pass-throughs before this) adds two thin wrappers following the
+exact `bunny_core_map_db_result(bunny_db_*(core->db, ...))` one-liner shape every other
+pass-through in this codebase uses: `bunny_core_record_download` and `bunny_core_list_
+downloads_for_post`. The latter reuses `bunny_db_download_list_t` directly as its out-param
+type -- no new `bunny_core`-level struct needed, since there's a real backing table (unlike
+`bunny_core_comment_list_t`/`bunny_core_pool_info_t`, which needed their own types precisely
+*because* nothing persists them).
+
+The actual HTTP fetch, disk write, and checksum computation that would produce the
+`file_path`/`checksum_md5`/`verified` arguments these calls take are deliberately **not** part
+of this sub-milestone -- `bunny_core_record_download` only persists the bookkeeping row
+*after* that work has already happened entirely client-side (M9.4 builds that pipeline). This
+mirrors the project's standing rule that downloads are never proxied through the server
+(`docs/architecture.md`'s pre-M9 "C server" section already states this).
+
+On the server side, `POST`/`GET /posts/{id}/downloads` slot into the existing `posts_handler`
+in `routes_queue.c` as two more `server_route_parse_id_with_suffix` branches -- the same
+one-handler-owns-the-whole-prefix civetweb pattern every other `/posts/{id}/*` sub-resource
+(`tags`/`sources`/`relationships`/`pools`/`comments`) already uses. The POST handler reads
+`file_path` (required, `BUNNY_CORE_ERR_INVALID_ARG` if missing), `checksum_md5` (optional,
+`bunny_json_get_string_or(body, "checksum_md5", NULL)` -- the first place in this codebase a
+request body field is allowed to be genuinely absent rather than defaulted to a concrete
+value), and `verified` (defaults `false`).
+
+Testing this layer meant seeding a real post without a saved search's sync ever touching
+`bunny_core_record_download` itself: a new `libs/core/tests/test_downloads.c` duplicates the
+small fake-transport + `seed_e621_post` helper pattern `test_queue.c`/`test_sync.c` each
+already carry their own copy of (an established convention in this codebase -- each C test
+file is self-contained rather than sharing a test-helpers module), just trimmed down to a
+single-response fake transport since downloads tests never need more than one canned e621
+search response to get a post into the local cache. `FakeBunnyRepository.recordDownload`
+mints sequential ids via a private `_nextDownloadId` counter and appends to a new
+`downloadsByPostId` map -- the first fake in this class that needs to both generate an id *and*
+store a record, unlike the four M8.5.14/M9.1 queue fakes which only needed to record that a
+call happened.
+
 ## Inkbunny API constraints (found in M2)
 
 Verified against the live API and the official docs while building `libinkbunny`:

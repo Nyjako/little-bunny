@@ -392,6 +392,34 @@ void main() {
       expect(comments.single.body, 'Nice pic!');
     });
 
+    test('recordDownload sends POST with the download fields and returns the new id', () async {
+      respond = (_) => http.Response(jsonEncode({'id': 9}), 200);
+
+      final id = await buildRepository().recordDownload(2, '/downloads/wolf/1.png', checksumMd5: 'aaa', verified: true);
+
+      expect(capturedMethod, 'POST');
+      expect(capturedUri.path, '/posts/2/downloads');
+      expect(jsonDecode(capturedBody), {'file_path': '/downloads/wolf/1.png', 'checksum_md5': 'aaa', 'verified': true});
+      expect(id, 9);
+    });
+
+    test('listDownloadsForPost sends GET to the right path and maps the response', () async {
+      respond = (_) => http.Response(
+        jsonEncode([
+          {'id': 9, 'post_id': 2, 'file_path': '/downloads/wolf/1.png', 'checksum_md5': 'aaa', 'checksum_verified': true, 'downloaded_at': '2026-01-01T00:00:00Z'},
+        ]),
+        200,
+      );
+
+      final downloads = await buildRepository().listDownloadsForPost(2);
+
+      expect(capturedMethod, 'GET');
+      expect(capturedUri.path, '/posts/2/downloads');
+      expect(downloads, hasLength(1));
+      expect(downloads.single.filePath, '/downloads/wolf/1.png');
+      expect(downloads.single.checksumVerified, isTrue);
+    });
+
     test('markPostSeen sends POST to the right path', () async {
       respond = (_) => http.Response(jsonEncode({'ok': true}), 200);
 
