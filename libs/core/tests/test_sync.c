@@ -149,7 +149,7 @@ void test_sync_e621_search_upserts_post(void)
     g_e621_state.body_count = 1;
 
     int64_t search_id = 0;
-    bunny_core_result_t result = bunny_core_search_create(g_core, BUNNY_DB_SITE_E621, "wolves", "wolf", 24, &search_id);
+    bunny_core_result_t result = bunny_core_search_create(g_core, BUNNY_DB_SITE_E621, "wolves", "wolf", 24, false, &search_id);
     TEST_ASSERT_EQUAL(BUNNY_CORE_OK, result);
 
     bunny_core_sync_stats_t stats;
@@ -183,7 +183,7 @@ void test_sync_e621_search_upserts_post_tag_categories(void)
     g_e621_state.body_count = 1;
 
     int64_t search_id = 0;
-    bunny_core_result_t result = bunny_core_search_create(g_core, BUNNY_DB_SITE_E621, "wolves", "wolf", 24, &search_id);
+    bunny_core_result_t result = bunny_core_search_create(g_core, BUNNY_DB_SITE_E621, "wolves", "wolf", 24, false, &search_id);
     TEST_ASSERT_EQUAL(BUNNY_CORE_OK, result);
 
     bunny_core_sync_stats_t stats;
@@ -223,7 +223,7 @@ void test_sync_e621_search_upserts_post_sources(void)
     g_e621_state.body_count = 1;
 
     int64_t search_id = 0;
-    bunny_core_result_t result = bunny_core_search_create(g_core, BUNNY_DB_SITE_E621, "wolves", "wolf", 24, &search_id);
+    bunny_core_result_t result = bunny_core_search_create(g_core, BUNNY_DB_SITE_E621, "wolves", "wolf", 24, false, &search_id);
     TEST_ASSERT_EQUAL(BUNNY_CORE_OK, result);
 
     bunny_core_sync_stats_t stats;
@@ -255,7 +255,7 @@ void test_sync_e621_search_upserts_post_relationships_and_pools(void)
     g_e621_state.body_count = 1;
 
     int64_t search_id = 0;
-    bunny_core_result_t result = bunny_core_search_create(g_core, BUNNY_DB_SITE_E621, "wolves", "wolf", 24, &search_id);
+    bunny_core_result_t result = bunny_core_search_create(g_core, BUNNY_DB_SITE_E621, "wolves", "wolf", 24, false, &search_id);
     TEST_ASSERT_EQUAL(BUNNY_CORE_OK, result);
 
     bunny_core_sync_stats_t stats;
@@ -540,7 +540,7 @@ void test_sync_e621_search_upserts_post_sample_url(void)
     g_e621_state.body_count = 1;
 
     int64_t search_id = 0;
-    bunny_core_result_t result = bunny_core_search_create(g_core, BUNNY_DB_SITE_E621, "wolves", "wolf", 24, &search_id);
+    bunny_core_result_t result = bunny_core_search_create(g_core, BUNNY_DB_SITE_E621, "wolves", "wolf", 24, false, &search_id);
     TEST_ASSERT_EQUAL(BUNNY_CORE_OK, result);
 
     bunny_core_sync_stats_t stats;
@@ -568,7 +568,7 @@ void test_sync_e621_search_fetches_a_second_page_when_the_first_is_full(void)
     g_e621_state.body_count = 2;
 
     int64_t search_id = 0;
-    bunny_core_search_create(g_core, BUNNY_DB_SITE_E621, "wolves", "wolf", 24, &search_id);
+    bunny_core_search_create(g_core, BUNNY_DB_SITE_E621, "wolves", "wolf", 24, false, &search_id);
 
     bunny_core_sync_stats_t stats;
     bunny_core_result_t result = bunny_core_sync_due_searches(g_core, &stats);
@@ -591,7 +591,7 @@ void test_sync_e621_search_stops_after_a_single_short_page(void)
     g_e621_state.body_count = 1;
 
     int64_t search_id = 0;
-    bunny_core_search_create(g_core, BUNNY_DB_SITE_E621, "wolves", "wolf", 24, &search_id);
+    bunny_core_search_create(g_core, BUNNY_DB_SITE_E621, "wolves", "wolf", 24, false, &search_id);
 
     bunny_core_sync_stats_t stats;
     bunny_core_result_t result = bunny_core_sync_due_searches(g_core, &stats);
@@ -610,7 +610,7 @@ void test_tag_autocomplete_finds_tags_from_synced_posts(void)
     g_e621_state.body_count = 1;
 
     int64_t search_id = 0;
-    bunny_core_search_create(g_core, BUNNY_DB_SITE_E621, "wolves", "wolf", 24, &search_id);
+    bunny_core_search_create(g_core, BUNNY_DB_SITE_E621, "wolves", "wolf", 24, false, &search_id);
     bunny_core_sync_due_searches(g_core, NULL);
 
     bunny_db_tag_stat_list_t tags;
@@ -640,7 +640,7 @@ void test_mark_seen_flips_is_seen_on_a_synced_post(void)
     g_e621_state.body_count = 1;
 
     int64_t search_id = 0;
-    bunny_core_search_create(g_core, BUNNY_DB_SITE_E621, "wolves", "wolf", 24, &search_id);
+    bunny_core_search_create(g_core, BUNNY_DB_SITE_E621, "wolves", "wolf", 24, false, &search_id);
     bunny_core_sync_due_searches(g_core, NULL);
 
     bunny_db_post_list_t posts;
@@ -687,7 +687,7 @@ void test_sync_inkbunny_search_upserts_post(void)
     g_inkbunny_state.body_count = 3;
 
     int64_t search_id = 0;
-    bunny_core_result_t result = bunny_core_search_create(g_core, BUNNY_DB_SITE_INKBUNNY, "tribute", "tribute", 24, &search_id);
+    bunny_core_result_t result = bunny_core_search_create(g_core, BUNNY_DB_SITE_INKBUNNY, "tribute", "tribute", 24, false, &search_id);
     TEST_ASSERT_EQUAL(BUNNY_CORE_OK, result);
 
     bunny_core_sync_stats_t stats;
@@ -738,7 +738,7 @@ void test_sync_skips_search_not_due_yet(void)
     g_e621_state.body_count = 1;
 
     int64_t search_id = 0;
-    bunny_core_search_create(g_core, BUNNY_DB_SITE_E621, "wolves", "wolf", 24, &search_id);
+    bunny_core_search_create(g_core, BUNNY_DB_SITE_E621, "wolves", "wolf", 24, false, &search_id);
 
     bunny_core_sync_stats_t stats;
     bunny_core_sync_due_searches(g_core, &stats);

@@ -143,6 +143,11 @@ class _SearchesScreenState extends State<SearchesScreen> with SingleTickerProvid
     _refresh();
   }
 
+  Future<void> _toggleAutoFavorite(BunnySearch search) async {
+    await _repository!.setSearchAutoFavorite(search.id, !search.autoFavorite);
+    _refresh();
+  }
+
   Widget _searchList(List<BunnySearch> searches, String emptyState) {
     final l10n = AppLocalizations.of(context)!;
     if (searches.isEmpty) {
@@ -164,6 +169,11 @@ class _SearchesScreenState extends State<SearchesScreen> with SingleTickerProvid
                       decoration: BoxDecoration(color: Theme.of(context).colorScheme.primary, borderRadius: BorderRadius.circular(12)),
                       child: Text('${search.unseenCount}', style: TextStyle(color: Theme.of(context).colorScheme.onPrimary, fontSize: 12)),
                     ),
+                  IconButton(
+                    icon: Icon(search.autoFavorite ? Icons.favorite : Icons.favorite_border),
+                    tooltip: search.autoFavorite ? l10n.searchesAutoFavoriteOnTooltip : l10n.searchesAutoFavoriteOffTooltip,
+                    onPressed: () => _toggleAutoFavorite(search),
+                  ),
                   IconButton(icon: const Icon(Icons.delete), onPressed: () => _removeSearch(search)),
                 ],
               ),

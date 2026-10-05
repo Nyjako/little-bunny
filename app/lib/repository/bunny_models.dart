@@ -43,6 +43,7 @@ class BunnySearch {
   final String createdAt;
   final String? lastRunAt;
   final int unseenCount;
+  final bool autoFavorite;
 
   const BunnySearch({
     required this.id,
@@ -53,6 +54,7 @@ class BunnySearch {
     required this.createdAt,
     this.lastRunAt,
     this.unseenCount = 0,
+    this.autoFavorite = false,
   });
 }
 

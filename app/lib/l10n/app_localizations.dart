@@ -310,6 +310,18 @@ abstract class AppLocalizations {
   /// **'Add pool'**
   String get searchesNewPoolTooltip;
 
+  /// No description provided for @searchesAutoFavoriteOnTooltip.
+  ///
+  /// In en, this message translates to:
+  /// **'Auto-favorite is on -- tap to turn off'**
+  String get searchesAutoFavoriteOnTooltip;
+
+  /// No description provided for @searchesAutoFavoriteOffTooltip.
+  ///
+  /// In en, this message translates to:
+  /// **'Auto-favorite is off -- tap to turn on'**
+  String get searchesAutoFavoriteOffTooltip;
+
   /// No description provided for @createSearchScreenTitle.
   ///
   /// In en, this message translates to:
@@ -333,6 +345,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Sync interval (hours)'**
   String get createSearchIntervalLabel;
+
+  /// No description provided for @createSearchAutoFavoriteLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Auto-favorite new posts'**
+  String get createSearchAutoFavoriteLabel;
 
   /// No description provided for @createSearchSubmit.
   ///

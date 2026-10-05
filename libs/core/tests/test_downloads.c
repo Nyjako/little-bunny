@@ -86,7 +86,7 @@ static int64_t seed_e621_post(void)
     g_e621_state.body = fixture;
 
     int64_t search_id = 0;
-    bunny_core_search_create(g_core, BUNNY_DB_SITE_E621, "wolves", "wolf", 24, &search_id);
+    bunny_core_search_create(g_core, BUNNY_DB_SITE_E621, "wolves", "wolf", 24, false, &search_id);
 
     bunny_core_sync_stats_t sync_stats;
     bunny_core_result_t result = bunny_core_sync_due_searches(g_core, &sync_stats);

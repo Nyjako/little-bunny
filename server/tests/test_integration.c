@@ -380,6 +380,32 @@ void test_full_account_search_sync_favorite_flow(void)
     free(response.data);
 }
 
+void test_search_auto_favorite_create_and_toggle(void)
+{
+    response_buffer_t response = {0};
+
+    long status = do_request("POST", "/searches", "{\"site\":\"e621\",\"label\":\"wolves\",\"query\":\"wolf\",\"interval_hours\":24,\"auto_favorite\":true}", &response, true, NULL);
+    TEST_ASSERT_EQUAL(201, status);
+    free(response.data);
+    memset(&response, 0, sizeof(response));
+
+    status = do_request("GET", "/searches", NULL, &response, true, NULL);
+    TEST_ASSERT_EQUAL(200, status);
+    TEST_ASSERT_NOT_NULL(strstr(response.data, "\"auto_favorite\":true"));
+    free(response.data);
+    memset(&response, 0, sizeof(response));
+
+    status = do_request("POST", "/searches/1/auto_favorite", "{\"auto_favorite\":false}", &response, true, NULL);
+    TEST_ASSERT_EQUAL(200, status);
+    free(response.data);
+    memset(&response, 0, sizeof(response));
+
+    status = do_request("GET", "/searches", NULL, &response, true, NULL);
+    TEST_ASSERT_EQUAL(200, status);
+    TEST_ASSERT_NOT_NULL(strstr(response.data, "\"auto_favorite\":false"));
+    free(response.data);
+}
+
 void test_scheduler_syncs_search_automatically(void)
 {
     /* setUp started the app with the scheduler disabled (poll_interval=0);
@@ -423,6 +449,7 @@ int main(void)
     RUN_TEST(test_request_with_wrong_token_is_rejected);
     RUN_TEST(test_verify_account);
     RUN_TEST(test_full_account_search_sync_favorite_flow);
+    RUN_TEST(test_search_auto_favorite_create_and_toggle);
     RUN_TEST(test_scheduler_syncs_search_automatically);
     int result = UNITY_END();
     curl_global_cleanup();
