@@ -7,7 +7,9 @@ import 'package:video_player/video_player.dart';
 import '../l10n/app_localizations.dart';
 import '../repository/bunny_models.dart';
 import '../repository/bunny_repository.dart';
+import '../services/download_manager.dart';
 import '../settings/display_settings_store.dart';
+import '../settings/download_settings_store.dart';
 import '../settings/sync_settings_store.dart';
 import '../util/image_headers.dart';
 import 'full_screen_post_viewer_screen.dart';
@@ -60,6 +62,13 @@ class PostDetailScreen extends StatefulWidget {
   final BunnyRepository repository;
   final DisplaySettingsStore displaySettingsStore;
   final SyncSettingsStore syncSettingsStore;
+  final DownloadSettingsStore downloadSettingsStore;
+
+  /// Pure logic, no required construction dependencies (unlike the settings
+  /// stores above, which are threaded from `main.dart` for a single source of
+  /// truth) -- defaults to a real instance, overridden in widget tests with a
+  /// fake HTTP client via [DownloadManager.client].
+  final DownloadManager downloadManager;
 
   /// The post list this post was opened from (e.g. a grid's currently loaded
   /// posts), used to seed [FullScreenPostViewerScreen]'s swipeable gallery
@@ -69,7 +78,16 @@ class PostDetailScreen extends StatefulWidget {
   /// falls back to a single-post gallery of just [post].
   final List<BunnyPost>? siblingPosts;
 
-  const PostDetailScreen({super.key, required this.post, required this.repository, required this.displaySettingsStore, required this.syncSettingsStore, this.siblingPosts});
+  const PostDetailScreen({
+    super.key,
+    required this.post,
+    required this.repository,
+    required this.displaySettingsStore,
+    required this.syncSettingsStore,
+    required this.downloadSettingsStore,
+    this.downloadManager = const DownloadManager(),
+    this.siblingPosts,
+  });
 
   @override
   State<PostDetailScreen> createState() => _PostDetailScreenState();
@@ -92,6 +110,12 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
   bool _commentAnonymous = false;
   bool _postingComment = false;
 
+  /// Reassigned after a successful download so the button's filled/checkmark
+  /// state (M9.4) updates without a full screen reload -- same "not late
+  /// final" reasoning as [_commentsFuture].
+  late Future<List<BunnyDownload>> _downloadsFuture;
+  bool _downloading = false;
+
   /// Mutable local copy of [widget.post], so favorite/vote taps can update
   /// the displayed score/favCount/isFavorited immediately (M8.5.14) without
   /// a round trip. Identity-ish fields (site/externalId/fileExt/...) never
@@ -107,6 +131,7 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
 
     _tagsFuture = widget.repository.getPostTagsByCategory(widget.post.id);
     _sourcesFuture = widget.repository.getPostSources(widget.post.id);
+    _downloadsFuture = widget.repository.listDownloadsForPost(widget.post.id);
     if (widget.post.site == BunnySite.e621) {
       _relationshipsFuture = widget.repository.getPostRelationships(widget.post.id);
       _poolIdsFuture = widget.repository.getPostPoolIds(widget.post.id);
@@ -184,6 +209,52 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
     });
   }
 
+  Future<void> _downloadFile(AppLocalizations l10n) async {
+    setState(() => _downloading = true);
+    final folder = await widget.downloadSettingsStore.loadDestinationFolder();
+    if (folder == null) {
+      if (!mounted) {
+        return;
+      }
+      setState(() => _downloading = false);
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(l10n.postDetailDownloadFailed)));
+      return;
+    }
+    final result = await widget.downloadManager.downloadPost(_post, widget.repository, folder);
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      _downloading = false;
+      if (result.outcome == DownloadOutcome.verified || result.outcome == DownloadOutcome.checksumMismatch) {
+        _downloadsFuture = widget.repository.listDownloadsForPost(_post.id);
+      }
+    });
+    final message = switch (result.outcome) {
+      DownloadOutcome.verified => l10n.postDetailDownloadVerified,
+      DownloadOutcome.checksumMismatch => l10n.postDetailDownloadMismatch,
+      DownloadOutcome.noFileUrl || DownloadOutcome.failed => l10n.postDetailDownloadFailed,
+    };
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  Widget _downloadButton(AppLocalizations l10n) {
+    final canDownload = _post.fileUrl != null;
+    return FutureBuilder<List<BunnyDownload>>(
+      future: _downloadsFuture,
+      builder: (context, snapshot) {
+        final alreadyDownloaded = (snapshot.data ?? const []).isNotEmpty;
+        return IconButton(
+          icon: _downloading
+              ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
+              : Icon(alreadyDownloaded ? Icons.download_done : Icons.download),
+          tooltip: l10n.postDetailDownloadTooltip,
+          onPressed: canDownload && !_downloading ? () => _downloadFile(l10n) : null,
+        );
+      },
+    );
+  }
+
   Widget _actionsRow(AppLocalizations l10n) {
     // Inkbunny has no vote API at all (unlike favorites, which M2.2's
     // unofficial route covers for both sites) -- greyed out rather than
@@ -200,6 +271,7 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
         ),
         IconButton(icon: const Icon(Icons.arrow_upward), tooltip: l10n.postDetailUpvoteTooltip, onPressed: votingEnabled ? () => _vote(1) : null),
         IconButton(icon: const Icon(Icons.arrow_downward), tooltip: l10n.postDetailDownvoteTooltip, onPressed: votingEnabled ? () => _vote(-1) : null),
+        _downloadButton(l10n),
       ],
     );
   }
@@ -261,7 +333,16 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
   void _openTagBrowse(String query) {
     Navigator.push(
       context,
-      MaterialPageRoute(builder: (context) => TagBrowseScreen(site: widget.post.site, query: query, repository: widget.repository, displaySettingsStore: widget.displaySettingsStore, syncSettingsStore: widget.syncSettingsStore)),
+      MaterialPageRoute(
+        builder: (context) => TagBrowseScreen(
+          site: widget.post.site,
+          query: query,
+          repository: widget.repository,
+          displaySettingsStore: widget.displaySettingsStore,
+          syncSettingsStore: widget.syncSettingsStore,
+          downloadSettingsStore: widget.downloadSettingsStore,
+        ),
+      ),
     );
   }
 
@@ -329,7 +410,18 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
       if (!mounted) {
         return;
       }
-      await Navigator.push(context, MaterialPageRoute(builder: (context) => PostDetailScreen(post: post, repository: widget.repository, displaySettingsStore: widget.displaySettingsStore, syncSettingsStore: widget.syncSettingsStore)));
+      await Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => PostDetailScreen(
+            post: post,
+            repository: widget.repository,
+            displaySettingsStore: widget.displaySettingsStore,
+            syncSettingsStore: widget.syncSettingsStore,
+            downloadSettingsStore: widget.downloadSettingsStore,
+          ),
+        ),
+      );
     } catch (_) {
       if (!mounted) {
         return;
@@ -414,7 +506,18 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
       if (!mounted) {
         return;
       }
-      await Navigator.push(context, MaterialPageRoute(builder: (context) => PostGridScreen(search: target!, repository: widget.repository, displaySettingsStore: widget.displaySettingsStore, syncSettingsStore: widget.syncSettingsStore)));
+      await Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => PostGridScreen(
+            search: target!,
+            repository: widget.repository,
+            displaySettingsStore: widget.displaySettingsStore,
+            syncSettingsStore: widget.syncSettingsStore,
+            downloadSettingsStore: widget.downloadSettingsStore,
+          ),
+        ),
+      );
     } catch (_) {
       if (!mounted) {
         return;
