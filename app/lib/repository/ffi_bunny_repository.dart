@@ -60,6 +60,8 @@ BunnyPostRelationships _relationshipsFromMap(Map<String, Object?> m) => BunnyPos
 
 BunnyPoolInfo _poolInfoFromMap(Map<String, Object?> m) => BunnyPoolInfo(id: m['id'] as int, name: m['name'] as String?, postCount: m['postCount'] as int);
 
+BunnyComment _commentFromMap(Map<String, Object?> m) => BunnyComment(id: m['id'] as int, creatorName: m['creatorName'] as String?, body: m['body'] as String?, createdAt: m['createdAt'] as String?);
+
 BunnySyncStats _syncStatsFromMap(Map<String, Object?> m) => BunnySyncStats(
   searchesChecked: m['searchesChecked'] as int,
   searchesSynced: m['searchesSynced'] as int,
@@ -183,6 +185,12 @@ class FfiBunnyRepository implements BunnyRepository {
   Future<List<BunnyPost>> previewSearch(BunnySite site, String query) async {
     final items = await _wrapped(() => _native.previewSearch(site.toWireString(), query));
     return items.map(_postFromMap).toList();
+  }
+
+  @override
+  Future<List<BunnyComment>> getPostComments(int postId) async {
+    final items = await _wrapped(() => _native.listComments(postId));
+    return items.map(_commentFromMap).toList();
   }
 
   @override

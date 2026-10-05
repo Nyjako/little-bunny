@@ -252,6 +252,24 @@ class AppLocalizationsEn extends AppLocalizations {
   String get postDetailDownvoteTooltip => 'Downvote';
 
   @override
+  String get postDetailCommentsSectionLabel => 'Discussion';
+
+  @override
+  String get postDetailNoCommentsYet => 'No comments yet.';
+
+  @override
+  String get postDetailCommentFieldLabel => 'Add a comment';
+
+  @override
+  String get postDetailCommentAnonymousLabel => 'Post anonymously';
+
+  @override
+  String get postDetailCommentSubmit => 'Post';
+
+  @override
+  String get postDetailCommentPostFailed => 'Couldn\'t post that comment';
+
+  @override
   String get lockScreenMessage => 'LittleBunny is locked';
 
   @override

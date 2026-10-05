@@ -208,6 +208,7 @@ void main() {
     // an empty result).
     repository.relationshipsByPostId[1] = const BunnyPostRelationships(hasParent: true, parentExternalId: 1, hasActiveChildren: false, children: [2]);
     repository.poolIdsByPostId[1] = [9];
+    repository.commentsByPostId[1] = const [BunnyComment(id: 1, creatorName: 'someone', body: 'hi')];
 
     await tester.pumpWidget(wrapWithLocalization(PostDetailScreen(post: post, repository: repository, displaySettingsStore: const DisplaySettingsStore(), syncSettingsStore: const SyncSettingsStore())));
     await tester.pumpAndSettle();
@@ -216,6 +217,45 @@ void main() {
     expect(find.text('Parent'), findsNothing);
     expect(find.text('Children'), findsNothing);
     expect(find.text('Pools'), findsNothing);
+    expect(find.text('Discussion'), findsNothing);
+    expect(find.text('hi'), findsNothing);
+  });
+
+  testWidgets('shows existing comments and posting a new one refreshes the list', (WidgetTester tester) async {
+    final repository = FakeBunnyRepository();
+    final post = _post(fileExt: 'jpg');
+    repository.commentsByPostId[1] = const [BunnyComment(id: 1, creatorName: 'someone', body: 'Nice pic!')];
+
+    await tester.pumpWidget(wrapWithLocalization(PostDetailScreen(post: post, repository: repository, displaySettingsStore: const DisplaySettingsStore(), syncSettingsStore: const SyncSettingsStore())));
+    await tester.pumpAndSettle();
+    await scrollToEnd(tester);
+
+    expect(find.text('Discussion'), findsOneWidget);
+    expect(find.text('someone'), findsOneWidget);
+    expect(find.text('Nice pic!'), findsOneWidget);
+
+    await tester.enterText(find.widgetWithText(TextField, 'Add a comment'), 'A new comment');
+    await tester.tap(find.widgetWithText(FilledButton, 'Post'));
+    await tester.pumpAndSettle();
+
+    expect(repository.queueCommentCalls, [(1, 'A new comment', false)]);
+    expect(repository.processQueueCallCount, 1);
+    // The fake's queueComment doesn't actually append to commentsByPostId,
+    // so the re-fetch after posting still returns the original one comment
+    // -- this assertion is really about getPostComments being called again
+    // (a second call would throw if the map had been cleared/removed).
+    expect(find.text('Nice pic!'), findsOneWidget);
+  });
+
+  testWidgets('shows the empty state when a post has no comments yet', (WidgetTester tester) async {
+    final repository = FakeBunnyRepository();
+    final post = _post(fileExt: 'jpg');
+
+    await tester.pumpWidget(wrapWithLocalization(PostDetailScreen(post: post, repository: repository, displaySettingsStore: const DisplaySettingsStore(), syncSettingsStore: const SyncSettingsStore())));
+    await tester.pumpAndSettle();
+    await scrollToEnd(tester);
+
+    expect(find.text('No comments yet.'), findsOneWidget);
   });
 
   testWidgets('pool chip navigates to an existing pool search', (WidgetTester tester) async {

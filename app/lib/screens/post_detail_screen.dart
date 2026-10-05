@@ -84,6 +84,14 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
   Future<BunnyPostRelationships>? _relationshipsFuture;
   Future<List<int>>? _poolIdsFuture;
 
+  /// Not `late final` like the futures above -- posting a new comment
+  /// reassigns this to a fresh fetch so the new comment shows up without a
+  /// full screen reload.
+  Future<List<BunnyComment>>? _commentsFuture;
+  final _commentController = TextEditingController();
+  bool _commentAnonymous = false;
+  bool _postingComment = false;
+
   /// Mutable local copy of [widget.post], so favorite/vote taps can update
   /// the displayed score/favCount/isFavorited immediately (M8.5.14) without
   /// a round trip. Identity-ish fields (site/externalId/fileExt/...) never
@@ -102,6 +110,7 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
     if (widget.post.site == BunnySite.e621) {
       _relationshipsFuture = widget.repository.getPostRelationships(widget.post.id);
       _poolIdsFuture = widget.repository.getPostPoolIds(widget.post.id);
+      _commentsFuture = widget.repository.getPostComments(widget.post.id);
     }
 
     final ext = widget.post.fileExt?.toLowerCase();
@@ -123,6 +132,7 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
   @override
   void dispose() {
     _videoController?.dispose();
+    _commentController.dispose();
     super.dispose();
   }
 
@@ -437,6 +447,86 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
     );
   }
 
+  Future<void> _postComment(AppLocalizations l10n) async {
+    final body = _commentController.text.trim();
+    if (body.isEmpty) {
+      return;
+    }
+    setState(() => _postingComment = true);
+    try {
+      await widget.repository.queueComment(widget.post.id, body, anonymous: _commentAnonymous);
+      // Drains immediately, same reasoning as the favorite/vote actions
+      // above, so the comment actually reaches e621 right away.
+      await widget.repository.processQueue();
+      _commentController.clear();
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _commentsFuture = widget.repository.getPostComments(widget.post.id);
+        _postingComment = false;
+      });
+    } catch (_) {
+      if (!mounted) {
+        return;
+      }
+      setState(() => _postingComment = false);
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(l10n.postDetailCommentPostFailed)));
+    }
+  }
+
+  Widget _commentsSection(AppLocalizations l10n) {
+    final future = _commentsFuture;
+    if (future == null) {
+      return const SizedBox.shrink();
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Divider(),
+        Padding(padding: const EdgeInsets.only(bottom: 4), child: Text(l10n.postDetailCommentsSectionLabel, style: Theme.of(context).textTheme.titleSmall)),
+        FutureBuilder<List<BunnyComment>>(
+          future: future,
+          builder: (context, snapshot) {
+            final comments = snapshot.data ?? const [];
+            if (comments.isEmpty) {
+              return Padding(padding: const EdgeInsets.only(bottom: 8), child: Text(l10n.postDetailNoCommentsYet));
+            }
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: comments
+                  .map(
+                    (comment) => Padding(
+                      padding: const EdgeInsets.only(bottom: 8),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(comment.creatorName ?? l10n.postDetailUnknownValue, style: const TextStyle(fontWeight: FontWeight.bold)),
+                          Text(comment.body ?? ''),
+                        ],
+                      ),
+                    ),
+                  )
+                  .toList(),
+            );
+          },
+        ),
+        TextField(controller: _commentController, enabled: !_postingComment, minLines: 1, maxLines: 4, decoration: InputDecoration(labelText: l10n.postDetailCommentFieldLabel)),
+        Row(
+          children: [
+            Checkbox(value: _commentAnonymous, onChanged: _postingComment ? null : (value) => setState(() => _commentAnonymous = value ?? false)),
+            Text(l10n.postDetailCommentAnonymousLabel),
+            const Spacer(),
+            FilledButton(
+              onPressed: _postingComment ? null : () => _postComment(l10n),
+              child: _postingComment ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)) : Text(l10n.postDetailCommentSubmit),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
@@ -469,6 +559,7 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
                 _sourcesSection(l10n),
                 _relationshipsSection(l10n),
                 _poolsSection(l10n),
+                _commentsSection(l10n),
               ],
             ),
           ),

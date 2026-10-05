@@ -145,6 +145,29 @@ bunny_core_result_t bunny_core_fetch_pool(bunny_core_t *core, int64_t pool_id, b
  * click-through browse screen rather than a saved search. */
 bunny_core_result_t bunny_core_preview_search(bunny_core_t *core, bunny_db_site_t site, const char *query, bunny_db_post_list_t *out_list);
 
+/* A post's existing comments, fetched live (e621 only -- no persistence, no
+ * equivalent on Inkbunny, same reasoning as bunny_core_pool_info_t above).
+ * Takes the local post id (not the site's external id) and looks up the
+ * post's own site/external_id internally, matching every other per-post
+ * read wrapper in this header. */
+typedef struct
+{
+    int64_t id;
+    char *creator_name;
+    char *body;
+    char *created_at;
+} bunny_core_comment_t;
+
+typedef struct
+{
+    bunny_core_comment_t *items;
+    size_t count;
+} bunny_core_comment_list_t;
+
+void bunny_core_comment_list_free(bunny_core_comment_list_t *list);
+
+bunny_core_result_t bunny_core_list_comments(bunny_core_t *core, int64_t post_id, bunny_core_comment_list_t *out_list);
+
 /* --- Scheduled search sync --------------------------------------------------- */
 
 typedef struct

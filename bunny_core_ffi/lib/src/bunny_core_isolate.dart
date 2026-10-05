@@ -246,6 +246,12 @@ class _PreviewSearchRequest extends _Request {
   const _PreviewSearchRequest(this.site, this.query);
 }
 
+class _ListCommentsRequest extends _Request {
+  final int postId;
+
+  const _ListCommentsRequest(this.postId);
+}
+
 class _QueueFavoriteAddRequest extends _Request {
   final int postId;
   final int stars;
@@ -433,6 +439,20 @@ List<Map<String, Object?>> _handlePreviewSearch(Pointer<bunny_core_t> core, _Pre
   });
 }
 
+List<Map<String, Object?>> _handleListComments(Pointer<bunny_core_t> core, _ListCommentsRequest r) {
+  return using((arena) {
+    final out = arena<bunny_core_comment_list_t>();
+    _check(_bindings.bunny_core_list_comments(core, r.postId, out));
+    final items = <Map<String, Object?>>[];
+    for (var i = 0; i < out.ref.count; i++) {
+      final comment = out.ref.items[i];
+      items.add({'id': comment.id, 'creatorName': _readNullableString(comment.creator_name), 'body': _readNullableString(comment.body), 'createdAt': _readNullableString(comment.created_at)});
+    }
+    _bindings.bunny_core_comment_list_free(out);
+    return items;
+  });
+}
+
 Map<String, Object?> _handleGetPostById(Pointer<bunny_core_t> core, _GetPostByIdRequest r) {
   return using((arena) {
     final out = arena<bunny_db_post_t>();
@@ -527,6 +547,8 @@ Object? _dispatch(Pointer<bunny_core_t>? core, _Request request, void Function(P
         return _handleFetchPool(c, r);
       case _PreviewSearchRequest r:
         return _handlePreviewSearch(c, r);
+      case _ListCommentsRequest r:
+        return _handleListComments(c, r);
       case _QueueFavoriteAddRequest r:
         _check(_bindings.bunny_core_queue_favorite_add(c, r.postId, r.stars));
         return null;
@@ -662,6 +684,8 @@ class BunnyCoreNative {
   Future<Map<String, Object?>> fetchPool(int poolId) => _send<Map<String, Object?>>(_FetchPoolRequest(poolId));
 
   Future<List<Map<String, Object?>>> previewSearch(String site, String query) => _send<List<Map<String, Object?>>>(_PreviewSearchRequest(site, query));
+
+  Future<List<Map<String, Object?>>> listComments(int postId) => _send<List<Map<String, Object?>>>(_ListCommentsRequest(postId));
 
   Future<void> queueFavoriteAdd(int postId, int stars) => _send<void>(_QueueFavoriteAddRequest(postId, stars));
 

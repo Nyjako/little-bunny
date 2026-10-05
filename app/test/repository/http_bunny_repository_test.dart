@@ -375,6 +375,23 @@ void main() {
       expect(posts.single.externalId, 7);
     });
 
+    test('getPostComments sends GET to the right path and maps the response', () async {
+      respond = (_) => http.Response(
+        jsonEncode([
+          {'id': 1, 'creator_name': 'someone', 'body': 'Nice pic!', 'created_at': '2026-01-01T00:00:00Z'},
+        ]),
+        200,
+      );
+
+      final comments = await buildRepository().getPostComments(2);
+
+      expect(capturedMethod, 'GET');
+      expect(capturedUri.path, '/posts/2/comments');
+      expect(comments, hasLength(1));
+      expect(comments.single.creatorName, 'someone');
+      expect(comments.single.body, 'Nice pic!');
+    });
+
     test('markPostSeen sends POST to the right path', () async {
       respond = (_) => http.Response(jsonEncode({'ok': true}), 200);
 

@@ -921,6 +921,50 @@ class BunnyCoreFfiBindings {
         )
       >();
 
+  void bunny_core_comment_list_free(
+    ffi.Pointer<bunny_core_comment_list_t> list,
+  ) {
+    return _bunny_core_comment_list_free(list);
+  }
+
+  late final _bunny_core_comment_list_freePtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.Void Function(ffi.Pointer<bunny_core_comment_list_t>)
+        >
+      >('bunny_core_comment_list_free');
+  late final _bunny_core_comment_list_free = _bunny_core_comment_list_freePtr
+      .asFunction<void Function(ffi.Pointer<bunny_core_comment_list_t>)>();
+
+  bunny_core_result_t bunny_core_list_comments(
+    ffi.Pointer<bunny_core_t> core,
+    int post_id,
+    ffi.Pointer<bunny_core_comment_list_t> out_list,
+  ) {
+    return bunny_core_result_t.fromValue(
+      _bunny_core_list_comments(core, post_id, out_list),
+    );
+  }
+
+  late final _bunny_core_list_commentsPtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.UnsignedInt Function(
+            ffi.Pointer<bunny_core_t>,
+            ffi.Int64,
+            ffi.Pointer<bunny_core_comment_list_t>,
+          )
+        >
+      >('bunny_core_list_comments');
+  late final _bunny_core_list_comments = _bunny_core_list_commentsPtr
+      .asFunction<
+        int Function(
+          ffi.Pointer<bunny_core_t>,
+          int,
+          ffi.Pointer<bunny_core_comment_list_t>,
+        )
+      >();
+
   /// Runs every saved search whose last run is NULL or older than its
   /// interval_hours: builds a client for that search's site (authenticated via
   /// the stored account if one exists, or anonymous/guest otherwise), fetches
@@ -1554,6 +1598,29 @@ final class bunny_core_pool_info_t extends ffi.Struct {
 
   @ffi.Int64()
   external int post_count;
+}
+
+/// A post's existing comments, fetched live (e621 only -- no persistence, no
+/// equivalent on Inkbunny, same reasoning as bunny_core_pool_info_t above).
+/// Takes the local post id (not the site's external id) and looks up the
+/// post's own site/external_id internally, matching every other per-post
+/// read wrapper in this header.
+final class bunny_core_comment_t extends ffi.Struct {
+  @ffi.Int64()
+  external int id;
+
+  external ffi.Pointer<ffi.Char> creator_name;
+
+  external ffi.Pointer<ffi.Char> body;
+
+  external ffi.Pointer<ffi.Char> created_at;
+}
+
+final class bunny_core_comment_list_t extends ffi.Struct {
+  external ffi.Pointer<bunny_core_comment_t> items;
+
+  @ffi.Size()
+  external int count;
 }
 
 /// --- Scheduled search sync ---------------------------------------------------

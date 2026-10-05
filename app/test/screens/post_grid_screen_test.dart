@@ -75,7 +75,7 @@ void main() {
     await tester.tap(find.byKey(const ValueKey(1)));
     await tester.pumpAndSettle();
 
-    expect(find.text('Post'), findsOneWidget);
+    expect(find.widgetWithText(AppBar, 'Post'), findsOneWidget);
     expect(repository.postsBySearchId[1]!.single.isSeen, isTrue);
 
     await tester.pageBack();
