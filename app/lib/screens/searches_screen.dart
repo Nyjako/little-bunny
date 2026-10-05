@@ -6,6 +6,7 @@ import '../repository/bunny_models.dart';
 import '../repository/bunny_repository.dart';
 import '../settings/app_lock_service.dart';
 import '../settings/display_settings_store.dart';
+import '../settings/download_settings_store.dart';
 import '../settings/sync_settings_store.dart';
 import '../settings/theme_settings_store.dart';
 import 'accounts_screen.dart';
@@ -22,6 +23,7 @@ class SearchesScreen extends StatefulWidget {
   final ThemeSettingsStore themeSettingsStore;
   final SyncSettingsStore syncSettingsStore;
   final DisplaySettingsStore displaySettingsStore;
+  final DownloadSettingsStore downloadSettingsStore;
   final ValueChanged<ThemeMode> onThemeModeChanged;
 
   const SearchesScreen({
@@ -30,6 +32,7 @@ class SearchesScreen extends StatefulWidget {
     required this.themeSettingsStore,
     required this.syncSettingsStore,
     required this.displaySettingsStore,
+    required this.downloadSettingsStore,
     required this.onThemeModeChanged,
   });
 
@@ -163,7 +166,13 @@ class _SearchesScreenState extends State<SearchesScreen> with SingleTickerProvid
                   IconButton(icon: const Icon(Icons.delete), onPressed: () => _removeSearch(search)),
                 ],
               ),
-              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => PostGridScreen(search: search, repository: _repository!, displaySettingsStore: widget.displaySettingsStore, syncSettingsStore: widget.syncSettingsStore))),
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) =>
+                      PostGridScreen(search: search, repository: _repository!, displaySettingsStore: widget.displaySettingsStore, syncSettingsStore: widget.syncSettingsStore, downloadSettingsStore: widget.downloadSettingsStore),
+                ),
+              ),
             ),
           )
           .toList(),
@@ -190,6 +199,7 @@ class _SearchesScreenState extends State<SearchesScreen> with SingleTickerProvid
                   lockService: widget.lockService,
                   syncSettingsStore: widget.syncSettingsStore,
                   displaySettingsStore: widget.displaySettingsStore,
+                  downloadSettingsStore: widget.downloadSettingsStore,
                   onThemeModeChanged: widget.onThemeModeChanged,
                 ),
               ),

@@ -5,11 +5,14 @@ import 'package:little_bunny/repository/bunny_models.dart';
 import 'package:little_bunny/screens/searches_screen.dart';
 import 'package:little_bunny/settings/app_lock_service.dart';
 import 'package:little_bunny/settings/display_settings_store.dart';
+import 'package:little_bunny/settings/download_settings_store.dart';
 import 'package:little_bunny/settings/sync_settings_store.dart';
 import 'package:little_bunny/settings/theme_settings_store.dart';
+import 'package:path_provider_platform_interface/path_provider_platform_interface.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../fakes/fake_bunny_repository.dart';
+import '../fakes/fake_path_provider.dart';
 import '../fakes/fake_secret_store.dart';
 import '../fakes/test_app.dart';
 
@@ -21,6 +24,7 @@ Widget _wrap(FakeBunnyRepository repository) => wrapWithLocalization(
       themeSettingsStore: const ThemeSettingsStore(),
       syncSettingsStore: const SyncSettingsStore(),
       displaySettingsStore: const DisplaySettingsStore(),
+      downloadSettingsStore: const DownloadSettingsStore(),
       onThemeModeChanged: (_) {},
     ),
   ),
@@ -29,6 +33,7 @@ Widget _wrap(FakeBunnyRepository repository) => wrapWithLocalization(
 void main() {
   setUp(() {
     SharedPreferences.setMockInitialValues({});
+    PathProviderPlatform.instance = FakePathProviderPlatform();
   });
 
   testWidgets('shows the empty state when there are no saved searches', (WidgetTester tester) async {

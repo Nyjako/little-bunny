@@ -1,8 +1,10 @@
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 
 import '../l10n/app_localizations.dart';
 import '../settings/app_lock_service.dart';
 import '../settings/display_settings_store.dart';
+import '../settings/download_settings_store.dart';
 import '../settings/sync_settings_store.dart';
 import '../settings/theme_settings_store.dart';
 import 'lock_setup_screen.dart';
@@ -10,16 +12,25 @@ import 'lock_setup_screen.dart';
 /// One place for cross-cutting app preferences -- reachable from
 /// [AccountsScreen]'s app bar. Structured so adding more appearance options
 /// later (or more sections entirely) doesn't need a redesign: each concern
-/// (theme, app lock, sync, display) is its own section backed by its own
-/// settings store.
+/// (theme, app lock, sync, display, downloads) is its own section backed by
+/// its own settings store.
 class SettingsScreen extends StatefulWidget {
   final ThemeSettingsStore themeSettingsStore;
   final AppLockService lockService;
   final SyncSettingsStore syncSettingsStore;
   final DisplaySettingsStore displaySettingsStore;
+  final DownloadSettingsStore downloadSettingsStore;
   final ValueChanged<ThemeMode> onThemeModeChanged;
 
-  const SettingsScreen({super.key, required this.themeSettingsStore, required this.lockService, required this.syncSettingsStore, required this.displaySettingsStore, required this.onThemeModeChanged});
+  const SettingsScreen({
+    super.key,
+    required this.themeSettingsStore,
+    required this.lockService,
+    required this.syncSettingsStore,
+    required this.displaySettingsStore,
+    required this.downloadSettingsStore,
+    required this.onThemeModeChanged,
+  });
 
   @override
   State<SettingsScreen> createState() => _SettingsScreenState();
@@ -28,6 +39,7 @@ class SettingsScreen extends StatefulWidget {
 class _SettingsScreenState extends State<SettingsScreen> {
   ThemeMode? _themeMode;
   PreviewQuality? _previewQuality;
+  String? _downloadFolder;
   final _intervalController = TextEditingController();
   final _gridColumnsController = TextEditingController();
 
@@ -49,6 +61,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final intervalHours = await widget.syncSettingsStore.loadDefaultIntervalHours();
     final previewQuality = await widget.displaySettingsStore.loadPreviewQuality();
     final gridColumns = await widget.displaySettingsStore.loadGridColumns();
+    final downloadFolder = await widget.downloadSettingsStore.loadDestinationFolder();
     if (!mounted) {
       return;
     }
@@ -57,6 +70,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       _intervalController.text = '$intervalHours';
       _previewQuality = previewQuality;
       _gridColumnsController.text = '$gridColumns';
+      _downloadFolder = downloadFolder;
     });
   }
 
@@ -85,6 +99,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
       return;
     }
     await widget.displaySettingsStore.saveGridColumns(columns);
+  }
+
+  Future<void> _chooseDownloadFolder() async {
+    final chosen = await FilePicker.getDirectoryPath();
+    if (chosen == null) {
+      return;
+    }
+    setState(() => _downloadFolder = chosen);
+    await widget.downloadSettingsStore.saveDestinationFolder(chosen);
   }
 
   @override
@@ -137,6 +160,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
             keyboardType: TextInputType.number,
             decoration: InputDecoration(labelText: l10n.settingsGridColumnsLabel),
             onChanged: _setGridColumns,
+          ),
+          const SizedBox(height: 24),
+          Text(l10n.settingsDownloadsSection, style: Theme.of(context).textTheme.titleMedium),
+          const SizedBox(height: 8),
+          ListTile(
+            contentPadding: EdgeInsets.zero,
+            title: Text(l10n.settingsDownloadsFolderLabel),
+            subtitle: Text(_downloadFolder ?? l10n.settingsDownloadsFolderUnset),
+            trailing: TextButton(onPressed: _chooseDownloadFolder, child: Text(l10n.settingsDownloadsChooseFolderButton)),
           ),
           const SizedBox(height: 24),
           Text(l10n.settingsAppLockSection, style: Theme.of(context).textTheme.titleMedium),

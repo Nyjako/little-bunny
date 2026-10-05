@@ -3,23 +3,27 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:little_bunny/screens/settings_screen.dart';
 import 'package:little_bunny/settings/app_lock_service.dart';
 import 'package:little_bunny/settings/display_settings_store.dart';
+import 'package:little_bunny/settings/download_settings_store.dart';
 import 'package:little_bunny/settings/sync_settings_store.dart';
 import 'package:little_bunny/settings/theme_settings_store.dart';
+import 'package:path_provider_platform_interface/path_provider_platform_interface.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../fakes/fake_path_provider.dart';
 import '../fakes/fake_secret_store.dart';
 import '../fakes/test_app.dart';
 
 void main() {
   setUp(() {
     SharedPreferences.setMockInitialValues({});
+    PathProviderPlatform.instance = FakePathProviderPlatform();
   });
 
   testWidgets('shows the persisted theme mode selected', (WidgetTester tester) async {
     const themeStore = ThemeSettingsStore();
     await themeStore.save(ThemeMode.light);
 
-    await tester.pumpWidget(wrapWithLocalization(SettingsScreen(themeSettingsStore: themeStore, lockService: AppLockService(FakeSecretStore()), syncSettingsStore: const SyncSettingsStore(), displaySettingsStore: const DisplaySettingsStore(), onThemeModeChanged: (_) {})));
+    await tester.pumpWidget(wrapWithLocalization(SettingsScreen(themeSettingsStore: themeStore, lockService: AppLockService(FakeSecretStore()), syncSettingsStore: const SyncSettingsStore(), downloadSettingsStore: const DownloadSettingsStore(), displaySettingsStore: const DisplaySettingsStore(), onThemeModeChanged: (_) {})));
     await tester.pumpAndSettle();
 
     final button = tester.widget<SegmentedButton<ThemeMode>>(find.byType(SegmentedButton<ThemeMode>));
@@ -30,7 +34,7 @@ void main() {
     const themeStore = ThemeSettingsStore();
     ThemeMode? notified;
 
-    await tester.pumpWidget(wrapWithLocalization(SettingsScreen(themeSettingsStore: themeStore, lockService: AppLockService(FakeSecretStore()), syncSettingsStore: const SyncSettingsStore(), displaySettingsStore: const DisplaySettingsStore(), onThemeModeChanged: (mode) => notified = mode)));
+    await tester.pumpWidget(wrapWithLocalization(SettingsScreen(themeSettingsStore: themeStore, lockService: AppLockService(FakeSecretStore()), syncSettingsStore: const SyncSettingsStore(), downloadSettingsStore: const DownloadSettingsStore(), displaySettingsStore: const DisplaySettingsStore(), onThemeModeChanged: (mode) => notified = mode)));
     await tester.pumpAndSettle();
 
     await tester.tap(find.text('Light'));
@@ -41,9 +45,13 @@ void main() {
   });
 
   testWidgets('tapping the app lock entry opens LockSetupScreen', (WidgetTester tester) async {
-    await tester.pumpWidget(wrapWithLocalization(SettingsScreen(themeSettingsStore: const ThemeSettingsStore(), lockService: AppLockService(FakeSecretStore()), syncSettingsStore: const SyncSettingsStore(), displaySettingsStore: const DisplaySettingsStore(), onThemeModeChanged: (_) {})));
+    await tester.pumpWidget(wrapWithLocalization(SettingsScreen(themeSettingsStore: const ThemeSettingsStore(), lockService: AppLockService(FakeSecretStore()), syncSettingsStore: const SyncSettingsStore(), downloadSettingsStore: const DownloadSettingsStore(), displaySettingsStore: const DisplaySettingsStore(), onThemeModeChanged: (_) {})));
     await tester.pumpAndSettle();
 
+    // The Downloads section (M9.4) pushed "Manage app lock" past the
+    // ListView's default build cache extent in the test viewport -- scroll
+    // it into view first so the sliver actually materializes that element.
+    await tester.dragUntilVisible(find.text('Manage app lock'), find.byType(ListView), const Offset(0, -100));
     await tester.tap(find.text('Manage app lock'));
     await tester.pumpAndSettle();
 
@@ -55,7 +63,7 @@ void main() {
 
     await tester.pumpWidget(
       wrapWithLocalization(
-        SettingsScreen(themeSettingsStore: const ThemeSettingsStore(), lockService: AppLockService(FakeSecretStore()), syncSettingsStore: const SyncSettingsStore(), displaySettingsStore: const DisplaySettingsStore(), onThemeModeChanged: (_) {}),
+        SettingsScreen(themeSettingsStore: const ThemeSettingsStore(), lockService: AppLockService(FakeSecretStore()), syncSettingsStore: const SyncSettingsStore(), downloadSettingsStore: const DownloadSettingsStore(), displaySettingsStore: const DisplaySettingsStore(), onThemeModeChanged: (_) {}),
       ),
     );
     await tester.pumpAndSettle();
@@ -67,7 +75,16 @@ void main() {
     const syncStore = SyncSettingsStore();
 
     await tester.pumpWidget(
-      wrapWithLocalization(SettingsScreen(themeSettingsStore: const ThemeSettingsStore(), lockService: AppLockService(FakeSecretStore()), syncSettingsStore: syncStore, displaySettingsStore: const DisplaySettingsStore(), onThemeModeChanged: (_) {})),
+      wrapWithLocalization(
+        SettingsScreen(
+          themeSettingsStore: const ThemeSettingsStore(),
+          lockService: AppLockService(FakeSecretStore()),
+          syncSettingsStore: syncStore,
+          displaySettingsStore: const DisplaySettingsStore(),
+          downloadSettingsStore: const DownloadSettingsStore(),
+          onThemeModeChanged: (_) {},
+        ),
+      ),
     );
     await tester.pumpAndSettle();
 
@@ -85,7 +102,7 @@ void main() {
         SettingsScreen(
           themeSettingsStore: const ThemeSettingsStore(),
           lockService: AppLockService(FakeSecretStore()),
-          syncSettingsStore: const SyncSettingsStore(),
+          syncSettingsStore: const SyncSettingsStore(), downloadSettingsStore: const DownloadSettingsStore(),
           displaySettingsStore: const DisplaySettingsStore(),
           onThemeModeChanged: (_) {},
         ),
@@ -106,7 +123,7 @@ void main() {
         SettingsScreen(
           themeSettingsStore: const ThemeSettingsStore(),
           lockService: AppLockService(FakeSecretStore()),
-          syncSettingsStore: const SyncSettingsStore(),
+          syncSettingsStore: const SyncSettingsStore(), downloadSettingsStore: const DownloadSettingsStore(),
           displaySettingsStore: displayStore,
           onThemeModeChanged: (_) {},
         ),

@@ -1,11 +1,18 @@
+import 'dart:io';
+
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
 import 'package:little_bunny/repository/bunny_models.dart';
 import 'package:little_bunny/screens/post_detail_screen.dart';
+import 'package:little_bunny/services/download_manager.dart';
 import 'package:little_bunny/settings/display_settings_store.dart';
+import 'package:little_bunny/settings/download_settings_store.dart';
 import 'package:little_bunny/settings/sync_settings_store.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:video_player/video_player.dart';
 import 'package:video_player_platform_interface/video_player_platform_interface.dart';
 
@@ -13,7 +20,7 @@ import '../fakes/fake_bunny_repository.dart';
 import '../fakes/fake_video_player_platform.dart';
 import '../fakes/test_app.dart';
 
-BunnyPost _post({String? fileExt, String? fileUrl, BunnySite site = BunnySite.e621, int id = 1, int externalId = 1, String title = 'A title'}) => BunnyPost(
+BunnyPost _post({String? fileExt, String? fileUrl, bool noFileUrl = false, String? fileMd5, BunnySite site = BunnySite.e621, int id = 1, int externalId = 1, String title = 'A title'}) => BunnyPost(
   id: id,
   site: site,
   externalId: externalId,
@@ -24,8 +31,9 @@ BunnyPost _post({String? fileExt, String? fileUrl, BunnySite site = BunnySite.e6
   score: 42,
   favCount: 10,
   commentCount: 3,
-  fileUrl: fileUrl ?? 'https://example.invalid/file.$fileExt',
+  fileUrl: noFileUrl ? null : (fileUrl ?? 'https://example.invalid/file.$fileExt'),
   fileExt: fileExt,
+  fileMd5: fileMd5,
   width: 640,
   height: 480,
   createdAtSite: '2026-01-01T00:00:00Z',
@@ -50,7 +58,7 @@ void main() {
     final repository = FakeBunnyRepository();
     repository.postsBySearchId[1] = [_post(fileExt: 'jpg')];
 
-    await tester.pumpWidget(wrapWithLocalization(PostDetailScreen(post: repository.postsBySearchId[1]!.single, repository: repository, displaySettingsStore: const DisplaySettingsStore(), syncSettingsStore: const SyncSettingsStore())));
+    await tester.pumpWidget(wrapWithLocalization(PostDetailScreen(post: repository.postsBySearchId[1]!.single, repository: repository, displaySettingsStore: const DisplaySettingsStore(), syncSettingsStore: const SyncSettingsStore(), downloadSettingsStore: const DownloadSettingsStore())));
     await tester.pumpAndSettle();
 
     expect(repository.postsBySearchId[1]!.single.isSeen, isTrue);
@@ -60,7 +68,7 @@ void main() {
     final repository = FakeBunnyRepository();
     final post = _post(fileExt: 'jpg');
 
-    await tester.pumpWidget(wrapWithLocalization(PostDetailScreen(post: post, repository: repository, displaySettingsStore: const DisplaySettingsStore(), syncSettingsStore: const SyncSettingsStore())));
+    await tester.pumpWidget(wrapWithLocalization(PostDetailScreen(post: post, repository: repository, displaySettingsStore: const DisplaySettingsStore(), syncSettingsStore: const SyncSettingsStore(), downloadSettingsStore: const DownloadSettingsStore())));
     await tester.pumpAndSettle();
 
     expect(find.text('A title'), findsOneWidget);
@@ -78,7 +86,7 @@ void main() {
       final repository = FakeBunnyRepository();
       final post = _post(fileExt: ext);
 
-      await tester.pumpWidget(wrapWithLocalization(PostDetailScreen(post: post, repository: repository, displaySettingsStore: const DisplaySettingsStore(), syncSettingsStore: const SyncSettingsStore())));
+      await tester.pumpWidget(wrapWithLocalization(PostDetailScreen(post: post, repository: repository, displaySettingsStore: const DisplaySettingsStore(), syncSettingsStore: const SyncSettingsStore(), downloadSettingsStore: const DownloadSettingsStore())));
       await tester.pumpAndSettle();
 
       expect(find.byType(CachedNetworkImage), findsOneWidget);
@@ -91,7 +99,7 @@ void main() {
       final repository = FakeBunnyRepository();
       final post = _post(fileExt: ext);
 
-      await tester.pumpWidget(wrapWithLocalization(PostDetailScreen(post: post, repository: repository, displaySettingsStore: const DisplaySettingsStore(), syncSettingsStore: const SyncSettingsStore())));
+      await tester.pumpWidget(wrapWithLocalization(PostDetailScreen(post: post, repository: repository, displaySettingsStore: const DisplaySettingsStore(), syncSettingsStore: const SyncSettingsStore(), downloadSettingsStore: const DownloadSettingsStore())));
       await tester.pumpAndSettle();
 
       expect(find.byType(VideoPlayer), findsOneWidget);
@@ -103,7 +111,7 @@ void main() {
     final repository = FakeBunnyRepository();
     final post = _post(fileExt: 'swf');
 
-    await tester.pumpWidget(wrapWithLocalization(PostDetailScreen(post: post, repository: repository, displaySettingsStore: const DisplaySettingsStore(), syncSettingsStore: const SyncSettingsStore())));
+    await tester.pumpWidget(wrapWithLocalization(PostDetailScreen(post: post, repository: repository, displaySettingsStore: const DisplaySettingsStore(), syncSettingsStore: const SyncSettingsStore(), downloadSettingsStore: const DownloadSettingsStore())));
     await tester.pumpAndSettle();
 
     expect(find.textContaining('swf'), findsOneWidget);
@@ -125,7 +133,7 @@ void main() {
       BunnyPostTag(name: 'uncategorized_tag'),
     ];
 
-    await tester.pumpWidget(wrapWithLocalization(PostDetailScreen(post: post, repository: repository, displaySettingsStore: const DisplaySettingsStore(), syncSettingsStore: const SyncSettingsStore())));
+    await tester.pumpWidget(wrapWithLocalization(PostDetailScreen(post: post, repository: repository, displaySettingsStore: const DisplaySettingsStore(), syncSettingsStore: const SyncSettingsStore(), downloadSettingsStore: const DownloadSettingsStore())));
     await tester.pumpAndSettle();
     await scrollToEnd(tester);
 
@@ -141,7 +149,7 @@ void main() {
     final repository = FakeBunnyRepository();
     final post = _post(fileExt: 'jpg');
 
-    await tester.pumpWidget(wrapWithLocalization(PostDetailScreen(post: post, repository: repository, displaySettingsStore: const DisplaySettingsStore(), syncSettingsStore: const SyncSettingsStore())));
+    await tester.pumpWidget(wrapWithLocalization(PostDetailScreen(post: post, repository: repository, displaySettingsStore: const DisplaySettingsStore(), syncSettingsStore: const SyncSettingsStore(), downloadSettingsStore: const DownloadSettingsStore())));
     await tester.pumpAndSettle();
     await scrollToEnd(tester);
 
@@ -153,7 +161,7 @@ void main() {
     final post = _post(fileExt: 'jpg');
     repository.sourcesByPostId[1] = ['https://example.invalid/a', 'https://example.invalid/b'];
 
-    await tester.pumpWidget(wrapWithLocalization(PostDetailScreen(post: post, repository: repository, displaySettingsStore: const DisplaySettingsStore(), syncSettingsStore: const SyncSettingsStore())));
+    await tester.pumpWidget(wrapWithLocalization(PostDetailScreen(post: post, repository: repository, displaySettingsStore: const DisplaySettingsStore(), syncSettingsStore: const SyncSettingsStore(), downloadSettingsStore: const DownloadSettingsStore())));
     await tester.pumpAndSettle();
     await scrollToEnd(tester);
 
@@ -166,7 +174,7 @@ void main() {
     final repository = FakeBunnyRepository();
     final post = _post(fileExt: 'jpg', externalId: 12345);
 
-    await tester.pumpWidget(wrapWithLocalization(PostDetailScreen(post: post, repository: repository, displaySettingsStore: const DisplaySettingsStore(), syncSettingsStore: const SyncSettingsStore())));
+    await tester.pumpWidget(wrapWithLocalization(PostDetailScreen(post: post, repository: repository, displaySettingsStore: const DisplaySettingsStore(), syncSettingsStore: const SyncSettingsStore(), downloadSettingsStore: const DownloadSettingsStore())));
     await tester.pumpAndSettle();
     await scrollToEnd(tester);
 
@@ -184,7 +192,7 @@ void main() {
     repository.fetchPostResults['e621:55'] = 2;
     repository.postsById[2] = _post(id: 2, externalId: 55, title: 'Parent post');
 
-    await tester.pumpWidget(wrapWithLocalization(PostDetailScreen(post: post, repository: repository, displaySettingsStore: const DisplaySettingsStore(), syncSettingsStore: const SyncSettingsStore())));
+    await tester.pumpWidget(wrapWithLocalization(PostDetailScreen(post: post, repository: repository, displaySettingsStore: const DisplaySettingsStore(), syncSettingsStore: const SyncSettingsStore(), downloadSettingsStore: const DownloadSettingsStore())));
     await tester.pumpAndSettle();
     await scrollToEnd(tester);
 
@@ -210,7 +218,7 @@ void main() {
     repository.poolIdsByPostId[1] = [9];
     repository.commentsByPostId[1] = const [BunnyComment(id: 1, creatorName: 'someone', body: 'hi')];
 
-    await tester.pumpWidget(wrapWithLocalization(PostDetailScreen(post: post, repository: repository, displaySettingsStore: const DisplaySettingsStore(), syncSettingsStore: const SyncSettingsStore())));
+    await tester.pumpWidget(wrapWithLocalization(PostDetailScreen(post: post, repository: repository, displaySettingsStore: const DisplaySettingsStore(), syncSettingsStore: const SyncSettingsStore(), downloadSettingsStore: const DownloadSettingsStore())));
     await tester.pumpAndSettle();
     await scrollToEnd(tester);
 
@@ -226,7 +234,7 @@ void main() {
     final post = _post(fileExt: 'jpg');
     repository.commentsByPostId[1] = const [BunnyComment(id: 1, creatorName: 'someone', body: 'Nice pic!')];
 
-    await tester.pumpWidget(wrapWithLocalization(PostDetailScreen(post: post, repository: repository, displaySettingsStore: const DisplaySettingsStore(), syncSettingsStore: const SyncSettingsStore())));
+    await tester.pumpWidget(wrapWithLocalization(PostDetailScreen(post: post, repository: repository, displaySettingsStore: const DisplaySettingsStore(), syncSettingsStore: const SyncSettingsStore(), downloadSettingsStore: const DownloadSettingsStore())));
     await tester.pumpAndSettle();
     await scrollToEnd(tester);
 
@@ -251,7 +259,7 @@ void main() {
     final repository = FakeBunnyRepository();
     final post = _post(fileExt: 'jpg');
 
-    await tester.pumpWidget(wrapWithLocalization(PostDetailScreen(post: post, repository: repository, displaySettingsStore: const DisplaySettingsStore(), syncSettingsStore: const SyncSettingsStore())));
+    await tester.pumpWidget(wrapWithLocalization(PostDetailScreen(post: post, repository: repository, displaySettingsStore: const DisplaySettingsStore(), syncSettingsStore: const SyncSettingsStore(), downloadSettingsStore: const DownloadSettingsStore())));
     await tester.pumpAndSettle();
     await scrollToEnd(tester);
 
@@ -264,7 +272,7 @@ void main() {
     repository.poolIdsByPostId[1] = [9];
     repository.searches.add(const BunnySearch(id: 5, site: BunnySite.e621, label: 'My pool', query: 'pool:9', intervalHours: 24, createdAt: '2026-01-01T00:00:00Z'));
 
-    await tester.pumpWidget(wrapWithLocalization(PostDetailScreen(post: post, repository: repository, displaySettingsStore: const DisplaySettingsStore(), syncSettingsStore: const SyncSettingsStore())));
+    await tester.pumpWidget(wrapWithLocalization(PostDetailScreen(post: post, repository: repository, displaySettingsStore: const DisplaySettingsStore(), syncSettingsStore: const SyncSettingsStore(), downloadSettingsStore: const DownloadSettingsStore())));
     await tester.pumpAndSettle();
     await scrollToEnd(tester);
 
@@ -279,7 +287,7 @@ void main() {
     final post = _post(fileExt: 'jpg');
     repository.poolIdsByPostId[1] = [9];
 
-    await tester.pumpWidget(wrapWithLocalization(PostDetailScreen(post: post, repository: repository, displaySettingsStore: const DisplaySettingsStore(), syncSettingsStore: const SyncSettingsStore())));
+    await tester.pumpWidget(wrapWithLocalization(PostDetailScreen(post: post, repository: repository, displaySettingsStore: const DisplaySettingsStore(), syncSettingsStore: const SyncSettingsStore(), downloadSettingsStore: const DownloadSettingsStore())));
     await tester.pumpAndSettle();
     await scrollToEnd(tester);
 
@@ -299,7 +307,7 @@ void main() {
     final repository = FakeBunnyRepository();
     final post = _post(fileExt: 'jpg');
 
-    await tester.pumpWidget(wrapWithLocalization(PostDetailScreen(post: post, repository: repository, displaySettingsStore: const DisplaySettingsStore(), syncSettingsStore: const SyncSettingsStore())));
+    await tester.pumpWidget(wrapWithLocalization(PostDetailScreen(post: post, repository: repository, displaySettingsStore: const DisplaySettingsStore(), syncSettingsStore: const SyncSettingsStore(), downloadSettingsStore: const DownloadSettingsStore())));
     await tester.pumpAndSettle();
 
     expect(find.byTooltip('Add to favorites'), findsOneWidget);
@@ -324,7 +332,7 @@ void main() {
     final repository = FakeBunnyRepository();
     final post = _post(fileExt: 'jpg');
 
-    await tester.pumpWidget(wrapWithLocalization(PostDetailScreen(post: post, repository: repository, displaySettingsStore: const DisplaySettingsStore(), syncSettingsStore: const SyncSettingsStore())));
+    await tester.pumpWidget(wrapWithLocalization(PostDetailScreen(post: post, repository: repository, displaySettingsStore: const DisplaySettingsStore(), syncSettingsStore: const SyncSettingsStore(), downloadSettingsStore: const DownloadSettingsStore())));
     await tester.pumpAndSettle();
 
     await tester.tap(find.byTooltip('Upvote'));
@@ -345,7 +353,7 @@ void main() {
     final repository = FakeBunnyRepository();
     final post = _post(fileExt: 'jpg', site: BunnySite.inkbunny);
 
-    await tester.pumpWidget(wrapWithLocalization(PostDetailScreen(post: post, repository: repository, displaySettingsStore: const DisplaySettingsStore(), syncSettingsStore: const SyncSettingsStore())));
+    await tester.pumpWidget(wrapWithLocalization(PostDetailScreen(post: post, repository: repository, displaySettingsStore: const DisplaySettingsStore(), syncSettingsStore: const SyncSettingsStore(), downloadSettingsStore: const DownloadSettingsStore())));
     await tester.pumpAndSettle();
 
     Finder iconButtonFor(String tooltip) => find.ancestor(of: find.byTooltip(tooltip), matching: find.byType(IconButton));
@@ -353,5 +361,135 @@ void main() {
     expect(tester.widget<IconButton>(iconButtonFor('Upvote')).onPressed, isNull);
     expect(tester.widget<IconButton>(iconButtonFor('Downvote')).onPressed, isNull);
     expect(tester.widget<IconButton>(iconButtonFor('Add to favorites')).onPressed, isNotNull);
+  });
+
+  group('download button (M9.4)', () {
+    late Directory tempDir;
+
+    setUp(() async {
+      tempDir = await Directory.systemTemp.createTemp('post_detail_download_test');
+      SharedPreferences.setMockInitialValues({'download_destination_folder': tempDir.path});
+    });
+
+    tearDown(() async {
+      if (await tempDir.exists()) {
+        await tempDir.delete(recursive: true);
+      }
+    });
+
+    testWidgets('download button is disabled when the post has no fileUrl', (WidgetTester tester) async {
+      final repository = FakeBunnyRepository();
+      final post = _post(noFileUrl: true);
+
+      await tester.pumpWidget(wrapWithLocalization(PostDetailScreen(post: post, repository: repository, displaySettingsStore: const DisplaySettingsStore(), syncSettingsStore: const SyncSettingsStore(), downloadSettingsStore: const DownloadSettingsStore())));
+      await tester.pumpAndSettle();
+
+      final downloadButton = find.ancestor(of: find.byTooltip('Download'), matching: find.byType(IconButton));
+      expect(tester.widget<IconButton>(downloadButton).onPressed, isNull);
+    });
+
+    testWidgets('tapping download with a matching checksum shows the verified message', (WidgetTester tester) async {
+      final repository = FakeBunnyRepository();
+      final post = _post(fileExt: 'jpg');
+      final bytes = [1, 2, 3];
+      final downloadManager = DownloadManager(client: MockClient((_) async => http.Response.bytes(bytes, 200)));
+
+      await tester.pumpWidget(
+        wrapWithLocalization(
+          PostDetailScreen(
+            post: post,
+            repository: repository,
+            displaySettingsStore: const DisplaySettingsStore(),
+            syncSettingsStore: const SyncSettingsStore(),
+            downloadSettingsStore: const DownloadSettingsStore(),
+            downloadManager: downloadManager,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.runAsync(() async {
+        await tester.tap(find.ancestor(of: find.byTooltip('Download'), matching: find.byType(IconButton)));
+        await tester.pump();
+        await Future<void>.delayed(const Duration(milliseconds: 100));
+        await tester.pump();
+      });
+      await tester.pump();
+
+      expect(find.text('Downloaded and checksum verified'), findsOneWidget);
+      expect(repository.recordDownloadCalls, hasLength(1));
+      expect(find.byIcon(Icons.download_done), findsOneWidget);
+    });
+
+    testWidgets('tapping download with a mismatched checksum shows the mismatch message', (WidgetTester tester) async {
+      final repository = FakeBunnyRepository();
+      final post = _post(fileExt: 'jpg', fileMd5: 'not-the-real-checksum');
+      final downloadManager = DownloadManager(client: MockClient((_) async => http.Response.bytes([1, 2, 3], 200)));
+
+      await tester.pumpWidget(
+        wrapWithLocalization(
+          PostDetailScreen(
+            post: post,
+            repository: repository,
+            displaySettingsStore: const DisplaySettingsStore(),
+            syncSettingsStore: const SyncSettingsStore(),
+            downloadSettingsStore: const DownloadSettingsStore(),
+            downloadManager: downloadManager,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.runAsync(() async {
+        await tester.tap(find.ancestor(of: find.byTooltip('Download'), matching: find.byType(IconButton)));
+        await tester.pump();
+        await Future<void>.delayed(const Duration(milliseconds: 100));
+        await tester.pump();
+      });
+
+      expect(find.text("Downloaded, but the checksum didn't match"), findsOneWidget);
+    });
+
+    testWidgets('tapping download on a failed HTTP response shows the failed message', (WidgetTester tester) async {
+      final repository = FakeBunnyRepository();
+      final post = _post(fileExt: 'jpg');
+      final downloadManager = DownloadManager(client: MockClient((_) async => http.Response('', 500)));
+
+      await tester.pumpWidget(
+        wrapWithLocalization(
+          PostDetailScreen(
+            post: post,
+            repository: repository,
+            displaySettingsStore: const DisplaySettingsStore(),
+            syncSettingsStore: const SyncSettingsStore(),
+            downloadSettingsStore: const DownloadSettingsStore(),
+            downloadManager: downloadManager,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.runAsync(() async {
+        await tester.tap(find.ancestor(of: find.byTooltip('Download'), matching: find.byType(IconButton)));
+        await tester.pump();
+        await Future<void>.delayed(const Duration(milliseconds: 100));
+        await tester.pump();
+      });
+
+      expect(find.text('Download failed'), findsOneWidget);
+      expect(repository.recordDownloadCalls, isEmpty);
+      expect(find.byIcon(Icons.download_done), findsNothing);
+    });
+
+    testWidgets('shows the already-downloaded icon when the post has prior download history', (WidgetTester tester) async {
+      final repository = FakeBunnyRepository();
+      final post = _post(fileExt: 'jpg');
+      repository.downloadsByPostId[post.id] = [const BunnyDownload(id: 1, postId: 1, filePath: '/downloads/1.jpg', checksumVerified: true)];
+
+      await tester.pumpWidget(wrapWithLocalization(PostDetailScreen(post: post, repository: repository, displaySettingsStore: const DisplaySettingsStore(), syncSettingsStore: const SyncSettingsStore(), downloadSettingsStore: const DownloadSettingsStore())));
+      await tester.pumpAndSettle();
+
+      expect(find.byIcon(Icons.download_done), findsOneWidget);
+    });
   });
 }
