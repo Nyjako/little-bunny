@@ -84,6 +84,22 @@
   "postGridMassFavoriteTooltip": "Favorite selected",
   "postGridMassUpvoteTooltip": "Upvote selected",
   "postGridMassDownvoteTooltip": "Downvote selected",
+  "postGridMassDownloadTooltip": "Download selected",
+  "postGridMassDownloadProgress": "{done}/{total} downloaded",
+  "@postGridMassDownloadProgress": {
+    "placeholders": {
+      "done": {"type": "int"},
+      "total": {"type": "int"}
+    }
+  },
+  "postGridMassDownloadSummary": "{succeeded} downloaded, {mismatched} checksum mismatch, {failed} failed",
+  "@postGridMassDownloadSummary": {
+    "placeholders": {
+      "succeeded": {"type": "int"},
+      "mismatched": {"type": "int"},
+      "failed": {"type": "int"}
+    }
+  },
 
   "tagBrowseEmptyState": "No posts found for this search.",
   "tagBrowseAddToSearchesTooltip": "Save as a search",
