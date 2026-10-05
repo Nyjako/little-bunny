@@ -128,11 +128,6 @@
   "postDetailChildrenLabel": "Children",
   "postDetailPoolsLabel": "Pools",
   "postDetailOpenPostFailed": "Couldn't open that post",
-  "postDetailCreatePoolSearchDialogTitle": "Add pool",
-  "postDetailCreatePoolSearchDialogContent": "This post belongs to pool {poolId}, but there's no saved search for it yet. Create one?",
-  "@postDetailCreatePoolSearchDialogContent": {
-    "placeholders": {"poolId": {"type": "int"}}
-  },
   "postDetailFavoriteAddTooltip": "Add to favorites",
   "postDetailFavoriteRemoveTooltip": "Remove from favorites",
   "postDetailUpvoteTooltip": "Upvote",

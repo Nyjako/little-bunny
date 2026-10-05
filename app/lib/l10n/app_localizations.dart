@@ -568,18 +568,6 @@ abstract class AppLocalizations {
   /// **'Couldn\'t open that post'**
   String get postDetailOpenPostFailed;
 
-  /// No description provided for @postDetailCreatePoolSearchDialogTitle.
-  ///
-  /// In en, this message translates to:
-  /// **'Add pool'**
-  String get postDetailCreatePoolSearchDialogTitle;
-
-  /// No description provided for @postDetailCreatePoolSearchDialogContent.
-  ///
-  /// In en, this message translates to:
-  /// **'This post belongs to pool {poolId}, but there\'s no saved search for it yet. Create one?'**
-  String postDetailCreatePoolSearchDialogContent(int poolId);
-
   /// No description provided for @postDetailFavoriteAddTooltip.
   ///
   /// In en, this message translates to:
