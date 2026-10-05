@@ -661,6 +661,22 @@ this file is the single source of truth for "what's done" across sessions.
   using a copy of `libinkbunny`'s own `submission_full.json` fixture, the first Inkbunny
   fixture in this test suite that actually includes a `"files"` array.
 
+- [x] **M8.5.7 — Grid tile badges**
+  New `app/lib/widgets/rating_badge.dart` — the app's first `widgets/` directory, pulled out
+  since this is genuinely reusable UI, not screen-specific. `ratingBadgeFor(BunnySite,
+  String? rating) -> (Color, String)` is a pure function (no backend changes; `BunnyPost`
+  already carries `rating`/`score`/`scoreUp`/`scoreDown`/`favCount`): e621's rating is a fixed
+  3-value encoding (`"s"`/`"q"`/`"e"`) mapping cleanly to green/amber/red with a single-letter
+  label; Inkbunny's `rating_name` is free text with no fixed value set, so it's best-effort
+  keyword-matched (general/safe → green, mature/moderate/questionable → amber, explicit/adult
+  → red), falling back to a neutral grey badge showing the raw string for anything unmapped on
+  either site — never hidden, never a crash. `RatingBadge` wraps it as a small colored chip.
+  `PostGridScreen` tiles gained the badge (top-left, leaving the existing unseen dot at
+  top-right untouched) plus a bottom overlay bar showing `score`/`favCount` with small icons.
+  Unit tests for `ratingBadgeFor` cover all three e621 values, several Inkbunny strings, and
+  an unmapped fallback on each site; a widget test confirms the badge and overlay render on
+  grid tiles.
+
 - [ ] **M9 — Actions & downloads**
   Single + mass like/favorite/download, commenting, download manager writing to
   `%artist%/%id%.%extension%`, checksum (md5) verification of downloaded files against the
