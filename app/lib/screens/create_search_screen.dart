@@ -26,7 +26,13 @@ class CreateSearchScreen extends StatefulWidget {
   final BunnySite? initialSite;
   final String? initialQuery;
 
-  const CreateSearchScreen({super.key, required this.repository, required this.syncSettingsStore, this.initialSite, this.initialQuery});
+  /// Pre-fills the label field with a friendlier name than the raw query
+  /// (e.g. a pool's own title, M9.6.3) -- when set, this also counts as the
+  /// user having "manually" touched the label, so the query-mirroring
+  /// behavior below never overwrites it.
+  final String? initialLabel;
+
+  const CreateSearchScreen({super.key, required this.repository, required this.syncSettingsStore, this.initialSite, this.initialQuery, this.initialLabel});
 
   @override
   State<CreateSearchScreen> createState() => _CreateSearchScreenState();
@@ -56,6 +62,10 @@ class _CreateSearchScreenState extends State<CreateSearchScreen> {
     _loadDefaultInterval();
     if (widget.initialQuery != null) {
       _queryController.text = widget.initialQuery!;
+    }
+    if (widget.initialLabel != null) {
+      _labelController.text = widget.initialLabel!;
+      _labelManuallyEdited = true;
     }
   }
 
