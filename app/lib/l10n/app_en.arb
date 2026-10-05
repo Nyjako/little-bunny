@@ -92,6 +92,19 @@
   "postDetailDimensionsLabel": "Dimensions",
   "postDetailCreatedLabel": "Posted",
   "postDetailUnknownValue": "Unknown",
+  "postDetailIdLabel": "Post ID",
+  "postDetailIdCopied": "Post ID copied to clipboard",
+  "postDetailTagsLabel": "Tags",
+  "postDetailSourcesLabel": "Sources",
+  "postDetailParentLabel": "Parent",
+  "postDetailChildrenLabel": "Children",
+  "postDetailPoolsLabel": "Pools",
+  "postDetailOpenPostFailed": "Couldn't open that post",
+  "postDetailCreatePoolSearchDialogTitle": "Add pool",
+  "postDetailCreatePoolSearchDialogContent": "This post belongs to pool {poolId}, but there's no saved search for it yet. Create one?",
+  "@postDetailCreatePoolSearchDialogContent": {
+    "placeholders": {"poolId": {"type": "int"}}
+  },
 
   "lockScreenMessage": "LittleBunny is locked",
   "lockScreenBiometricReason": "Unlock LittleBunny",
