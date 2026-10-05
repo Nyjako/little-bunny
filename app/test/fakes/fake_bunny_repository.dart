@@ -203,18 +203,37 @@ class FakeBunnyRepository implements BunnyRepository {
     return const BunnySyncStats(searchesChecked: 0, searchesSynced: 0, postsUpserted: 0);
   }
 
-  @override
-  Future<void> queueFavoriteAdd(int postId, {int? stars}) => throw UnimplementedError();
+  /// Each entry is the `postId` passed to [queueFavoriteAdd].
+  final List<int> favoriteAddCalls = [];
+
+  /// Each entry is the `postId` passed to [queueFavoriteRemove].
+  final List<int> favoriteRemoveCalls = [];
+
+  /// Each entry is the `(postId, score)` passed to [queueVote].
+  final List<(int, int)> voteCalls = [];
+  int processQueueCallCount = 0;
 
   @override
-  Future<void> queueFavoriteRemove(int postId) => throw UnimplementedError();
+  Future<void> queueFavoriteAdd(int postId, {int? stars}) async {
+    favoriteAddCalls.add(postId);
+  }
 
   @override
-  Future<void> queueVote(int postId, int score, {bool noUnvote = false}) => throw UnimplementedError();
+  Future<void> queueFavoriteRemove(int postId) async {
+    favoriteRemoveCalls.add(postId);
+  }
+
+  @override
+  Future<void> queueVote(int postId, int score, {bool noUnvote = false}) async {
+    voteCalls.add((postId, score));
+  }
 
   @override
   Future<void> queueComment(int postId, String body, {bool anonymous = false}) => throw UnimplementedError();
 
   @override
-  Future<BunnyQueueStats> processQueue() => throw UnimplementedError();
+  Future<BunnyQueueStats> processQueue() async {
+    processQueueCallCount++;
+    return const BunnyQueueStats(actionsProcessed: 0, actionsSucceeded: 0, actionsFailed: 0);
+  }
 }
