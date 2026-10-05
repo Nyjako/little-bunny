@@ -37,11 +37,16 @@ class FakeBunnyRepository implements BunnyRepository {
   /// saved search's results).
   final Map<int, BunnyPost> postsById = {};
 
-  /// Keyed by `'${site.toWireString()}:$query'` -- the posts [previewSearch]
-  /// returns for that (site, query) pair; an unregistered pair returns an
-  /// empty list (a search genuinely matching nothing is a normal, non-error
-  /// outcome, same convention as every other list-returning fake here).
+  /// Keyed by `'${site.toWireString()}:$query:$page'` -- the posts
+  /// [previewSearch] returns for that (site, query, page) triple (M9.6.2
+  /// added `page` to support infinite scroll); an unregistered triple
+  /// returns an empty list (a search genuinely matching nothing, or running
+  /// past the last page, is a normal, non-error outcome, same convention as
+  /// every other list-returning fake here).
   final Map<String, List<BunnyPost>> previewSearchResults = {};
+
+  /// Each entry is the `(site, query, page)` passed to [previewSearch].
+  final List<(BunnySite, String, int)> previewSearchCalls = [];
   int _nextSearchId = 1;
   int syncCallCount = 0;
 
@@ -202,7 +207,10 @@ class FakeBunnyRepository implements BunnyRepository {
   }
 
   @override
-  Future<List<BunnyPost>> previewSearch(BunnySite site, String query) async => List.of(previewSearchResults['${site.toWireString()}:$query'] ?? const []);
+  Future<List<BunnyPost>> previewSearch(BunnySite site, String query, {int page = 1}) async {
+    previewSearchCalls.add((site, query, page));
+    return List.of(previewSearchResults['${site.toWireString()}:$query:$page'] ?? const []);
+  }
 
   @override
   Future<List<BunnyComment>> getPostComments(int postId) async => List.of(commentsByPostId[postId] ?? const []);

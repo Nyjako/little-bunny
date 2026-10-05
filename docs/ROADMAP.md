@@ -959,6 +959,27 @@ this file is the single source of truth for "what's done" across sessions.
   contextual app bar work unchanged once selection is populated this way. Widget test confirms
   tapping "Select all" selects every currently-loaded post and shows the right count.
 
+- [x] **M9.6.2 — Tag/pool browse pagination (infinite scroll)**
+  `bunny_core_preview_search` gained a 1-indexed `page` parameter (previously hardcoded to `1`
+  for both sites), threaded straight through to `e621_search_posts`/`inkbunny_search` -- full
+  plumbing end to end: FFI request class + isolate handler, an optional `page` query param on
+  `POST /search/preview` (server-side default `1` when absent, so every pre-existing caller
+  keeps working unchanged), and `BunnyRepository.previewSearch(site, query, {int page = 1})`
+  across FFI/HTTP/Fake. `TagBrowseScreen` changed from a one-shot `Future<List<BunnyPost>>` to
+  an accumulating `List<BunnyPost>` with a `ScrollController` listener that fetches and appends
+  the next page once the user scrolls within 400px of the bottom -- posts are de-duplicated by
+  id (a churning tag can resurface an already-seen post across pages) via a parallel `Set<int>`.
+  "Is there more" is inferred from whether the just-fetched page came back non-empty, rather
+  than comparing against a hardcoded mirror of e621's own page-size constant (which lives only
+  in `bunny_core`, not here, and would silently drift if that constant ever changed) -- the only
+  cost is one extra request that comes back empty right before giving up. Tests: C-level fake-
+  transport tests confirming the `page` param reaches the actual request URL for both sites (and
+  that `page < 1` is rejected), FFI/HTTP repository tests, and widget tests driving the grid's
+  scroll position to trigger a second page load and confirming an empty/short page stops further
+  loading -- using the fake repository's own call-log rather than asserting on which tiles are
+  visually present after a large scroll, since a big scroll jump can push earlier tiles outside
+  the `GridView`'s build+cache range the same way the M9.6.1-documented `ListView` gotcha does.
+
 - [ ] **M10 — Automation & recommendations**
   "Auto-like/auto-favorite on download" setting, most-liked/most-favorited tag stats,
   recommended new searches based on that history.

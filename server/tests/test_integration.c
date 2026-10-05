@@ -319,6 +319,14 @@ void test_full_account_search_sync_favorite_flow(void)
     free(response.data);
     memset(&response, 0, sizeof(response));
 
+    /* An explicit page param (M9.6.2's infinite scroll) is accepted the same
+     * way -- the fake transport doesn't vary its fixture by page, so this
+     * only confirms the server parses/forwards the param without erroring. */
+    status = do_request("POST", "/search/preview?site=e621&query=wolf&page=2", NULL, &response, true, NULL);
+    TEST_ASSERT_EQUAL(200, status);
+    free(response.data);
+    memset(&response, 0, sizeof(response));
+
     status = do_request("GET", "/searches", NULL, &response, true, NULL);
     TEST_ASSERT_EQUAL(200, status);
     TEST_ASSERT_NOT_NULL(strstr(response.data, "\"id\":1")); /* still just the one "wolves" search */
