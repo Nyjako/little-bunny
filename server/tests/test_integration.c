@@ -286,6 +286,15 @@ void test_full_account_search_sync_favorite_flow(void)
     free(response.data);
     memset(&response, 0, sizeof(response));
 
+    /* The fetched post (external_id 42) is local id 2 (the search sync's
+     * post took id 1) -- GET /posts/{id} reads it back by that local id. */
+    status = do_request("GET", "/posts/2", NULL, &response, true, NULL);
+    TEST_ASSERT_EQUAL(200, status);
+    TEST_ASSERT_NOT_NULL(strstr(response.data, "\"external_id\":42"));
+    TEST_ASSERT_NOT_NULL(strstr(response.data, "\"artist\":\"anotherartist\""));
+    free(response.data);
+    memset(&response, 0, sizeof(response));
+
     /* The synced post's local id is 1 (first row in a fresh :memory: db). */
     status = do_request("POST", "/posts/1/seen", NULL, &response, true, NULL);
     TEST_ASSERT_EQUAL(200, status);

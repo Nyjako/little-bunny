@@ -34,6 +34,14 @@ bunny_core_result_t bunny_core_search_list_posts(bunny_core_t *core, int64_t sea
     return bunny_core_map_db_result(bunny_db_search_list_posts(core->db, search_id, unseen_only, out_list));
 }
 
+bunny_core_result_t bunny_core_post_get_by_id(bunny_core_t *core, int64_t post_id, bunny_db_post_t *out_post)
+{
+    if (!core) {
+        return BUNNY_CORE_ERR_INVALID_ARG;
+    }
+    return bunny_core_map_db_result(bunny_db_post_get_by_id(core->db, post_id, out_post));
+}
+
 bunny_core_result_t bunny_core_tag_autocomplete(bunny_core_t *core, bunny_db_site_t site, const char *prefix, int limit, bunny_db_tag_stat_list_t *out_list)
 {
     if (!core) {

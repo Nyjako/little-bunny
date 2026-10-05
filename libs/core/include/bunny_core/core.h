@@ -71,6 +71,13 @@ bunny_core_result_t bunny_core_search_delete(bunny_core_t *core, int64_t search_
 bunny_core_result_t bunny_core_search_list(bunny_core_t *core, bunny_db_search_list_t *out_list);
 bunny_core_result_t bunny_core_search_list_posts(bunny_core_t *core, int64_t search_id, bool unseen_only, bunny_db_post_list_t *out_list);
 
+/* Fetches a single cached post by its local id -- a thin pass-through to
+ * bunny_db, used when a post detail view needs to open a *different* post
+ * it doesn't already have a BunnyPost for (e.g. after bunny_core_fetch_and_
+ * cache_post caches a parent/child/pool-mate post by external id, this is
+ * how its full data gets loaded for display). */
+bunny_core_result_t bunny_core_post_get_by_id(bunny_core_t *core, int64_t post_id, bunny_db_post_t *out_post);
+
 /* Ranks cached tags (from already-synced posts) by usage count, for a
  * search box's autocomplete -- a thin pass-through to bunny_db, same shape
  * as the search CRUD above. `prefix`'s characters are matched literally, not

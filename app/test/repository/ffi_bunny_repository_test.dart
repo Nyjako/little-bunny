@@ -59,6 +59,12 @@ void main() {
     expect(await repository.getPostPoolIds(1), isEmpty);
   });
 
+  test('getPost rejects a post id with no cached post', () async {
+    // Unlike the other getPost* reads above, this is a single-row lookup by
+    // primary key, so a miss is a real NOT_FOUND rather than an empty list.
+    await expectLater(repository.getPost(1), throwsA(isA<BunnyRepositoryException>()));
+  });
+
   test('verifyAccount rejects bogus e621 credentials', () async {
     // See bunny_core_ffi/test/bunny_core_native_test.dart for why this hits
     // real e621 network: standalone mode has no fake-transport override.

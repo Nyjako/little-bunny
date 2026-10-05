@@ -52,6 +52,7 @@ dependencies:
   cached_network_image: ^3.4.1
   video_player: ^2.9.2
   fvp: ^0.38.1
+  url_launcher: ^6.3.1
 
 dev_dependencies:
   flutter_test:
