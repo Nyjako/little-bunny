@@ -950,6 +950,15 @@ this file is the single source of truth for "what's done" across sessions.
   mode is entered, and a widget test confirming `PhotoViewGalleryPageOptions.childSize` comes
   from post metadata rather than `imageProvider`.
 
+- [x] **M9.6.4 — Select all + mass actions entry point**
+  `PostGridScreen`'s existing overflow `PopupMenuButton` (previously just "Mark all as seen")
+  gained a "Select all" item (`_selectAll`) that awaits the current `_postsFuture` (the same
+  `_postsFuture ?? Future.value(const [])` pattern M9.5's `_massDownload` already established)
+  and replaces `_selectedPostIds` with every loaded post's id, entering selection mode with
+  everything selected -- the existing M9.2/M9.5 mass favorite/vote/download actions in the
+  contextual app bar work unchanged once selection is populated this way. Widget test confirms
+  tapping "Select all" selects every currently-loaded post and shows the right count.
+
 - [ ] **M10 — Automation & recommendations**
   "Auto-like/auto-favorite on download" setting, most-liked/most-favorited tag stats,
   recommended new searches based on that history.

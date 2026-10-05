@@ -120,6 +120,18 @@ class _PostGridScreenState extends State<PostGridScreen> {
     });
   }
 
+  Future<void> _selectAll() async {
+    final posts = await (_postsFuture ?? Future.value(const <BunnyPost>[]));
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      _selectedPostIds
+        ..clear()
+        ..addAll(posts.map((post) => post.id));
+    });
+  }
+
   Future<void> _openPost(List<BunnyPost> posts, BunnyPost post) async {
     await Navigator.push(
       context,
@@ -269,7 +281,10 @@ class _PostGridScreenState extends State<PostGridScreen> {
           onPressed: _syncing ? null : _refresh,
         ),
         PopupMenuButton<void>(
-          itemBuilder: (context) => [PopupMenuItem(onTap: _markAllSeen, child: Text(l10n.postGridMarkAllSeen))],
+          itemBuilder: (context) => [
+            PopupMenuItem(onTap: _markAllSeen, child: Text(l10n.postGridMarkAllSeen)),
+            PopupMenuItem(onTap: _selectAll, child: Text(l10n.postGridSelectAll)),
+          ],
         ),
       ],
     );
