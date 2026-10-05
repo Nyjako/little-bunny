@@ -59,6 +59,14 @@ void main() {
     expect(await repository.getPostPoolIds(1), isEmpty);
   });
 
+  test('recordDownload rejects a post id with no cached post', () async {
+    await expectLater(repository.recordDownload(1, '/tmp/file.jpg'), throwsA(isA<BunnyRepositoryException>()));
+  });
+
+  test('listDownloadsForPost returns an empty list for a post with no recorded downloads', () async {
+    expect(await repository.listDownloadsForPost(1), isEmpty);
+  });
+
   test('getPost rejects a post id with no cached post', () async {
     // Unlike the other getPost* reads above, this is a single-row lookup by
     // primary key, so a miss is a real NOT_FOUND rather than an empty list.

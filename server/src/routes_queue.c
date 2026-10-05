@@ -141,6 +141,69 @@ static int handle_list_comments(struct mg_connection *conn, server_context_t *ct
     return status;
 }
 
+static cJSON *download_to_json(const bunny_db_download_t *download)
+{
+    cJSON *json = cJSON_CreateObject();
+    cJSON_AddNumberToObject(json, "id", (double)download->id);
+    cJSON_AddNumberToObject(json, "post_id", (double)download->post_id);
+    add_optional_string(json, "file_path", download->file_path);
+    add_optional_string(json, "checksum_md5", download->checksum_md5);
+    cJSON_AddBoolToObject(json, "checksum_verified", download->checksum_verified);
+    add_optional_string(json, "downloaded_at", download->downloaded_at);
+    return json;
+}
+
+static int handle_record_download(struct mg_connection *conn, server_context_t *ctx, int64_t post_id)
+{
+    cJSON *body = server_json_read_request_body(conn);
+    const char *file_path = NULL;
+    bool has_file_path = body && bunny_json_get_string(body, "file_path", &file_path) == BUNNY_JSON_OK;
+    if (!has_file_path) {
+        cJSON_Delete(body);
+        return server_json_respond_error(conn, BUNNY_CORE_ERR_INVALID_ARG);
+    }
+    const char *checksum_md5 = bunny_json_get_string_or(body, "checksum_md5", NULL);
+    bool verified = bunny_json_get_bool_or(body, "verified", false);
+
+    int64_t download_id = 0;
+    pthread_mutex_lock(&ctx->core_mutex);
+    bunny_core_result_t result = bunny_core_record_download(ctx->core, post_id, file_path, checksum_md5, verified, &download_id);
+    pthread_mutex_unlock(&ctx->core_mutex);
+    cJSON_Delete(body);
+
+    if (result != BUNNY_CORE_OK) {
+        return server_json_respond_error(conn, result);
+    }
+
+    cJSON *response = cJSON_CreateObject();
+    cJSON_AddNumberToObject(response, "id", (double)download_id);
+    int status = server_json_respond(conn, 200, response);
+    cJSON_Delete(response);
+    return status;
+}
+
+static int handle_list_downloads(struct mg_connection *conn, server_context_t *ctx, int64_t post_id)
+{
+    bunny_db_download_list_t list;
+    pthread_mutex_lock(&ctx->core_mutex);
+    bunny_core_result_t result = bunny_core_list_downloads_for_post(ctx->core, post_id, &list);
+    pthread_mutex_unlock(&ctx->core_mutex);
+
+    if (result != BUNNY_CORE_OK) {
+        return server_json_respond_error(conn, result);
+    }
+
+    cJSON *response = cJSON_CreateArray();
+    for (size_t i = 0; i < list.count; i++) {
+        cJSON_AddItemToArray(response, download_to_json(&list.items[i]));
+    }
+    bunny_db_download_list_free(&list);
+
+    int status = server_json_respond(conn, 200, response);
+    cJSON_Delete(response);
+    return status;
+}
+
 static int handle_get_post_tags(struct mg_connection *conn, server_context_t *ctx, int64_t post_id)
 {
     bunny_db_post_tag_list_t list;
@@ -376,6 +439,12 @@ static int posts_handler(struct mg_connection *conn, void *cbdata)
     }
     if (strcmp(method, "GET") == 0 && server_route_parse_id_with_suffix(sub_path, "pools", &post_id)) {
         return handle_get_post_pools(conn, ctx, post_id);
+    }
+    if (strcmp(method, "POST") == 0 && server_route_parse_id_with_suffix(sub_path, "downloads", &post_id)) {
+        return handle_record_download(conn, ctx, post_id);
+    }
+    if (strcmp(method, "GET") == 0 && server_route_parse_id_with_suffix(sub_path, "downloads", &post_id)) {
+        return handle_list_downloads(conn, ctx, post_id);
     }
     if (strcmp(method, "POST") == 0 && strcmp(sub_path, "fetch") == 0) {
         return handle_fetch_post(conn, ctx, info->query_string);

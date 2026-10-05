@@ -69,6 +69,15 @@ BunnyPoolInfo _poolInfoFromJson(Map<String, Object?> j) => BunnyPoolInfo(id: (j[
 BunnyComment _commentFromJson(Map<String, Object?> j) =>
     BunnyComment(id: (j['id'] as num).toInt(), creatorName: j['creator_name'] as String?, body: j['body'] as String?, createdAt: j['created_at'] as String?);
 
+BunnyDownload _downloadFromJson(Map<String, Object?> j) => BunnyDownload(
+  id: (j['id'] as num).toInt(),
+  postId: (j['post_id'] as num).toInt(),
+  filePath: j['file_path'] as String?,
+  checksumMd5: j['checksum_md5'] as String?,
+  checksumVerified: j['checksum_verified'] as bool,
+  downloadedAt: j['downloaded_at'] as String?,
+);
+
 BunnySyncStats _syncStatsFromJson(Map<String, Object?> j) => BunnySyncStats(
   searchesChecked: (j['searches_checked'] as num).toInt(),
   searchesSynced: (j['searches_synced'] as num).toInt(),
@@ -327,6 +336,24 @@ class HttpBunnyRepository implements BunnyRepository {
       _throwError(response);
     }
     return _decodeList(response).map(_commentFromJson).toList();
+  }
+
+  @override
+  Future<int> recordDownload(int postId, String filePath, {String? checksumMd5, bool verified = false}) async {
+    final response = await _client.post(_uri('/posts/$postId/downloads'), headers: _headers, body: jsonEncode({'file_path': filePath, 'checksum_md5': checksumMd5, 'verified': verified}));
+    if (response.statusCode != 200) {
+      _throwError(response);
+    }
+    return (_decodeObject(response)['id'] as num).toInt();
+  }
+
+  @override
+  Future<List<BunnyDownload>> listDownloadsForPost(int postId) async {
+    final response = await _client.get(_uri('/posts/$postId/downloads'), headers: _headers);
+    if (response.statusCode != 200) {
+      _throwError(response);
+    }
+    return _decodeList(response).map(_downloadFromJson).toList();
   }
 
   @override

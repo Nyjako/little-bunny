@@ -853,6 +853,24 @@ this file is the single source of truth for "what's done" across sessions.
   disabled) for an Inkbunny search -- each scoped to `find.descendant(of: find.byType(AppBar),
   ...)` since `PostGridTile`'s own score/fav-count overlay reuses the same icons.
 
+- [x] **M9.3 — Download manager: backend plumbing**
+  Backend bookkeeping only, no UI -- the `downloads` table and its `bunny_db_download_record`/
+  `bunny_db_download_list_for_post` functions have existed since M3 with nothing calling them.
+  New `libs/core/src/downloads.c` (its own file, like every other single-concern `libs/core/
+  src/*.c`) adds thin pass-through wrappers `bunny_core_record_download(core, post_id,
+  file_path, checksum_md5, verified, out_id)` and `bunny_core_list_downloads_for_post(core,
+  post_id, out_list)` -- the latter reuses `bunny_db_download_list_t` directly, no new type
+  needed. Full plumbing: FFI binding regen + isolate wrapper (`recordDownload`/
+  `listDownloadsForPost`), `POST`/`GET /posts/{id}/downloads` as two more branches in the
+  existing `posts_handler` (`routes_queue.c`), new `BunnyDownload{id, postId, filePath,
+  checksumMd5, checksumVerified, downloadedAt}` model + matching `BunnyRepository` methods
+  across FFI/HTTP/Fake. The actual HTTP fetch, disk write, and checksum computation (M9.4) are
+  deliberately not part of this sub-milestone -- this only persists the record afterward.
+  Tests at every layer: a new `bunny_core_test_downloads` C suite (round-trip record+list
+  against a seeded e621 post, empty-list for a post with none, invalid-arg for a nonexistent
+  post id), a server integration test extending the existing full-flow test, and FFI/HTTP
+  repository tests.
+
 - [ ] **M10 — Automation & recommendations**
   "Auto-like/auto-favorite on download" setting, most-liked/most-favorited tag stats,
   recommended new searches based on that history.
