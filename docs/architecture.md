@@ -1455,6 +1455,65 @@ rather than just the id `_massFavorite`/`_massVote` are content with, it awaits 
 current `_postsFuture` directly rather than threading posts through as a parameter -- the same
 list already backing the `GridView.builder`, so no extra fetch.
 
+## M9.6 -- Browsing, detail screen & UX polish
+
+**Bug fixes bundle (M9.6.1)**: four unrelated fixes bundled into one sub-milestone, same
+precedent as M8.5.1.
+
+`FullScreenPostViewerScreen` had no way to close itself -- its `Scaffold` carried no `AppBar`
+(deliberately, for an immersive black viewer) and nothing else called `Navigator.pop`. Fixed by
+layering a semi-transparent circular close `IconButton` (top-left, wrapped in `SafeArea`) over
+the `PhotoViewGallery` via a `Stack`, rather than adding a real `AppBar` that would have
+reintroduced the chrome the immersive design avoided.
+
+The same screen's stretched-GIF bug came from trusting `PhotoView`'s own size inference:
+`PhotoViewGalleryPageOptions(imageProvider: ...)` asks `PhotoView` to decode the image and use
+its reported dimensions for `PhotoViewComputedScale.contained`/`covered` math -- on this Linux
+desktop target, an animated GIF's reported decode size can disagree with its real dimensions,
+which stretches the computed scale. The fix doesn't chase the decoder bug directly; it sidesteps
+it by switching to `PhotoViewGalleryPageOptions.customChild(child: ..., childSize: ...)`, passing
+the post's own already-trusted `width`/`height` metadata as `childSize` instead of letting
+`PhotoView` infer anything from the decoded image at all. `child` itself is a plain
+`CachedNetworkImage` with `BoxFit.contain`, same as the inline detail view's media renderer.
+
+The selection-circle bug was a real logic error, not a one-off styling slip: `PostGridTile`'s
+checkmark/empty-circle overlay (M9.2) keyed off `onLongPress != null`, but `PostGridScreen`
+always passes a non-null `onLongPress` (so long-pressing any tile, from normal browsing, can
+*enter* selection mode) -- meaning the overlay had been visible on every tile in every grid
+since M9.2 shipped, not just while selection mode was actually active. `onLongPress` being wired
+up and selection mode being active are genuinely different conditions that happened to be
+conflated by reusing one signal for both; the fix adds an explicit `selectionMode` bool,
+independent of `onLongPress`, that the overlay (and the unseen-dot suppression next to it) now
+checks instead. `PostGridScreen` passes `selectionMode: _selectionMode` alongside its
+always-present `onLongPress`; `TagBrowseScreen` (no selection mode) passes neither, defaulting
+both to their non-selectable values, unaffected.
+
+The e621 User-Agent fix couldn't be a single static string change, because the required format
+(`"LittleBunny/1.0.0 (by someuser on e621)"`) depends on whichever e621 account is currently
+configured -- information that doesn't exist yet at `bunny_core_open()` time, when the bare app
+name/version half of the string was previously set once and for all. The right seam turned out
+to be `bunny_core_build_e621_client` (`libs/core/src/site_clients.c`), which already calls
+`bunny_db_account_get` to populate Basic Auth credentials on every client construction --
+appending `" (by <username> on e621)"` to `core->user_agent` right there, into a local
+stack buffer passed as `e621_config_t.user_agent` (copied internally by `e621_client_create`'s
+own `goblin_copy_cstr`, so the stack buffer's lifetime is never a concern), falls back to the
+bare `core->user_agent` when no account exists. This one change fixes the header for every
+deployment mode at once -- standalone (FFI) and networked (the C server) both route every e621
+call through this same function, so there was no separate server-side user-agent string to find
+or fix.
+
+**Test gotcha, capturing request headers without dangling pointers**: the new C test
+(`libs/core/tests/test_sync.c`) needed to inspect the actual `User-Agent` header value a real
+`bunny_core_preview_search` call sends, which meant adding a capturing variant of the file's
+shared `fake_send` callback. A first attempt copied the matched `bunny_http_header_t` struct
+directly into a global for the test to inspect after the call returned -- but that struct only
+holds pointers into the e621 client's own `user_agent`/other buffers, and the client (along with
+everything it allocated) is destroyed before `bunny_core_preview_search` returns, leaving the
+captured struct's pointers dangling by the time the test's assertion ran. Fixed by `snprintf`-ing
+the matched header's value into a fixed-size global buffer *inside* the capturing callback, while
+the client (and its buffers) are still alive, rather than retaining a pointer into memory that's
+about to be freed.
+
 ## Inkbunny API constraints (found in M2)
 
 Verified against the live API and the official docs while building `libinkbunny`:

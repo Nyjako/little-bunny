@@ -1,5 +1,6 @@
 #include "unity.h"
 
+#include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -29,6 +30,24 @@ static bunny_http_result_t fake_send(void *user_data, const bunny_http_request_t
     out_response->body = strdup(body);
     out_response->body_len = strlen(body);
     return BUNNY_HTTP_OK;
+}
+
+/* Copied out immediately (rather than keeping the request's own header
+ * pointers) since the e621 client -- and the buffer its User-Agent header
+ * value points into -- is destroyed before the test gets a chance to
+ * inspect the captured value. */
+static char g_captured_user_agent[256];
+static bool g_captured_user_agent_found;
+
+static bunny_http_result_t capturing_fake_send(void *user_data, const bunny_http_request_t *request, bunny_http_response_t *out_response)
+{
+    for (size_t i = 0; i < request->header_count; i++) {
+        if (strcmp(request->headers[i].name, "User-Agent") == 0) {
+            snprintf(g_captured_user_agent, sizeof(g_captured_user_agent), "%s", request->headers[i].value);
+            g_captured_user_agent_found = true;
+        }
+    }
+    return fake_send(user_data, request, out_response);
 }
 
 static char *read_fixture(const char *filename)
@@ -422,6 +441,47 @@ void test_preview_search_upserts_posts_without_creating_a_search(void)
     free(fixture);
 }
 
+void test_e621_requests_use_the_bare_user_agent_without_an_account(void)
+{
+    g_captured_user_agent_found = false;
+    g_e621_transport.send = capturing_fake_send;
+
+    char *fixture = read_fixture("e621_posts_search.json");
+    TEST_ASSERT_NOT_NULL(fixture);
+    g_e621_state.bodies[0] = fixture;
+    g_e621_state.body_count = 1;
+
+    bunny_db_post_list_t posts;
+    bunny_core_result_t result = bunny_core_preview_search(g_core, BUNNY_DB_SITE_E621, "wolf", &posts);
+    TEST_ASSERT_EQUAL(BUNNY_CORE_OK, result);
+    bunny_db_post_list_free(&posts);
+    free(fixture);
+
+    TEST_ASSERT_TRUE(g_captured_user_agent_found);
+    TEST_ASSERT_EQUAL_STRING("bunny-tests/1.0 (unit tests)", g_captured_user_agent);
+}
+
+void test_e621_requests_include_the_configured_username_in_the_user_agent(void)
+{
+    bunny_core_account_set(g_core, BUNNY_DB_SITE_E621, "someuser", "someapikey");
+    g_captured_user_agent_found = false;
+    g_e621_transport.send = capturing_fake_send;
+
+    char *fixture = read_fixture("e621_posts_search.json");
+    TEST_ASSERT_NOT_NULL(fixture);
+    g_e621_state.bodies[0] = fixture;
+    g_e621_state.body_count = 1;
+
+    bunny_db_post_list_t posts;
+    bunny_core_result_t result = bunny_core_preview_search(g_core, BUNNY_DB_SITE_E621, "wolf", &posts);
+    TEST_ASSERT_EQUAL(BUNNY_CORE_OK, result);
+    bunny_db_post_list_free(&posts);
+    free(fixture);
+
+    TEST_ASSERT_TRUE(g_captured_user_agent_found);
+    TEST_ASSERT_EQUAL_STRING("bunny-tests/1.0 (unit tests) (by someuser on e621)", g_captured_user_agent);
+}
+
 void test_sync_e621_search_upserts_post_sample_url(void)
 {
     char *fixture = read_fixture("e621_posts_search.json");
@@ -710,6 +770,8 @@ int main(void)
     RUN_TEST(test_list_comments_rejects_inkbunny_posts);
     RUN_TEST(test_fetch_pool_returns_live_pool_info);
     RUN_TEST(test_preview_search_upserts_posts_without_creating_a_search);
+    RUN_TEST(test_e621_requests_use_the_bare_user_agent_without_an_account);
+    RUN_TEST(test_e621_requests_include_the_configured_username_in_the_user_agent);
     RUN_TEST(test_sync_e621_search_fetches_a_second_page_when_the_first_is_full);
     RUN_TEST(test_sync_e621_search_stops_after_a_single_short_page);
     RUN_TEST(test_tag_autocomplete_finds_tags_from_synced_posts);

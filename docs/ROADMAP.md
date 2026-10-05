@@ -918,6 +918,38 @@ this file is the single source of truth for "what's done" across sessions.
   `recordDownload` call (the only one that actually succeeds), the correct three-way summary
   text, and that selection mode exits afterward.
 
+- [ ] **M9.6 — Browsing, detail screen & UX polish**
+  A hands-on feedback pass over the whole M9 browsing/detail/download experience: a full-screen
+  viewer with no close button, tag/pool browsing stuck on e621's first page even for 250k-post
+  tags, a stretched GIF, a selection checkbox visible outside selection mode, pools that forced
+  a saved search just to preview, no "select all", no auto-favorite, a non-compliant e621
+  User-Agent, an autocomplete that breaks on e621's own query syntax, an oversized desktop app
+  bar, and a full post-detail-screen re-layout request. Delivered as eight sub-milestones.
+
+- [x] **M9.6.1 — Bug fixes bundle**
+  Four independent fixes bundled as one branch (same precedent as M8.5.1): (1)
+  `FullScreenPostViewerScreen` gained a close `IconButton` (semi-transparent circle, top-left,
+  layered over the gallery via a `Stack`) -- there was previously no way to dismiss it besides
+  killing the app. (2) The same screen's `PhotoViewGalleryPageOptions` switched from
+  `imageProvider:` to the `.customChild` constructor with an explicit `childSize` computed from
+  `post.width`/`post.height`, rather than letting PhotoView infer sizing from the decoded image
+  -- fixes a stretched GIF regardless of whether the root cause is a Linux-specific animated-GIF
+  codec sizing quirk, since the post's own trusted metadata is used instead. (3) `PostGridTile`
+  gained a `selectionMode` bool independent of `onLongPress` being non-null -- the selection
+  checkmark/circle overlay had been rendering on every tile since M9.2, not just while selection
+  mode was actually active, because `PostGridScreen` always wires up `onLongPress` (so a
+  long-press can *enter* selection mode from normal browsing) and the tile had no other signal
+  to distinguish the two states. (4) `bunny_core_build_e621_client`
+  (`libs/core/src/site_clients.c`) now formats the e621 User-Agent as `"<base> (by <username> on
+  e621)"` when an account is configured (falling back to the bare base string otherwise),
+  computed per client construction since the account is only known inside `bunny_core`, not at
+  `bunny_core_open()` time; the Dart-side base string changed from `little_bunny/1.0.0` to
+  `LittleBunny/1.0.0` to match e621's documented capitalization convention. Tests: a C test
+  capturing the fake transport's request headers to confirm the formatted/bare User-Agent in
+  each case, a regression widget test confirming no selection indicator renders before selection
+  mode is entered, and a widget test confirming `PhotoViewGalleryPageOptions.childSize` comes
+  from post metadata rather than `imageProvider`.
+
 - [ ] **M10 — Automation & recommendations**
   "Auto-like/auto-favorite on download" setting, most-liked/most-favorited tag stats,
   recommended new searches based on that history.

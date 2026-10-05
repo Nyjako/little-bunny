@@ -1,3 +1,4 @@
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:little_bunny/repository/bunny_models.dart';
 import 'package:little_bunny/screens/full_screen_post_viewer_screen.dart';
@@ -50,5 +51,43 @@ void main() {
     expect(repository.postsBySearchId[1]![1].isSeen, isTrue);
     expect(repository.postsBySearchId[1]![0].isSeen, isFalse);
     expect(repository.postsBySearchId[1]![2].isSeen, isFalse);
+  });
+
+  testWidgets('a close button pops the viewer', (WidgetTester tester) async {
+    final repository = FakeBunnyRepository();
+    final posts = [_post(1)];
+
+    await tester.pumpWidget(
+      wrapWithLocalization(
+        Builder(
+          builder: (context) => ElevatedButton(
+            onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (context) => FullScreenPostViewerScreen(posts: posts, initialIndex: 0, repository: repository))),
+            child: const Text('open'),
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.text('open'));
+    await tester.pumpAndSettle();
+    expect(find.byType(FullScreenPostViewerScreen), findsOneWidget);
+
+    await tester.tap(find.byIcon(Icons.close));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(FullScreenPostViewerScreen), findsNothing);
+  });
+
+  testWidgets('sizes each page from the post\'s own dimensions rather than the decoded image', (WidgetTester tester) async {
+    final repository = FakeBunnyRepository();
+    final posts = [_post(1)];
+
+    await tester.pumpWidget(wrapWithLocalization(FullScreenPostViewerScreen(posts: posts, initialIndex: 0, repository: repository)));
+    await tester.pump();
+
+    final gallery = tester.widget<PhotoViewGallery>(find.byType(PhotoViewGallery));
+    final context = tester.element(find.byType(PhotoViewGallery));
+    final options = gallery.builder!(context, 0);
+    expect(options.childSize, const Size(640, 480));
+    expect(options.imageProvider, isNull); // customChild is used instead, see M9.6.1
   });
 }

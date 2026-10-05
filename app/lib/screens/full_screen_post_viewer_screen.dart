@@ -40,20 +40,39 @@ class _FullScreenPostViewerScreenState extends State<FullScreenPostViewerScreen>
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.black,
-      body: PhotoViewGallery.builder(
-        pageController: _controller,
-        itemCount: widget.posts.length,
-        onPageChanged: _onPageChanged,
-        backgroundDecoration: const BoxDecoration(color: Colors.black),
-        builder: (context, index) {
-          final post = widget.posts[index];
-          return PhotoViewGalleryPageOptions(
-            imageProvider: CachedNetworkImageProvider(post.fileUrl!, headers: imageHeadersFor(post.site)),
-            minScale: PhotoViewComputedScale.contained,
-            maxScale: PhotoViewComputedScale.covered * 3,
-            heroAttributes: PhotoViewHeroAttributes(tag: post.id),
-          );
-        },
+      body: Stack(
+        children: [
+          PhotoViewGallery.builder(
+            pageController: _controller,
+            itemCount: widget.posts.length,
+            onPageChanged: _onPageChanged,
+            backgroundDecoration: const BoxDecoration(color: Colors.black),
+            builder: (context, index) {
+              final post = widget.posts[index];
+              // .customChild + an explicit childSize (rather than imageProvider:,
+              // which makes PhotoView infer size from the decoded image) keeps
+              // the original aspect ratio even when the platform's image codec
+              // misreports an animated GIF's true dimensions.
+              return PhotoViewGalleryPageOptions.customChild(
+                child: CachedNetworkImage(imageUrl: post.fileUrl!, httpHeaders: imageHeadersFor(post.site), fit: BoxFit.contain),
+                childSize: post.width > 0 && post.height > 0 ? Size(post.width.toDouble(), post.height.toDouble()) : null,
+                minScale: PhotoViewComputedScale.contained,
+                maxScale: PhotoViewComputedScale.covered * 3,
+                heroAttributes: PhotoViewHeroAttributes(tag: post.id),
+              );
+            },
+          ),
+          Positioned(
+            top: 8,
+            left: 8,
+            child: SafeArea(
+              child: DecoratedBox(
+                decoration: BoxDecoration(color: Colors.black45, shape: BoxShape.circle),
+                child: IconButton(icon: const Icon(Icons.close, color: Colors.white), onPressed: () => Navigator.pop(context)),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
