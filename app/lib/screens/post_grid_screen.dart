@@ -33,6 +33,14 @@ class _PostGridScreenState extends State<PostGridScreen> {
   PreviewQuality _previewQuality = PreviewQuality.thumbnail;
   int _gridColumns = 3;
 
+  /// Non-empty means selection mode is active (M9.2) -- there's no separate
+  /// boolean flag, since "at least one post selected" and "in selection
+  /// mode" are the same condition here (deselecting the last post exits the
+  /// mode automatically).
+  final Set<int> _selectedPostIds = {};
+
+  bool get _selectionMode => _selectedPostIds.isNotEmpty;
+
   @override
   void initState() {
     super.initState();
@@ -100,24 +108,90 @@ class _PostGridScreenState extends State<PostGridScreen> {
     });
   }
 
+  void _toggleSelection(int postId) {
+    setState(() {
+      if (!_selectedPostIds.remove(postId)) {
+        _selectedPostIds.add(postId);
+      }
+    });
+  }
+
+  void _onTileTap(List<BunnyPost> posts, BunnyPost post) {
+    if (_selectionMode) {
+      _toggleSelection(post.id);
+    } else {
+      _openPost(posts, post);
+    }
+  }
+
+  void _exitSelectionMode() {
+    setState(() => _selectedPostIds.clear());
+  }
+
+  Future<void> _massFavorite() async {
+    final ids = _selectedPostIds.toList();
+    for (final id in ids) {
+      await widget.repository.queueFavoriteAdd(id);
+    }
+    await widget.repository.processQueue();
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      _selectedPostIds.clear();
+      _postsFuture = _loadPosts();
+    });
+  }
+
+  Future<void> _massVote(int score) async {
+    final ids = _selectedPostIds.toList();
+    for (final id in ids) {
+      await widget.repository.queueVote(id, score);
+    }
+    await widget.repository.processQueue();
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      _selectedPostIds.clear();
+      _postsFuture = _loadPosts();
+    });
+  }
+
+  AppBar _buildAppBar(AppLocalizations l10n) {
+    if (_selectionMode) {
+      final votingEnabled = widget.search.site != BunnySite.inkbunny;
+      return AppBar(
+        leading: IconButton(icon: const Icon(Icons.close), tooltip: l10n.postGridExitSelectionTooltip, onPressed: _exitSelectionMode),
+        title: Text(l10n.postGridSelectionCount(_selectedPostIds.length)),
+        actions: [
+          IconButton(icon: const Icon(Icons.favorite), tooltip: l10n.postGridMassFavoriteTooltip, onPressed: _massFavorite),
+          if (votingEnabled) IconButton(icon: const Icon(Icons.arrow_upward), tooltip: l10n.postGridMassUpvoteTooltip, onPressed: () => _massVote(1)),
+          if (votingEnabled) IconButton(icon: const Icon(Icons.arrow_downward), tooltip: l10n.postGridMassDownvoteTooltip, onPressed: () => _massVote(-1)),
+        ],
+      );
+    }
+    return AppBar(
+      title: Text(widget.search.label),
+      actions: [
+        IconButton(icon: Icon(_unseenOnly ? Icons.visibility_off : Icons.visibility), tooltip: l10n.postGridUnseenOnlyTooltip, onPressed: _toggleUnseenOnly),
+        IconButton(
+          icon: _syncing ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.refresh),
+          tooltip: l10n.postGridRefreshTooltip,
+          onPressed: _syncing ? null : _refresh,
+        ),
+        PopupMenuButton<void>(
+          itemBuilder: (context) => [PopupMenuItem(onTap: _markAllSeen, child: Text(l10n.postGridMarkAllSeen))],
+        ),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
     return Scaffold(
-      appBar: AppBar(
-        title: Text(widget.search.label),
-        actions: [
-          IconButton(icon: Icon(_unseenOnly ? Icons.visibility_off : Icons.visibility), tooltip: l10n.postGridUnseenOnlyTooltip, onPressed: _toggleUnseenOnly),
-          IconButton(
-            icon: _syncing ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.refresh),
-            tooltip: l10n.postGridRefreshTooltip,
-            onPressed: _syncing ? null : _refresh,
-          ),
-          PopupMenuButton<void>(
-            itemBuilder: (context) => [PopupMenuItem(onTap: _markAllSeen, child: Text(l10n.postGridMarkAllSeen))],
-          ),
-        ],
-      ),
+      appBar: _buildAppBar(l10n),
       body: FutureBuilder<List<BunnyPost>>(
         future: _postsFuture,
         builder: (context, snapshot) {
@@ -134,7 +208,14 @@ class _PostGridScreenState extends State<PostGridScreen> {
             itemCount: posts.length,
             itemBuilder: (context, index) {
               final post = posts[index];
-              return PostGridTile(key: ValueKey(post.id), post: post, imageUrl: _imageUrlFor(post), onTap: () => _openPost(posts, post));
+              return PostGridTile(
+                key: ValueKey(post.id),
+                post: post,
+                imageUrl: _imageUrlFor(post),
+                selected: _selectedPostIds.contains(post.id),
+                onTap: () => _onTileTap(posts, post),
+                onLongPress: () => _toggleSelection(post.id),
+              );
             },
           );
         },
