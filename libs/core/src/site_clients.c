@@ -4,6 +4,7 @@
 #include <inkbunny/client.h>
 
 #include <stdbool.h>
+#include <stdio.h>
 #include <string.h>
 
 #include "internal.h"
@@ -14,9 +15,21 @@ e621_client_t *bunny_core_build_e621_client(bunny_core_t *core)
     memset(&account, 0, sizeof(account));
     bool have_account = bunny_db_account_get(core->db, BUNNY_DB_SITE_E621, &account) == BUNNY_DB_OK;
 
+    /* e621's API etiquette requires a contact identifier in the User-Agent
+     * (e.g. "LittleBunny/1.0.0 (by someuser on e621)") -- formatted here,
+     * per client construction, since the configured account (if any) is
+     * only known inside bunny_core, not at bunny_core_open() time when
+     * core->user_agent's bare app name/version was first set. */
+    char formatted_user_agent[256];
+    const char *user_agent = core->user_agent;
+    if (have_account && account.username) {
+        snprintf(formatted_user_agent, sizeof(formatted_user_agent), "%s (by %s on e621)", core->user_agent, account.username);
+        user_agent = formatted_user_agent;
+    }
+
     e621_config_t config;
     memset(&config, 0, sizeof(config));
-    config.user_agent = core->user_agent;
+    config.user_agent = user_agent;
     config.transport = core->e621_transport;
     config.min_request_interval_sec = core->min_request_interval_sec;
     if (have_account) {

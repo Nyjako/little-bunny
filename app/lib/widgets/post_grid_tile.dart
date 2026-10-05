@@ -9,16 +9,22 @@ import 'rating_badge.dart';
 /// score-favCount overlay [PostGridScreen] originally built inline (M8.3,
 /// badges added M8.5.7), factored out here (M8.5.10) so [TagBrowseScreen]
 /// can reuse it instead of duplicating the whole `Stack`. [selected]/
-/// [onLongPress] (M9.2) both default to not-selectable, so [TagBrowseScreen]
-/// (which has no selection mode) is unaffected.
+/// [onLongPress]/[selectionMode] (M9.2, [selectionMode] split out in M9.6.1)
+/// all default to not-selectable, so [TagBrowseScreen] (which has no
+/// selection mode) is unaffected. [selectionMode] is deliberately separate
+/// from [onLongPress] being non-null: [PostGridScreen] always wires up
+/// [onLongPress] (so long-pressing any tile can *enter* selection mode from
+/// normal browsing), but the selection checkmark/circle overlay itself must
+/// only render once selection mode is actually active.
 class PostGridTile extends StatelessWidget {
   final BunnyPost post;
   final String? imageUrl;
   final VoidCallback onTap;
   final bool selected;
   final VoidCallback? onLongPress;
+  final bool selectionMode;
 
-  const PostGridTile({super.key, required this.post, required this.imageUrl, required this.onTap, this.selected = false, this.onLongPress});
+  const PostGridTile({super.key, required this.post, required this.imageUrl, required this.onTap, this.selected = false, this.onLongPress, this.selectionMode = false});
 
   @override
   Widget build(BuildContext context) {
@@ -31,13 +37,13 @@ class PostGridTile extends StatelessWidget {
         children: [
           if (url != null) CachedNetworkImage(imageUrl: url, httpHeaders: imageHeadersFor(post.site), fit: BoxFit.cover) else const ColoredBox(color: Colors.black12),
           if (selected) Container(color: Colors.black45),
-          if (!post.isSeen && onLongPress == null) Positioned(top: 4, right: 4, child: Container(width: 10, height: 10, decoration: const BoxDecoration(color: Colors.redAccent, shape: BoxShape.circle))),
+          if (!post.isSeen && !selectionMode) Positioned(top: 4, right: 4, child: Container(width: 10, height: 10, decoration: const BoxDecoration(color: Colors.redAccent, shape: BoxShape.circle))),
           Positioned(top: 4, left: 4, child: RatingBadge(site: post.site, rating: post.rating)),
           // Selection mode replaces the unseen dot in this corner with a
           // (de)selected checkmark -- both are small status markers for the
           // same corner, and which one matters more depends on whether
           // selection mode is active.
-          if (onLongPress != null)
+          if (selectionMode)
             Positioned(
               top: 4,
               right: 4,
