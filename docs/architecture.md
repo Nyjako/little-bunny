@@ -1514,6 +1514,17 @@ the matched header's value into a fixed-size global buffer *inside* the capturin
 the client (and its buffers) are still alive, rather than retaining a pointer into memory that's
 about to be freed.
 
+**Select all + mass actions entry point (M9.6.4)**: a small, independent addition to
+`PostGridScreen`'s existing overflow `PopupMenuButton` -- a "Select all" item next to the
+existing "Mark all as seen" -- that awaits the current `_postsFuture` and replaces
+`_selectedPostIds` with every loaded post's id. This reuses the exact `_postsFuture ??
+Future.value(const [])` pattern M9.5's `_massDownload` already established for getting at the
+currently-loaded post list from outside the `FutureBuilder`'s `builder` callback, rather than
+introducing a second way to do the same thing. No changes needed to the contextual app bar
+itself or to any of the existing mass favorite/vote/download actions -- they already operate
+purely off `_selectedPostIds`, indifferent to whether it was populated by individually
+long-pressing tiles or by this new bulk action.
+
 ## Inkbunny API constraints (found in M2)
 
 Verified against the live API and the official docs while building `libinkbunny`:

@@ -382,6 +382,12 @@ abstract class AppLocalizations {
   /// **'Mark all as seen'**
   String get postGridMarkAllSeen;
 
+  /// No description provided for @postGridSelectAll.
+  ///
+  /// In en, this message translates to:
+  /// **'Select all'**
+  String get postGridSelectAll;
+
   /// No description provided for @postGridSelectionCount.
   ///
   /// In en, this message translates to:

@@ -150,6 +150,22 @@ void main() {
     expect(repository.postsBySearchId[1]!.every((post) => post.isSeen), isTrue);
   });
 
+  testWidgets('select all enters selection mode with every loaded post selected', (WidgetTester tester) async {
+    final repository = FakeBunnyRepository();
+    repository.postsBySearchId[1] = [_post(id: 1, isSeen: false), _post(id: 2, isSeen: false), _post(id: 3, isSeen: false)];
+
+    await tester.pumpWidget(wrapWithLocalization(PostGridScreen(search: search, repository: repository, displaySettingsStore: const DisplaySettingsStore(), syncSettingsStore: const SyncSettingsStore(), downloadSettingsStore: const DownloadSettingsStore())));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byType(PopupMenuButton<void>));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Select all'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('3 selected'), findsOneWidget);
+    expect(find.byIcon(Icons.check_circle), findsNWidgets(3));
+  });
+
   testWidgets('honors a non-default grid column count from settings', (WidgetTester tester) async {
     SharedPreferences.setMockInitialValues({'grid_columns': 5});
     final repository = FakeBunnyRepository();
