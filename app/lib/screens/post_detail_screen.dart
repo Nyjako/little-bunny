@@ -8,9 +8,11 @@ import '../l10n/app_localizations.dart';
 import '../repository/bunny_models.dart';
 import '../repository/bunny_repository.dart';
 import '../settings/display_settings_store.dart';
+import '../settings/sync_settings_store.dart';
 import '../util/image_headers.dart';
 import 'full_screen_post_viewer_screen.dart';
 import 'post_grid_screen.dart';
+import 'tag_browse_screen.dart';
 
 const _imageExtensions = {'jpg', 'jpeg', 'png', 'gif', 'webp'};
 const _videoExtensions = {'webm', 'mp4'};
@@ -26,6 +28,7 @@ class PostDetailScreen extends StatefulWidget {
   final BunnyPost post;
   final BunnyRepository repository;
   final DisplaySettingsStore displaySettingsStore;
+  final SyncSettingsStore syncSettingsStore;
 
   /// The post list this post was opened from (e.g. a grid's currently loaded
   /// posts), used to seed [FullScreenPostViewerScreen]'s swipeable gallery
@@ -35,7 +38,7 @@ class PostDetailScreen extends StatefulWidget {
   /// falls back to a single-post gallery of just [post].
   final List<BunnyPost>? siblingPosts;
 
-  const PostDetailScreen({super.key, required this.post, required this.repository, required this.displaySettingsStore, this.siblingPosts});
+  const PostDetailScreen({super.key, required this.post, required this.repository, required this.displaySettingsStore, required this.syncSettingsStore, this.siblingPosts});
 
   @override
   State<PostDetailScreen> createState() => _PostDetailScreenState();
@@ -148,6 +151,13 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
 
   static String _titleCase(String s) => s.isEmpty ? s : '${s[0].toUpperCase()}${s.substring(1)}';
 
+  void _openTagBrowse(String query) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (context) => TagBrowseScreen(site: widget.post.site, query: query, repository: widget.repository, displaySettingsStore: widget.displaySettingsStore, syncSettingsStore: widget.syncSettingsStore)),
+    );
+  }
+
   Widget _tagsSection(AppLocalizations l10n) => FutureBuilder<List<BunnyPostTag>>(
     future: _tagsFuture,
     builder: (context, snapshot) {
@@ -165,9 +175,10 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
           const Divider(),
           for (final entry in grouped.entries) ...[
             Padding(padding: const EdgeInsets.only(bottom: 4), child: Text(entry.key == null ? l10n.postDetailTagsLabel : _titleCase(entry.key!), style: Theme.of(context).textTheme.titleSmall)),
-            // Chips aren't tappable yet -- M8.5.10 adds the tag-browse screen
-            // these would navigate to.
-            Padding(padding: const EdgeInsets.only(bottom: 8), child: Wrap(spacing: 4, runSpacing: 4, children: entry.value.map((tag) => Chip(label: Text(tag.name))).toList())),
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Wrap(spacing: 4, runSpacing: 4, children: entry.value.map((tag) => ActionChip(label: Text(tag.name), onPressed: () => _openTagBrowse(tag.name))).toList()),
+            ),
           ],
         ],
       );
@@ -211,7 +222,7 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
       if (!mounted) {
         return;
       }
-      await Navigator.push(context, MaterialPageRoute(builder: (context) => PostDetailScreen(post: post, repository: widget.repository, displaySettingsStore: widget.displaySettingsStore)));
+      await Navigator.push(context, MaterialPageRoute(builder: (context) => PostDetailScreen(post: post, repository: widget.repository, displaySettingsStore: widget.displaySettingsStore, syncSettingsStore: widget.syncSettingsStore)));
     } catch (_) {
       if (!mounted) {
         return;
@@ -296,7 +307,7 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
       if (!mounted) {
         return;
       }
-      await Navigator.push(context, MaterialPageRoute(builder: (context) => PostGridScreen(search: target!, repository: widget.repository, displaySettingsStore: widget.displaySettingsStore)));
+      await Navigator.push(context, MaterialPageRoute(builder: (context) => PostGridScreen(search: target!, repository: widget.repository, displaySettingsStore: widget.displaySettingsStore, syncSettingsStore: widget.syncSettingsStore)));
     } catch (_) {
       if (!mounted) {
         return;
@@ -344,7 +355,9 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 if (post.title != null && post.title!.isNotEmpty) Padding(padding: const EdgeInsets.only(bottom: 8), child: Text(post.title!, style: Theme.of(context).textTheme.titleLarge)),
-                _metadataRow(l10n.postDetailArtistLabel, post.artist ?? l10n.postDetailUnknownValue),
+                post.artist != null && post.artist!.isNotEmpty
+                    ? InkWell(onTap: () => _openTagBrowse(post.artist!), child: _metadataRow(l10n.postDetailArtistLabel, post.artist!))
+                    : _metadataRow(l10n.postDetailArtistLabel, l10n.postDetailUnknownValue),
                 if (post.description != null && post.description!.isNotEmpty) Padding(padding: const EdgeInsets.only(top: 8, bottom: 8), child: Text(post.description!)),
                 const Divider(),
                 InkWell(onTap: () => _copyPostId(l10n), child: _metadataRow(l10n.postDetailIdLabel, '${post.externalId}')),

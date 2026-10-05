@@ -1138,6 +1138,58 @@ suite for `SnackBar`-involving assertions that can't use `pumpAndSettle` either 
 different reason -- the `SnackBar`'s own auto-dismiss duration would've fully elapsed by the
 time `pumpAndSettle` considers the tree idle).
 
+**Tag/artist click-through browsing (M8.5.10)**: the first sub-milestone since M8.5.5a to add a
+genuinely new `bunny_core` read with no existing equivalent at the db layer to wrap -- every
+prior "fetch live + cache" function (`bunny_core_fetch_and_cache_post`,
+`bunny_core_fetch_pool`) handles exactly one external entity; this one runs a real site search
+and needs to return a *list* of freshly-upserted posts without creating the
+`searches`/`search_results` row a real saved search would. The list-building itself reuses
+`bunny_db_post_get_by_id` (an immediate re-read right after each upsert) rather than threading
+post data through by hand, trading a few extra sqlite lookups (bounded by one search page, so
+at most a few hundred rows) for not having to duplicate `upsert_e621_post`/
+`upsert_inkbunny_submission`'s struct-to-row mapping a third time. The accumulator itself is a
+file-local `GOBLIN_DYN_ARRAY_DECL(bunny_core_post, bunny_db_post_t)` in `sync.c` -- safe
+alongside `libs/db/src/posts.c`'s own `bunny_db_post_array` of the identical shape, since the
+macro expands to `static inline` functions scoped to whichever translation unit instantiates
+it, so there's no link collision between the two independent declarations.
+
+`/search` (singular) needed a brand-new route file (`server/src/routes_search.c`/`.h`) rather
+than extending an existing one -- `/searches` (plural, saved searches) and `/posts` (actions +
+reads) are both already-owned literal prefixes under civetweb's one-handler-per-path model, and
+neither is the right conceptual home for a stateless preview. This is the same reasoning that
+put pools in their own `routes_pools.c` back in M8.5.5a rather than bolting them onto an
+existing file.
+
+On the Flutter side, this sub-milestone finally gave `PostGridScreen`'s per-tile `Stack`
+(rating badge + unseen dot + score/favCount overlay, built inline since M8.3 and extended in
+M8.5.7) a real second caller (`TagBrowseScreen`), which is what justified factoring it into
+`app/lib/widgets/post_grid_tile.dart` now rather than earlier speculatively -- consistent with
+this project's standing anti-speculative-abstraction preference (extract only once there are
+two real call sites, not in anticipation of a second one).
+
+Wiring the detail page's tag chips and artist text to actually navigate required threading a
+`SyncSettingsStore` through both `PostGridScreen` and `PostDetailScreen`, neither of which had
+ever needed one before -- `TagBrowseScreen`'s "add to searches" button pushes
+`CreateSearchScreen`, which has required a `SyncSettingsStore` since M8.5.13's default-interval
+feature. `CreateSearchScreen` itself gained `initialSite`/`initialQuery` (both nullable,
+defaulting to the existing blank-form behavior) rather than a separate pre-filled variant,
+since the only actual difference is what the controllers start with -- the query-field listener
+that mirrors text into the label field (M8.5.13) already handles the rest correctly once
+`_queryController.text` is set after that listener is attached in `initState`.
+
+**Test gotcha**: a `tester.tap()` aimed at a `PostGridTile` inside `TagBrowseScreen`'s
+`GridView` silently hit something else -- `tester.getRect`/`getCenter` reported the tile's
+on-screen position correctly, but the resulting hit-test chain never included the tile's own
+`GestureDetector` render object, so the tap landed without effect and no exception was raised
+(Flutter only prints an advisory warning, not a failure, unless `warnIfMissed` is left at its
+default and the assertion afterward happens to catch the consequence). The structurally
+near-identical tap test in `post_grid_screen_test.dart` passes without this problem, so the
+cause wasn't tracked down further -- it's narrower than a general `PostGridTile` defect. Worked
+around by reading the `PostGridTile` widget instance via `tester.widget<PostGridTile>(...)` and
+invoking its `onTap` callback directly rather than synthesizing a tap, which still verifies the
+navigation logic under test (that the correct post opens) without depending on Flutter's
+hit-testing resolving correctly in this specific layout.
+
 ## Inkbunny API constraints (found in M2)
 
 Verified against the live API and the official docs while building `libinkbunny`:

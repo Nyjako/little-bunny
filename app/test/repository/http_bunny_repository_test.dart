@@ -334,6 +334,47 @@ void main() {
       expect(post.artist, 'anotherartist');
     });
 
+    test('previewSearch sends POST with site/query query params and maps the response', () async {
+      respond = (_) => http.Response(
+        jsonEncode([
+          {
+            'id': 1,
+            'site': 'e621',
+            'external_id': 7,
+            'artist': 'someartist',
+            'title': null,
+            'description': null,
+            'rating': 's',
+            'score': 5,
+            'score_up': 5,
+            'score_down': 0,
+            'fav_count': 2,
+            'comment_count': 0,
+            'file_url': 'https://example.com/7.png',
+            'file_ext': 'png',
+            'file_md5': 'abc',
+            'preview_url': null,
+            'width': 100,
+            'height': 200,
+            'created_at_site': null,
+            'cached_at': '2026-01-01T00:00:00Z',
+            'is_seen': false,
+            'is_favorited': false,
+            'sample_url': null,
+          },
+        ]),
+        200,
+      );
+
+      final posts = await buildRepository().previewSearch(BunnySite.e621, 'someartist');
+
+      expect(capturedMethod, 'POST');
+      expect(capturedUri.path, '/search/preview');
+      expect(capturedUri.queryParameters, {'site': 'e621', 'query': 'someartist'});
+      expect(posts, hasLength(1));
+      expect(posts.single.externalId, 7);
+    });
+
     test('markPostSeen sends POST to the right path', () async {
       respond = (_) => http.Response(jsonEncode({'ok': true}), 200);
 

@@ -164,6 +164,12 @@ class AppLocalizationsEn extends AppLocalizations {
   String get postGridMarkAllSeen => 'Mark all as seen';
 
   @override
+  String get tagBrowseEmptyState => 'No posts found for this search.';
+
+  @override
+  String get tagBrowseAddToSearchesTooltip => 'Save as a search';
+
+  @override
   String get postDetailScreenTitle => 'Post';
 
   @override
