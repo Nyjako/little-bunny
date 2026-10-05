@@ -6,6 +6,7 @@ import '../repository/bunny_models.dart';
 import '../repository/bunny_repository.dart';
 import '../settings/display_settings_store.dart';
 import '../util/image_headers.dart';
+import '../widgets/rating_badge.dart';
 import 'post_detail_screen.dart';
 
 /// Shows a [BunnySearch]'s cached posts as a thumbnail grid, with an unseen
@@ -142,6 +143,35 @@ class _PostGridScreenState extends State<PostGridScreen> {
                   children: [
                     if (imageUrl != null) CachedNetworkImage(imageUrl: imageUrl, httpHeaders: imageHeadersFor(post.site), fit: BoxFit.cover) else const ColoredBox(color: Colors.black12),
                     if (!post.isSeen) Positioned(top: 4, right: 4, child: Container(width: 10, height: 10, decoration: const BoxDecoration(color: Colors.redAccent, shape: BoxShape.circle))),
+                    Positioned(top: 4, left: 4, child: RatingBadge(site: post.site, rating: post.rating)),
+                    Positioned(
+                      bottom: 0,
+                      left: 0,
+                      right: 0,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                        color: Colors.black54,
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(Icons.arrow_upward, size: 10, color: Colors.white),
+                                Text('${post.score}', style: const TextStyle(color: Colors.white, fontSize: 10)),
+                              ],
+                            ),
+                            Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(Icons.favorite, size: 10, color: Colors.white),
+                                Text('${post.favCount}', style: const TextStyle(color: Colors.white, fontSize: 10)),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
                   ],
                 ),
               );
