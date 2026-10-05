@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../l10n/app_localizations.dart';
 import '../repository/bunny_models.dart';
 import '../repository/bunny_repository.dart';
+import '../services/download_manager.dart';
 import '../settings/display_settings_store.dart';
 import '../settings/download_settings_store.dart';
 import '../settings/sync_settings_store.dart';
@@ -20,7 +21,20 @@ class PostGridScreen extends StatefulWidget {
   final SyncSettingsStore syncSettingsStore;
   final DownloadSettingsStore downloadSettingsStore;
 
-  const PostGridScreen({super.key, required this.search, required this.repository, required this.displaySettingsStore, required this.syncSettingsStore, required this.downloadSettingsStore});
+  /// Pure logic, no required construction dependencies -- same reasoning as
+  /// [PostDetailScreen.downloadManager] (M9.4): defaults to a real instance,
+  /// overridden in widget tests with a fake HTTP client.
+  final DownloadManager downloadManager;
+
+  const PostGridScreen({
+    super.key,
+    required this.search,
+    required this.repository,
+    required this.displaySettingsStore,
+    required this.syncSettingsStore,
+    required this.downloadSettingsStore,
+    this.downloadManager = const DownloadManager(),
+  });
 
   @override
   State<PostGridScreen> createState() => _PostGridScreenState();
@@ -42,6 +56,12 @@ class _PostGridScreenState extends State<PostGridScreen> {
   final Set<int> _selectedPostIds = {};
 
   bool get _selectionMode => _selectedPostIds.isNotEmpty;
+
+  /// Non-null while a mass download (M9.5) is running -- drives the
+  /// contextual app bar's "n/total downloaded" progress title and disables
+  /// the other mass-action icons for the duration (deliberately sequential,
+  /// no parallel download queue, see the M9 plan's reasoning).
+  (int done, int total)? _massDownloadProgress;
 
   @override
   void initState() {
@@ -172,16 +192,70 @@ class _PostGridScreenState extends State<PostGridScreen> {
     });
   }
 
+  Future<void> _massDownload(AppLocalizations l10n) async {
+    final allPosts = await (_postsFuture ?? Future.value(const <BunnyPost>[]));
+    final selected = allPosts.where((post) => _selectedPostIds.contains(post.id)).toList();
+    if (!mounted || selected.isEmpty) {
+      return;
+    }
+
+    final folder = await widget.downloadSettingsStore.loadDestinationFolder();
+    if (!mounted) {
+      return;
+    }
+    if (folder == null) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(l10n.postGridMassDownloadSummary(0, 0, selected.length))));
+      return;
+    }
+
+    setState(() => _massDownloadProgress = (0, selected.length));
+    var succeeded = 0;
+    var mismatched = 0;
+    var failed = 0;
+    for (final post in selected) {
+      final result = await widget.downloadManager.downloadPost(post, widget.repository, folder);
+      switch (result.outcome) {
+        case DownloadOutcome.verified:
+          succeeded++;
+        case DownloadOutcome.checksumMismatch:
+          mismatched++;
+        case DownloadOutcome.noFileUrl || DownloadOutcome.failed:
+          failed++;
+      }
+      if (!mounted) {
+        return;
+      }
+      setState(() => _massDownloadProgress = (succeeded + mismatched + failed, selected.length));
+    }
+
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      _massDownloadProgress = null;
+      _selectedPostIds.clear();
+      _postsFuture = _loadPosts();
+    });
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(l10n.postGridMassDownloadSummary(succeeded, mismatched, failed))));
+  }
+
   AppBar _buildAppBar(AppLocalizations l10n) {
     if (_selectionMode) {
       final votingEnabled = widget.search.site != BunnySite.inkbunny;
+      final progress = _massDownloadProgress;
+      final busy = progress != null;
       return AppBar(
-        leading: IconButton(icon: const Icon(Icons.close), tooltip: l10n.postGridExitSelectionTooltip, onPressed: _exitSelectionMode),
-        title: Text(l10n.postGridSelectionCount(_selectedPostIds.length)),
+        leading: IconButton(icon: const Icon(Icons.close), tooltip: l10n.postGridExitSelectionTooltip, onPressed: busy ? null : _exitSelectionMode),
+        title: Text(busy ? l10n.postGridMassDownloadProgress(progress.$1, progress.$2) : l10n.postGridSelectionCount(_selectedPostIds.length)),
         actions: [
-          IconButton(icon: const Icon(Icons.favorite), tooltip: l10n.postGridMassFavoriteTooltip, onPressed: _massFavorite),
-          if (votingEnabled) IconButton(icon: const Icon(Icons.arrow_upward), tooltip: l10n.postGridMassUpvoteTooltip, onPressed: () => _massVote(1)),
-          if (votingEnabled) IconButton(icon: const Icon(Icons.arrow_downward), tooltip: l10n.postGridMassDownvoteTooltip, onPressed: () => _massVote(-1)),
+          IconButton(icon: const Icon(Icons.favorite), tooltip: l10n.postGridMassFavoriteTooltip, onPressed: busy ? null : _massFavorite),
+          if (votingEnabled) IconButton(icon: const Icon(Icons.arrow_upward), tooltip: l10n.postGridMassUpvoteTooltip, onPressed: busy ? null : () => _massVote(1)),
+          if (votingEnabled) IconButton(icon: const Icon(Icons.arrow_downward), tooltip: l10n.postGridMassDownvoteTooltip, onPressed: busy ? null : () => _massVote(-1)),
+          IconButton(
+            icon: busy ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.download),
+            tooltip: l10n.postGridMassDownloadTooltip,
+            onPressed: busy ? null : () => _massDownload(l10n),
+          ),
         ],
       );
     }
