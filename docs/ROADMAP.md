@@ -993,6 +993,22 @@ this file is the single source of truth for "what's done" across sessions.
   directly (no dialog, `previewSearchCalls` shows the right query, no search gets created) and
   that saving from there pre-fills the label with the pool's name.
 
+- [x] **M9.6.6 — Desktop app bar compactness**
+  New `app/lib/util/responsive.dart`: a single `wideScreenBreakpoint` constant (720px) and an
+  `isWideScreen(BuildContext)` helper backed by `MediaQuery.sizeOf`, shared by `PostGridScreen`,
+  `PostDetailScreen`, `SearchesScreen`, and `TagBrowseScreen`'s `AppBar`s -- each now passes
+  `toolbarHeight: isWideScreen(context) ? compactToolbarHeight : null` (44px vs. Material's
+  56px default) instead of a hardcoded height, so narrow/phone-width windows are completely
+  unaffected. `SearchesScreen`'s `TabBar` (the tallest combined app-bar-plus-tab-bar case) also
+  tightens its `labelPadding` on wide windows to shrink its own height to match. Tests: widget
+  tests per screen pumping the same screen at a narrow (600px) and a wide (1200px) surface size
+  and asserting the rendered `AppBar.toolbarHeight` is smaller at the wide size. One of these
+  tests surfaced a pre-existing, unrelated layout bug -- `PostDetailScreen`'s comment section
+  anonymous-checkbox row overflows below roughly 650px width regardless of app bar height -- the
+  test was written against 600px (comfortably below the 720px breakpoint but above where that
+  bug triggers) rather than a more typical ~400px phone width; the overflow itself is left for
+  M9.6.5's planned responsive redesign of that screen to fix.
+
 - [ ] **M10 — Automation & recommendations**
   "Auto-like/auto-favorite on download" setting, most-liked/most-favorited tag stats,
   recommended new searches based on that history.

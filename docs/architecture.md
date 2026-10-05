@@ -1573,6 +1573,33 @@ does choose to save -- setting the label field's text in `initState` also marks 
 with the raw `pool:$id` string. The old confirmation dialog and its two now-unreachable ARB
 entries were deleted outright rather than left as dead code.
 
+**Desktop app bar compactness (M9.6.6)**: the default Material `AppBar` (56px toolbar) is sized
+for phone touch targets and wastes vertical space once the window is wide enough that it's
+clearly being used on a desktop. New `app/lib/util/responsive.dart` centralizes the single
+judgment call this needs -- a `wideScreenBreakpoint` (720px) and `isWideScreen(BuildContext)`
+helper backed by `MediaQuery.sizeOf` -- so `PostGridScreen`, `PostDetailScreen`,
+`SearchesScreen`, and `TagBrowseScreen` all shrink their `AppBar.toolbarHeight` to a shared
+`compactToolbarHeight` (44px) the same way, rather than each screen picking its own number.
+Passing `null` (the Material default) below the breakpoint, rather than always setting an
+explicit height, means phone-width layouts are byte-for-byte unchanged by this sub-milestone.
+`SearchesScreen`'s `AppBar` carries a `TabBar` in its `bottom`, which has its own height
+separate from the toolbar -- its `labelPadding` also tightens on wide windows so the combined
+app-bar-plus-tab-bar region shrinks consistently rather than just the top half. This same
+breakpoint constant is intended to be reused by M9.6.5's planned responsive post-detail layout
+(wide: tags/details/sources side by side; narrow: stacked), so introducing it as a shared util
+now rather than inlining a number into each of these four screens pays off immediately on the
+next sub-milestone.
+
+**Test gotcha, an unrelated overflow surfacing at narrow widths**: the widget test for
+`PostDetailScreen`'s app bar originally pumped a 400px-wide surface for the "narrow" case
+(roughly a phone width) -- but at that width, the comments section's anonymous-checkbox `Row`
+(a pre-existing layout, untouched by this change) overflows regardless of app bar height,
+failing the test for a reason that has nothing to do with what it's checking. Rather than fix
+that unrelated overflow as a drive-by (it's in the exact section M9.6.5's planned redesign will
+rework anyway), the test was adjusted to pump 600px instead -- still comfortably under the
+720px wide-screen breakpoint this sub-milestone cares about, but above the width where the
+unrelated bug triggers.
+
 ## Inkbunny API constraints (found in M2)
 
 Verified against the live API and the official docs while building `libinkbunny`:

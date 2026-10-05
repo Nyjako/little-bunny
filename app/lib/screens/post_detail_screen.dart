@@ -12,6 +12,7 @@ import '../settings/display_settings_store.dart';
 import '../settings/download_settings_store.dart';
 import '../settings/sync_settings_store.dart';
 import '../util/image_headers.dart';
+import '../util/responsive.dart';
 import 'full_screen_post_viewer_screen.dart';
 import 'tag_browse_screen.dart';
 
@@ -608,7 +609,7 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
     final l10n = AppLocalizations.of(context)!;
     final post = _post;
     return Scaffold(
-      appBar: AppBar(title: Text(l10n.postDetailScreenTitle)),
+      appBar: AppBar(title: Text(l10n.postDetailScreenTitle), toolbarHeight: isWideScreen(context) ? compactToolbarHeight : null),
       body: ListView(
         children: [
           _buildMedia(l10n),
