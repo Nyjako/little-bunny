@@ -156,5 +156,14 @@
   "settingsDisplaySection": "Display",
   "settingsPreviewQualityThumbnail": "Thumbnail",
   "settingsPreviewQualityMedium": "Medium",
-  "settingsGridColumnsLabel": "Grid columns"
+  "settingsGridColumnsLabel": "Grid columns",
+  "settingsDownloadsSection": "Downloads",
+  "settingsDownloadsFolderLabel": "Destination folder",
+  "settingsDownloadsFolderUnset": "Not set",
+  "settingsDownloadsChooseFolderButton": "Choose folder",
+
+  "postDetailDownloadTooltip": "Download",
+  "postDetailDownloadVerified": "Downloaded and checksum verified",
+  "postDetailDownloadMismatch": "Downloaded, but the checksum didn't match",
+  "postDetailDownloadFailed": "Download failed"
 }

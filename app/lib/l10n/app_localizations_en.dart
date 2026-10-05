@@ -371,4 +371,29 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get settingsGridColumnsLabel => 'Grid columns';
+
+  @override
+  String get settingsDownloadsSection => 'Downloads';
+
+  @override
+  String get settingsDownloadsFolderLabel => 'Destination folder';
+
+  @override
+  String get settingsDownloadsFolderUnset => 'Not set';
+
+  @override
+  String get settingsDownloadsChooseFolderButton => 'Choose folder';
+
+  @override
+  String get postDetailDownloadTooltip => 'Download';
+
+  @override
+  String get postDetailDownloadVerified => 'Downloaded and checksum verified';
+
+  @override
+  String get postDetailDownloadMismatch =>
+      'Downloaded, but the checksum didn\'t match';
+
+  @override
+  String get postDetailDownloadFailed => 'Download failed';
 }
