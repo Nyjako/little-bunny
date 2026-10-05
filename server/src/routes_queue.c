@@ -109,6 +109,38 @@ static cJSON *post_tag_to_json(const bunny_db_post_tag_t *tag)
     return json;
 }
 
+static cJSON *comment_to_json(const bunny_core_comment_t *comment)
+{
+    cJSON *json = cJSON_CreateObject();
+    cJSON_AddNumberToObject(json, "id", (double)comment->id);
+    add_optional_string(json, "creator_name", comment->creator_name);
+    add_optional_string(json, "body", comment->body);
+    add_optional_string(json, "created_at", comment->created_at);
+    return json;
+}
+
+static int handle_list_comments(struct mg_connection *conn, server_context_t *ctx, int64_t post_id)
+{
+    bunny_core_comment_list_t list;
+    pthread_mutex_lock(&ctx->core_mutex);
+    bunny_core_result_t result = bunny_core_list_comments(ctx->core, post_id, &list);
+    pthread_mutex_unlock(&ctx->core_mutex);
+
+    if (result != BUNNY_CORE_OK) {
+        return server_json_respond_error(conn, result);
+    }
+
+    cJSON *response = cJSON_CreateArray();
+    for (size_t i = 0; i < list.count; i++) {
+        cJSON_AddItemToArray(response, comment_to_json(&list.items[i]));
+    }
+    bunny_core_comment_list_free(&list);
+
+    int status = server_json_respond(conn, 200, response);
+    cJSON_Delete(response);
+    return status;
+}
+
 static int handle_get_post_tags(struct mg_connection *conn, server_context_t *ctx, int64_t post_id)
 {
     bunny_db_post_tag_list_t list;
@@ -326,6 +358,9 @@ static int posts_handler(struct mg_connection *conn, void *cbdata)
     }
     if (strcmp(method, "POST") == 0 && server_route_parse_id_with_suffix(sub_path, "comment", &post_id)) {
         return handle_comment(conn, ctx, post_id);
+    }
+    if (strcmp(method, "GET") == 0 && server_route_parse_id_with_suffix(sub_path, "comments", &post_id)) {
+        return handle_list_comments(conn, ctx, post_id);
     }
     if (strcmp(method, "POST") == 0 && server_route_parse_id_with_suffix(sub_path, "seen", &post_id)) {
         return handle_mark_seen(conn, ctx, post_id);

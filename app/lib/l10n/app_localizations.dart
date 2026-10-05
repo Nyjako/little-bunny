@@ -550,6 +550,42 @@ abstract class AppLocalizations {
   /// **'Downvote'**
   String get postDetailDownvoteTooltip;
 
+  /// No description provided for @postDetailCommentsSectionLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Discussion'**
+  String get postDetailCommentsSectionLabel;
+
+  /// No description provided for @postDetailNoCommentsYet.
+  ///
+  /// In en, this message translates to:
+  /// **'No comments yet.'**
+  String get postDetailNoCommentsYet;
+
+  /// No description provided for @postDetailCommentFieldLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Add a comment'**
+  String get postDetailCommentFieldLabel;
+
+  /// No description provided for @postDetailCommentAnonymousLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Post anonymously'**
+  String get postDetailCommentAnonymousLabel;
+
+  /// No description provided for @postDetailCommentSubmit.
+  ///
+  /// In en, this message translates to:
+  /// **'Post'**
+  String get postDetailCommentSubmit;
+
+  /// No description provided for @postDetailCommentPostFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t post that comment'**
+  String get postDetailCommentPostFailed;
+
   /// No description provided for @lockScreenMessage.
   ///
   /// In en, this message translates to:

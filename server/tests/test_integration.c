@@ -31,6 +31,8 @@ static const char *E621_POOL_FIXTURE = "{\"id\":5,\"name\":\"a_test_pool\",\"des
                                        "\"updated_at\":\"2024-01-02T00:00:00.000-05:00\",\"creator_id\":1,\"creator_name\":\"someone\",\"is_active\":true,"
                                        "\"category\":\"series\",\"post_ids\":[1,2,3]}";
 
+static const char *E621_COMMENTS_LIST_FIXTURE = "[{\"id\":1,\"post_id\":42,\"creator_name\":\"someone\",\"body\":\"Nice pic!\",\"created_at\":\"2024-01-02T00:00:00.000-05:00\"}]";
+
 static bunny_http_result_t fake_e621_send(void *user_data, const bunny_http_request_t *request, bunny_http_response_t *out_response)
 {
     (void)user_data;
@@ -39,6 +41,8 @@ static bunny_http_result_t fake_e621_send(void *user_data, const bunny_http_requ
         body = E621_SINGLE_POST_FIXTURE;
     } else if (strstr(request->url, "/pools/5.json")) {
         body = E621_POOL_FIXTURE;
+    } else if (strstr(request->url, "/comments.json") && request->method == BUNNY_HTTP_GET) {
+        body = E621_COMMENTS_LIST_FIXTURE;
     }
     out_response->status = 200;
     out_response->body = strdup(body);
@@ -292,6 +296,15 @@ void test_full_account_search_sync_favorite_flow(void)
     TEST_ASSERT_EQUAL(200, status);
     TEST_ASSERT_NOT_NULL(strstr(response.data, "\"external_id\":42"));
     TEST_ASSERT_NOT_NULL(strstr(response.data, "\"artist\":\"anotherartist\""));
+    free(response.data);
+    memset(&response, 0, sizeof(response));
+
+    /* Live comment list for local post id 2 (external_id 42) -- fetched
+     * fresh from the site on every call, nothing persisted. */
+    status = do_request("GET", "/posts/2/comments", NULL, &response, true, NULL);
+    TEST_ASSERT_EQUAL(200, status);
+    TEST_ASSERT_NOT_NULL(strstr(response.data, "\"creator_name\":\"someone\""));
+    TEST_ASSERT_NOT_NULL(strstr(response.data, "\"body\":\"Nice pic!\""));
     free(response.data);
     memset(&response, 0, sizeof(response));
 

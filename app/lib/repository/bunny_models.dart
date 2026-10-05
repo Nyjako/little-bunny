@@ -147,6 +147,18 @@ class BunnyPostRelationships {
   });
 }
 
+/// One of a post's existing comments, fetched live (e621 only, no
+/// persistence -- same reasoning as [BunnyPoolInfo]). Mirrors
+/// `bunny_core_comment_t`.
+class BunnyComment {
+  final int id;
+  final String? creatorName;
+  final String? body;
+  final String? createdAt;
+
+  const BunnyComment({required this.id, this.creatorName, this.body, this.createdAt});
+}
+
 /// A pool's own metadata, fetched live (e621 only) -- used to auto-fill a
 /// pool search's label at creation time. Mirrors `bunny_core_pool_info_t`.
 class BunnyPoolInfo {

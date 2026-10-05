@@ -1216,6 +1216,61 @@ already states for comments; favorite works on both sites, since the unofficial 
 favorite route (M2.2) is already wired generically into `queueFavoriteAdd`/`Remove` regardless
 of site.
 
+## M9 -- Actions & downloads
+
+**Comments: post + view (M9.1)**: the first read-side gap in the action-queue family --
+`e621_comment_create` (posting) has been wired end-to-end since M4.3, but `e621_comment_list`
+(viewing) had never been threaded past `libe621` itself at all, not even a stub further up the
+stack. `bunny_core_list_comments(core, post_id, out_list)` follows the exact same "live fetch,
+nothing persisted" shape as `bunny_core_fetch_pool`/`bunny_core_preview_search`: a new
+`bunny_core_comment_t`/`bunny_core_comment_list_t` pair lives in `bunny_core/core.h` itself
+rather than `bunny_db`, since there's no table backing it (same reasoning as
+`bunny_core_pool_info_t`). The function takes the *local* post id, not e621's external id --
+every other per-post read wrapper in this codebase does the same, so it looks up
+`external_id`/`site` internally via the already-existing `bunny_db_post_get_by_id` and rejects
+non-e621 posts with `BUNNY_CORE_ERR_SITE` before making any HTTP call at all. This ordering is
+specifically tested (`test_list_comments_rejects_inkbunny_posts` queues only a login + fetch
+fixture for setup, then calls `bunny_core_list_comments` with zero further fixture bodies
+queued -- if the rejection happened after an HTTP call instead of before, the fake transport
+would have nothing to return and the test would fail for the wrong reason).
+
+On the server side, `GET /posts/{id}/comments` slots into the already-existing `posts_handler`
+in `routes_queue.c` as one more `server_route_parse_id_with_suffix` branch, alongside
+`tags`/`sources`/`relationships`/`pools`/`comment` (singular, the existing POST-to-create
+route) -- civetweb matches suffixes as exact strings, so `"comment"` and `"comments"` coexist
+on the same path prefix without ambiguity.
+
+On the Flutter side, `PostDetailScreen` gained a comments section -- but it couldn't be titled
+"Comments", because that string was already taken by the pre-existing metadata row showing the
+post's raw `commentCount` (`_metadataRow(l10n.postDetailCommentsLabel, '${post.commentCount}')`,
+present since M8.4). The new section is titled "Discussion" instead purely to avoid this
+collision; a widget test asserting the section's absence on an Inkbunny post would otherwise
+spuriously fail against the ever-present count row. The section follows the established
+e621-only, hide-entirely (not grey-out) pattern already used for relationships/pools, since
+Inkbunny has no comment concept at all -- not a restricted one. Posting a comment reuses
+`queueComment`+`processQueue` exactly as M8.5.14 established for favorite/vote, then reassigns
+the section's `Future<List<BunnyComment>>` field (not `late final` like the other per-post
+futures in this screen, specifically so it *can* be reassigned) to a fresh `getPostComments`
+call so the new comment appears without a full screen reload.
+
+`FakeBunnyRepository.queueComment` had been an inert `throw UnimplementedError()` stub since
+M8.2 -- the class's own doc comment explicitly called this out as "unimplemented since nothing
+under test calls them, that's M9's scope." This is the sub-milestone that made it real: it now
+records `(postId, body, anonymous)` tuples into an in-memory list, the same shape
+`favoriteAddCalls`/`voteCalls` already established in M8.5.14 for the other three queue
+methods.
+
+**Test gotcha, cross-file**: adding a "Post" submit button to the comments section broke two
+*other* already-passing widget tests in unrelated files (`post_detail_screen_test.dart`'s own
+`copies the post id...` test was unaffected, but `post_grid_screen_test.dart`'s navigation test
+asserted `find.text('Post')` to confirm `PostDetailScreen`'s app bar title had appeared --
+which now collides with the new button's identical label). Fixed by scoping each assertion to
+its actual target widget (`find.widgetWithText(AppBar, 'Post')` for the app bar check,
+`find.widgetWithText(FilledButton, 'Post')` for the submit-button tap) rather than a bare
+`find.text`. Worth remembering generally: a bare `find.text('X')` assertion is implicitly a
+claim that `'X'` appears exactly once on the whole screen, which a later, unrelated change can
+silently invalidate from a completely different file.
+
 ## Inkbunny API constraints (found in M2)
 
 Verified against the live API and the official docs while building `libinkbunny`:

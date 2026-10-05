@@ -800,13 +800,33 @@ this file is the single source of truth for "what's done" across sessions.
   step against a real account) remains before M8.5 as a whole is done.
 
 - [ ] **M9 — Actions & downloads**
-  Single + mass like/favorite/download, commenting, download manager writing to
-  `%artist%/%id%.%extension%`, checksum (md5) verification of downloaded files against the
-  site-provided value. Downloads happen client-side, straight from the site CDN. Favorite
-  now works for both sites (e621 officially, Inkbunny via the unofficial route in M2.2 —
-  needs `inkbunny_website_login()` in addition to `inkbunny_login()`). Comment actions only
-  apply to e621; the UI needs to reflect that (e.g. grey out commenting for Inkbunny posts)
-  rather than fail silently.
+  Single + mass favorite/download, commenting, and a download manager with checksum
+  verification. Single-post favorite/vote was already pulled forward into M8.5.14; what's
+  left here is commenting, multi-select, and the download manager itself. Delivered as
+  sequential sub-milestones, M9.1 onward.
+
+- [x] **M9.1 — Comments: post + view (e621 only)**
+  `e621_comment_create` (posting) was already wired end-to-end since M4.3 with nothing calling
+  it; `e621_comment_list` (viewing) had never been wired past `libe621` itself at all. New
+  `bunny_core_comment_t`/`bunny_core_comment_list_t` (core-level only, not `bunny_db` -- nothing
+  is persisted, same reasoning as `bunny_core_pool_info_t`) and `bunny_core_list_comments(core,
+  post_id, out_list)`: looks up the post's `external_id`/`site` via the already-existing
+  `bunny_db_post_get_by_id`, rejects non-e621 posts with `BUNNY_CORE_ERR_SITE` *before* making
+  any HTTP call, otherwise fetches live via `e621_comment_list`. Full plumbing: FFI binding +
+  isolate wrapper, `GET /posts/{id}/comments` as a new branch in the existing `posts_handler`
+  (`routes_queue.c`), new `BunnyComment{id, creatorName, body, createdAt}` model +
+  `BunnyRepository.getPostComments(int) -> Future<List<BunnyComment>>` across FFI/HTTP/Fake.
+  `PostDetailScreen` gained a "Discussion" section (named to avoid colliding with the
+  pre-existing "Comments" metadata row showing the raw count) -- e621-only like the
+  relationships/pools sections, hidden entirely for Inkbunny -- listing existing comments plus
+  a text field + "post anonymously" checkbox + submit button reusing `queueComment`+
+  `processQueue`; posting successfully re-fetches the comment list. `FakeBunnyRepository.
+  queueComment` (previously an inert `throw UnimplementedError()` stub, like the other three
+  queue methods before M8.5.14 needed them) now records calls in-memory. Tests at every layer:
+  fake-transport C test with an e621 comments-list fixture (plus a rejection test proving the
+  Inkbunny short-circuit happens before any HTTP call), server integration test, FFI/HTTP
+  repository tests, widget tests covering comments rendering, posting refreshing the list, the
+  empty state, and the section's absence on an Inkbunny post.
 
 - [ ] **M10 — Automation & recommendations**
   "Auto-like/auto-favorite on download" setting, most-liked/most-favorited tag stats,
