@@ -1,12 +1,11 @@
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 
 import '../l10n/app_localizations.dart';
 import '../repository/bunny_models.dart';
 import '../repository/bunny_repository.dart';
 import '../settings/display_settings_store.dart';
-import '../util/image_headers.dart';
-import '../widgets/rating_badge.dart';
+import '../settings/sync_settings_store.dart';
+import '../widgets/post_grid_tile.dart';
 import 'post_detail_screen.dart';
 
 /// Shows a [BunnySearch]'s cached posts as a thumbnail grid, with an unseen
@@ -17,8 +16,9 @@ class PostGridScreen extends StatefulWidget {
   final BunnySearch search;
   final BunnyRepository repository;
   final DisplaySettingsStore displaySettingsStore;
+  final SyncSettingsStore syncSettingsStore;
 
-  const PostGridScreen({super.key, required this.search, required this.repository, required this.displaySettingsStore});
+  const PostGridScreen({super.key, required this.search, required this.repository, required this.displaySettingsStore, required this.syncSettingsStore});
 
   @override
   State<PostGridScreen> createState() => _PostGridScreenState();
@@ -91,7 +91,7 @@ class _PostGridScreenState extends State<PostGridScreen> {
   }
 
   Future<void> _openPost(List<BunnyPost> posts, BunnyPost post) async {
-    await Navigator.push(context, MaterialPageRoute(builder: (context) => PostDetailScreen(post: post, repository: widget.repository, displaySettingsStore: widget.displaySettingsStore, siblingPosts: posts)));
+    await Navigator.push(context, MaterialPageRoute(builder: (context) => PostDetailScreen(post: post, repository: widget.repository, displaySettingsStore: widget.displaySettingsStore, syncSettingsStore: widget.syncSettingsStore, siblingPosts: posts)));
     if (!mounted) {
       return;
     }
@@ -134,47 +134,7 @@ class _PostGridScreenState extends State<PostGridScreen> {
             itemCount: posts.length,
             itemBuilder: (context, index) {
               final post = posts[index];
-              final imageUrl = _imageUrlFor(post);
-              return GestureDetector(
-                key: ValueKey(post.id),
-                onTap: () => _openPost(posts, post),
-                child: Stack(
-                  fit: StackFit.expand,
-                  children: [
-                    if (imageUrl != null) CachedNetworkImage(imageUrl: imageUrl, httpHeaders: imageHeadersFor(post.site), fit: BoxFit.cover) else const ColoredBox(color: Colors.black12),
-                    if (!post.isSeen) Positioned(top: 4, right: 4, child: Container(width: 10, height: 10, decoration: const BoxDecoration(color: Colors.redAccent, shape: BoxShape.circle))),
-                    Positioned(top: 4, left: 4, child: RatingBadge(site: post.site, rating: post.rating)),
-                    Positioned(
-                      bottom: 0,
-                      left: 0,
-                      right: 0,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-                        color: Colors.black54,
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                const Icon(Icons.arrow_upward, size: 10, color: Colors.white),
-                                Text('${post.score}', style: const TextStyle(color: Colors.white, fontSize: 10)),
-                              ],
-                            ),
-                            Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                const Icon(Icons.favorite, size: 10, color: Colors.white),
-                                Text('${post.favCount}', style: const TextStyle(color: Colors.white, fontSize: 10)),
-                              ],
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              );
+              return PostGridTile(key: ValueKey(post.id), post: post, imageUrl: _imageUrlFor(post), onTap: () => _openPost(posts, post));
             },
           );
         },

@@ -295,6 +295,24 @@ void test_full_account_search_sync_favorite_flow(void)
     free(response.data);
     memset(&response, 0, sizeof(response));
 
+    /* A stateless preview search -- the fake transport routes this to the
+     * same E621_FIXTURE as the earlier search sync (external_id 1), so this
+     * upserts in place (still local id 1) rather than creating a new row. No
+     * new searches row is created either. */
+    status = do_request("POST", "/search/preview?site=e621&query=wolf", NULL, &response, true, NULL);
+    TEST_ASSERT_EQUAL(200, status);
+    TEST_ASSERT_NOT_NULL(strstr(response.data, "\"id\":1"));
+    TEST_ASSERT_NOT_NULL(strstr(response.data, "\"artist\":\"someartist\""));
+    free(response.data);
+    memset(&response, 0, sizeof(response));
+
+    status = do_request("GET", "/searches", NULL, &response, true, NULL);
+    TEST_ASSERT_EQUAL(200, status);
+    TEST_ASSERT_NOT_NULL(strstr(response.data, "\"id\":1")); /* still just the one "wolves" search */
+    TEST_ASSERT_NULL(strstr(response.data, "\"id\":2"));
+    free(response.data);
+    memset(&response, 0, sizeof(response));
+
     /* The synced post's local id is 1 (first row in a fresh :memory: db). */
     status = do_request("POST", "/posts/1/seen", NULL, &response, true, NULL);
     TEST_ASSERT_EQUAL(200, status);

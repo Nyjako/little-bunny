@@ -29,6 +29,12 @@ class FakeBunnyRepository implements BunnyRepository {
   /// was only ever fetched standalone via [fetchPost], never synced into a
   /// saved search's results).
   final Map<int, BunnyPost> postsById = {};
+
+  /// Keyed by `'${site.toWireString()}:$query'` -- the posts [previewSearch]
+  /// returns for that (site, query) pair; an unregistered pair returns an
+  /// empty list (a search genuinely matching nothing is a normal, non-error
+  /// outcome, same convention as every other list-returning fake here).
+  final Map<String, List<BunnyPost>> previewSearchResults = {};
   int _nextSearchId = 1;
   int syncCallCount = 0;
 
@@ -187,6 +193,9 @@ class FakeBunnyRepository implements BunnyRepository {
     }
     throw BunnyRepositoryException('no fake post registered for $postId');
   }
+
+  @override
+  Future<List<BunnyPost>> previewSearch(BunnySite site, String query) async => List.of(previewSearchResults['${site.toWireString()}:$query'] ?? const []);
 
   @override
   Future<BunnySyncStats> syncDueSearches() async {

@@ -20,7 +20,13 @@ class CreateSearchScreen extends StatefulWidget {
   final BunnyRepository repository;
   final SyncSettingsStore syncSettingsStore;
 
-  const CreateSearchScreen({super.key, required this.repository, required this.syncSettingsStore});
+  /// Pre-fills the site/query fields -- used by [TagBrowseScreen]'s "add to
+  /// searches" action (M8.5.10). `null` (the default) preserves the blank
+  /// form the FAB-driven flow has always shown.
+  final BunnySite? initialSite;
+  final String? initialQuery;
+
+  const CreateSearchScreen({super.key, required this.repository, required this.syncSettingsStore, this.initialSite, this.initialQuery});
 
   @override
   State<CreateSearchScreen> createState() => _CreateSearchScreenState();
@@ -41,10 +47,16 @@ class _CreateSearchScreenState extends State<CreateSearchScreen> {
   @override
   void initState() {
     super.initState();
+    if (widget.initialSite != null) {
+      _site = widget.initialSite!;
+    }
     _queryController.addListener(_onQueryChanged);
     _queryController.addListener(_mirrorQueryIntoLabel);
     _labelController.addListener(_onLabelChanged);
     _loadDefaultInterval();
+    if (widget.initialQuery != null) {
+      _queryController.text = widget.initialQuery!;
+    }
   }
 
   Future<void> _loadDefaultInterval() async {
