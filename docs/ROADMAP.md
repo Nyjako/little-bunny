@@ -1133,6 +1133,44 @@ this file is the single source of truth for "what's done" across sessions.
   `PostDetailScreen` built from a `BunnyPost` carrying `userVote` directly, the way a real
   repository read would return it).
 
+- [x] **M9.7.2 — Search edit screen: rename/requery, Inkbunny star level, e621 auto-upvote**
+  Auto-favorite's settings have grown by one parameter in nearly every sub-milestone that's
+  touched searches (`interval_hours`, then `auto_favorite` in M9.6.8) -- rather than adding yet
+  more positional params, a new `bunny_db_search_options_t { auto_favorite; auto_favorite_stars;
+  auto_upvote; }` struct (`libs/db/include/bunny_db/types.h`) is now passed by pointer to both
+  `bunny_db_search_create` (`NULL` keeps the old all-off default) and a new
+  `bunny_db_search_update`, which replaces and deletes `bunny_db_search_set_auto_favorite`
+  entirely -- its only caller, the searches-list heart icon, is removed in this same
+  sub-milestone in favor of a full edit screen. Two new migrations (`libs/db/src/db.c`, versions
+  4 and 5, since SQLite's `ALTER TABLE ADD COLUMN` only accepts one column per statement):
+  `searches.auto_favorite_stars INTEGER NOT NULL DEFAULT 1` and `searches.auto_upvote INTEGER
+  NOT NULL DEFAULT 0`. Sync hooks in `libs/core/src/sync.c`: the existing `auto_favorite` hook
+  now passes `search->auto_favorite_stars` instead of a hardcoded `-1`; a new `auto_upvote` hook
+  calls `bunny_core_queue_vote(core, post_id, 1, false)` -- e621-only in effect, since
+  `process_inkbunny_action` already rejects any queued vote outright as a safety net, so no
+  explicit site check is needed at enqueue time. `bunny_core_search_create`/new
+  `bunny_core_search_update` mirror the db layer exactly. Server: `POST /searches`'s body gains
+  `auto_favorite_stars`/`auto_upvote`; a new `PUT /searches/{id}` taking the full editable field
+  set replaces the narrower `POST /searches/{id}/auto_favorite` from M9.6.8 (deleted).
+  `BunnySearch` gains `autoFavoriteStars`/`autoUpvote`; `BunnyRepository.createSearch` gains the
+  two matching named params; `setSearchAutoFavorite` is replaced by `updateSearch(searchId,
+  {label, query, intervalHours, autoFavorite, autoFavoriteStars, autoUpvote})` across
+  FFI/HTTP/Fake. UI: `CreateSearchScreen` gains a second `SwitchListTile` ("Auto-upvote new
+  posts") shown only when the site is e621 -- no star picker there, by design, since a new
+  search's Inkbunny auto-favorite always starts at a fixed default (1 star) until edited. New
+  `app/lib/screens/edit_search_screen.dart` mirrors `CreateSearchScreen`'s form (label/query/
+  interval/auto-favorite/auto-upvote, same tag-autocomplete behavior) pre-filled from the
+  `BunnySearch` passed in, plus an Inkbunny-only 1-3 star `SegmentedButton` picker; the site
+  itself is not editable (shown as plain text), to avoid orphaning already-synced posts tagged
+  to the old site. `SearchesScreen`'s `ListTile` gains `onLongPress` opening this screen
+  (refreshing on a `true` pop, same pattern `_createSearch` already uses); the heart `IconButton`
+  and `_toggleAutoFavorite` are deleted. Tests at every layer: C `:memory:` tests for the new
+  columns/`_update` function, a sync+queue test confirming `auto_upvote` actually queues and
+  (once processed) applies a vote for e621, a server integration test covering both the create
+  fields and the new `PUT` endpoint, FFI/HTTP repository tests, and widget tests for
+  `CreateSearchScreen`'s new switch (hidden for Inkbunny), `EditSearchScreen`'s pre-filled
+  fields/star-picker visibility/successful save, and `SearchesScreen`'s long-press-to-edit flow.
+
 - [x] **M9.7.3 — Video/GIF badge on grid thumbnails**
   New `app/lib/util/media_type.dart`: pure `isVideoExt`/`isGifExt` functions factored out of
   `PostDetailScreen`'s previously-private `_videoExtensions` set (now reused there too, replacing

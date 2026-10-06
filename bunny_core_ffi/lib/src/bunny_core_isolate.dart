@@ -58,6 +58,8 @@ Map<String, Object?> _searchToMap(bunny_db_search_t search) => {
   'lastRunAt': _readNullableString(search.last_run_at),
   'unseenCount': search.unseen_count,
   'autoFavorite': search.auto_favorite,
+  'autoFavoriteStars': search.auto_favorite_stars,
+  'autoUpvote': search.auto_upvote,
 };
 
 Map<String, Object?> _postToMap(bunny_db_post_t post) => {
@@ -154,15 +156,22 @@ class _CreateSearchRequest extends _Request {
   final String query;
   final int intervalHours;
   final bool autoFavorite;
+  final int autoFavoriteStars;
+  final bool autoUpvote;
 
-  const _CreateSearchRequest(this.site, this.label, this.query, this.intervalHours, this.autoFavorite);
+  const _CreateSearchRequest(this.site, this.label, this.query, this.intervalHours, this.autoFavorite, this.autoFavoriteStars, this.autoUpvote);
 }
 
-class _SetSearchAutoFavoriteRequest extends _Request {
+class _UpdateSearchRequest extends _Request {
   final int searchId;
+  final String label;
+  final String query;
+  final int intervalHours;
   final bool autoFavorite;
+  final int autoFavoriteStars;
+  final bool autoUpvote;
 
-  const _SetSearchAutoFavoriteRequest(this.searchId, this.autoFavorite);
+  const _UpdateSearchRequest(this.searchId, this.label, this.query, this.intervalHours, this.autoFavorite, this.autoFavoriteStars, this.autoUpvote);
 }
 
 class _ListSearchesRequest extends _Request {
@@ -567,15 +576,23 @@ Object? _dispatch(Pointer<bunny_core_t>? core, _Request request, void Function(P
         return null;
       case _CreateSearchRequest r:
         final outId = arena<Int64>();
-        _check(_bindings.bunny_core_search_create(c, _siteFromWire(r.site), r.label.toNativeUtf8(allocator: arena).cast(), r.query.toNativeUtf8(allocator: arena).cast(), r.intervalHours, r.autoFavorite, outId));
+        final options = arena<bunny_db_search_options_t>();
+        options.ref.auto_favorite = r.autoFavorite;
+        options.ref.auto_favorite_stars = r.autoFavoriteStars;
+        options.ref.auto_upvote = r.autoUpvote;
+        _check(_bindings.bunny_core_search_create(c, _siteFromWire(r.site), r.label.toNativeUtf8(allocator: arena).cast(), r.query.toNativeUtf8(allocator: arena).cast(), r.intervalHours, options, outId));
         return outId.value;
       case _ListSearchesRequest():
         return _handleListSearches(c);
       case _DeleteSearchRequest r:
         _check(_bindings.bunny_core_search_delete(c, r.searchId));
         return null;
-      case _SetSearchAutoFavoriteRequest r:
-        _check(_bindings.bunny_core_search_set_auto_favorite(c, r.searchId, r.autoFavorite));
+      case _UpdateSearchRequest r:
+        final options = arena<bunny_db_search_options_t>();
+        options.ref.auto_favorite = r.autoFavorite;
+        options.ref.auto_favorite_stars = r.autoFavoriteStars;
+        options.ref.auto_upvote = r.autoUpvote;
+        _check(_bindings.bunny_core_search_update(c, r.searchId, r.label.toNativeUtf8(allocator: arena).cast(), r.query.toNativeUtf8(allocator: arena).cast(), r.intervalHours, options));
         return null;
       case _ListSearchPostsRequest r:
         return _handleListSearchPosts(c, r);
@@ -717,13 +734,15 @@ class BunnyCoreNative {
 
   Future<void> verifyAccount(String site, String username, String secret) => _send<void>(_VerifyAccountRequest(site, username, secret));
 
-  Future<int> createSearch(String site, String label, String query, int intervalHours, {bool autoFavorite = false}) => _send<int>(_CreateSearchRequest(site, label, query, intervalHours, autoFavorite));
+  Future<int> createSearch(String site, String label, String query, int intervalHours, {bool autoFavorite = false, int autoFavoriteStars = 1, bool autoUpvote = false}) =>
+      _send<int>(_CreateSearchRequest(site, label, query, intervalHours, autoFavorite, autoFavoriteStars, autoUpvote));
 
   Future<List<Map<String, Object?>>> listSearches() => _send<List<Map<String, Object?>>>(const _ListSearchesRequest());
 
   Future<void> deleteSearch(int searchId) => _send<void>(_DeleteSearchRequest(searchId));
 
-  Future<void> setSearchAutoFavorite(int searchId, bool autoFavorite) => _send<void>(_SetSearchAutoFavoriteRequest(searchId, autoFavorite));
+  Future<void> updateSearch(int searchId, String label, String query, int intervalHours, {bool autoFavorite = false, int autoFavoriteStars = 1, bool autoUpvote = false}) =>
+      _send<void>(_UpdateSearchRequest(searchId, label, query, intervalHours, autoFavorite, autoFavoriteStars, autoUpvote));
 
   Future<List<Map<String, Object?>>> listSearchPosts(int searchId, bool unseenOnly) => _send<List<Map<String, Object?>>>(_ListSearchPostsRequest(searchId, unseenOnly));
 

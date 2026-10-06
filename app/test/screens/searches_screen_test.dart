@@ -86,27 +86,23 @@ void main() {
     expect(find.text('1'), findsOneWidget);
   });
 
-  testWidgets('tapping the auto-favorite icon toggles it on the search (M9.6.8)', (WidgetTester tester) async {
+  testWidgets('long-pressing a search row opens EditSearchScreen and refreshes on success (M9.7.2)', (WidgetTester tester) async {
     final repository = FakeBunnyRepository();
     await repository.createSearch(BunnySite.e621, 'Foxes', 'fox');
 
     await tester.pumpWidget(_wrap(repository));
     await tester.pumpAndSettle();
 
-    expect(find.byIcon(Icons.favorite_border), findsOneWidget);
-    expect(find.byIcon(Icons.favorite), findsNothing);
+    await tester.longPress(find.text('Foxes'));
+    await tester.pumpAndSettle();
+    expect(find.text('Edit search'), findsOneWidget);
 
-    await tester.tap(find.byIcon(Icons.favorite_border));
+    await tester.enterText(find.widgetWithText(TextFormField, 'Label'), 'Renamed foxes');
+    await tester.tap(find.text('Save'));
     await tester.pumpAndSettle();
 
-    expect(repository.searches.single.autoFavorite, isTrue);
-    expect(find.byIcon(Icons.favorite), findsOneWidget);
-    expect(find.byIcon(Icons.favorite_border), findsNothing);
-
-    await tester.tap(find.byIcon(Icons.favorite));
-    await tester.pumpAndSettle();
-
-    expect(repository.searches.single.autoFavorite, isFalse);
+    expect(find.text('Renamed foxes'), findsOneWidget);
+    expect(repository.searches.single.label, 'Renamed foxes');
   });
 
   testWidgets('tapping remove then confirming deletes the search', (WidgetTester tester) async {

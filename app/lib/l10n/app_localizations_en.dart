@@ -128,14 +128,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get searchesNewPoolTooltip => 'Add pool';
 
   @override
-  String get searchesAutoFavoriteOnTooltip =>
-      'Auto-favorite is on -- tap to turn off';
-
-  @override
-  String get searchesAutoFavoriteOffTooltip =>
-      'Auto-favorite is off -- tap to turn on';
-
-  @override
   String get createSearchScreenTitle => 'New search';
 
   @override
@@ -151,6 +143,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get createSearchAutoFavoriteLabel => 'Auto-favorite new posts';
 
   @override
+  String get createSearchAutoUpvoteLabel => 'Auto-upvote new posts';
+
+  @override
   String get createSearchSubmit => 'Create';
 
   @override
@@ -161,6 +156,20 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get createPoolSearchSubmit => 'Add';
+
+  @override
+  String get editSearchScreenTitle => 'Edit search';
+
+  @override
+  String editSearchSiteLabel(String site) {
+    return 'Site: $site';
+  }
+
+  @override
+  String get editSearchStarsLabel => 'Favorite level';
+
+  @override
+  String get editSearchSubmit => 'Save';
 
   @override
   String get postGridUnseenOnlyTooltip => 'Show unseen only';

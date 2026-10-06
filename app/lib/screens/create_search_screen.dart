@@ -53,6 +53,7 @@ class _CreateSearchScreenState extends State<CreateSearchScreen> {
   bool _labelManuallyEdited = false;
   bool _mirroringLabel = false;
   bool _autoFavorite = false;
+  bool _autoUpvote = false;
 
   @override
   void initState() {
@@ -142,7 +143,14 @@ class _CreateSearchScreenState extends State<CreateSearchScreen> {
     }
     setState(() => _submitting = true);
 
-    await widget.repository.createSearch(_site, _labelController.text.trim(), _queryController.text.trim(), intervalHours: int.parse(_intervalController.text), autoFavorite: _autoFavorite);
+    await widget.repository.createSearch(
+      _site,
+      _labelController.text.trim(),
+      _queryController.text.trim(),
+      intervalHours: int.parse(_intervalController.text),
+      autoFavorite: _autoFavorite,
+      autoUpvote: _site == BunnySite.e621 && _autoUpvote,
+    );
 
     if (!mounted) {
       return;
@@ -184,6 +192,13 @@ class _CreateSearchScreenState extends State<CreateSearchScreen> {
                 value: _autoFavorite,
                 onChanged: _submitting ? null : (value) => setState(() => _autoFavorite = value),
               ),
+              if (_site == BunnySite.e621)
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: Text(l10n.createSearchAutoUpvoteLabel),
+                  value: _autoUpvote,
+                  onChanged: _submitting ? null : (value) => setState(() => _autoUpvote = value),
+                ),
               const SizedBox(height: 16),
               FilledButton(
                 onPressed: _submitting ? null : _submit,

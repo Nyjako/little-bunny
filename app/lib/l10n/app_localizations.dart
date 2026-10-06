@@ -310,18 +310,6 @@ abstract class AppLocalizations {
   /// **'Add pool'**
   String get searchesNewPoolTooltip;
 
-  /// No description provided for @searchesAutoFavoriteOnTooltip.
-  ///
-  /// In en, this message translates to:
-  /// **'Auto-favorite is on -- tap to turn off'**
-  String get searchesAutoFavoriteOnTooltip;
-
-  /// No description provided for @searchesAutoFavoriteOffTooltip.
-  ///
-  /// In en, this message translates to:
-  /// **'Auto-favorite is off -- tap to turn on'**
-  String get searchesAutoFavoriteOffTooltip;
-
   /// No description provided for @createSearchScreenTitle.
   ///
   /// In en, this message translates to:
@@ -352,6 +340,12 @@ abstract class AppLocalizations {
   /// **'Auto-favorite new posts'**
   String get createSearchAutoFavoriteLabel;
 
+  /// No description provided for @createSearchAutoUpvoteLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Auto-upvote new posts'**
+  String get createSearchAutoUpvoteLabel;
+
   /// No description provided for @createSearchSubmit.
   ///
   /// In en, this message translates to:
@@ -375,6 +369,30 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Add'**
   String get createPoolSearchSubmit;
+
+  /// No description provided for @editSearchScreenTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Edit search'**
+  String get editSearchScreenTitle;
+
+  /// No description provided for @editSearchSiteLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Site: {site}'**
+  String editSearchSiteLabel(String site);
+
+  /// No description provided for @editSearchStarsLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Favorite level'**
+  String get editSearchStarsLabel;
+
+  /// No description provided for @editSearchSubmit.
+  ///
+  /// In en, this message translates to:
+  /// **'Save'**
+  String get editSearchSubmit;
 
   /// No description provided for @postGridUnseenOnlyTooltip.
   ///
