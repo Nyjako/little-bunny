@@ -26,6 +26,10 @@ void main() {
     expect(await repository.tagAutocomplete(BunnySite.e621, 'any'), isEmpty);
   });
 
+  test('topFavoritedTags returns an empty list when nothing is favorited (M10.2)', () async {
+    expect(await repository.topFavoritedTags(BunnySite.e621), isEmpty);
+  });
+
   test('markPostSeen rejects a post id with no cached post', () async {
     await expectLater(repository.markPostSeen(1), throwsA(isA<BunnyRepositoryException>()));
   });
