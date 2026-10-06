@@ -46,7 +46,14 @@ class DownloadManager {
     return artist.replaceAll(RegExp(r'[\\/:*?"<>|]'), '_');
   }
 
-  Future<DownloadResult> downloadPost(BunnyPost post, BunnyRepository repository, String destinationFolder) async {
+  /// [autoFavorite] (M10.1) queues a favorite-add for [post] once the file is
+  /// actually written to disk (a [DownloadOutcome.verified] or
+  /// [DownloadOutcome.checksumMismatch] result -- never [noFileUrl]/[failed],
+  /// since nothing was downloaded in those cases). Only queues it --
+  /// draining the action queue afterward is left to the caller, which
+  /// already decides that for its own batching needs (an immediate drain for
+  /// a single download, one drain after a whole mass-download loop).
+  Future<DownloadResult> downloadPost(BunnyPost post, BunnyRepository repository, String destinationFolder, {bool autoFavorite = false}) async {
     final url = post.fileUrl;
     if (url == null) {
       return const DownloadResult(DownloadOutcome.noFileUrl);
@@ -71,6 +78,9 @@ class DownloadManager {
       final verified = expected == null || expected.toLowerCase() == checksum;
 
       await repository.recordDownload(post.id, filePath, checksumMd5: checksum, verified: verified);
+      if (autoFavorite) {
+        await repository.queueFavoriteAdd(post.id);
+      }
 
       return DownloadResult(verified ? DownloadOutcome.verified : DownloadOutcome.checksumMismatch, filePath: filePath);
     } catch (_) {

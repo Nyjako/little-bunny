@@ -115,6 +115,31 @@ void main() {
     expect(tester.widget<TextField>(find.widgetWithText(TextField, 'Grid columns')).controller!.text, '4');
   });
 
+  testWidgets('toggling auto-favorite on download persists it (M10.1)', (WidgetTester tester) async {
+    const downloadStore = DownloadSettingsStore();
+
+    await tester.pumpWidget(
+      wrapWithLocalization(
+        SettingsScreen(
+          themeSettingsStore: const ThemeSettingsStore(),
+          lockService: AppLockService(FakeSecretStore()),
+          syncSettingsStore: const SyncSettingsStore(),
+          downloadSettingsStore: downloadStore,
+          displaySettingsStore: const DisplaySettingsStore(),
+          onThemeModeChanged: (_) {},
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(await downloadStore.loadAutoFavoriteOnDownload(), isFalse);
+
+    await tester.tap(find.widgetWithText(SwitchListTile, 'Auto-favorite on download'));
+    await tester.pumpAndSettle();
+
+    expect(await downloadStore.loadAutoFavoriteOnDownload(), isTrue);
+  });
+
   testWidgets('picking a preview quality and editing grid columns persists both', (WidgetTester tester) async {
     const displayStore = DisplaySettingsStore();
 

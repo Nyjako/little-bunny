@@ -409,6 +409,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get settingsDownloadsChooseFolderButton => 'Choose folder';
 
   @override
+  String get settingsAutoFavoriteOnDownloadLabel => 'Auto-favorite on download';
+
+  @override
   String get postDetailDownloadTooltip => 'Download';
 
   @override

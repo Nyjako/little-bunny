@@ -1827,6 +1827,30 @@ its `spaceBetween` layout. Centering the badge instead sidesteps this entirely a
 match a familiar convention (a centered play icon over a video thumbnail), at the cost of
 partially obscuring the thumbnail's center -- an acceptable trade for a small icon/chip.
 
+## M10 -- Automation & recommendations
+
+**Auto-favorite on download (M10.1)**: a download-triggered counterpart to the sync-triggered
+auto-favorite M9.6.8/M9.7.2 already built -- this is the other half of the roadmap line those two
+sub-milestones pulled forward from M10, a different trigger (downloading a file) reusing the
+exact same action-queue plumbing (`BunnyRepository.queueFavoriteAdd`/`processQueue`) rather than
+anything new at the queue layer. `DownloadManager.downloadPost` (`app/lib/services/
+download_manager.dart`) already took `BunnyRepository` as a parameter and is the single
+chokepoint both the single-post download button (`PostDetailScreen`) and the mass-download action
+(`PostGridScreen`) call through, so a new `{bool autoFavorite = false}` parameter there -- rather
+than duplicating the queueing logic at each call site -- is the natural fit. It deliberately only
+*queues* the favorite (`repository.queueFavoriteAdd(post.id)`, no `stars` override, matching the
+detail screen's own manual favorite button) when the outcome is `verified` or `checksumMismatch`
+(the file was actually written; `noFileUrl`/`failed` never queue anything) and never calls
+`processQueue()` itself -- draining stays an orchestration decision each caller already makes for
+its own batching needs, the same "queue N, drain once" pattern M9.2's mass favorite/vote
+established for mass actions. `PostDetailScreen._downloadFile` loads the new `DownloadSettingsStore.
+loadAutoFavoriteOnDownload()` setting alongside its existing `loadDestinationFolder()` call and,
+only when it's on, calls `processQueue()` once immediately after -- mirroring `_toggleFavorite`'s
+existing immediate-drain shape. `PostGridScreen._massDownload` loads the same setting once before
+its loop (not per post, to avoid N redundant `shared_preferences` reads) and, only when on, calls
+`processQueue()` once after the whole loop finishes, exactly mirroring mass-favorite's batching
+rather than draining after every individual download.
+
 ## Inkbunny API constraints (found in M2)
 
 Verified against the live API and the official docs while building `libinkbunny`:

@@ -10,6 +10,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 /// [RepositorySettingsStore]'s standalone db path default.
 class DownloadSettingsStore {
   static const _key = 'download_destination_folder';
+  static const _autoFavoriteKey = 'auto_favorite_on_download';
 
   const DownloadSettingsStore();
 
@@ -26,5 +27,19 @@ class DownloadSettingsStore {
   Future<void> saveDestinationFolder(String folder) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_key, folder);
+  }
+
+  /// Whether downloading a post should also queue a favorite-add for it
+  /// (M10.1) -- a separate, download-triggered counterpart to the
+  /// sync-triggered auto-favorite a saved search can already do (M9.6.8).
+  /// Defaults to off.
+  Future<bool> loadAutoFavoriteOnDownload() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(_autoFavoriteKey) ?? false;
+  }
+
+  Future<void> saveAutoFavoriteOnDownload(bool enabled) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_autoFavoriteKey, enabled);
   }
 }
