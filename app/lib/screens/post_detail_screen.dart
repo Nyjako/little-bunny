@@ -178,8 +178,17 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
     });
   }
 
-  Future<void> _toggleFavorite() async {
+  // Previously applied the optimistic UI update unconditionally, even when
+  // processQueue()'s own stats reported the action as failed (e.g. no
+  // account configured, or a rejected request) -- the toggle looked like it
+  // took effect for the rest of this screen's lifetime, but nothing was
+  // ever actually persisted (bunny_core only updates the local favorites
+  // mirror on a *successful* action), so reopening the post later showed the
+  // real, unfavorited state. Checking actionsFailed here means a failed
+  // action now surfaces an error instead of lying about what happened.
+  Future<void> _toggleFavorite(AppLocalizations l10n) async {
     final wasFavorited = _post.isFavorited;
+    bool succeeded;
     try {
       if (wasFavorited) {
         await widget.repository.queueFavoriteRemove(_post.id);
@@ -188,12 +197,16 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
       }
       // Drains immediately rather than waiting for the next scheduled pass
       // (M5.3), so the action actually reaches the site right away.
-      await widget.repository.processQueue();
+      final stats = await widget.repository.processQueue();
+      succeeded = stats.actionsFailed == 0;
     } catch (_) {
-      // The queue itself already has its own retry/backoff (M4.3) for a
-      // failed send; nothing further to show the user here.
+      succeeded = false;
     }
     if (!mounted) {
+      return;
+    }
+    if (!succeeded) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(l10n.postDetailActionFailed)));
       return;
     }
     setState(() {
@@ -201,14 +214,20 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
     });
   }
 
-  Future<void> _vote(int score) async {
+  Future<void> _vote(AppLocalizations l10n, int score) async {
+    bool succeeded;
     try {
       await widget.repository.queueVote(_post.id, score);
-      await widget.repository.processQueue();
+      final stats = await widget.repository.processQueue();
+      succeeded = stats.actionsFailed == 0;
     } catch (_) {
-      // See _toggleFavorite.
+      succeeded = false;
     }
     if (!mounted) {
+      return;
+    }
+    if (!succeeded) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(l10n.postDetailActionFailed)));
       return;
     }
     setState(() {
@@ -300,13 +319,13 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
             children: [
               RatingBadge(site: post.site, rating: post.rating),
               const SizedBox(width: 8),
-              _statAction(icon: Icons.arrow_upward, count: post.scoreUp, tooltip: l10n.postDetailUpvoteTooltip, onPressed: votingEnabled ? () => _vote(1) : null),
-              _statAction(icon: Icons.arrow_downward, count: post.scoreDown, tooltip: l10n.postDetailDownvoteTooltip, onPressed: votingEnabled ? () => _vote(-1) : null),
+              _statAction(icon: Icons.arrow_upward, count: post.scoreUp, tooltip: l10n.postDetailUpvoteTooltip, onPressed: votingEnabled ? () => _vote(l10n, 1) : null),
+              _statAction(icon: Icons.arrow_downward, count: post.scoreDown, tooltip: l10n.postDetailDownvoteTooltip, onPressed: votingEnabled ? () => _vote(l10n, -1) : null),
               _statAction(
                 icon: post.isFavorited ? Icons.favorite : Icons.favorite_border,
                 count: post.favCount,
                 tooltip: post.isFavorited ? l10n.postDetailFavoriteRemoveTooltip : l10n.postDetailFavoriteAddTooltip,
-                onPressed: _toggleFavorite,
+                onPressed: () => _toggleFavorite(l10n),
                 color: post.isFavorited ? Colors.red : null,
               ),
               const Spacer(),
