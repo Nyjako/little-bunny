@@ -112,4 +112,53 @@ void main() {
 
     expect(await File('${nestedDir.path}/wolf/42.png').exists(), isTrue);
   });
+
+  group('autoFavorite (M10.1)', () {
+    test('queues a favorite when a download verifies and autoFavorite is true', () async {
+      final manager = DownloadManager(client: MockClient((_) async => http.Response.bytes([1, 2, 3], 200)));
+      final repository = FakeBunnyRepository();
+
+      await manager.downloadPost(_post(fileMd5: null), repository, tempDir.path, autoFavorite: true);
+
+      expect(repository.favoriteAddCalls, [1]);
+      expect(repository.processQueueCallCount, 0); // downloadPost only queues -- draining is the caller's job
+    });
+
+    test('queues a favorite even on a checksum mismatch, since the file was still written', () async {
+      final manager = DownloadManager(client: MockClient((_) async => http.Response.bytes([1, 2, 3], 200)));
+      final repository = FakeBunnyRepository();
+
+      final result = await manager.downloadPost(_post(fileMd5: 'not-the-real-checksum'), repository, tempDir.path, autoFavorite: true);
+
+      expect(result.outcome, DownloadOutcome.checksumMismatch);
+      expect(repository.favoriteAddCalls, [1]);
+    });
+
+    test('does not queue a favorite when autoFavorite is false (the default)', () async {
+      final manager = DownloadManager(client: MockClient((_) async => http.Response.bytes([1, 2, 3], 200)));
+      final repository = FakeBunnyRepository();
+
+      await manager.downloadPost(_post(fileMd5: null), repository, tempDir.path);
+
+      expect(repository.favoriteAddCalls, isEmpty);
+    });
+
+    test('does not queue a favorite when there is no file to download', () async {
+      final manager = DownloadManager(client: MockClient((_) async => fail('should not be called')));
+      final repository = FakeBunnyRepository();
+
+      await manager.downloadPost(_post(fileUrl: null), repository, tempDir.path, autoFavorite: true);
+
+      expect(repository.favoriteAddCalls, isEmpty);
+    });
+
+    test('does not queue a favorite when the download fails', () async {
+      final manager = DownloadManager(client: MockClient((_) async => http.Response('', 404)));
+      final repository = FakeBunnyRepository();
+
+      await manager.downloadPost(_post(), repository, tempDir.path, autoFavorite: true);
+
+      expect(repository.favoriteAddCalls, isEmpty);
+    });
+  });
 }

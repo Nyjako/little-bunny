@@ -838,6 +838,12 @@ abstract class AppLocalizations {
   /// **'Choose folder'**
   String get settingsDownloadsChooseFolderButton;
 
+  /// No description provided for @settingsAutoFavoriteOnDownloadLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Auto-favorite on download'**
+  String get settingsAutoFavoriteOnDownloadLabel;
+
   /// No description provided for @postDetailDownloadTooltip.
   ///
   /// In en, this message translates to:

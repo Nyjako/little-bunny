@@ -40,6 +40,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   ThemeMode? _themeMode;
   PreviewQuality? _previewQuality;
   String? _downloadFolder;
+  bool _autoFavoriteOnDownload = false;
   final _intervalController = TextEditingController();
   final _gridColumnsController = TextEditingController();
 
@@ -62,6 +63,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final previewQuality = await widget.displaySettingsStore.loadPreviewQuality();
     final gridColumns = await widget.displaySettingsStore.loadGridColumns();
     final downloadFolder = await widget.downloadSettingsStore.loadDestinationFolder();
+    final autoFavoriteOnDownload = await widget.downloadSettingsStore.loadAutoFavoriteOnDownload();
     if (!mounted) {
       return;
     }
@@ -71,6 +73,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       _previewQuality = previewQuality;
       _gridColumnsController.text = '$gridColumns';
       _downloadFolder = downloadFolder;
+      _autoFavoriteOnDownload = autoFavoriteOnDownload;
     });
   }
 
@@ -108,6 +111,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
     setState(() => _downloadFolder = chosen);
     await widget.downloadSettingsStore.saveDestinationFolder(chosen);
+  }
+
+  Future<void> _setAutoFavoriteOnDownload(bool value) async {
+    setState(() => _autoFavoriteOnDownload = value);
+    await widget.downloadSettingsStore.saveAutoFavoriteOnDownload(value);
   }
 
   @override
@@ -169,6 +177,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
             title: Text(l10n.settingsDownloadsFolderLabel),
             subtitle: Text(_downloadFolder ?? l10n.settingsDownloadsFolderUnset),
             trailing: TextButton(onPressed: _chooseDownloadFolder, child: Text(l10n.settingsDownloadsChooseFolderButton)),
+          ),
+          SwitchListTile(
+            contentPadding: EdgeInsets.zero,
+            title: Text(l10n.settingsAutoFavoriteOnDownloadLabel),
+            value: _autoFavoriteOnDownload,
+            onChanged: _setAutoFavoriteOnDownload,
           ),
           const SizedBox(height: 24),
           Text(l10n.settingsAppLockSection, style: Theme.of(context).textTheme.titleMedium),
