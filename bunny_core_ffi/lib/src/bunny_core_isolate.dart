@@ -209,6 +209,13 @@ class _TagAutocompleteRequest extends _Request {
   const _TagAutocompleteRequest(this.site, this.prefix, this.limit);
 }
 
+class _TopFavoritedTagsRequest extends _Request {
+  final String site;
+  final int limit;
+
+  const _TopFavoritedTagsRequest(this.site, this.limit);
+}
+
 class _MarkPostSeenRequest extends _Request {
   final int postId;
 
@@ -381,6 +388,19 @@ List<Map<String, Object?>> _handleTagAutocomplete(Pointer<bunny_core_t> core, _T
   return using((arena) {
     final out = arena<bunny_db_tag_stat_list_t>();
     _check(_bindings.bunny_core_tag_autocomplete(core, _siteFromWire(r.site), r.prefix.toNativeUtf8(allocator: arena).cast(), r.limit, out));
+    final items = <Map<String, Object?>>[];
+    for (var i = 0; i < out.ref.count; i++) {
+      items.add(_tagStatToMap(out.ref.items[i]));
+    }
+    _bindings.bunny_db_tag_stat_list_free(out);
+    return items;
+  });
+}
+
+List<Map<String, Object?>> _handleTopFavoritedTags(Pointer<bunny_core_t> core, _TopFavoritedTagsRequest r) {
+  return using((arena) {
+    final out = arena<bunny_db_tag_stat_list_t>();
+    _check(_bindings.bunny_core_top_favorited_tags(core, _siteFromWire(r.site), r.limit, out));
     final items = <Map<String, Object?>>[];
     for (var i = 0; i < out.ref.count; i++) {
       items.add(_tagStatToMap(out.ref.items[i]));
@@ -604,6 +624,8 @@ Object? _dispatch(Pointer<bunny_core_t>? core, _Request request, void Function(P
         return _syncStatsToMap(outStats.ref);
       case _TagAutocompleteRequest r:
         return _handleTagAutocomplete(c, r);
+      case _TopFavoritedTagsRequest r:
+        return _handleTopFavoritedTags(c, r);
       case _MarkPostSeenRequest r:
         _check(_bindings.bunny_core_post_mark_seen(c, r.postId));
         return null;
@@ -751,6 +773,8 @@ class BunnyCoreNative {
   Future<Map<String, Object?>> syncDueSearches() => _send<Map<String, Object?>>(const _SyncDueSearchesRequest());
 
   Future<List<Map<String, Object?>>> tagAutocomplete(String site, String prefix, int limit) => _send<List<Map<String, Object?>>>(_TagAutocompleteRequest(site, prefix, limit));
+
+  Future<List<Map<String, Object?>>> topFavoritedTags(String site, int limit) => _send<List<Map<String, Object?>>>(_TopFavoritedTagsRequest(site, limit));
 
   Future<void> markPostSeen(int postId) => _send<void>(_MarkPostSeenRequest(postId));
 

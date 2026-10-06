@@ -15,6 +15,7 @@ import 'create_search_screen.dart';
 import 'edit_search_screen.dart';
 import 'post_grid_screen.dart';
 import 'settings_screen.dart';
+import 'tag_stats_screen.dart';
 
 /// The app's actual home screen (M8.2 promoted this over [AccountsScreen] --
 /// browse/search is the daily-use surface, site login is a one-time setup
@@ -200,6 +201,21 @@ class _SearchesScreenState extends State<SearchesScreen> with SingleTickerProvid
         title: Text(l10n.searchesScreenTitle),
         actions: [
           IconButton(icon: const Icon(Icons.person_outline), tooltip: l10n.searchesAccountsTooltip, onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (context) => AccountsScreen(repository: _repository!)))),
+          IconButton(
+            icon: const Icon(Icons.bar_chart_outlined),
+            tooltip: l10n.searchesTagStatsTooltip,
+            onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => TagStatsScreen(
+                  repository: _repository!,
+                  displaySettingsStore: widget.displaySettingsStore,
+                  syncSettingsStore: widget.syncSettingsStore,
+                  downloadSettingsStore: widget.downloadSettingsStore,
+                ),
+              ),
+            ),
+          ),
           IconButton(
             icon: const Icon(Icons.settings_outlined),
             tooltip: l10n.searchesSettingsTooltip,

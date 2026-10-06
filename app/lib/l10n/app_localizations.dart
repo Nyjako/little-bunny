@@ -256,6 +256,12 @@ abstract class AppLocalizations {
   /// **'Settings'**
   String get searchesSettingsTooltip;
 
+  /// No description provided for @searchesTagStatsTooltip.
+  ///
+  /// In en, this message translates to:
+  /// **'Tag stats'**
+  String get searchesTagStatsTooltip;
+
   /// No description provided for @searchesNewSearchTooltip.
   ///
   /// In en, this message translates to:
@@ -309,6 +315,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Add pool'**
   String get searchesNewPoolTooltip;
+
+  /// No description provided for @tagStatsScreenTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Tag stats'**
+  String get tagStatsScreenTitle;
+
+  /// No description provided for @tagStatsEmptyState.
+  ///
+  /// In en, this message translates to:
+  /// **'No favorited posts yet -- favorite some to see their tags here.'**
+  String get tagStatsEmptyState;
 
   /// No description provided for @createSearchScreenTitle.
   ///

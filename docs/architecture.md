@@ -1851,6 +1851,35 @@ its loop (not per post, to avoid N redundant `shared_preferences` reads) and, on
 `processQueue()` once after the whole loop finishes, exactly mirroring mass-favorite's batching
 rather than draining after every individual download.
 
+**Most-favorited tag stats + recommended-search entry point (M10.2)**: `bunny_db_top_favorited_
+tags` (`libs/db/src/stats.c`) had existed since M3 as a never-wired db function, and turned out to
+have a real bug once this sub-milestone actually tried to surface it: unlike `bunny_db_tag_
+autocomplete`'s otherwise near-identical query (same file, `WHERE t.site = ?`), it had no site
+filter at all. Since `tags` is `UNIQUE(site, name)`, an e621 "wolf" and an Inkbunny "wolf" are two
+distinct rows that would both surface as indistinguishable `{name: "wolf", count: N}` entries --
+fixed by giving `bunny_db_top_favorited_tags` the same `bunny_db_site_t site` parameter
+`tag_autocomplete` already has, a natural side effect of adding the parameter this sub-milestone's
+UI needed anyway (a per-site stats screen). `bunny_core_top_favorited_tags` (`libs/core/src/
+searches.c`, right next to `bunny_core_tag_autocomplete`) and its FFI/server/repository plumbing
+all mirror `tag_autocomplete`'s existing chain shape for shape: a new `_TopFavoritedTagsRequest`/
+handler in the FFI isolate wrapper, a new `GET /tags/top_favorited?site=&limit=` registered as a
+sibling exact-path handler alongside `GET /tags/autocomplete` in `server/src/routes_tags.c` (civet
+web dispatches by exact URI match here, not a prefix router, so adding a route is one more `mg_
+set_request_handler` call plus one more `strcmp` branch in the shared `tags_handler`), and
+`BunnyRepository.topFavoritedTags(site, {limit = 20})` across FFI/HTTP/Fake -- reusing `BunnyTagStat`
+(`{name, count}`) exactly as-is, since it already has the right shape from the autocomplete feature.
+
+UI: new `app/lib/screens/tag_stats_screen.dart` -- a `SegmentedButton<BunnySite>` (matching
+`CreateSearchScreen`'s own site toggle) switches which site's stats are loaded, followed by a
+plain `ListTile`-per-tag list. Tapping a tag opens the existing `TagBrowseScreen` (M8.5.10) for
+that tag/site, which already has its own "add to searches" action from the pool/tag click-through
+work -- per the confirmed scope, the tag itself *is* the "recommended search," with no additional
+filtering against what's already covered by an existing saved search's query (that would need
+parsing/matching logic with its own edge cases for comparatively little payoff, so it was
+deliberately left out). `SearchesScreen`'s app bar gained one more icon (next to the existing
+accounts/settings icons) opening this screen -- the same `IconButton` + `Navigator.push` pattern
+already used for the other two.
+
 ## Inkbunny API constraints (found in M2)
 
 Verified against the live API and the official docs while building `libinkbunny`:
