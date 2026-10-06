@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 
 import '../repository/bunny_models.dart';
 import '../util/image_headers.dart';
+import '../util/media_type.dart';
 import 'rating_badge.dart';
 
 /// A single thumbnail tile for a post grid -- the rating badge/unseen-dot/
@@ -26,6 +27,24 @@ class PostGridTile extends StatelessWidget {
 
   const PostGridTile({super.key, required this.post, required this.imageUrl, required this.onTap, this.selected = false, this.onLongPress, this.selectionMode = false});
 
+  /// A video gets a centered play icon, a GIF a small "GIF" chip -- both
+  /// centered (M9.7.3) rather than tucked into a corner, since every corner
+  /// is already spoken for by the rating badge, unseen-dot/selection marker,
+  /// and the full-width score/favCount bar along the bottom.
+  Widget _mediaTypeBadge() {
+    if (isVideoExt(post.fileExt)) {
+      return const Icon(Icons.play_circle_fill, color: Colors.white70, size: 36);
+    }
+    if (isGifExt(post.fileExt)) {
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+        decoration: BoxDecoration(color: Colors.black54, borderRadius: BorderRadius.circular(4)),
+        child: const Text('GIF', style: TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold)),
+      );
+    }
+    return const SizedBox.shrink();
+  }
+
   @override
   Widget build(BuildContext context) {
     final url = imageUrl;
@@ -36,6 +55,7 @@ class PostGridTile extends StatelessWidget {
         fit: StackFit.expand,
         children: [
           if (url != null) CachedNetworkImage(imageUrl: url, httpHeaders: imageHeadersFor(post.site), fit: BoxFit.cover) else const ColoredBox(color: Colors.black12),
+          Center(child: _mediaTypeBadge()),
           if (selected) Container(color: Colors.black45),
           if (!post.isSeen && !selectionMode) Positioned(top: 4, right: 4, child: Container(width: 10, height: 10, decoration: const BoxDecoration(color: Colors.redAccent, shape: BoxShape.circle))),
           Positioned(top: 4, left: 4, child: RatingBadge(site: post.site, rating: post.rating)),

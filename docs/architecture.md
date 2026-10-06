@@ -1754,6 +1754,19 @@ mirror` has no way to detect this from the API response it currently inspects (j
 status), so it always records whichever direction was just successfully sent -- the same
 toggle-blind-spot `apply_favorite_mirror` already has, not a new regression introduced here.
 
+**Video/GIF badge on grid thumbnails (M9.7.3)**: `PostDetailScreen` already had everything this
+needed, just private to that one file -- `_videoExtensions`/the gif-is-just-another-image-
+extension check moved into a new shared `app/lib/util/media_type.dart` (`isVideoExt`/`isGifExt`),
+with `PostDetailScreen` itself switched over to the shared functions instead of its own copy. The
+interesting design question was placement, not logic: `PostGridTile`'s `Stack` already has
+something in every corner (rating badge top-left since M8.5.7, unseen-dot/selection-checkmark
+top-right since M9.2/M9.6.1, the full-width score/favCount bar along the entire bottom edge since
+M8.5.7) -- there's no genuinely free corner left to tuck a fourth badge into without either
+colliding with an existing one or squeezing into the bottom bar's `Row` in a way that complicates
+its `spaceBetween` layout. Centering the badge instead sidesteps this entirely and happens to
+match a familiar convention (a centered play icon over a video thumbnail), at the cost of
+partially obscuring the thumbnail's center -- an acceptable trade for a small icon/chip.
+
 ## Inkbunny API constraints (found in M2)
 
 Verified against the live API and the official docs while building `libinkbunny`:
