@@ -562,6 +562,12 @@ abstract class AppLocalizations {
   /// **'Couldn\'t open that post'**
   String get postDetailOpenPostFailed;
 
+  /// No description provided for @postDetailActionFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t send that action -- it wasn\'t saved'**
+  String get postDetailActionFailed;
+
   /// No description provided for @postDetailFavoriteAddTooltip.
   ///
   /// In en, this message translates to:

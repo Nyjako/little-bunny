@@ -268,6 +268,10 @@ class AppLocalizationsEn extends AppLocalizations {
   String get postDetailOpenPostFailed => 'Couldn\'t open that post';
 
   @override
+  String get postDetailActionFailed =>
+      'Couldn\'t send that action -- it wasn\'t saved';
+
+  @override
   String get postDetailFavoriteAddTooltip => 'Add to favorites';
 
   @override
