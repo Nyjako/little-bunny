@@ -45,6 +45,14 @@ class BunnySearch {
   final int unseenCount;
   final bool autoFavorite;
 
+  /// Inkbunny favorite level (1-3) queued by [autoFavorite]; ignored by e621,
+  /// which has no stars concept (M9.7.2).
+  final int autoFavoriteStars;
+
+  /// e621 only -- queues an upvote for every post this search finds during
+  /// sync (M9.7.2). Always false for Inkbunny, which has no vote API.
+  final bool autoUpvote;
+
   const BunnySearch({
     required this.id,
     required this.site,
@@ -55,6 +63,8 @@ class BunnySearch {
     this.lastRunAt,
     this.unseenCount = 0,
     this.autoFavorite = false,
+    this.autoFavoriteStars = 1,
+    this.autoUpvote = false,
   });
 }
 

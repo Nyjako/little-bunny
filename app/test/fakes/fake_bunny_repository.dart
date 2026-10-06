@@ -74,9 +74,21 @@ class FakeBunnyRepository implements BunnyRepository {
   Future<void> deleteAccount(BunnySite site) async => accounts.remove(site);
 
   @override
-  Future<int> createSearch(BunnySite site, String label, String query, {int intervalHours = 24, bool autoFavorite = false}) async {
+  Future<int> createSearch(BunnySite site, String label, String query, {int intervalHours = 24, bool autoFavorite = false, int autoFavoriteStars = 1, bool autoUpvote = false}) async {
     final id = _nextSearchId++;
-    searches.add(BunnySearch(id: id, site: site, label: label, query: query, intervalHours: intervalHours, createdAt: '2026-01-01T00:00:00Z', autoFavorite: autoFavorite));
+    searches.add(
+      BunnySearch(
+        id: id,
+        site: site,
+        label: label,
+        query: query,
+        intervalHours: intervalHours,
+        createdAt: '2026-01-01T00:00:00Z',
+        autoFavorite: autoFavorite,
+        autoFavoriteStars: autoFavoriteStars,
+        autoUpvote: autoUpvote,
+      ),
+    );
     return id;
   }
 
@@ -93,6 +105,8 @@ class FakeBunnyRepository implements BunnyRepository {
           lastRunAt: search.lastRunAt,
           unseenCount: (postsBySearchId[search.id] ?? const []).where((post) => !post.isSeen).length,
           autoFavorite: search.autoFavorite,
+          autoFavoriteStars: search.autoFavoriteStars,
+          autoUpvote: search.autoUpvote,
         ),
       )
       .toList();
@@ -104,7 +118,7 @@ class FakeBunnyRepository implements BunnyRepository {
   }
 
   @override
-  Future<void> setSearchAutoFavorite(int searchId, bool autoFavorite) async {
+  Future<void> updateSearch(int searchId, String label, String query, {int intervalHours = 24, bool autoFavorite = false, int autoFavoriteStars = 1, bool autoUpvote = false}) async {
     final index = searches.indexWhere((search) => search.id == searchId);
     if (index == -1) {
       return;
@@ -113,13 +127,15 @@ class FakeBunnyRepository implements BunnyRepository {
     searches[index] = BunnySearch(
       id: search.id,
       site: search.site,
-      label: search.label,
-      query: search.query,
-      intervalHours: search.intervalHours,
+      label: label,
+      query: query,
+      intervalHours: intervalHours,
       createdAt: search.createdAt,
       lastRunAt: search.lastRunAt,
       unseenCount: search.unseenCount,
       autoFavorite: autoFavorite,
+      autoFavoriteStars: autoFavoriteStars,
+      autoUpvote: autoUpvote,
     );
   }
 

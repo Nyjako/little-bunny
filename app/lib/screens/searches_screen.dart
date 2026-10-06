@@ -12,6 +12,7 @@ import '../settings/theme_settings_store.dart';
 import '../util/responsive.dart';
 import 'accounts_screen.dart';
 import 'create_search_screen.dart';
+import 'edit_search_screen.dart';
 import 'post_grid_screen.dart';
 import 'settings_screen.dart';
 
@@ -143,9 +144,11 @@ class _SearchesScreenState extends State<SearchesScreen> with SingleTickerProvid
     _refresh();
   }
 
-  Future<void> _toggleAutoFavorite(BunnySearch search) async {
-    await _repository!.setSearchAutoFavorite(search.id, !search.autoFavorite);
-    _refresh();
+  Future<void> _editSearch(BunnySearch search) async {
+    final updated = await Navigator.push<bool>(context, MaterialPageRoute(builder: (context) => EditSearchScreen(repository: _repository!, search: search)));
+    if (updated == true) {
+      _refresh();
+    }
   }
 
   Widget _searchList(List<BunnySearch> searches, String emptyState) {
@@ -169,11 +172,6 @@ class _SearchesScreenState extends State<SearchesScreen> with SingleTickerProvid
                       decoration: BoxDecoration(color: Theme.of(context).colorScheme.primary, borderRadius: BorderRadius.circular(12)),
                       child: Text('${search.unseenCount}', style: TextStyle(color: Theme.of(context).colorScheme.onPrimary, fontSize: 12)),
                     ),
-                  IconButton(
-                    icon: Icon(search.autoFavorite ? Icons.favorite : Icons.favorite_border),
-                    tooltip: search.autoFavorite ? l10n.searchesAutoFavoriteOnTooltip : l10n.searchesAutoFavoriteOffTooltip,
-                    onPressed: () => _toggleAutoFavorite(search),
-                  ),
                   IconButton(icon: const Icon(Icons.delete), onPressed: () => _removeSearch(search)),
                 ],
               ),
@@ -184,6 +182,7 @@ class _SearchesScreenState extends State<SearchesScreen> with SingleTickerProvid
                       PostGridScreen(search: search, repository: _repository!, displaySettingsStore: widget.displaySettingsStore, syncSettingsStore: widget.syncSettingsStore, downloadSettingsStore: widget.downloadSettingsStore),
                 ),
               ),
+              onLongPress: () => _editSearch(search),
             ),
           )
           .toList(),

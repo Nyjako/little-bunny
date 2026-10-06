@@ -26,6 +26,17 @@ typedef struct
     char *created_at;
 } bunny_db_account_t;
 
+/* Editable settings shared by bunny_db_search_create and bunny_db_search_update
+ * (M9.7.2) -- kept as one struct instead of ever-more positional bool/int
+ * params, since this set has grown with nearly every sub-milestone that's
+ * touched searches. */
+typedef struct
+{
+    bool auto_favorite;      /* queue a favorite for every post this search finds during sync */
+    int auto_favorite_stars; /* Inkbunny favorite level (1-3); ignored by e621, which has no stars concept */
+    bool auto_upvote;        /* e621 only -- queue an upvote for every post this search finds during sync */
+} bunny_db_search_options_t;
+
 typedef struct
 {
     int64_t id;
@@ -34,9 +45,11 @@ typedef struct
     char *query;
     int interval_hours;
     char *created_at;
-    char *last_run_at;  /* NULL if this search has never run */
-    int unseen_count;   /* posts linked to this search with no seen_posts row */
-    bool auto_favorite; /* queue a favorite for every post this search finds during sync */
+    char *last_run_at;       /* NULL if this search has never run */
+    int unseen_count;        /* posts linked to this search with no seen_posts row */
+    bool auto_favorite;      /* queue a favorite for every post this search finds during sync */
+    int auto_favorite_stars; /* Inkbunny favorite level (1-3); ignored by e621 */
+    bool auto_upvote;        /* e621 only -- queue an upvote for every post this search finds during sync */
 } bunny_db_search_t;
 
 typedef struct
