@@ -1181,9 +1181,27 @@ this file is the single source of truth for "what's done" across sessions.
   unit tests for both pure functions (case-insensitivity, null handling), and a new
   `test/widgets/post_grid_tile_test.dart` covering all three outcomes (video, gif, neither).
 
-- [ ] **M10 — Automation & recommendations**
-  "Auto-like/auto-favorite on download" setting, most-liked/most-favorited tag stats,
-  recommended new searches based on that history.
+- [x] **M10.1 — Auto-favorite on download**
+  A new, download-triggered counterpart to the sync-triggered auto-favorite M9.6.8/M9.7.2
+  already built -- a different event (downloading a file), reusing the exact same action-queue
+  plumbing. New `DownloadSettingsStore.loadAutoFavoriteOnDownload()`/`saveAutoFavoriteOnDownload`
+  (default off), new `SwitchListTile` in `SettingsScreen`'s Downloads section.
+  `DownloadManager.downloadPost` gains `{bool autoFavorite = false}`: when true and the file was
+  actually written (`verified` or `checksumMismatch` -- never `noFileUrl`/`failed`), it calls
+  `repository.queueFavoriteAdd(post.id)` and nothing else -- draining the action queue afterward
+  stays the caller's call, matching how each caller already batches its own download outcomes.
+  `PostDetailScreen._downloadFile` loads the setting alongside the existing destination-folder
+  lookup and, only when it's on, calls `processQueue()` once immediately after -- the same
+  immediate-drain shape `_toggleFavorite` already uses. `PostGridScreen._massDownload` loads the
+  setting once before its loop (not per post) and, only when on, calls `processQueue()` once
+  after the whole loop finishes -- mirroring M9.2's mass-favorite "queue N, drain once" pattern
+  exactly, rather than draining after every single post. Tests: `DownloadManager` unit tests
+  (queues on verified/mismatch, never on noFileUrl/failed, never when the param is off),
+  `SettingsScreen` widget test for the toggle persisting, and `PostDetailScreen`/`PostGridScreen`
+  widget tests confirming the queue+drain calls fire (or don't) exactly when expected.
+
+- [ ] **M10.2 — Most-favorited tag stats + recommended-search entry point**
+  Most-liked/most-favorited tag stats, recommended new searches based on that history.
 
 - [ ] **M11 — Backup & import**
   Export/import of our own searches. Import from "The Wolf's Stash"

@@ -180,6 +180,7 @@
   "settingsDownloadsFolderLabel": "Destination folder",
   "settingsDownloadsFolderUnset": "Not set",
   "settingsDownloadsChooseFolderButton": "Choose folder",
+  "settingsAutoFavoriteOnDownloadLabel": "Auto-favorite on download",
 
   "postDetailDownloadTooltip": "Download",
   "postDetailDownloadVerified": "Downloaded and checksum verified",

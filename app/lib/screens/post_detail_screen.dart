@@ -247,13 +247,18 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(l10n.postDetailDownloadFailed)));
       return;
     }
-    final result = await widget.downloadManager.downloadPost(_post, widget.repository, folder);
+    final autoFavorite = await widget.downloadSettingsStore.loadAutoFavoriteOnDownload();
+    final result = await widget.downloadManager.downloadPost(_post, widget.repository, folder, autoFavorite: autoFavorite);
+    final downloaded = result.outcome == DownloadOutcome.verified || result.outcome == DownloadOutcome.checksumMismatch;
+    if (autoFavorite && downloaded) {
+      await widget.repository.processQueue();
+    }
     if (!mounted) {
       return;
     }
     setState(() {
       _downloading = false;
-      if (result.outcome == DownloadOutcome.verified || result.outcome == DownloadOutcome.checksumMismatch) {
+      if (downloaded) {
         _downloadsFuture = widget.repository.listDownloadsForPost(_post.id);
       }
     });
