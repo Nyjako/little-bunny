@@ -655,13 +655,55 @@ void test_top_favorited_tags(void)
     bunny_db_favorite_add(g_db, id2, -1);
 
     bunny_db_tag_stat_list_t stats;
-    bunny_db_result_t result = bunny_db_top_favorited_tags(g_db, 10, &stats);
+    bunny_db_result_t result = bunny_db_top_favorited_tags(g_db, BUNNY_DB_SITE_E621, 10, &stats);
     TEST_ASSERT_EQUAL(BUNNY_DB_OK, result);
     TEST_ASSERT_EQUAL(3, (int)stats.count); /* wolf, forest, meadow */
     TEST_ASSERT_EQUAL_STRING("wolf", stats.items[0].name);
     TEST_ASSERT_EQUAL(2, stats.items[0].count);
 
     bunny_db_tag_stat_list_free(&stats);
+}
+
+void test_top_favorited_tags_is_scoped_per_site(void)
+{
+    const char *e621_tags[] = {"wolf"};
+    const char *inkbunny_tags[] = {"wolf", "wolf"}; /* duplicate on purpose -- still one tag row */
+
+    bunny_db_post_upsert_t e621_post;
+    make_test_post(&e621_post, 801, 1);
+    e621_post.tags = e621_tags;
+    e621_post.tag_count = 1;
+
+    bunny_db_post_upsert_t inkbunny_post;
+    memset(&inkbunny_post, 0, sizeof(inkbunny_post));
+    inkbunny_post.site = BUNNY_DB_SITE_INKBUNNY;
+    inkbunny_post.external_id = 802;
+    inkbunny_post.tags = inkbunny_tags;
+    inkbunny_post.tag_count = 1;
+
+    int64_t e621_id = 0;
+    int64_t inkbunny_id = 0;
+    bunny_db_post_upsert(g_db, &e621_post, &e621_id);
+    bunny_db_post_upsert(g_db, &inkbunny_post, &inkbunny_id);
+
+    bunny_db_favorite_add(g_db, e621_id, -1);
+    bunny_db_favorite_add(g_db, inkbunny_id, 1);
+
+    bunny_db_tag_stat_list_t e621_stats;
+    bunny_db_result_t result = bunny_db_top_favorited_tags(g_db, BUNNY_DB_SITE_E621, 10, &e621_stats);
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, result);
+    TEST_ASSERT_EQUAL(1, (int)e621_stats.count);
+    TEST_ASSERT_EQUAL_STRING("wolf", e621_stats.items[0].name);
+    TEST_ASSERT_EQUAL(1, e621_stats.items[0].count); /* not 2 -- Inkbunny's "wolf" doesn't bleed in */
+    bunny_db_tag_stat_list_free(&e621_stats);
+
+    bunny_db_tag_stat_list_t inkbunny_stats;
+    result = bunny_db_top_favorited_tags(g_db, BUNNY_DB_SITE_INKBUNNY, 10, &inkbunny_stats);
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, result);
+    TEST_ASSERT_EQUAL(1, (int)inkbunny_stats.count);
+    TEST_ASSERT_EQUAL_STRING("wolf", inkbunny_stats.items[0].name);
+    TEST_ASSERT_EQUAL(1, inkbunny_stats.items[0].count);
+    bunny_db_tag_stat_list_free(&inkbunny_stats);
 }
 
 void test_tag_autocomplete_prefix_match(void)
@@ -1156,6 +1198,7 @@ int main(void)
     RUN_TEST(test_action_queue_mark_done_removes_from_pending);
     RUN_TEST(test_action_queue_mark_failed_records_error);
     RUN_TEST(test_top_favorited_tags);
+    RUN_TEST(test_top_favorited_tags_is_scoped_per_site);
     RUN_TEST(test_tag_autocomplete_prefix_match);
     RUN_TEST(test_tag_autocomplete_orders_by_usage_then_name);
     RUN_TEST(test_tag_autocomplete_is_per_site);

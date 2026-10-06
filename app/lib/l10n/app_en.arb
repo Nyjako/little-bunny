@@ -43,6 +43,7 @@
   "searchesScreenTitle": "Searches",
   "searchesAccountsTooltip": "Accounts",
   "searchesSettingsTooltip": "Settings",
+  "searchesTagStatsTooltip": "Tag stats",
   "searchesNewSearchTooltip": "New search",
   "searchesEmptyState": "No saved searches yet. Tap + to add one.",
   "searchesIntervalSubtitle": "{site} • every {hours}h",
@@ -61,6 +62,9 @@
   "searchesTabPools": "Pools",
   "searchesPoolsEmptyState": "No saved pools yet. Tap + to add one.",
   "searchesNewPoolTooltip": "Add pool",
+
+  "tagStatsScreenTitle": "Tag stats",
+  "tagStatsEmptyState": "No favorited posts yet -- favorite some to see their tags here.",
 
   "createSearchScreenTitle": "New search",
   "createSearchLabelField": "Label",

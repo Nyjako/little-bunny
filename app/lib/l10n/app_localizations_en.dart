@@ -97,6 +97,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get searchesSettingsTooltip => 'Settings';
 
   @override
+  String get searchesTagStatsTooltip => 'Tag stats';
+
+  @override
   String get searchesNewSearchTooltip => 'New search';
 
   @override
@@ -126,6 +129,13 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get searchesNewPoolTooltip => 'Add pool';
+
+  @override
+  String get tagStatsScreenTitle => 'Tag stats';
+
+  @override
+  String get tagStatsEmptyState =>
+      'No favorited posts yet -- favorite some to see their tags here.';
 
   @override
   String get createSearchScreenTitle => 'New search';

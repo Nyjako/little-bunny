@@ -252,6 +252,25 @@ void main() {
       expect(stats.first.count, 3);
     });
 
+    test('topFavoritedTags sends site/limit as query params and maps results (M10.2)', () async {
+      respond = (_) => http.Response(
+        jsonEncode([
+          {'name': 'wolf', 'count': 5},
+          {'name': 'forest', 'count': 2},
+        ]),
+        200,
+      );
+
+      final stats = await buildRepository().topFavoritedTags(BunnySite.e621, limit: 20);
+
+      expect(capturedMethod, 'GET');
+      expect(capturedUri.path, '/tags/top_favorited');
+      expect(capturedUri.queryParameters, {'site': 'e621', 'limit': '20'});
+      expect(stats, hasLength(2));
+      expect(stats.first.name, 'wolf');
+      expect(stats.first.count, 5);
+    });
+
     test('getPostTagsByCategory sends GET to the right path and maps results', () async {
       respond = (_) => http.Response(
         jsonEncode([

@@ -277,6 +277,15 @@ class HttpBunnyRepository implements BunnyRepository {
   }
 
   @override
+  Future<List<BunnyTagStat>> topFavoritedTags(BunnySite site, {int limit = 20}) async {
+    final response = await _client.get(_uri('/tags/top_favorited', {'site': site.toWireString(), 'limit': limit.toString()}), headers: _headers);
+    if (response.statusCode != 200) {
+      _throwError(response);
+    }
+    return _decodeList(response).map(_tagStatFromJson).toList();
+  }
+
+  @override
   Future<void> markPostSeen(int postId) async {
     final response = await _client.post(_uri('/posts/$postId/seen'), headers: _headers);
     if (response.statusCode != 200) {

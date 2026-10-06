@@ -678,6 +678,42 @@ class BunnyCoreFfiBindings {
         )
       >();
 
+  /// Tags of currently-favorited posts on `site`, ranked by how many favorited
+  /// posts carry them -- a thin pass-through to bunny_db, feeding a "most
+  /// favorited tags" browse screen (M10.2). Same shape as bunny_core_tag_
+  /// autocomplete above.
+  bunny_core_result_t bunny_core_top_favorited_tags(
+    ffi.Pointer<bunny_core_t> core,
+    bunny_db_site_t site,
+    int limit,
+    ffi.Pointer<bunny_db_tag_stat_list_t> out_list,
+  ) {
+    return bunny_core_result_t.fromValue(
+      _bunny_core_top_favorited_tags(core, site.value, limit, out_list),
+    );
+  }
+
+  late final _bunny_core_top_favorited_tagsPtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.UnsignedInt Function(
+            ffi.Pointer<bunny_core_t>,
+            ffi.UnsignedInt,
+            ffi.Int,
+            ffi.Pointer<bunny_db_tag_stat_list_t>,
+          )
+        >
+      >('bunny_core_top_favorited_tags');
+  late final _bunny_core_top_favorited_tags = _bunny_core_top_favorited_tagsPtr
+      .asFunction<
+        int Function(
+          ffi.Pointer<bunny_core_t>,
+          int,
+          int,
+          ffi.Pointer<bunny_db_tag_stat_list_t>,
+        )
+      >();
+
   /// Marks a post seen (global per post, not per search) -- lets a post detail
   /// view clear the unseen marker bunny_core_search_list_posts's unseen_only
   /// filter and bunny_db_post_t.is_seen are based on. Returns
