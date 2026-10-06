@@ -478,12 +478,6 @@ abstract class AppLocalizations {
   /// **'This file format ({extension}) isn\'t supported yet'**
   String postDetailUnsupportedFormat(String extension);
 
-  /// No description provided for @postDetailArtistLabel.
-  ///
-  /// In en, this message translates to:
-  /// **'Artist'**
-  String get postDetailArtistLabel;
-
   /// No description provided for @postDetailTitleLabel.
   ///
   /// In en, this message translates to:
@@ -495,24 +489,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Description'**
   String get postDetailDescriptionLabel;
-
-  /// No description provided for @postDetailRatingLabel.
-  ///
-  /// In en, this message translates to:
-  /// **'Rating'**
-  String get postDetailRatingLabel;
-
-  /// No description provided for @postDetailScoreLabel.
-  ///
-  /// In en, this message translates to:
-  /// **'Score'**
-  String get postDetailScoreLabel;
-
-  /// No description provided for @postDetailFavoritesLabel.
-  ///
-  /// In en, this message translates to:
-  /// **'Favorites'**
-  String get postDetailFavoritesLabel;
 
   /// No description provided for @postDetailCommentsLabel.
   ///

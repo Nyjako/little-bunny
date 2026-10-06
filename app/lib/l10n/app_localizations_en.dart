@@ -226,22 +226,10 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
-  String get postDetailArtistLabel => 'Artist';
-
-  @override
   String get postDetailTitleLabel => 'Title';
 
   @override
   String get postDetailDescriptionLabel => 'Description';
-
-  @override
-  String get postDetailRatingLabel => 'Rating';
-
-  @override
-  String get postDetailScoreLabel => 'Score';
-
-  @override
-  String get postDetailFavoritesLabel => 'Favorites';
 
   @override
   String get postDetailCommentsLabel => 'Comments';
