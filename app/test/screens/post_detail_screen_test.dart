@@ -29,6 +29,8 @@ BunnyPost _post({String? fileExt, String? fileUrl, bool noFileUrl = false, Strin
   description: 'A description',
   rating: 'safe',
   score: 42,
+  scoreUp: 15,
+  scoreDown: 4,
   favCount: 10,
   commentCount: 3,
   fileUrl: noFileUrl ? null : (fileUrl ?? 'https://example.invalid/file.$fileExt'),
@@ -53,6 +55,11 @@ void main() {
   setUp(() {
     TestWidgetsFlutterBinding.ensureInitialized().defaultBinaryMessenger.setMockMethodCallHandler(SystemChannels.platform, (call) async => null);
   });
+
+  Future<void> scrollToEnd(WidgetTester tester) async {
+    await tester.drag(find.byType(Scrollable).first, const Offset(0, -2000));
+    await tester.pumpAndSettle();
+  }
 
   testWidgets('marks the post seen once when opened', (WidgetTester tester) async {
     final repository = FakeBunnyRepository();
@@ -98,10 +105,13 @@ void main() {
     expect(find.text('A title'), findsOneWidget);
     expect(find.text('someartist'), findsOneWidget);
     expect(find.text('A description'), findsOneWidget);
-    expect(find.text('safe'), findsOneWidget);
-    expect(find.text('42'), findsOneWidget);
-    expect(find.text('10'), findsOneWidget);
-    expect(find.text('3'), findsOneWidget);
+    expect(find.text('safe'), findsOneWidget); // rendered via RatingBadge (M9.6.5)
+    expect(find.text('15'), findsOneWidget); // scoreUp, shown next to the upvote icon
+    expect(find.text('4'), findsOneWidget); // scoreDown, shown next to the downvote icon
+    expect(find.text('10'), findsOneWidget); // favCount, shown next to the favorite icon
+
+    await scrollToEnd(tester);
+    expect(find.text('3'), findsOneWidget); // commentCount, in the post-details column
     expect(find.text('640x480'), findsOneWidget);
   });
 
@@ -143,11 +153,6 @@ void main() {
     expect(find.byType(VideoPlayer), findsNothing);
   });
 
-  Future<void> scrollToEnd(WidgetTester tester) async {
-    await tester.drag(find.byType(Scrollable).first, const Offset(0, -2000));
-    await tester.pumpAndSettle();
-  }
-
   testWidgets('shows tag chips grouped by category', (WidgetTester tester) async {
     final repository = FakeBunnyRepository();
     final post = _post(fileExt: 'jpg');
@@ -167,6 +172,73 @@ void main() {
     expect(find.text('some_character'), findsOneWidget);
     expect(find.text('some_species'), findsOneWidget);
     expect(find.text('uncategorized_tag'), findsOneWidget);
+  });
+
+  testWidgets('sorts tag category headers into the fixed order, unrecognized last (M9.6.5)', (WidgetTester tester) async {
+    final repository = FakeBunnyRepository();
+    final post = _post(fileExt: 'jpg');
+    // Deliberately out of order (species before artist, meta before
+    // character, uncategorized first) to prove the screen re-sorts rather
+    // than just rendering whatever order the tags arrived in.
+    repository.tagsByPostId[1] = const [
+      BunnyPostTag(name: 'uncategorized_tag'),
+      BunnyPostTag(name: 'some_meta', category: 'meta'),
+      BunnyPostTag(name: 'some_species', category: 'species'),
+      BunnyPostTag(name: 'some_character', category: 'character'),
+      BunnyPostTag(name: 'someartist_tag', category: 'artist'),
+    ];
+
+    await tester.pumpWidget(wrapWithLocalization(PostDetailScreen(post: post, repository: repository, displaySettingsStore: const DisplaySettingsStore(), syncSettingsStore: const SyncSettingsStore(), downloadSettingsStore: const DownloadSettingsStore())));
+    await tester.pumpAndSettle();
+    await scrollToEnd(tester);
+
+    final headerOrder = ['Artist', 'Character', 'Species', 'Meta', 'Tags'];
+    final offsets = headerOrder.map((header) => tester.getTopLeft(find.text(header)).dy).toList();
+    expect(offsets, orderedEquals(List.of(offsets)..sort()));
+  });
+
+  testWidgets('the thick info bar shows the artist, rating badge, and stat counts (M9.6.5)', (WidgetTester tester) async {
+    final repository = FakeBunnyRepository();
+    final post = _post(fileExt: 'jpg');
+
+    await tester.pumpWidget(wrapWithLocalization(PostDetailScreen(post: post, repository: repository, displaySettingsStore: const DisplaySettingsStore(), syncSettingsStore: const SyncSettingsStore(), downloadSettingsStore: const DownloadSettingsStore())));
+    await tester.pumpAndSettle();
+
+    // The artist line sits above the rating/stats line, both inside the bar.
+    final artistY = tester.getTopLeft(find.text('someartist')).dy;
+    final ratingY = tester.getTopLeft(find.text('safe')).dy;
+    expect(ratingY, greaterThan(artistY));
+
+    expect(find.text('15'), findsOneWidget); // scoreUp
+    expect(find.text('4'), findsOneWidget); // scoreDown
+    expect(find.text('10'), findsOneWidget); // favCount
+    expect(find.byTooltip('Download'), findsOneWidget);
+
+    // Tapping the artist name navigates to its tag-browse page, same as the
+    // click-through behavior this bar replaced.
+    await tester.tap(find.text('someartist'));
+    await tester.pumpAndSettle();
+    expect(find.text('No posts found for this search.'), findsOneWidget);
+  });
+
+  testWidgets('tags/details/sources lay out side by side on wide windows, stacked on narrow (M9.6.5)', (WidgetTester tester) async {
+    final repository = FakeBunnyRepository();
+    final post = _post(fileExt: 'jpg');
+    final screen = PostDetailScreen(post: post, repository: repository, displaySettingsStore: const DisplaySettingsStore(), syncSettingsStore: const SyncSettingsStore(), downloadSettingsStore: const DownloadSettingsStore());
+
+    tester.view.physicalSize = const Size(600, 800);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+    await tester.pumpWidget(wrapWithLocalization(screen));
+    await tester.pumpAndSettle();
+    await scrollToEnd(tester);
+    expect(find.byKey(const Key('wideTagsDetailsSourcesRow')), findsNothing);
+
+    tester.view.physicalSize = const Size(1200, 800);
+    await tester.pumpWidget(wrapWithLocalization(screen));
+    await tester.pumpAndSettle();
+    await scrollToEnd(tester);
+    expect(find.byKey(const Key('wideTagsDetailsSourcesRow')), findsOneWidget);
   });
 
   testWidgets('hides the sources section when there are none', (WidgetTester tester) async {
@@ -352,7 +424,7 @@ void main() {
     expect(find.byTooltip('Add to favorites'), findsOneWidget);
   });
 
-  testWidgets('tapping upvote/downvote queues a vote and updates the displayed score', (WidgetTester tester) async {
+  testWidgets('tapping upvote/downvote queues a vote and updates the displayed counts', (WidgetTester tester) async {
     final repository = FakeBunnyRepository();
     final post = _post(fileExt: 'jpg');
 
@@ -364,13 +436,13 @@ void main() {
 
     expect(repository.voteCalls, [(1, 1)]);
     expect(repository.processQueueCallCount, 1);
-    expect(find.text('43'), findsOneWidget); // score optimistically bumped from 42
+    expect(find.text('16'), findsOneWidget); // scoreUp optimistically bumped from 15
 
     await tester.tap(find.byTooltip('Downvote'));
     await tester.pumpAndSettle();
 
     expect(repository.voteCalls, [(1, 1), (1, -1)]);
-    expect(find.text('42'), findsOneWidget);
+    expect(find.text('5'), findsOneWidget); // scoreDown optimistically bumped from 4
   });
 
   testWidgets('vote buttons are disabled for Inkbunny posts, favorite stays enabled', (WidgetTester tester) async {
@@ -380,11 +452,15 @@ void main() {
     await tester.pumpWidget(wrapWithLocalization(PostDetailScreen(post: post, repository: repository, displaySettingsStore: const DisplaySettingsStore(), syncSettingsStore: const SyncSettingsStore(), downloadSettingsStore: const DownloadSettingsStore())));
     await tester.pumpAndSettle();
 
-    Finder iconButtonFor(String tooltip) => find.ancestor(of: find.byTooltip(tooltip), matching: find.byType(IconButton));
+    // The upvote/downvote/favorite stat actions (M9.6.5) are a Tooltip
+    // wrapping a TextButton.icon -- the reverse nesting of IconButton's own
+    // internal tooltip (where the IconButton is the ancestor), so this looks
+    // for a TextButton *descendant* of the tooltip rather than an ancestor.
+    Finder statActionFor(String tooltip) => find.descendant(of: find.byTooltip(tooltip), matching: find.byType(TextButton));
 
-    expect(tester.widget<IconButton>(iconButtonFor('Upvote')).onPressed, isNull);
-    expect(tester.widget<IconButton>(iconButtonFor('Downvote')).onPressed, isNull);
-    expect(tester.widget<IconButton>(iconButtonFor('Add to favorites')).onPressed, isNotNull);
+    expect(tester.widget<TextButton>(statActionFor('Upvote')).onPressed, isNull);
+    expect(tester.widget<TextButton>(statActionFor('Downvote')).onPressed, isNull);
+    expect(tester.widget<TextButton>(statActionFor('Add to favorites')).onPressed, isNotNull);
   });
 
   group('download button (M9.4)', () {

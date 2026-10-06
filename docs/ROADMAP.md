@@ -918,7 +918,7 @@ this file is the single source of truth for "what's done" across sessions.
   `recordDownload` call (the only one that actually succeeds), the correct three-way summary
   text, and that selection mode exits afterward.
 
-- [ ] **M9.6 — Browsing, detail screen & UX polish**
+- [x] **M9.6 — Browsing, detail screen & UX polish**
   A hands-on feedback pass over the whole M9 browsing/detail/download experience: a full-screen
   viewer with no close button, tag/pool browsing stuck on e621's first page even for 250k-post
   tags, a stretched GIF, a selection checkbox visible outside selection mode, pools that forced
@@ -1056,6 +1056,35 @@ this file is the single source of truth for "what's done" across sessions.
   confirming a search without it queues nothing -- a server integration test for both the create
   field and the toggle endpoint, FFI/HTTP repository tests, and widget tests for the creation
   switch and the list-row toggle.
+
+- [x] **M9.6.5 — Post detail screen redesign**
+  The biggest and riskiest sub-milestone, sequenced last so it builds on M9.6.3's pool-click fix
+  rather than fighting it. New top-to-bottom order: media → title (unchanged position) → a new
+  "info bar" (`_infoBar`) -- a `Container` tinted with `colorScheme.surfaceContainerHighest`
+  acting as a bold visual separator, with the artist name (tappable, same tag-browse navigation
+  as before) on its own line, then [RatingBadge] (reused verbatim from M8.5.7's grid tiles) plus
+  three tappable icon+count actions (upvote/`scoreUp`, downvote/`scoreDown`, favorite/`favCount`)
+  replacing the old bare favorite/vote `IconButton` row, and the download button at the end of
+  that line → Pools + Relationships (repositioned here from near the bottom, otherwise unchanged)
+  → Description → a responsive region (`_tagsDetailsSourcesRegion`, sharing M9.6.6's
+  `isWideScreen` breakpoint): wide windows get tags on the left and a `Column` of post details
+  (id-with-copy, comment count, dimensions, created date -- everything left over once rating/
+  votes/favorites moved into the info bar) plus sources on the right in a `Row`; narrow windows
+  stack the same three pieces vertically in that order → Comments (unchanged, e621-only, still
+  last). Tags are now sorted into a fixed category order (artist, character, copyright, species,
+  general, meta) with any unrecognized/null category grouped last, instead of whatever order
+  they happened to arrive in. Each upvote/downvote/favorite action is a `TextButton.icon` inside
+  a `Tooltip` (a bare `IconButton` has no room for a label) rather than `IconButton`'s own
+  internal tooltip wrapping -- note the nesting is reversed from `IconButton` (the `Tooltip` is
+  the ancestor here, `TextButton` the descendant), which existing-test-style `find.ancestor`
+  finders needed to become `find.descendant` for. Tests: most of `post_detail_screen_test.dart`
+  updated to the new structure (tag/source/pool/relationship taps, id copy, comments, favorite/
+  vote, download all still covered, just relocated and re-keyed to `scoreUp`/`scoreDown` instead
+  of the no-longer-displayed total `score`), plus new tests for the info bar's content, the tag
+  category sort order (via comparing rendered header y-offsets), and the wide/narrow responsive
+  split (via a `Key` on the wide-only `Row` that doesn't exist in the narrow layout). Verified via
+  the full widget-test suite simulating both window widths and a Linux build smoke test; a true
+  manual/visual check wasn't possible with the tools available in this session.
 
 - [ ] **M10 — Automation & recommendations**
   "Auto-like/auto-favorite on download" setting, most-liked/most-favorited tag stats,
