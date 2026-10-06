@@ -200,6 +200,20 @@ static void apply_favorite_mirror(bunny_db_t *db, const bunny_db_action_t *actio
     }
 }
 
+/* Updates the local votes mirror (M9.7.1) to match a just-succeeded vote
+ * action -- e621 only has a vote concept at all, so this is a no-op for
+ * anything else, same as apply_favorite_mirror's non-favorite no-op above. */
+static void apply_vote_mirror(bunny_db_t *db, const bunny_db_action_t *action)
+{
+    if (action->action_type != BUNNY_DB_ACTION_VOTE) {
+        return;
+    }
+    cJSON *payload = action->payload ? cJSON_Parse(action->payload) : NULL;
+    int score = bunny_json_get_int_or(payload, "score", 1);
+    cJSON_Delete(payload);
+    bunny_db_vote_set(db, action->post_id, score);
+}
+
 bunny_core_result_t bunny_core_process_queue(bunny_core_t *core, bunny_core_queue_stats_t *out_stats)
 {
     if (!core) {
@@ -247,6 +261,7 @@ bunny_core_result_t bunny_core_process_queue(bunny_core_t *core, bunny_core_queu
 
         if (action_result == BUNNY_CORE_OK) {
             apply_favorite_mirror(core->db, action);
+            apply_vote_mirror(core->db, action);
             bunny_db_action_queue_mark_done(core->db, action->id);
             stats.actions_succeeded++;
         } else {

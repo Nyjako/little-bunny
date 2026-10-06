@@ -1409,6 +1409,10 @@ final class bunny_db_post_t extends ffi.Struct {
 
   /// medium-quality variant (e621's "sample", Inkbunny's "screen"); may be NULL
   external ffi.Pointer<ffi.Char> sample_url;
+
+  /// -1, 0 (no vote), or 1 -- always 0 for Inkbunny (M9.7.1)
+  @ffi.Int()
+  external int user_vote;
 }
 
 final class bunny_db_post_list_t extends ffi.Struct {
