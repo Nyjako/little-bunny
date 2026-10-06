@@ -20,6 +20,7 @@ typedef struct
 static const bunny_db_migration_t BUNNY_DB_MIGRATIONS[] = {
     {1, "ALTER TABLE posts ADD COLUMN score_up INTEGER NOT NULL DEFAULT 0;"},
     {2, "ALTER TABLE posts ADD COLUMN score_down INTEGER NOT NULL DEFAULT 0;"},
+    {3, "ALTER TABLE searches ADD COLUMN auto_favorite INTEGER NOT NULL DEFAULT 0;"},
 };
 
 static bunny_db_result_t bunny_db_apply_migrations(sqlite3 *handle)

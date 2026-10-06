@@ -128,6 +128,14 @@ class AppLocalizationsEn extends AppLocalizations {
   String get searchesNewPoolTooltip => 'Add pool';
 
   @override
+  String get searchesAutoFavoriteOnTooltip =>
+      'Auto-favorite is on -- tap to turn off';
+
+  @override
+  String get searchesAutoFavoriteOffTooltip =>
+      'Auto-favorite is off -- tap to turn on';
+
+  @override
   String get createSearchScreenTitle => 'New search';
 
   @override
@@ -138,6 +146,9 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get createSearchIntervalLabel => 'Sync interval (hours)';
+
+  @override
+  String get createSearchAutoFavoriteLabel => 'Auto-favorite new posts';
 
   @override
   String get createSearchSubmit => 'Create';

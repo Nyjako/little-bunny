@@ -29,7 +29,7 @@ void test_open_close(void)
 void test_search_create_and_list(void)
 {
     int64_t id = 0;
-    bunny_db_result_t result = bunny_db_search_create(g_db, BUNNY_DB_SITE_E621, "wolves", "wolf rating:s", 12, &id);
+    bunny_db_result_t result = bunny_db_search_create(g_db, BUNNY_DB_SITE_E621, "wolves", "wolf rating:s", 12, false, &id);
     TEST_ASSERT_EQUAL(BUNNY_DB_OK, result);
     TEST_ASSERT_TRUE(id > 0);
 
@@ -44,14 +44,48 @@ void test_search_create_and_list(void)
     TEST_ASSERT_EQUAL(12, list.items[0].interval_hours);
     TEST_ASSERT_NULL(list.items[0].last_run_at);
     TEST_ASSERT_EQUAL(0, list.items[0].unseen_count);
+    TEST_ASSERT_FALSE(list.items[0].auto_favorite);
 
+    bunny_db_search_list_free(&list);
+}
+
+void test_search_create_with_auto_favorite(void)
+{
+    int64_t id = 0;
+    bunny_db_result_t result = bunny_db_search_create(g_db, BUNNY_DB_SITE_E621, "wolves", "wolf", 24, true, &id);
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, result);
+
+    bunny_db_search_list_t list;
+    bunny_db_search_list(g_db, &list);
+    TEST_ASSERT_TRUE(list.items[0].auto_favorite);
+    bunny_db_search_list_free(&list);
+}
+
+void test_search_set_auto_favorite_toggles_an_existing_search(void)
+{
+    int64_t id = 0;
+    bunny_db_search_create(g_db, BUNNY_DB_SITE_E621, "wolves", "wolf", 24, false, &id);
+
+    bunny_db_result_t result = bunny_db_search_set_auto_favorite(g_db, id, true);
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, result);
+
+    bunny_db_search_list_t list;
+    bunny_db_search_list(g_db, &list);
+    TEST_ASSERT_TRUE(list.items[0].auto_favorite);
+
+    result = bunny_db_search_set_auto_favorite(g_db, id, false);
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, result);
+    bunny_db_search_list_free(&list);
+
+    bunny_db_search_list(g_db, &list);
+    TEST_ASSERT_FALSE(list.items[0].auto_favorite);
     bunny_db_search_list_free(&list);
 }
 
 void test_search_default_interval(void)
 {
     int64_t id = 0;
-    bunny_db_result_t result = bunny_db_search_create(g_db, BUNNY_DB_SITE_INKBUNNY, "cats", "cat", 0, &id);
+    bunny_db_result_t result = bunny_db_search_create(g_db, BUNNY_DB_SITE_INKBUNNY, "cats", "cat", 0, false, &id);
     TEST_ASSERT_EQUAL(BUNNY_DB_OK, result);
 
     bunny_db_search_list_t list;
@@ -63,7 +97,7 @@ void test_search_default_interval(void)
 void test_search_delete(void)
 {
     int64_t id = 0;
-    bunny_db_search_create(g_db, BUNNY_DB_SITE_E621, "temp", "temp", 24, &id);
+    bunny_db_search_create(g_db, BUNNY_DB_SITE_E621, "temp", "temp", 24, false, &id);
 
     bunny_db_result_t result = bunny_db_search_delete(g_db, id);
     TEST_ASSERT_EQUAL(BUNNY_DB_OK, result);
@@ -77,7 +111,7 @@ void test_search_delete(void)
 void test_search_touch_last_run(void)
 {
     int64_t id = 0;
-    bunny_db_search_create(g_db, BUNNY_DB_SITE_E621, "temp", "temp", 24, &id);
+    bunny_db_search_create(g_db, BUNNY_DB_SITE_E621, "temp", "temp", 24, false, &id);
 
     bunny_db_result_t result = bunny_db_search_touch_last_run(g_db, id);
     TEST_ASSERT_EQUAL(BUNNY_DB_OK, result);
@@ -175,8 +209,8 @@ void test_search_list_unseen_count(void)
 {
     int64_t search1_id = 0;
     int64_t search2_id = 0;
-    bunny_db_search_create(g_db, BUNNY_DB_SITE_E621, "wolves", "wolf", 24, &search1_id);
-    bunny_db_search_create(g_db, BUNNY_DB_SITE_E621, "foxes", "fox", 24, &search2_id);
+    bunny_db_search_create(g_db, BUNNY_DB_SITE_E621, "wolves", "wolf", 24, false, &search1_id);
+    bunny_db_search_create(g_db, BUNNY_DB_SITE_E621, "foxes", "fox", 24, false, &search2_id);
 
     bunny_db_post_upsert_t post1;
     bunny_db_post_upsert_t post2;
@@ -330,7 +364,7 @@ void test_favorite_add_remove_list(void)
 void test_search_results_and_list_posts(void)
 {
     int64_t search_id = 0;
-    bunny_db_search_create(g_db, BUNNY_DB_SITE_E621, "wolves", "wolf", 24, &search_id);
+    bunny_db_search_create(g_db, BUNNY_DB_SITE_E621, "wolves", "wolf", 24, false, &search_id);
 
     bunny_db_post_upsert_t post1;
     bunny_db_post_upsert_t post2;
@@ -366,7 +400,7 @@ void test_search_results_and_list_posts(void)
 void test_search_list_posts_orders_newest_first_by_site_date(void)
 {
     int64_t search_id = 0;
-    bunny_db_search_create(g_db, BUNNY_DB_SITE_E621, "wolves", "wolf", 24, &search_id);
+    bunny_db_search_create(g_db, BUNNY_DB_SITE_E621, "wolves", "wolf", 24, false, &search_id);
 
     /* Added to the search in the opposite order of their site creation
      * dates -- if list_posts still sorted by found_at (when this app linked
@@ -399,8 +433,8 @@ void test_search_mark_all_seen_only_affects_that_searchs_posts(void)
 {
     int64_t search1_id = 0;
     int64_t search2_id = 0;
-    bunny_db_search_create(g_db, BUNNY_DB_SITE_E621, "wolves", "wolf", 24, &search1_id);
-    bunny_db_search_create(g_db, BUNNY_DB_SITE_E621, "foxes", "fox", 24, &search2_id);
+    bunny_db_search_create(g_db, BUNNY_DB_SITE_E621, "wolves", "wolf", 24, false, &search1_id);
+    bunny_db_search_create(g_db, BUNNY_DB_SITE_E621, "foxes", "fox", 24, false, &search2_id);
 
     bunny_db_post_upsert_t post1;
     bunny_db_post_upsert_t post2;
@@ -1043,6 +1077,8 @@ int main(void)
     RUN_TEST(test_account_delete);
     RUN_TEST(test_account_is_per_site);
     RUN_TEST(test_search_create_and_list);
+    RUN_TEST(test_search_create_with_auto_favorite);
+    RUN_TEST(test_search_set_auto_favorite_toggles_an_existing_search);
     RUN_TEST(test_search_list_unseen_count);
     RUN_TEST(test_search_default_interval);
     RUN_TEST(test_search_delete);

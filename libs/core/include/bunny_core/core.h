@@ -66,10 +66,15 @@ bunny_core_result_t bunny_core_account_verify(bunny_core_t *core, bunny_db_site_
  * bunny_core_sync_due_searches below). bunny_core_search_list_posts is what
  * a search's synced results (see below) are read back through. */
 
-bunny_core_result_t bunny_core_search_create(bunny_core_t *core, bunny_db_site_t site, const char *label, const char *query, int interval_hours, int64_t *out_id);
+bunny_core_result_t bunny_core_search_create(bunny_core_t *core, bunny_db_site_t site, const char *label, const char *query, int interval_hours, bool auto_favorite, int64_t *out_id);
 bunny_core_result_t bunny_core_search_delete(bunny_core_t *core, int64_t search_id);
 bunny_core_result_t bunny_core_search_list(bunny_core_t *core, bunny_db_search_list_t *out_list);
 bunny_core_result_t bunny_core_search_list_posts(bunny_core_t *core, int64_t search_id, bool unseen_only, bunny_db_post_list_t *out_list);
+
+/* Toggles auto-favorite on an existing search (M9.6.8) -- editable after
+ * creation, not just at bunny_core_search_create time, so a search doesn't
+ * need to be deleted and recreated to turn this on/off. */
+bunny_core_result_t bunny_core_search_set_auto_favorite(bunny_core_t *core, int64_t search_id, bool auto_favorite);
 
 /* Fetches a single cached post by its local id -- a thin pass-through to
  * bunny_db, used when a post detail view needs to open a *different* post
