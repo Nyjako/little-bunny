@@ -199,6 +199,7 @@ void main() {
             'cached_at': '2026-01-01T00:00:00Z',
             'is_seen': false,
             'is_favorited': true,
+            'user_vote': 1,
             'sample_url': 'https://example.com/1_sample.png',
           },
         ]),
@@ -214,6 +215,7 @@ void main() {
       expect(posts.single.scoreUp, 6);
       expect(posts.single.scoreDown, 1);
       expect(posts.single.sampleUrl, 'https://example.com/1_sample.png');
+      expect(posts.single.userVote, 1);
     });
 
     test('tagAutocomplete sends site/prefix/limit as query params and maps results', () async {
@@ -339,6 +341,7 @@ void main() {
           'cached_at': '2026-01-01T00:00:00Z',
           'is_seen': false,
           'is_favorited': false,
+          'user_vote': 0,
           'sample_url': null,
         }),
         200,
@@ -379,6 +382,7 @@ void main() {
             'cached_at': '2026-01-01T00:00:00Z',
             'is_seen': false,
             'is_favorited': false,
+            'user_vote': 0,
             'sample_url': null,
           },
         ]),

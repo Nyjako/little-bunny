@@ -352,6 +352,7 @@ void bunny_db_fill_post_from_row(sqlite3_stmt *stmt, bunny_db_post_t *out)
     out->score_up = sqlite3_column_int(stmt, 20);
     out->score_down = sqlite3_column_int(stmt, 21);
     out->sample_url = bunny_db_column_text_dup(stmt, 22);
+    out->user_vote = sqlite3_column_int(stmt, 23);
 }
 
 bunny_db_result_t bunny_db_post_get(bunny_db_t *db, bunny_db_site_t site, int64_t external_id, bunny_db_post_t *out_post)

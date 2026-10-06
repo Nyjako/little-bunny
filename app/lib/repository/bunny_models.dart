@@ -86,6 +86,9 @@ class BunnyPost {
   /// null if the site didn't provide one, or it was never fetched (Inkbunny
   /// only populates this via a full submission fetch, not a search sync).
   final String? sampleUrl;
+  /// -1, 0 (no vote), or 1 -- the caller's own most recently successfully
+  /// sent vote direction (M9.7.1). Always 0 for Inkbunny (no vote API).
+  final int userVote;
 
   const BunnyPost({
     required this.id,
@@ -111,6 +114,7 @@ class BunnyPost {
     required this.isSeen,
     required this.isFavorited,
     this.sampleUrl,
+    this.userVote = 0,
   });
 }
 

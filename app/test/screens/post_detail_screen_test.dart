@@ -483,6 +483,50 @@ void main() {
     expect(find.text("Couldn't send that action -- it wasn't saved"), findsOneWidget);
   });
 
+  testWidgets('a successful upvote highlights the arrow, surviving a simulated reopen (M9.7.1)', (WidgetTester tester) async {
+    final repository = FakeBunnyRepository();
+    final post = _post(fileExt: 'jpg');
+
+    await tester.pumpWidget(wrapWithLocalization(PostDetailScreen(post: post, repository: repository, displaySettingsStore: const DisplaySettingsStore(), syncSettingsStore: const SyncSettingsStore(), downloadSettingsStore: const DownloadSettingsStore())));
+    await tester.pumpAndSettle();
+
+    Icon upvoteIcon() => tester.widget<Icon>(find.descendant(of: find.byTooltip('Upvote'), matching: find.byIcon(Icons.arrow_upward)));
+    expect(upvoteIcon().color, isNull);
+
+    await tester.tap(find.byTooltip('Upvote'));
+    await tester.pumpAndSettle();
+
+    expect(upvoteIcon().color, Colors.green);
+
+    // Reopening the post -- a fresh BunnyPost carrying the persisted
+    // userVote, the way a real repository read would return it after the
+    // M9.7.1 votes-mirror fix -- keeps the highlight. Before that fix there
+    // was nothing to carry: userVote didn't exist, so a reopened post could
+    // never show this at all.
+    final reopenedPost = BunnyPost(
+      id: post.id,
+      site: post.site,
+      externalId: post.externalId,
+      score: post.score,
+      favCount: post.favCount,
+      commentCount: post.commentCount,
+      width: post.width,
+      height: post.height,
+      cachedAt: post.cachedAt,
+      isSeen: post.isSeen,
+      isFavorited: post.isFavorited,
+      userVote: 1,
+    );
+    await tester.pumpWidget(
+      wrapWithLocalization(
+        PostDetailScreen(post: reopenedPost, repository: FakeBunnyRepository(), displaySettingsStore: const DisplaySettingsStore(), syncSettingsStore: const SyncSettingsStore(), downloadSettingsStore: const DownloadSettingsStore()),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(upvoteIcon().color, Colors.green);
+  });
+
   testWidgets('vote buttons are disabled for Inkbunny posts, favorite stays enabled', (WidgetTester tester) async {
     final repository = FakeBunnyRepository();
     final post = _post(fileExt: 'jpg', site: BunnySite.inkbunny);
