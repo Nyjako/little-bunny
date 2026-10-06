@@ -127,6 +127,7 @@
   "postDetailChildrenLabel": "Children",
   "postDetailPoolsLabel": "Pools",
   "postDetailOpenPostFailed": "Couldn't open that post",
+  "postDetailActionFailed": "Couldn't send that action -- it wasn't saved",
   "postDetailFavoriteAddTooltip": "Add to favorites",
   "postDetailFavoriteRemoveTooltip": "Remove from favorites",
   "postDetailUpvoteTooltip": "Upvote",

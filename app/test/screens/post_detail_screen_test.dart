@@ -445,6 +445,44 @@ void main() {
     expect(find.text('5'), findsOneWidget); // scoreDown optimistically bumped from 4
   });
 
+  testWidgets('a failed favorite action shows an error instead of flipping the icon (M9.6.9)', (WidgetTester tester) async {
+    final repository = FakeBunnyRepository();
+    repository.processQueueResult = const BunnyQueueStats(actionsProcessed: 1, actionsSucceeded: 0, actionsFailed: 1);
+    final post = _post(fileExt: 'jpg');
+
+    await tester.pumpWidget(wrapWithLocalization(PostDetailScreen(post: post, repository: repository, displaySettingsStore: const DisplaySettingsStore(), syncSettingsStore: const SyncSettingsStore(), downloadSettingsStore: const DownloadSettingsStore())));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byTooltip('Add to favorites'));
+    await tester.pumpAndSettle();
+
+    // Queued and drained, but the drain itself failed -- the UI must not
+    // pretend it succeeded (the bug reported after M9.6's redesign: a
+    // favorite looked applied until the post was reopened, because nothing
+    // was actually persisted on a failed send).
+    expect(repository.favoriteAddCalls, [1]);
+    expect(find.byTooltip('Add to favorites'), findsOneWidget);
+    expect(find.byTooltip('Remove from favorites'), findsNothing);
+    expect(find.text('10'), findsOneWidget); // favCount unchanged
+    expect(find.text("Couldn't send that action -- it wasn't saved"), findsOneWidget);
+  });
+
+  testWidgets('a failed vote action shows an error instead of bumping the count (M9.6.9)', (WidgetTester tester) async {
+    final repository = FakeBunnyRepository();
+    repository.processQueueResult = const BunnyQueueStats(actionsProcessed: 1, actionsSucceeded: 0, actionsFailed: 1);
+    final post = _post(fileExt: 'jpg');
+
+    await tester.pumpWidget(wrapWithLocalization(PostDetailScreen(post: post, repository: repository, displaySettingsStore: const DisplaySettingsStore(), syncSettingsStore: const SyncSettingsStore(), downloadSettingsStore: const DownloadSettingsStore())));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byTooltip('Upvote'));
+    await tester.pumpAndSettle();
+
+    expect(repository.voteCalls, [(1, 1)]);
+    expect(find.text('15'), findsOneWidget); // scoreUp unchanged
+    expect(find.text("Couldn't send that action -- it wasn't saved"), findsOneWidget);
+  });
+
   testWidgets('vote buttons are disabled for Inkbunny posts, favorite stays enabled', (WidgetTester tester) async {
     final repository = FakeBunnyRepository();
     final post = _post(fileExt: 'jpg', site: BunnySite.inkbunny);

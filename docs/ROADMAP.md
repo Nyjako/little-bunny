@@ -1086,6 +1086,27 @@ this file is the single source of truth for "what's done" across sessions.
   the full widget-test suite simulating both window widths and a Linux build smoke test; a true
   manual/visual check wasn't possible with the tools available in this session.
 
+- [x] **M9.6.9 — Fix: favorite/vote state not persisting on a failed queue drain**
+  A post-M9.6 bug report: favoriting or voting looked like it worked immediately, but reopening
+  the post later showed it unfavorited/unvoted again. Root cause: `PostDetailScreen._toggleFavorite`/
+  `_vote` applied their optimistic UI update *unconditionally*, discarding `processQueue()`'s
+  returned `BunnyQueueStats` entirely (wrapped in a bare `try { ... } catch (_) {}` that only
+  guarded against the call throwing, not against the action itself failing). `bunny_core_process_
+  queue` only calls `apply_favorite_mirror` -- the thing that actually persists `is_favorited` --
+  when the action *succeeds*; a failure (no account configured, a rejected request, a network
+  error surfaced as a non-exceptional failed-action-stat rather than a thrown exception) leaves
+  the local DB untouched, so the optimistic flip was lying about what had actually happened for as
+  long as the screen stayed open. Fixed by checking `stats.actionsFailed == 0` before applying the
+  optimistic update; a failed action now shows a `postDetailActionFailed` SnackBar instead of
+  silently (and incorrectly) looking successful. (Vote counts were never persisted as "the user's
+  own vote" in the first place -- e621's post API doesn't return that -- so this fix only
+  addresses the UI falsely claiming an action succeeded; a real "mark my own vote" feature is
+  separate follow-up work, tracked for a future sub-milestone.) Tests: two new widget tests
+  (`processQueueResult` is now settable on `FakeBunnyRepository` to simulate a failed drain)
+  confirming a failed favorite/vote shows the error and leaves the displayed favCount/scoreUp
+  unchanged, alongside the existing success-path tests (unaffected, since the fake still defaults
+  to an all-succeeded `BunnyQueueStats`).
+
 - [ ] **M10 — Automation & recommendations**
   "Auto-like/auto-favorite on download" setting, most-liked/most-favorited tag stats,
   recommended new searches based on that history.
