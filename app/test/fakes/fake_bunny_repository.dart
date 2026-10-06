@@ -266,6 +266,12 @@ class FakeBunnyRepository implements BunnyRepository {
   final List<(int, String, bool)> queueCommentCalls = [];
   int processQueueCallCount = 0;
 
+  /// Stats returned by [processQueue] -- defaults to "nothing failed" so
+  /// existing tests' favorite/vote optimistic-update assertions keep working
+  /// unchanged; set this to a stats value with `actionsFailed > 0` to
+  /// simulate a failed queue drain (M9.6.9).
+  BunnyQueueStats processQueueResult = const BunnyQueueStats(actionsProcessed: 0, actionsSucceeded: 0, actionsFailed: 0);
+
   @override
   Future<void> queueFavoriteAdd(int postId, {int? stars}) async {
     favoriteAddCalls.add(postId);
@@ -289,6 +295,6 @@ class FakeBunnyRepository implements BunnyRepository {
   @override
   Future<BunnyQueueStats> processQueue() async {
     processQueueCallCount++;
-    return const BunnyQueueStats(actionsProcessed: 0, actionsSucceeded: 0, actionsFailed: 0);
+    return processQueueResult;
   }
 }

@@ -1700,6 +1700,30 @@ check across window sizes -- which the plan called for given the layout risk -- 
 with the tools available in this session, since there's no way to drive or screenshot a native
 Linux GTK window the way the browser-preview tools can for a web app.
 
+**Fix: favorite/vote not persisting on a failed queue drain (M9.6.9)**: `bunny_core_process_
+queue` (`libs/core/src/queue.c`) only calls `apply_favorite_mirror` -- the function that writes
+to the `favorites` table, which is what `is_favorited` is actually computed from via `LEFT JOIN
+favorites` in `BUNNY_DB_POST_SELECT_COLUMNS` -- when `process_e621_action`/`process_inkbunny_
+action` return success for that specific action. A failure (no account configured, a rejected
+request, anything the site itself rejects) marks the action `FAILED` in `action_queue` and moves
+on; nothing is written to `favorites`, by design -- this part of `bunny_core` was already correct.
+The bug was entirely in `PostDetailScreen._toggleFavorite`/`_vote`: both called `processQueue()`
+and then unconditionally applied `_applyOptimisticUpdate`, discarding the returned `BunnyQueueStats`
+entirely. The `try`/`catch` around the call only guarded against `processQueue()` itself throwing
+(a thrown exception, e.g. a network-level failure) -- a *returned* failed-action count was never a
+caught exception, so it sailed straight through to the unconditional optimistic flip every time.
+The UI looked right for the rest of that screen's session (nothing ever re-read the DB to
+contradict it) and only showed the true, never-persisted state once the post was reopened and
+`PostDetailScreen` initialized `_post` from a `BunnyPost` that reflected what's actually in
+`favorites`. Fixed by checking `stats.actionsFailed == 0` before applying the optimistic update,
+surfacing a new generic `postDetailActionFailed` SnackBar otherwise -- the same "swallow network
+errors, but now also check for a returned failure" treatment `_downloadFile` already gave its own
+outcome. Votes themselves still have no "did *I* vote, and which way" concept anywhere -- e621's
+post-listing API doesn't return the caller's own vote, so there was never anything to mark beyond
+the global `scoreUp`/`scoreDown` totals this fix now at least persists correctly; a real per-user
+vote indicator would need a new local-only table mirroring the `favorites` pattern, deliberately
+left as separate follow-up work rather than folded into this fix.
+
 ## Inkbunny API constraints (found in M2)
 
 Verified against the live API and the official docs while building `libinkbunny`:
