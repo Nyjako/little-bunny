@@ -33,7 +33,7 @@ bool _isImage(BunnyPost post) => post.fileExt != null && _imageExtensions.contai
 /// waiting for a resync. No `copyWith` exists on [BunnyPost] (nothing else
 /// needed one), so this just lists every field once, same manual-
 /// reconstruction approach `FakeBunnyRepository._markedSeen` already uses.
-BunnyPost _applyOptimisticUpdate(BunnyPost post, {bool? isFavorited, int favCountDelta = 0, int scoreDelta = 0, int scoreUpDelta = 0, int scoreDownDelta = 0}) => BunnyPost(
+BunnyPost _applyOptimisticUpdate(BunnyPost post, {bool? isFavorited, int favCountDelta = 0, int scoreDelta = 0, int scoreUpDelta = 0, int scoreDownDelta = 0, int? userVote}) => BunnyPost(
   id: post.id,
   site: post.site,
   externalId: post.externalId,
@@ -57,6 +57,7 @@ BunnyPost _applyOptimisticUpdate(BunnyPost post, {bool? isFavorited, int favCoun
   isSeen: post.isSeen,
   isFavorited: isFavorited ?? post.isFavorited,
   sampleUrl: post.sampleUrl,
+  userVote: userVote ?? post.userVote,
 );
 
 /// Full read-only metadata + media viewer for a single post (M8.4, redesigned
@@ -231,7 +232,7 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
       return;
     }
     setState(() {
-      _post = _applyOptimisticUpdate(_post, scoreDelta: score, scoreUpDelta: score > 0 ? 1 : 0, scoreDownDelta: score < 0 ? 1 : 0);
+      _post = _applyOptimisticUpdate(_post, scoreDelta: score, scoreUpDelta: score > 0 ? 1 : 0, scoreDownDelta: score < 0 ? 1 : 0, userVote: score);
     });
   }
 
@@ -319,8 +320,20 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
             children: [
               RatingBadge(site: post.site, rating: post.rating),
               const SizedBox(width: 8),
-              _statAction(icon: Icons.arrow_upward, count: post.scoreUp, tooltip: l10n.postDetailUpvoteTooltip, onPressed: votingEnabled ? () => _vote(l10n, 1) : null),
-              _statAction(icon: Icons.arrow_downward, count: post.scoreDown, tooltip: l10n.postDetailDownvoteTooltip, onPressed: votingEnabled ? () => _vote(l10n, -1) : null),
+              _statAction(
+                icon: Icons.arrow_upward,
+                count: post.scoreUp,
+                tooltip: l10n.postDetailUpvoteTooltip,
+                onPressed: votingEnabled ? () => _vote(l10n, 1) : null,
+                color: post.userVote == 1 ? Colors.green : null,
+              ),
+              _statAction(
+                icon: Icons.arrow_downward,
+                count: post.scoreDown,
+                tooltip: l10n.postDetailDownvoteTooltip,
+                onPressed: votingEnabled ? () => _vote(l10n, -1) : null,
+                color: post.userVote == -1 ? Colors.orange : null,
+              ),
               _statAction(
                 icon: post.isFavorited ? Icons.favorite : Icons.favorite_border,
                 count: post.favCount,

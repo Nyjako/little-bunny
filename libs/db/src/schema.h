@@ -121,6 +121,15 @@ static const char *const BUNNY_DB_SCHEMA_SQL = "PRAGMA foreign_keys = ON;"
                                                "    stars INTEGER," /* Inkbunny 1-3; NULL for e621's plain favorite */
                                                "    favorited_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))"
                                                ");"
+                                               /* e621 only -- Inkbunny has no vote API. Mirrors the caller's own most
+                                                * recently *successfully sent* vote direction (M9.7.1); e621's post API
+                                                * has no "did I vote, and which way" field to resync this from, so this
+                                                * is the only source of truth for it. */
+                                               "CREATE TABLE IF NOT EXISTS votes ("
+                                               "    post_id INTEGER PRIMARY KEY REFERENCES posts(id) ON DELETE CASCADE,"
+                                               "    score INTEGER NOT NULL CHECK (score IN (-1, 1)),"
+                                               "    voted_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))"
+                                               ");"
                                                "CREATE TABLE IF NOT EXISTS downloads ("
                                                "    id INTEGER PRIMARY KEY,"
                                                "    post_id INTEGER NOT NULL REFERENCES posts(id) ON DELETE CASCADE,"

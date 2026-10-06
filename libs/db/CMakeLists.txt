@@ -6,6 +6,7 @@ add_library(bunny_db STATIC
     src/searches.c
     src/posts.c
     src/favorites.c
+    src/votes.c
     src/downloads.c
     src/stats.c
     src/action_queue.c

@@ -361,6 +361,39 @@ void test_favorite_add_remove_list(void)
     bunny_db_post_list_free(&favorites);
 }
 
+void test_vote_set_upserts_and_is_read_back(void)
+{
+    bunny_db_post_upsert_t post;
+    make_test_post(&post, 410, 1);
+    int64_t id = 0;
+    bunny_db_post_upsert(g_db, &post, &id);
+
+    bunny_db_post_t fetched;
+    bunny_db_post_get(g_db, BUNNY_DB_SITE_E621, 410, &fetched);
+    TEST_ASSERT_EQUAL(0, fetched.user_vote);
+    bunny_db_post_free(&fetched);
+
+    bunny_db_result_t result = bunny_db_vote_set(g_db, id, 1);
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, result);
+    bunny_db_post_get(g_db, BUNNY_DB_SITE_E621, 410, &fetched);
+    TEST_ASSERT_EQUAL(1, fetched.user_vote);
+    bunny_db_post_free(&fetched);
+
+    /* Switching direction overwrites in place rather than erroring or
+     * stacking a second row. */
+    result = bunny_db_vote_set(g_db, id, -1);
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, result);
+    bunny_db_post_get(g_db, BUNNY_DB_SITE_E621, 410, &fetched);
+    TEST_ASSERT_EQUAL(-1, fetched.user_vote);
+    bunny_db_post_free(&fetched);
+}
+
+void test_vote_set_rejects_an_invalid_score(void)
+{
+    bunny_db_result_t result = bunny_db_vote_set(g_db, 1, 0);
+    TEST_ASSERT_EQUAL(BUNNY_DB_ERR_INVALID_ARG, result);
+}
+
 void test_search_results_and_list_posts(void)
 {
     int64_t search_id = 0;
@@ -1089,6 +1122,8 @@ int main(void)
     RUN_TEST(test_seen_state);
     RUN_TEST(test_search_mark_all_seen_only_affects_that_searchs_posts);
     RUN_TEST(test_favorite_add_remove_list);
+    RUN_TEST(test_vote_set_upserts_and_is_read_back);
+    RUN_TEST(test_vote_set_rejects_an_invalid_score);
     RUN_TEST(test_search_results_and_list_posts);
     RUN_TEST(test_search_list_posts_orders_newest_first_by_site_date);
     RUN_TEST(test_download_record_and_list);

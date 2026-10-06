@@ -139,6 +139,14 @@ bunny_db_result_t bunny_db_favorite_add(bunny_db_t *db, int64_t post_id, int sta
 bunny_db_result_t bunny_db_favorite_remove(bunny_db_t *db, int64_t post_id);
 bunny_db_result_t bunny_db_favorite_list(bunny_db_t *db, bunny_db_post_list_t *out_list);
 
+/* --- Votes mirror (M9.7.1) ---------------------------------------------------
+ * A local cache of the caller's own most recently *successfully sent* vote
+ * direction -- e621 only (Inkbunny has no vote API). e621's post-listing API
+ * never returns "did I vote, and which way," so this is the only source of
+ * truth for it; does not itself call any site API. */
+
+bunny_db_result_t bunny_db_vote_set(bunny_db_t *db, int64_t post_id, int score /* -1 or 1 */);
+
 /* --- Downloads -------------------------------------------------------------- */
 
 bunny_db_result_t bunny_db_download_record(bunny_db_t *db, int64_t post_id, const char *file_path, const char *checksum_md5, bool verified, int64_t *out_id);
