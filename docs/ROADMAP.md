@@ -1133,6 +1133,16 @@ this file is the single source of truth for "what's done" across sessions.
   `PostDetailScreen` built from a `BunnyPost` carrying `userVote` directly, the way a real
   repository read would return it).
 
+- [x] **M9.7.3 — Video/GIF badge on grid thumbnails**
+  New `app/lib/util/media_type.dart`: pure `isVideoExt`/`isGifExt` functions factored out of
+  `PostDetailScreen`'s previously-private `_videoExtensions` set (now reused there too, replacing
+  the duplicate), shared with `PostGridTile`. Every corner of a tile was already spoken for
+  (rating badge top-left, unseen-dot/selection-checkmark top-right, the full-width score/favCount
+  bar along the bottom) so the media-type marker is centered instead: a play icon for a video,
+  a small "GIF" chip for an animated GIF, nothing for a plain image. Tests: `media_type_test.dart`
+  unit tests for both pure functions (case-insensitivity, null handling), and a new
+  `test/widgets/post_grid_tile_test.dart` covering all three outcomes (video, gif, neither).
+
 - [ ] **M10 — Automation & recommendations**
   "Auto-like/auto-favorite on download" setting, most-liked/most-favorited tag stats,
   recommended new searches based on that history.
