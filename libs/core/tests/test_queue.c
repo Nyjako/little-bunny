@@ -204,6 +204,15 @@ void test_queue_e621_vote_succeeds(void)
     result = bunny_core_process_queue(g_core, &stats);
     TEST_ASSERT_EQUAL(BUNNY_CORE_OK, result);
     TEST_ASSERT_EQUAL(1, stats.actions_succeeded);
+
+    /* M9.7.1: a successful vote now persists locally too -- unlike
+     * favorites, there was never anything to resync this from, so this is
+     * the only way "did I vote, and which way" survives a reopened post. */
+    bunny_db_post_t post;
+    result = bunny_core_post_get_by_id(g_core, post_id, &post);
+    TEST_ASSERT_EQUAL(BUNNY_CORE_OK, result);
+    TEST_ASSERT_EQUAL(1, post.user_vote);
+    bunny_db_post_free(&post);
 }
 
 void test_queue_e621_comment_succeeds(void)

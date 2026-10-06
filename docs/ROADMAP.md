@@ -1107,6 +1107,32 @@ this file is the single source of truth for "what's done" across sessions.
   unchanged, alongside the existing success-path tests (unaffected, since the fake still defaults
   to an all-succeeded `BunnyQueueStats`).
 
+- [x] **M9.7.1 — Persistent own-vote tracking + visual marking**
+  M9.6.9 fixed favorite/vote state from *lying*, but votes still had nothing to actually persist
+  -- e621's post-listing API has no "did I vote, and which way" field, so unlike favorites
+  (backed by the `favorites` table) there was no local source of truth to even check. New `votes`
+  table (`libs/db/src/schema.h`, new table so no migration needed) mirrors the caller's own most
+  recently *successfully sent* vote direction; new `libs/db/src/votes.c`'s `bunny_db_vote_set`
+  upserts it. `BUNNY_DB_POST_SELECT_COLUMNS`/`_FROM_JOIN` grow a `LEFT JOIN votes` the same way
+  `favorites` already joins in `is_favorited`; every `bunny_db_post_t` now carries `user_vote`
+  (0/1/-1). `libs/core/src/queue.c` gained `apply_vote_mirror`, called from
+  `bunny_core_process_queue` alongside `apply_favorite_mirror` on a successful vote action. Full
+  plumbing: FFI bindings regen, server's `post_to_json` (all three copies: `routes_searches.c`,
+  `routes_search.c`, `routes_queue.c`) gains `"user_vote"`, `BunnyPost.userVote` threaded through
+  FFI/HTTP/Fake. UI: `PostDetailScreen`'s upvote/downvote stat actions highlight green/orange
+  when `post.userVote` matches, using the same optimistic-update-on-success pattern M9.6.9
+  already established (no change to when the color updates, just what triggers it). Known,
+  documented limitation: e621 treats a repeat same-direction vote as an "unvote" server-side,
+  which this mirror doesn't detect -- it always records whichever direction was just
+  successfully sent, the same fidelity gap `apply_favorite_mirror` already accepted for
+  toggle-driven state. Tests: a C `:memory:` test for `bunny_db_vote_set`'s upsert-on-conflict
+  behavior (including rejecting a `0` score), an extended sync+queue test confirming a successful
+  vote is actually readable afterward via `bunny_core_post_get_by_id`, a server integration test
+  for the new JSON field, an HTTP repository test, and a widget test confirming the upvote
+  highlight appears after a successful vote and survives a simulated reopen (a fresh
+  `PostDetailScreen` built from a `BunnyPost` carrying `userVote` directly, the way a real
+  repository read would return it).
+
 - [ ] **M10 — Automation & recommendations**
   "Auto-like/auto-favorite on download" setting, most-liked/most-favorited tag stats,
   recommended new searches based on that history.

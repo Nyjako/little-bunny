@@ -352,11 +352,24 @@ void test_full_account_search_sync_favorite_flow(void)
     free(response.data);
     memset(&response, 0, sizeof(response));
 
+    /* M9.7.1: an upvote queued right alongside the favorite above, so a
+     * single /queue/process drains both in one pass. */
+    status = do_request("POST", "/posts/1/vote", "{\"score\":1}", &response, true, NULL);
+    TEST_ASSERT_EQUAL(202, status);
+    free(response.data);
+    memset(&response, 0, sizeof(response));
+
     status = do_request("POST", "/queue/process", NULL, &response, true, NULL);
     TEST_ASSERT_EQUAL(200, status);
-    /* No e621 account credentials matter here -- favorite_add just needs
+    /* No e621 account credentials matter here -- favorite_add/vote just need
      * status 200, which the fake transport always returns. */
-    TEST_ASSERT_NOT_NULL(strstr(response.data, "\"actions_succeeded\":1"));
+    TEST_ASSERT_NOT_NULL(strstr(response.data, "\"actions_succeeded\":2"));
+    free(response.data);
+    memset(&response, 0, sizeof(response));
+
+    status = do_request("GET", "/searches/1/posts", NULL, &response, true, NULL);
+    TEST_ASSERT_EQUAL(200, status);
+    TEST_ASSERT_NOT_NULL(strstr(response.data, "\"user_vote\":1"));
     free(response.data);
     memset(&response, 0, sizeof(response));
 

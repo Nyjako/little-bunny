@@ -1724,6 +1724,36 @@ the global `scoreUp`/`scoreDown` totals this fix now at least persists correctly
 vote indicator would need a new local-only table mirroring the `favorites` pattern, deliberately
 left as separate follow-up work rather than folded into this fix.
 
+**Persistent own-vote tracking + visual marking (M9.7.1)**: the follow-up work M9.6.9 flagged.
+A new `votes` table (`libs/db/src/schema.h`) is deliberately a *new* table rather than a migration
+-- same reasoning `favorites`/`downloads` already established back in M8.5.0: `CREATE TABLE IF
+NOT EXISTS` is free on every `bunny_db_open()`, only `ALTER TABLE` on a table that already shipped
+needs the migration runner. `libs/db/src/votes.c`'s `bunny_db_vote_set` is a near-identical
+upsert to `bunny_db_favorite_add` (`INSERT ... ON CONFLICT(post_id) DO UPDATE`), with a `CHECK
+(score IN (-1, 1))` constraint enforced both in SQL and in the C function's own argument
+validation. `BUNNY_DB_POST_SELECT_COLUMNS`/`_FROM_JOIN` (`libs/db/src/internal.h`) grow a `LEFT
+JOIN votes` exactly the way `favorites` already joins in to compute `is_favorited` -- every
+`bunny_db_post_t` (and therefore every post read anywhere in the app, not just the detail screen)
+now carries `user_vote` for free. The actual write happens inside `bunny_core_process_queue`
+(`libs/core/src/queue.c`): a new `apply_vote_mirror`, structurally identical to `apply_favorite_
+mirror`, called right alongside it whenever a `BUNNY_DB_ACTION_VOTE` action succeeds. Because
+`process_inkbunny_action` already rejects any vote action outright (`libs/core/src/queue.c`,
+confirmed back in M4.3), `apply_vote_mirror` is only ever reached for e621 posts in practice --
+no explicit site check needed, the same reasoning M9.6.8's `auto_upvote` hook (M9.7.2) relies on.
+
+The server has three separate `post_to_json`-shaped functions (`routes_searches.c`, `routes_
+search.c`, `routes_queue.c` -- each route file apparently grew its own copy rather than sharing
+one, predating this sub-milestone), so the new `"user_vote"` field had to be added in all three
+rather than one shared place; worth factoring into a shared helper if a fourth copy ever appears.
+UI: `PostDetailScreen`'s upvote/downvote `_statAction`s pass a highlight color (green/orange) when
+`post.userVote` matches that direction, using the exact same `_applyOptimisticUpdate`-on-success
+path M9.6.9 already built -- the only change there was adding a `userVote` parameter alongside
+the existing score deltas. Documented limitation: e621 treats a repeat same-direction vote as an
+"unvote" server-side (clicking upvote on an already-upvoted post removes the vote); `apply_vote_
+mirror` has no way to detect this from the API response it currently inspects (just the HTTP
+status), so it always records whichever direction was just successfully sent -- the same
+toggle-blind-spot `apply_favorite_mirror` already has, not a new regression introduced here.
+
 ## Inkbunny API constraints (found in M2)
 
 Verified against the live API and the official docs while building `libinkbunny`:

@@ -89,13 +89,15 @@ static inline void bunny_db_bind_text_or_null(sqlite3_stmt *stmt, int idx, const
     "p.id, p.site, p.external_id, p.artist, p.title, p.description, p.rating, p.score, p.fav_count, " \
     "p.comment_count, p.file_url, p.file_ext, p.file_md5, p.preview_url, p.width, p.height, "         \
     "p.created_at_site, p.cached_at, (seen.post_id IS NOT NULL) AS is_seen, "                         \
-    "(fav.post_id IS NOT NULL) AS is_favorited, p.score_up, p.score_down, pmv.sample_url "
+    "(fav.post_id IS NOT NULL) AS is_favorited, p.score_up, p.score_down, pmv.sample_url, "           \
+    "COALESCE(vt.score, 0) AS user_vote "
 
-#define BUNNY_DB_POST_SELECT_FROM_JOIN                  \
-    "FROM posts p "                                     \
-    "LEFT JOIN seen_posts seen ON seen.post_id = p.id " \
-    "LEFT JOIN favorites fav ON fav.post_id = p.id "    \
-    "LEFT JOIN post_media_variants pmv ON pmv.post_id = p.id "
+#define BUNNY_DB_POST_SELECT_FROM_JOIN                         \
+    "FROM posts p "                                            \
+    "LEFT JOIN seen_posts seen ON seen.post_id = p.id "        \
+    "LEFT JOIN favorites fav ON fav.post_id = p.id "           \
+    "LEFT JOIN post_media_variants pmv ON pmv.post_id = p.id " \
+    "LEFT JOIN votes vt ON vt.post_id = p.id "
 
 /* Defined in posts.c; expects a row shaped like BUNNY_DB_POST_SELECT_COLUMNS. */
 void bunny_db_fill_post_from_row(sqlite3_stmt *stmt, bunny_db_post_t *out);
