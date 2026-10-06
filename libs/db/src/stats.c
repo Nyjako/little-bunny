@@ -9,7 +9,7 @@
 
 GOBLIN_DYN_ARRAY_DECL(bunny_db_tag_stat, bunny_db_tag_stat_t)
 
-bunny_db_result_t bunny_db_top_favorited_tags(bunny_db_t *db, int limit, bunny_db_tag_stat_list_t *out_list)
+bunny_db_result_t bunny_db_top_favorited_tags(bunny_db_t *db, bunny_db_site_t site, int limit, bunny_db_tag_stat_list_t *out_list)
 {
     if (!db || !out_list) {
         return BUNNY_DB_ERR_INVALID_ARG;
@@ -20,6 +20,7 @@ bunny_db_result_t bunny_db_top_favorited_tags(bunny_db_t *db, int limit, bunny_d
                       "FROM tags t "
                       "JOIN post_tags pt ON pt.tag_id = t.id "
                       "JOIN favorites f ON f.post_id = pt.post_id "
+                      "WHERE t.site = ? "
                       "GROUP BY t.id "
                       "ORDER BY n DESC, t.name ASC "
                       "LIMIT ?;";
@@ -27,7 +28,8 @@ bunny_db_result_t bunny_db_top_favorited_tags(bunny_db_t *db, int limit, bunny_d
     if (sqlite3_prepare_v2(db->handle, sql, -1, &stmt, NULL) != SQLITE_OK) {
         return BUNNY_DB_ERR_QUERY_FAILED;
     }
-    sqlite3_bind_int(stmt, 1, limit > 0 ? limit : 10);
+    sqlite3_bind_text(stmt, 1, bunny_db_site_to_string(site), -1, SQLITE_STATIC);
+    sqlite3_bind_int(stmt, 2, limit > 0 ? limit : 10);
 
     bunny_db_tag_stat_array arr;
     bunny_db_tag_stat_array_init(&arr);

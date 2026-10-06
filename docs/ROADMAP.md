@@ -1200,8 +1200,30 @@ this file is the single source of truth for "what's done" across sessions.
   `SettingsScreen` widget test for the toggle persisting, and `PostDetailScreen`/`PostGridScreen`
   widget tests confirming the queue+drain calls fire (or don't) exactly when expected.
 
-- [ ] **M10.2 — Most-favorited tag stats + recommended-search entry point**
-  Most-liked/most-favorited tag stats, recommended new searches based on that history.
+- [x] **M10.2 — Most-favorited tag stats + recommended-search entry point**
+  `bunny_db_top_favorited_tags` existed since M3 but was never wired past the db layer, and had a
+  real bug: unlike `bunny_db_tag_autocomplete`'s otherwise-identical query, it had no `site` filter
+  at all, so (since `tags` is `UNIQUE(site, name)`) an e621 "wolf" and an Inkbunny "wolf" would
+  both surface as indistinguishable `{name: "wolf", count: N}` rows. Fixed by giving it the same
+  `bunny_db_site_t site` parameter `tag_autocomplete` already has (`WHERE t.site = ?`) -- a side
+  effect of adding the parameter this sub-milestone needed anyway. Full plumbing mirroring
+  `tag_autocomplete`'s chain exactly: `bunny_core_top_favorited_tags` (thin wrapper, `libs/core/
+  src/searches.c`), FFI `_TopFavoritedTagsRequest`/handler, a new `GET /tags/top_favorited?site=&
+  limit=` route (a sibling registration alongside `GET /tags/autocomplete` in `server/src/
+  routes_tags.c`, not a new file), and `BunnyRepository.topFavoritedTags(site, {limit = 20})`
+  across FFI/HTTP/Fake -- reusing `BunnyTagStat` as-is (already exactly `{name, count}`), no new
+  model needed. New `app/lib/screens/tag_stats_screen.dart`: a `SegmentedButton<BunnySite>`
+  (matching `CreateSearchScreen`'s site toggle) above a list of tag/count rows for the selected
+  site, each tappable into the existing `TagBrowseScreen` (M8.5.10) -- which already has its own
+  "add to searches" action, so the tag itself *is* the recommendation; no separate recommendation/
+  dedup logic was built (confirmed scope: no filtering against tags already covered by an existing
+  saved search). `SearchesScreen`'s app bar gained one more icon opening this screen, alongside
+  the existing accounts/settings icons. Tests at every layer: a new C `:memory:` test confirming
+  the fix (favoriting an e621 "wolf" post and an Inkbunny "wolf" post, then confirming each site's
+  `top_favorited_tags` call only counts its own), a `bunny_core` wrapper test, a server integration
+  test for the new route, FFI/HTTP repository tests, and widget tests for `TagStatsScreen` (empty
+  state, per-site list switching, tapping a tag opening `TagBrowseScreen` with the right site/
+  query) plus a `SearchesScreen` test confirming the new icon opens it.
 
 - [ ] **M11 — Backup & import**
   Export/import of our own searches. Import from "The Wolf's Stash"

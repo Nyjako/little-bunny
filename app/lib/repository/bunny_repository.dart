@@ -85,6 +85,14 @@ abstract interface class BunnyRepository {
     int limit = 10,
   });
 
+  /// Ranks tags of currently-favorited [site] posts by how many favorited
+  /// posts carry them, descending -- feeds a "most favorited tags" browse
+  /// screen (M10.2). Scoped to one site at a time, same as [tagAutocomplete].
+  Future<List<BunnyTagStat>> topFavoritedTags(
+    BunnySite site, {
+    int limit = 20,
+  });
+
   /// Marks a post seen (global per post, not per search) -- clears the
   /// unseen marker [listSearchPosts]'s `unseenOnly` filter and
   /// `BunnyPost.isSeen` are based on.

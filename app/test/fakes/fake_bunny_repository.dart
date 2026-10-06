@@ -14,6 +14,7 @@ class FakeBunnyRepository implements BunnyRepository {
   final List<BunnySearch> searches = [];
   final Map<int, List<BunnyPost>> postsBySearchId = {};
   final List<BunnyTagStat> tagStats = [];
+  final Map<BunnySite, List<BunnyTagStat>> topFavoritedTagsBySite = {};
   final Map<int, List<BunnyPostTag>> tagsByPostId = {};
   final Map<int, List<String>> sourcesByPostId = {};
   final Map<int, BunnyPostRelationships> relationshipsByPostId = {};
@@ -148,6 +149,12 @@ class FakeBunnyRepository implements BunnyRepository {
   @override
   Future<List<BunnyTagStat>> tagAutocomplete(BunnySite site, String prefix, {int limit = 10}) async {
     final matches = tagStats.where((stat) => stat.name.startsWith(prefix)).toList();
+    return matches.length > limit ? matches.sublist(0, limit) : matches;
+  }
+
+  @override
+  Future<List<BunnyTagStat>> topFavoritedTags(BunnySite site, {int limit = 20}) async {
+    final matches = topFavoritedTagsBySite[site] ?? const [];
     return matches.length > limit ? matches.sublist(0, limit) : matches;
   }
 

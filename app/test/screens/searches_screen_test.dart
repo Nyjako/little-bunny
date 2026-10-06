@@ -146,6 +146,16 @@ void main() {
     expect(find.text('Accounts'), findsOneWidget);
   });
 
+  testWidgets('tapping the tag stats icon opens TagStatsScreen (M10.2)', (WidgetTester tester) async {
+    await tester.pumpWidget(_wrap(FakeBunnyRepository()));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byIcon(Icons.bar_chart_outlined));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Tag stats'), findsOneWidget);
+  });
+
   testWidgets('tapping the settings icon opens SettingsScreen', (WidgetTester tester) async {
     await tester.pumpWidget(_wrap(FakeBunnyRepository()));
     await tester.pumpAndSettle();

@@ -373,6 +373,15 @@ void test_full_account_search_sync_favorite_flow(void)
     free(response.data);
     memset(&response, 0, sizeof(response));
 
+    /* M10.2: post 1 (tags "one"/"someartist") was favorited a few requests
+     * ago, so both tags now show up here with count 1. */
+    status = do_request("GET", "/tags/top_favorited?site=e621", NULL, &response, true, NULL);
+    TEST_ASSERT_EQUAL(200, status);
+    TEST_ASSERT_NOT_NULL(strstr(response.data, "\"name\":\"one\""));
+    TEST_ASSERT_NOT_NULL(strstr(response.data, "\"name\":\"someartist\""));
+    free(response.data);
+    memset(&response, 0, sizeof(response));
+
     status = do_request("GET", "/posts/1/downloads", NULL, &response, true, NULL);
     TEST_ASSERT_EQUAL(200, status);
     TEST_ASSERT_EQUAL_STRING("[]", response.data);
