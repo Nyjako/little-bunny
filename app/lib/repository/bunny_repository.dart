@@ -41,22 +41,36 @@ abstract interface class BunnyRepository {
 
   /// Returns the new search's id. [autoFavorite] (M9.6.8) queues a favorite
   /// for every post this search finds during sync, starting with the very
-  /// next sync pass -- editable afterward too, via [setSearchAutoFavorite].
+  /// next sync pass; [autoFavoriteStars] is Inkbunny's 1-3 favorite level
+  /// (ignored by e621); [autoUpvote] (M9.7.2, e621 only) queues an upvote the
+  /// same way. All three are editable afterward too, via [updateSearch].
   Future<int> createSearch(
     BunnySite site,
     String label,
     String query, {
     int intervalHours = 24,
     bool autoFavorite = false,
+    int autoFavoriteStars = 1,
+    bool autoUpvote = false,
   });
 
   Future<List<BunnySearch>> listSearches();
 
   Future<void> deleteSearch(int searchId);
 
-  /// Toggles auto-favorite on an existing search (M9.6.8) -- the only way to
-  /// change it after creation, since there's no general "edit search" flow.
-  Future<void> setSearchAutoFavorite(int searchId, bool autoFavorite);
+  /// Updates a search's editable fields in place (M9.7.2) -- replaces the
+  /// narrower setSearchAutoFavorite (M9.6.8), so a search's label/query/
+  /// interval/auto-favorite/auto-upvote settings can all be changed from one
+  /// edit screen. The site itself is not editable.
+  Future<void> updateSearch(
+    int searchId,
+    String label,
+    String query, {
+    int intervalHours = 24,
+    bool autoFavorite = false,
+    int autoFavoriteStars = 1,
+    bool autoUpvote = false,
+  });
 
   Future<List<BunnyPost>> listSearchPosts(
     int searchId, {

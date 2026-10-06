@@ -26,6 +26,8 @@ BunnySearch _searchFromJson(Map<String, Object?> j) => BunnySearch(
   lastRunAt: j['last_run_at'] as String?,
   unseenCount: (j['unseen_count'] as num).toInt(),
   autoFavorite: j['auto_favorite'] as bool,
+  autoFavoriteStars: (j['auto_favorite_stars'] as num).toInt(),
+  autoUpvote: j['auto_upvote'] as bool,
 );
 
 BunnyPost _postFromJson(Map<String, Object?> j) => BunnyPost(
@@ -200,11 +202,19 @@ class HttpBunnyRepository implements BunnyRepository {
   }
 
   @override
-  Future<int> createSearch(BunnySite site, String label, String query, {int intervalHours = 24, bool autoFavorite = false}) async {
+  Future<int> createSearch(BunnySite site, String label, String query, {int intervalHours = 24, bool autoFavorite = false, int autoFavoriteStars = 1, bool autoUpvote = false}) async {
     final response = await _client.post(
       _uri('/searches'),
       headers: _headers,
-      body: jsonEncode({'site': site.toWireString(), 'label': label, 'query': query, 'interval_hours': intervalHours, 'auto_favorite': autoFavorite}),
+      body: jsonEncode({
+        'site': site.toWireString(),
+        'label': label,
+        'query': query,
+        'interval_hours': intervalHours,
+        'auto_favorite': autoFavorite,
+        'auto_favorite_stars': autoFavoriteStars,
+        'auto_upvote': autoUpvote,
+      }),
     );
     if (response.statusCode != 201) {
       _throwError(response);
@@ -230,8 +240,19 @@ class HttpBunnyRepository implements BunnyRepository {
   }
 
   @override
-  Future<void> setSearchAutoFavorite(int searchId, bool autoFavorite) async {
-    final response = await _client.post(_uri('/searches/$searchId/auto_favorite'), headers: _headers, body: jsonEncode({'auto_favorite': autoFavorite}));
+  Future<void> updateSearch(int searchId, String label, String query, {int intervalHours = 24, bool autoFavorite = false, int autoFavoriteStars = 1, bool autoUpvote = false}) async {
+    final response = await _client.put(
+      _uri('/searches/$searchId'),
+      headers: _headers,
+      body: jsonEncode({
+        'label': label,
+        'query': query,
+        'interval_hours': intervalHours,
+        'auto_favorite': autoFavorite,
+        'auto_favorite_stars': autoFavoriteStars,
+        'auto_upvote': autoUpvote,
+      }),
+    );
     if (response.statusCode != 200) {
       _throwError(response);
     }

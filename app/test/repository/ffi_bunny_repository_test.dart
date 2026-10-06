@@ -102,16 +102,20 @@ void main() {
     expect(searches.single.autoFavorite, isFalse);
   });
 
-  test('createSearch with autoFavorite, then setSearchAutoFavorite round-trips (M9.6.8)', () async {
+  test('createSearch with autoFavorite, then updateSearch round-trips (M9.7.2)', () async {
     final id = await repository.createSearch(BunnySite.e621, 'my search', 'rating:safe', autoFavorite: true);
 
     final created = await repository.listSearches();
     expect(created.single.autoFavorite, isTrue);
 
-    await repository.setSearchAutoFavorite(id, false);
+    await repository.updateSearch(id, 'renamed', 'rating:explicit', intervalHours: 6, autoFavorite: false, autoUpvote: true);
 
     final updated = await repository.listSearches();
+    expect(updated.single.label, 'renamed');
+    expect(updated.single.query, 'rating:explicit');
+    expect(updated.single.intervalHours, 6);
     expect(updated.single.autoFavorite, isFalse);
+    expect(updated.single.autoUpvote, isTrue);
   });
 
   test('syncDueSearches returns a BunnySyncStats', () async {
