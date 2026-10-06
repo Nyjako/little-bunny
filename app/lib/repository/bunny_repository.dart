@@ -39,17 +39,24 @@ abstract interface class BunnyRepository {
 
   Future<void> deleteAccount(BunnySite site);
 
-  /// Returns the new search's id.
+  /// Returns the new search's id. [autoFavorite] (M9.6.8) queues a favorite
+  /// for every post this search finds during sync, starting with the very
+  /// next sync pass -- editable afterward too, via [setSearchAutoFavorite].
   Future<int> createSearch(
     BunnySite site,
     String label,
     String query, {
     int intervalHours = 24,
+    bool autoFavorite = false,
   });
 
   Future<List<BunnySearch>> listSearches();
 
   Future<void> deleteSearch(int searchId);
+
+  /// Toggles auto-favorite on an existing search (M9.6.8) -- the only way to
+  /// change it after creation, since there's no general "edit search" flow.
+  Future<void> setSearchAutoFavorite(int searchId, bool autoFavorite);
 
   Future<List<BunnyPost>> listSearchPosts(
     int searchId, {

@@ -114,14 +114,22 @@ void main() {
 
       expect(capturedMethod, 'POST');
       expect(capturedUri.path, '/searches');
-      expect(jsonDecode(capturedBody), {'site': 'e621', 'label': 'my search', 'query': 'rating:safe', 'interval_hours': 12});
+      expect(jsonDecode(capturedBody), {'site': 'e621', 'label': 'my search', 'query': 'rating:safe', 'interval_hours': 12, 'auto_favorite': false});
       expect(id, 42);
+    });
+
+    test('createSearch sends the given auto_favorite value', () async {
+      respond = (_) => http.Response(jsonEncode({'id': 42}), 201);
+
+      await buildRepository().createSearch(BunnySite.e621, 'my search', 'rating:safe', autoFavorite: true);
+
+      expect(jsonDecode(capturedBody), containsPair('auto_favorite', true));
     });
 
     test('listSearches maps a JSON array into BunnySearch objects', () async {
       respond = (_) => http.Response(
         jsonEncode([
-          {'id': 1, 'site': 'e621', 'label': 'my search', 'query': 'rating:safe', 'interval_hours': 24, 'created_at': '2026-01-01T00:00:00Z', 'last_run_at': null, 'unseen_count': 3},
+          {'id': 1, 'site': 'e621', 'label': 'my search', 'query': 'rating:safe', 'interval_hours': 24, 'created_at': '2026-01-01T00:00:00Z', 'last_run_at': null, 'unseen_count': 3, 'auto_favorite': true},
         ]),
         200,
       );
@@ -133,6 +141,7 @@ void main() {
       expect(searches.single.label, 'my search');
       expect(searches.single.lastRunAt, isNull);
       expect(searches.single.unseenCount, 3);
+      expect(searches.single.autoFavorite, isTrue);
     });
 
     test('deleteSearch sends DELETE to the right path', () async {
@@ -142,6 +151,16 @@ void main() {
 
       expect(capturedMethod, 'DELETE');
       expect(capturedUri.path, '/searches/7');
+    });
+
+    test('setSearchAutoFavorite sends POST with the new value', () async {
+      respond = (_) => http.Response(jsonEncode({'ok': true}), 200);
+
+      await buildRepository().setSearchAutoFavorite(7, true);
+
+      expect(capturedMethod, 'POST');
+      expect(capturedUri.path, '/searches/7/auto_favorite');
+      expect(jsonDecode(capturedBody), {'auto_favorite': true});
     });
 
     test('listSearchPosts sends unseen_only as a query parameter', () async {

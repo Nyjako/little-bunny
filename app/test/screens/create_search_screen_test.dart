@@ -42,6 +42,22 @@ void main() {
     expect(repository.searches.single.query, 'fox');
     expect(repository.searches.single.site, BunnySite.e621);
     expect(repository.searches.single.intervalHours, 24);
+    expect(repository.searches.single.autoFavorite, isFalse);
+  });
+
+  testWidgets('toggling auto-favorite creates the search with it set (M9.6.8)', (WidgetTester tester) async {
+    final repository = FakeBunnyRepository();
+    await tester.pumpWidget(_wrap(repository));
+    await tester.pumpAndSettle();
+
+    await tester.enterText(find.widgetWithText(TextFormField, 'Label'), 'Foxes');
+    await tester.enterText(find.widgetWithText(TextFormField, 'Query'), 'fox');
+    await tester.tap(find.widgetWithText(SwitchListTile, 'Auto-favorite new posts'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Create'));
+    await tester.pumpAndSettle();
+
+    expect(repository.searches.single.autoFavorite, isTrue);
   });
 
   testWidgets('typing a query word shows debounced tag suggestions for that word only', (WidgetTester tester) async {

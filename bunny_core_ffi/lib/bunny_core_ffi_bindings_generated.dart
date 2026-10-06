@@ -436,6 +436,7 @@ class BunnyCoreFfiBindings {
     ffi.Pointer<ffi.Char> label,
     ffi.Pointer<ffi.Char> query,
     int interval_hours,
+    bool auto_favorite,
     ffi.Pointer<ffi.Int64> out_id,
   ) {
     return bunny_core_result_t.fromValue(
@@ -445,6 +446,7 @@ class BunnyCoreFfiBindings {
         label,
         query,
         interval_hours,
+        auto_favorite,
         out_id,
       ),
     );
@@ -459,6 +461,7 @@ class BunnyCoreFfiBindings {
             ffi.Pointer<ffi.Char>,
             ffi.Pointer<ffi.Char>,
             ffi.Int,
+            ffi.Bool,
             ffi.Pointer<ffi.Int64>,
           )
         >
@@ -471,6 +474,7 @@ class BunnyCoreFfiBindings {
           ffi.Pointer<ffi.Char>,
           ffi.Pointer<ffi.Char>,
           int,
+          bool,
           ffi.Pointer<ffi.Int64>,
         )
       >();
@@ -550,6 +554,33 @@ class BunnyCoreFfiBindings {
           ffi.Pointer<bunny_db_post_list_t>,
         )
       >();
+
+  /// Toggles auto-favorite on an existing search (M9.6.8) -- editable after
+  /// creation, not just at bunny_core_search_create time, so a search doesn't
+  /// need to be deleted and recreated to turn this on/off.
+  bunny_core_result_t bunny_core_search_set_auto_favorite(
+    ffi.Pointer<bunny_core_t> core,
+    int search_id,
+    bool auto_favorite,
+  ) {
+    return bunny_core_result_t.fromValue(
+      _bunny_core_search_set_auto_favorite(core, search_id, auto_favorite),
+    );
+  }
+
+  late final _bunny_core_search_set_auto_favoritePtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.UnsignedInt Function(
+            ffi.Pointer<bunny_core_t>,
+            ffi.Int64,
+            ffi.Bool,
+          )
+        >
+      >('bunny_core_search_set_auto_favorite');
+  late final _bunny_core_search_set_auto_favorite =
+      _bunny_core_search_set_auto_favoritePtr
+          .asFunction<int Function(ffi.Pointer<bunny_core_t>, int, bool)>();
 
   /// Fetches a single cached post by its local id -- a thin pass-through to
   /// bunny_db, used when a post detail view needs to open a *different* post
@@ -1298,6 +1329,10 @@ final class bunny_db_search_t extends ffi.Struct {
   /// posts linked to this search with no seen_posts row
   @ffi.Int()
   external int unseen_count;
+
+  /// queue a favorite for every post this search finds during sync
+  @ffi.Bool()
+  external bool auto_favorite;
 }
 
 final class bunny_db_search_list_t extends ffi.Struct {

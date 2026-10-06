@@ -33,10 +33,11 @@ bunny_db_result_t bunny_db_account_delete(bunny_db_t *db, bunny_db_site_t site);
 
 /* --- Searches ------------------------------------------------------------ */
 
-bunny_db_result_t bunny_db_search_create(bunny_db_t *db, bunny_db_site_t site, const char *label, const char *query, int interval_hours, int64_t *out_id);
+bunny_db_result_t bunny_db_search_create(bunny_db_t *db, bunny_db_site_t site, const char *label, const char *query, int interval_hours, bool auto_favorite, int64_t *out_id);
 bunny_db_result_t bunny_db_search_delete(bunny_db_t *db, int64_t search_id);
 bunny_db_result_t bunny_db_search_list(bunny_db_t *db, bunny_db_search_list_t *out_list);
 bunny_db_result_t bunny_db_search_touch_last_run(bunny_db_t *db, int64_t search_id);
+bunny_db_result_t bunny_db_search_set_auto_favorite(bunny_db_t *db, int64_t search_id, bool auto_favorite);
 
 /* --- Posts cache ----------------------------------------------------------
  * Upserts are keyed on (site, external_id): calling this again for a post

@@ -52,6 +52,7 @@ class _CreateSearchScreenState extends State<CreateSearchScreen> {
   bool _submitting = false;
   bool _labelManuallyEdited = false;
   bool _mirroringLabel = false;
+  bool _autoFavorite = false;
 
   @override
   void initState() {
@@ -141,7 +142,7 @@ class _CreateSearchScreenState extends State<CreateSearchScreen> {
     }
     setState(() => _submitting = true);
 
-    await widget.repository.createSearch(_site, _labelController.text.trim(), _queryController.text.trim(), intervalHours: int.parse(_intervalController.text));
+    await widget.repository.createSearch(_site, _labelController.text.trim(), _queryController.text.trim(), intervalHours: int.parse(_intervalController.text), autoFavorite: _autoFavorite);
 
     if (!mounted) {
       return;
@@ -176,6 +177,12 @@ class _CreateSearchScreenState extends State<CreateSearchScreen> {
                 keyboardType: TextInputType.number,
                 decoration: InputDecoration(labelText: l10n.createSearchIntervalLabel),
                 validator: (value) => (int.tryParse(value ?? '') == null) ? l10n.commonRequired : null,
+              ),
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                title: Text(l10n.createSearchAutoFavoriteLabel),
+                value: _autoFavorite,
+                onChanged: _submitting ? null : (value) => setState(() => _autoFavorite = value),
               ),
               const SizedBox(height: 16),
               FilledButton(

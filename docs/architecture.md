@@ -1620,6 +1620,41 @@ there's no real parser for balanced parenthesized boolean groups (e.g.
 `( ~cat ~tiger ) ( ~dog ~wolf )`) -- `(` is treated purely as one more prefix character on
 whatever token it's attached to, same as `-`/`~`.
 
+**Auto-favorite per saved search (M9.6.8)**: this pulls forward a slice of M10's "auto-favorite"
+roadmap entry early, the same way M8.5.14 pulled single-post favorite/vote UI forward out of M9
+-- M10 keeps the rest of that line item ("auto-favorite *on download*", a different trigger
+tied to the download pipeline rather than sync, plus the tag-stats/recommendation work). A new
+migration (`libs/db/src/db.c`'s `BUNNY_DB_MIGRATIONS[]`, version 3) adds `searches.auto_favorite`
+the same way M8.5.0 added `posts.score_up`/`score_down` -- `bunny_db_search_create` takes the
+flag as a new parameter, `bunny_db_search_list`'s SELECT grows one more column, and a focused
+`bunny_db_search_set_auto_favorite(db, search_id, bool)` setter (same one-job-per-function shape
+as `bunny_db_post_mark_seen`) is the only way to flip it on a search that already exists, since
+there's still no general "edit a saved search" screen anywhere in the app.
+
+The actual enqueuing happens inside the sync loop, not as a separate pass: both `sync_e621_
+search` and `sync_inkbunny_search` (`libs/core/src/sync.c`) call `bunny_core_queue_favorite_add
+(core, post_id, -1)` immediately after `bunny_db_search_add_result` upserts a post into a
+search's results, when that search has `auto_favorite` set. This only inserts a row into
+`action_queue` -- no network call happens at sync time -- so it's exactly as cheap as any other
+enqueue, and the already-scheduled `bunny_core_process_queue` pass drains it like any other
+pending favorite. The plan that shaped this sub-milestone only called out `sync_e621_search`
+explicitly, but the hook went into both site's sync loops: Inkbunny favorites are already fully
+wired end-to-end via `inkbunny/unofficial_favorites.h` (confirmed back when M4.3 built the queue
+itself), so restricting the toggle to e621 would have made the "Auto-favorite" switch silently
+do nothing on an Inkbunny search -- the switch in `CreateSearchScreen` doesn't say "e621 only,"
+and there's no reason it should have to.
+
+Full plumbing follows the established shape exactly: FFI request classes + isolate handlers for
+both the new `createSearch` parameter and the new setter, an `auto_favorite` field accepted on
+`POST /searches`'s body (defaulting to `false` via `bunny_json_get_bool_or`, so every existing
+caller is unaffected) plus a new `POST /searches/{id}/auto_favorite` endpoint taking `{"auto_
+favorite": bool}`, and `BunnySearch.autoFavorite` + `BunnyRepository.createSearch(...,
+autoFavorite:)`/`setSearchAutoFavorite(int, bool)` across all three repository implementations.
+`CreateSearchScreen` gained a `SwitchListTile`; `SearchesScreen`'s list row gained a filled/
+outlined heart `IconButton` next to the existing delete button -- tapping it calls `setSearch
+AutoFavorite` directly and refreshes, the "editable afterward" affordance the user specifically
+asked for, built without a general edit-search screen.
+
 ## Inkbunny API constraints (found in M2)
 
 Verified against the live API and the official docs while building `libinkbunny`:

@@ -31,6 +31,7 @@ static cJSON *search_to_json(const bunny_db_search_t *search)
     cJSON_AddStringToObject(json, "created_at", search->created_at);
     add_optional_string(json, "last_run_at", search->last_run_at);
     cJSON_AddNumberToObject(json, "unseen_count", search->unseen_count);
+    cJSON_AddBoolToObject(json, "auto_favorite", search->auto_favorite);
     return json;
 }
 
@@ -76,6 +77,7 @@ static int handle_post_searches(struct mg_connection *conn, server_context_t *ct
     bunny_db_site_t site;
     bool valid = bunny_json_get_string(body, "site", &site_text) == BUNNY_JSON_OK && server_route_parse_site(site_text, &site) && bunny_json_get_string(body, "label", &label) == BUNNY_JSON_OK && bunny_json_get_string(body, "query", &query) == BUNNY_JSON_OK;
     int interval_hours = bunny_json_get_int_or(body, "interval_hours", 0);
+    bool auto_favorite = bunny_json_get_bool_or(body, "auto_favorite", false);
     if (!valid) {
         cJSON_Delete(body);
         return server_json_respond_error(conn, BUNNY_CORE_ERR_INVALID_ARG);
@@ -83,7 +85,7 @@ static int handle_post_searches(struct mg_connection *conn, server_context_t *ct
 
     int64_t search_id = 0;
     pthread_mutex_lock(&ctx->core_mutex);
-    bunny_core_result_t result = bunny_core_search_create(ctx->core, site, label, query, interval_hours, &search_id);
+    bunny_core_result_t result = bunny_core_search_create(ctx->core, site, label, query, interval_hours, auto_favorite, &search_id);
     pthread_mutex_unlock(&ctx->core_mutex);
     cJSON_Delete(body);
 
@@ -184,6 +186,34 @@ static int handle_mark_all_seen(struct mg_connection *conn, server_context_t *ct
     return status;
 }
 
+static int handle_set_auto_favorite(struct mg_connection *conn, server_context_t *ctx, int64_t search_id)
+{
+    cJSON *body = server_json_read_request_body(conn);
+    if (!body) {
+        return server_json_respond_error(conn, BUNNY_CORE_ERR_INVALID_ARG);
+    }
+    bool auto_favorite = false;
+    bool valid = bunny_json_get_bool(body, "auto_favorite", &auto_favorite) == BUNNY_JSON_OK;
+    cJSON_Delete(body);
+    if (!valid) {
+        return server_json_respond_error(conn, BUNNY_CORE_ERR_INVALID_ARG);
+    }
+
+    pthread_mutex_lock(&ctx->core_mutex);
+    bunny_core_result_t result = bunny_core_search_set_auto_favorite(ctx->core, search_id, auto_favorite);
+    pthread_mutex_unlock(&ctx->core_mutex);
+
+    if (result != BUNNY_CORE_OK) {
+        return server_json_respond_error(conn, result);
+    }
+
+    cJSON *response = cJSON_CreateObject();
+    cJSON_AddBoolToObject(response, "ok", true);
+    int status = server_json_respond(conn, 200, response);
+    cJSON_Delete(response);
+    return status;
+}
+
 static int searches_handler(struct mg_connection *conn, void *cbdata)
 {
     server_context_t *ctx = (server_context_t *)cbdata;
@@ -209,6 +239,9 @@ static int searches_handler(struct mg_connection *conn, void *cbdata)
         }
         if (strcmp(method, "POST") == 0 && server_route_parse_id_with_suffix(sub_path, "mark_all_seen", &search_id)) {
             return handle_mark_all_seen(conn, ctx, search_id);
+        }
+        if (strcmp(method, "POST") == 0 && server_route_parse_id_with_suffix(sub_path, "auto_favorite", &search_id)) {
+            return handle_set_auto_favorite(conn, ctx, search_id);
         }
         if (strcmp(method, "DELETE") == 0 && server_route_parse_id(sub_path, &search_id)) {
             return handle_delete_search(conn, ctx, search_id);

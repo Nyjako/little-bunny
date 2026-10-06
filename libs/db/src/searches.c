@@ -9,13 +9,13 @@
 
 GOBLIN_DYN_ARRAY_DECL(bunny_db_search, bunny_db_search_t)
 
-bunny_db_result_t bunny_db_search_create(bunny_db_t *db, bunny_db_site_t site, const char *label, const char *query, int interval_hours, int64_t *out_id)
+bunny_db_result_t bunny_db_search_create(bunny_db_t *db, bunny_db_site_t site, const char *label, const char *query, int interval_hours, bool auto_favorite, int64_t *out_id)
 {
     if (!db || !label || !query) {
         return BUNNY_DB_ERR_INVALID_ARG;
     }
 
-    const char *sql = "INSERT INTO searches (site, label, query, interval_hours) VALUES (?, ?, ?, ?);";
+    const char *sql = "INSERT INTO searches (site, label, query, interval_hours, auto_favorite) VALUES (?, ?, ?, ?, ?);";
     sqlite3_stmt *stmt = NULL;
     if (sqlite3_prepare_v2(db->handle, sql, -1, &stmt, NULL) != SQLITE_OK) {
         return BUNNY_DB_ERR_QUERY_FAILED;
@@ -25,6 +25,7 @@ bunny_db_result_t bunny_db_search_create(bunny_db_t *db, bunny_db_site_t site, c
     sqlite3_bind_text(stmt, 2, label, -1, SQLITE_STATIC);
     sqlite3_bind_text(stmt, 3, query, -1, SQLITE_STATIC);
     sqlite3_bind_int(stmt, 4, interval_hours > 0 ? interval_hours : 24);
+    sqlite3_bind_int(stmt, 5, auto_favorite ? 1 : 0);
 
     int rc = sqlite3_step(stmt);
     sqlite3_finalize(stmt);
@@ -66,6 +67,7 @@ static void fill_search_from_row(sqlite3_stmt *stmt, bunny_db_search_t *out)
     out->created_at = bunny_db_column_text_dup(stmt, 5);
     out->last_run_at = bunny_db_column_text_dup(stmt, 6);
     out->unseen_count = sqlite3_column_int(stmt, 7);
+    out->auto_favorite = sqlite3_column_int(stmt, 8) != 0;
 }
 
 bunny_db_result_t bunny_db_search_list(bunny_db_t *db, bunny_db_search_list_t *out_list)
@@ -80,7 +82,8 @@ bunny_db_result_t bunny_db_search_list(bunny_db_t *db, bunny_db_search_list_t *o
      * separate round trip per row. */
     const char *sql = "SELECT s.id, s.site, s.label, s.query, s.interval_hours, s.created_at, s.last_run_at, "
                       "(SELECT COUNT(*) FROM search_results sr LEFT JOIN seen_posts seen ON seen.post_id = sr.post_id "
-                      " WHERE sr.search_id = s.id AND seen.post_id IS NULL) AS unseen_count "
+                      " WHERE sr.search_id = s.id AND seen.post_id IS NULL) AS unseen_count, "
+                      "s.auto_favorite "
                       "FROM searches s ORDER BY s.id;";
     sqlite3_stmt *stmt = NULL;
     if (sqlite3_prepare_v2(db->handle, sql, -1, &stmt, NULL) != SQLITE_OK) {
@@ -132,6 +135,23 @@ bunny_db_result_t bunny_db_search_touch_last_run(bunny_db_t *db, int64_t search_
         return BUNNY_DB_ERR_QUERY_FAILED;
     }
     sqlite3_bind_int64(stmt, 1, search_id);
+    int rc = sqlite3_step(stmt);
+    sqlite3_finalize(stmt);
+    return rc == SQLITE_DONE ? BUNNY_DB_OK : bunny_db_sqlite_rc_to_result(rc);
+}
+
+bunny_db_result_t bunny_db_search_set_auto_favorite(bunny_db_t *db, int64_t search_id, bool auto_favorite)
+{
+    if (!db) {
+        return BUNNY_DB_ERR_INVALID_ARG;
+    }
+    const char *sql = "UPDATE searches SET auto_favorite = ? WHERE id = ?;";
+    sqlite3_stmt *stmt = NULL;
+    if (sqlite3_prepare_v2(db->handle, sql, -1, &stmt, NULL) != SQLITE_OK) {
+        return BUNNY_DB_ERR_QUERY_FAILED;
+    }
+    sqlite3_bind_int(stmt, 1, auto_favorite ? 1 : 0);
+    sqlite3_bind_int64(stmt, 2, search_id);
     int rc = sqlite3_step(stmt);
     sqlite3_finalize(stmt);
     return rc == SQLITE_DONE ? BUNNY_DB_OK : bunny_db_sqlite_rc_to_result(rc);
