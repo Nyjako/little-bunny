@@ -13,8 +13,15 @@ import '../settings/download_settings_store.dart';
 import '../settings/sync_settings_store.dart';
 import '../util/image_headers.dart';
 import '../util/responsive.dart';
+import '../widgets/rating_badge.dart';
 import 'full_screen_post_viewer_screen.dart';
 import 'tag_browse_screen.dart';
+
+/// Tags are grouped by category (M8.5.3) and then sorted into this fixed
+/// order (M9.6.5) rather than whatever order they happened to arrive in --
+/// any category not in this list (including `null`, Inkbunny's single
+/// uncategorized bucket) is grouped last instead of being dropped.
+const _tagCategoryOrder = ['artist', 'character', 'copyright', 'species', 'general', 'meta'];
 
 const _imageExtensions = {'jpg', 'jpeg', 'png', 'gif', 'webp'};
 const _videoExtensions = {'webm', 'mp4'};
@@ -255,24 +262,59 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
     );
   }
 
-  Widget _actionsRow(AppLocalizations l10n) {
+  /// One tappable icon+count group in [_infoBar] -- a bare `IconButton` has
+  /// no room for a label, so each of upvote/downvote/favorite (M9.6.5) is a
+  /// `TextButton.icon` instead, wrapped in its own `Tooltip` the same way
+  /// `IconButton`'s own `tooltip` param already wraps it internally.
+  Widget _statAction({required IconData icon, required int count, required String tooltip, required VoidCallback? onPressed, Color? color}) => Tooltip(
+    message: tooltip,
+    child: TextButton.icon(onPressed: onPressed, icon: Icon(icon, size: 18, color: onPressed != null ? color : null), label: Text('$count')),
+  );
+
+  /// The thick author/rating/stats bar (M9.6.5) replacing the old bare
+  /// favorite/vote `IconButton` row -- a tinted `Container` directly under
+  /// the title acting as a bold visual separator, with the artist name on
+  /// its own line and [RatingBadge] + the three stat actions + the download
+  /// button all on the line below.
+  Widget _infoBar(AppLocalizations l10n) {
+    final post = _post;
+    final hasArtist = post.artist != null && post.artist!.isNotEmpty;
     // Inkbunny has no vote API at all (unlike favorites, which M2.2's
     // unofficial route covers for both sites) -- greyed out rather than
     // hidden or silently failing, same principle the roadmap already states
     // for comments.
-    final votingEnabled = _post.site != BunnySite.inkbunny;
-    return Row(
-      children: [
-        IconButton(
-          icon: Icon(_post.isFavorited ? Icons.favorite : Icons.favorite_border),
-          color: _post.isFavorited ? Colors.red : null,
-          tooltip: _post.isFavorited ? l10n.postDetailFavoriteRemoveTooltip : l10n.postDetailFavoriteAddTooltip,
-          onPressed: _toggleFavorite,
-        ),
-        IconButton(icon: const Icon(Icons.arrow_upward), tooltip: l10n.postDetailUpvoteTooltip, onPressed: votingEnabled ? () => _vote(1) : null),
-        IconButton(icon: const Icon(Icons.arrow_downward), tooltip: l10n.postDetailDownvoteTooltip, onPressed: votingEnabled ? () => _vote(-1) : null),
-        _downloadButton(l10n),
-      ],
+    final votingEnabled = post.site != BunnySite.inkbunny;
+    return Container(
+      width: double.infinity,
+      color: Theme.of(context).colorScheme.surfaceContainerHighest,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          InkWell(
+            onTap: hasArtist ? () => _openTagBrowse(post.artist!) : null,
+            child: Text(hasArtist ? post.artist! : l10n.postDetailUnknownValue, style: Theme.of(context).textTheme.titleMedium),
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              RatingBadge(site: post.site, rating: post.rating),
+              const SizedBox(width: 8),
+              _statAction(icon: Icons.arrow_upward, count: post.scoreUp, tooltip: l10n.postDetailUpvoteTooltip, onPressed: votingEnabled ? () => _vote(1) : null),
+              _statAction(icon: Icons.arrow_downward, count: post.scoreDown, tooltip: l10n.postDetailDownvoteTooltip, onPressed: votingEnabled ? () => _vote(-1) : null),
+              _statAction(
+                icon: post.isFavorited ? Icons.favorite : Icons.favorite_border,
+                count: post.favCount,
+                tooltip: post.isFavorited ? l10n.postDetailFavoriteRemoveTooltip : l10n.postDetailFavoriteAddTooltip,
+                onPressed: _toggleFavorite,
+                color: post.isFavorited ? Colors.red : null,
+              ),
+              const Spacer(),
+              _downloadButton(l10n),
+            ],
+          ),
+        ],
+      ),
     );
   }
 
@@ -357,11 +399,17 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
       for (final tag in tags) {
         grouped.putIfAbsent(tag.category, () => []).add(tag);
       }
+      final ordered = <MapEntry<String?, List<BunnyPostTag>>>[
+        for (final category in _tagCategoryOrder)
+          if (grouped[category] != null) MapEntry(category, grouped[category]!),
+        for (final entry in grouped.entries)
+          if (!_tagCategoryOrder.contains(entry.key)) entry,
+      ];
       return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const Divider(),
-          for (final entry in grouped.entries) ...[
+          for (final entry in ordered) ...[
             Padding(padding: const EdgeInsets.only(bottom: 4), child: Text(entry.key == null ? l10n.postDetailTagsLabel : _titleCase(entry.key!), style: Theme.of(context).textTheme.titleSmall)),
             Padding(
               padding: const EdgeInsets.only(bottom: 8),
@@ -604,6 +652,46 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
     );
   }
 
+  /// The post id/comment-count/dimensions/created-date rows left over in
+  /// "post details" once rating/votes/favorites moved into [_infoBar]
+  /// (M9.6.5) -- used by [_tagsDetailsSourcesRegion] on both sides of its
+  /// wide/narrow split.
+  Widget _postDetailsColumn(AppLocalizations l10n) {
+    final post = _post;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        InkWell(onTap: () => _copyPostId(l10n), child: _metadataRow(l10n.postDetailIdLabel, '${widget.post.externalId}')),
+        _metadataRow(l10n.postDetailCommentsLabel, '${post.commentCount}'),
+        _metadataRow(l10n.postDetailDimensionsLabel, '${post.width}x${post.height}'),
+        _metadataRow(l10n.postDetailCreatedLabel, post.createdAtSite ?? l10n.postDetailUnknownValue),
+      ],
+    );
+  }
+
+  /// Tags + post details + sources (M9.6.5): on wide windows, tags sit in
+  /// their own column on the left with post details and sources stacked on
+  /// the right; on narrow windows the same three pieces just stack top to
+  /// bottom in that order. Shares [isWideScreen]'s breakpoint with M9.6.6's
+  /// app-bar compactness rather than inventing a second one.
+  Widget _tagsDetailsSourcesRegion(AppLocalizations l10n) {
+    final tags = _tagsSection(l10n);
+    final details = _postDetailsColumn(l10n);
+    final sources = _sourcesSection(l10n);
+    if (isWideScreen(context)) {
+      return Row(
+        key: const Key('wideTagsDetailsSourcesRow'),
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(child: tags),
+          const SizedBox(width: 24),
+          Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [details, sources])),
+        ],
+      );
+    }
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [tags, details, sources]);
+  }
+
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
@@ -613,29 +701,20 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
       body: ListView(
         children: [
           _buildMedia(l10n),
+          if (post.title != null && post.title!.isNotEmpty)
+            Padding(padding: const EdgeInsets.fromLTRB(16, 12, 16, 0), child: Text(post.title!, style: Theme.of(context).textTheme.titleLarge)),
+          const SizedBox(height: 8),
+          _infoBar(l10n),
           Padding(
             padding: const EdgeInsets.all(16),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                if (post.title != null && post.title!.isNotEmpty) Padding(padding: const EdgeInsets.only(bottom: 8), child: Text(post.title!, style: Theme.of(context).textTheme.titleLarge)),
-                post.artist != null && post.artist!.isNotEmpty
-                    ? InkWell(onTap: () => _openTagBrowse(post.artist!), child: _metadataRow(l10n.postDetailArtistLabel, post.artist!))
-                    : _metadataRow(l10n.postDetailArtistLabel, l10n.postDetailUnknownValue),
-                if (post.description != null && post.description!.isNotEmpty) Padding(padding: const EdgeInsets.only(top: 8, bottom: 8), child: Text(post.description!)),
-                _actionsRow(l10n),
-                const Divider(),
-                InkWell(onTap: () => _copyPostId(l10n), child: _metadataRow(l10n.postDetailIdLabel, '${post.externalId}')),
-                _metadataRow(l10n.postDetailRatingLabel, post.rating ?? l10n.postDetailUnknownValue),
-                _metadataRow(l10n.postDetailScoreLabel, '${post.score}'),
-                _metadataRow(l10n.postDetailFavoritesLabel, '${post.favCount}'),
-                _metadataRow(l10n.postDetailCommentsLabel, '${post.commentCount}'),
-                _metadataRow(l10n.postDetailDimensionsLabel, '${post.width}x${post.height}'),
-                _metadataRow(l10n.postDetailCreatedLabel, post.createdAtSite ?? l10n.postDetailUnknownValue),
-                _tagsSection(l10n),
-                _sourcesSection(l10n),
-                _relationshipsSection(l10n),
                 _poolsSection(l10n),
+                _relationshipsSection(l10n),
+                if (post.description != null && post.description!.isNotEmpty) ...[const Divider(), Text(post.description!)],
+                const Divider(),
+                _tagsDetailsSourcesRegion(l10n),
                 _commentsSection(l10n),
               ],
             ),

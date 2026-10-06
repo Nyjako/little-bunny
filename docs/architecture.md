@@ -1655,6 +1655,51 @@ outlined heart `IconButton` next to the existing delete button -- tapping it cal
 AutoFavorite` directly and refreshes, the "editable afterward" affordance the user specifically
 asked for, built without a general edit-search screen.
 
+**Post detail screen redesign (M9.6.5)**: the largest single rewrite in M9.6, deliberately
+sequenced last so it builds on top of every smaller fix (especially M9.6.3's pool-click change)
+rather than racing them. `PostDetailScreen.build()`'s top-to-bottom order became: media → title
+(kept exactly where it was -- the user's spec never mentioned it) → a new `_infoBar` → Pools →
+Relationships → Description → a responsive tags/details/sources region → Comments. `_infoBar` is
+a `Container` tinted with `Theme.of(context).colorScheme.surfaceContainerHighest` holding the
+artist name (tappable) on one line and, on the line below, [RatingBadge] (M8.5.7's grid-tile
+widget, reused as-is) plus three new `_statAction` widgets for upvote/downvote/favorite, plus the
+existing download button at the end. `_statAction` exists because a bare `IconButton` has no slot
+for a label -- each is a `Tooltip` wrapping a `TextButton.icon(icon: ..., label: Text('$count'))`
+instead, which is the first place in the app a stat needs both an icon *and* a live count in one
+tappable unit. Rating/score/favorites moved out of the old flat metadata-row list entirely; what's
+left (post id, comment count, dimensions, created date) became `_postDetailsColumn`, used by the
+new `_tagsDetailsSourcesRegion` on both sides of its wide/narrow split -- wide windows get a `Row`
+(tags on the left; post details + sources stacked on the right), narrow windows get the same three
+pieces in a plain stacked `Column`, both sharing M9.6.6's `isWideScreen` breakpoint rather than a
+second one invented for this screen. Tags themselves are now sorted into a fixed category order
+(artist, character, copyright, species, general, meta) before rendering, with anything not in that
+list (including Inkbunny's `null` uncategorized bucket) grouped last -- previously they rendered
+in whatever order `Map` iteration happened to produce from the upsert.
+
+**Test gotcha, Tooltip/TextButton nesting direction**: `IconButton`'s own `tooltip` param wraps
+its *internal* icon in a `Tooltip`, so existing tests found the enabled/disabled state via
+`find.ancestor(of: find.byTooltip(...), matching: find.byType(IconButton))` -- the `IconButton`
+sits *above* the `Tooltip` it generates internally. `_statAction`'s `Tooltip(child: TextButton.
+icon(...))` is the opposite nesting: the `Tooltip` is the outer wrapper the caller wrote, so the
+`TextButton` is a *descendant* of it, not an ancestor. The vote-buttons-disabled test's `find.
+ancestor` call against `TextButton` therefore always returned nothing until it was changed to
+`find.descendant` -- a one-line fix once the actual tree shape was diagrammed out, but non-obvious
+from the assertion failure's bare "No element" message alone.
+
+Every pre-M9.6.5 behavior the layout touched (tag taps opening tag-browse, source taps launching
+URLs, id-copy-to-clipboard, pool/relationship taps, comments post/list, favorite/vote queuing +
+optimistic UI update, download button state) is still covered by `post_detail_screen_test.dart`,
+just re-pointed at the new structure and re-keyed to `scoreUp`/`scoreDown` wherever a test used to
+read the no-longer-displayed total `score`. New tests cover the info bar's content, the tag sort
+order (comparing rendered category-header y-offsets rather than just checking presence), and the
+wide/narrow split (a `Key` on the wide-only `Row` that simply doesn't exist in the narrow Column
+layout, rather than trying to distinguish `Row` vs. `Column` structurally). Verification for this
+sub-milestone was the full widget-test suite (covering both the narrow and wide code paths via
+`tester.view.physicalSize`) plus a Linux build + headless smoke test; an actual visual/manual
+check across window sizes -- which the plan called for given the layout risk -- wasn't possible
+with the tools available in this session, since there's no way to drive or screenshot a native
+Linux GTK window the way the browser-preview tools can for a web app.
+
 ## Inkbunny API constraints (found in M2)
 
 Verified against the live API and the official docs while building `libinkbunny`:

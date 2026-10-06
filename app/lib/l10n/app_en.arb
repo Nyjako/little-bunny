@@ -113,12 +113,8 @@
   "@postDetailUnsupportedFormat": {
     "placeholders": {"extension": {"type": "String"}}
   },
-  "postDetailArtistLabel": "Artist",
   "postDetailTitleLabel": "Title",
   "postDetailDescriptionLabel": "Description",
-  "postDetailRatingLabel": "Rating",
-  "postDetailScoreLabel": "Score",
-  "postDetailFavoritesLabel": "Favorites",
   "postDetailCommentsLabel": "Comments",
   "postDetailDimensionsLabel": "Dimensions",
   "postDetailCreatedLabel": "Posted",
