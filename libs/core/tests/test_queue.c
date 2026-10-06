@@ -102,7 +102,7 @@ void tearDown(void)
 static int64_t seed_e621_post(int64_t *out_search_id)
 {
     int64_t search_id = 0;
-    bunny_core_search_create(g_core, BUNNY_DB_SITE_E621, "wolves", "wolf", 24, false, &search_id);
+    bunny_core_search_create(g_core, BUNNY_DB_SITE_E621, "wolves", "wolf", 24, NULL, &search_id);
 
     bunny_core_sync_stats_t sync_stats;
     bunny_core_result_t result = bunny_core_sync_due_searches(g_core, &sync_stats);
@@ -132,7 +132,7 @@ static int64_t seed_inkbunny_post(void)
     g_inkbunny_state.count = 2;
 
     int64_t search_id = 0;
-    bunny_core_search_create(g_core, BUNNY_DB_SITE_INKBUNNY, "tribute", "tribute", 24, false, &search_id);
+    bunny_core_search_create(g_core, BUNNY_DB_SITE_INKBUNNY, "tribute", "tribute", 24, NULL, &search_id);
 
     bunny_core_sync_stats_t sync_stats;
     bunny_core_sync_due_searches(g_core, &sync_stats);
@@ -313,7 +313,8 @@ void test_sync_e621_search_with_auto_favorite_queues_a_favorite(void)
     g_e621_state.count = 1;
 
     int64_t search_id = 0;
-    bunny_core_search_create(g_core, BUNNY_DB_SITE_E621, "wolves", "wolf", 24, true, &search_id);
+    bunny_db_search_options_t options = {true, 1, false};
+    bunny_core_search_create(g_core, BUNNY_DB_SITE_E621, "wolves", "wolf", 24, &options, &search_id);
 
     bunny_core_sync_stats_t sync_stats;
     bunny_core_result_t result = bunny_core_sync_due_searches(g_core, &sync_stats);
@@ -341,6 +342,39 @@ void test_sync_e621_search_with_auto_favorite_queues_a_favorite(void)
     bunny_db_post_list_free(&posts);
 }
 
+void test_sync_e621_search_with_auto_upvote_queues_a_vote(void)
+{
+    char *fixture = read_fixture("e621_posts_search.json");
+    g_e621_state.bodies[0] = fixture;
+    g_e621_state.count = 1;
+
+    int64_t search_id = 0;
+    bunny_db_search_options_t options = {false, 1, true};
+    bunny_core_search_create(g_core, BUNNY_DB_SITE_E621, "wolves", "wolf", 24, &options, &search_id);
+
+    bunny_core_sync_stats_t sync_stats;
+    bunny_core_result_t result = bunny_core_sync_due_searches(g_core, &sync_stats);
+    TEST_ASSERT_EQUAL(BUNNY_CORE_OK, result);
+    TEST_ASSERT_EQUAL(1, sync_stats.posts_upserted);
+    free(fixture);
+
+    memset(&g_e621_state, 0, sizeof(g_e621_state));
+    g_e621_state.statuses[0] = 200; /* votes.json POST response */
+    g_e621_state.count = 1;
+
+    bunny_core_queue_stats_t queue_stats;
+    result = bunny_core_process_queue(g_core, &queue_stats);
+    TEST_ASSERT_EQUAL(BUNNY_CORE_OK, result);
+    TEST_ASSERT_EQUAL(1, queue_stats.actions_processed);
+    TEST_ASSERT_EQUAL(1, queue_stats.actions_succeeded);
+
+    bunny_db_post_list_t posts;
+    bunny_core_search_list_posts(g_core, search_id, false, &posts);
+    TEST_ASSERT_EQUAL(1, (int)posts.count);
+    TEST_ASSERT_EQUAL(1, posts.items[0].user_vote);
+    bunny_db_post_list_free(&posts);
+}
+
 void test_sync_e621_search_without_auto_favorite_queues_nothing(void)
 {
     char *fixture = read_fixture("e621_posts_search.json");
@@ -348,7 +382,7 @@ void test_sync_e621_search_without_auto_favorite_queues_nothing(void)
     g_e621_state.count = 1;
 
     int64_t search_id = 0;
-    bunny_core_search_create(g_core, BUNNY_DB_SITE_E621, "wolves", "wolf", 24, false, &search_id);
+    bunny_core_search_create(g_core, BUNNY_DB_SITE_E621, "wolves", "wolf", 24, NULL, &search_id);
 
     bunny_core_sync_stats_t sync_stats;
     bunny_core_sync_due_searches(g_core, &sync_stats);
@@ -371,6 +405,7 @@ int main(void)
     RUN_TEST(test_queue_inkbunny_favorite_without_account_fails);
     RUN_TEST(test_queue_favorite_add_for_nonexistent_post_is_invalid_arg);
     RUN_TEST(test_sync_e621_search_with_auto_favorite_queues_a_favorite);
+    RUN_TEST(test_sync_e621_search_with_auto_upvote_queues_a_vote);
     RUN_TEST(test_sync_e621_search_without_auto_favorite_queues_nothing);
     return UNITY_END();
 }

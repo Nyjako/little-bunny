@@ -2,20 +2,20 @@
 
 #include "internal.h"
 
-bunny_core_result_t bunny_core_search_create(bunny_core_t *core, bunny_db_site_t site, const char *label, const char *query, int interval_hours, bool auto_favorite, int64_t *out_id)
+bunny_core_result_t bunny_core_search_create(bunny_core_t *core, bunny_db_site_t site, const char *label, const char *query, int interval_hours, const bunny_db_search_options_t *options, int64_t *out_id)
 {
     if (!core) {
         return BUNNY_CORE_ERR_INVALID_ARG;
     }
-    return bunny_core_map_db_result(bunny_db_search_create(core->db, site, label, query, interval_hours, auto_favorite, out_id));
+    return bunny_core_map_db_result(bunny_db_search_create(core->db, site, label, query, interval_hours, options, out_id));
 }
 
-bunny_core_result_t bunny_core_search_set_auto_favorite(bunny_core_t *core, int64_t search_id, bool auto_favorite)
+bunny_core_result_t bunny_core_search_update(bunny_core_t *core, int64_t search_id, const char *label, const char *query, int interval_hours, const bunny_db_search_options_t *options)
 {
     if (!core) {
         return BUNNY_CORE_ERR_INVALID_ARG;
     }
-    return bunny_core_map_db_result(bunny_db_search_set_auto_favorite(core->db, search_id, auto_favorite));
+    return bunny_core_map_db_result(bunny_db_search_update(core->db, search_id, label, query, interval_hours, options));
 }
 
 bunny_core_result_t bunny_core_search_delete(bunny_core_t *core, int64_t search_id)

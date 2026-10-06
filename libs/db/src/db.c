@@ -17,11 +17,15 @@ typedef struct
     const char *sql;
 } bunny_db_migration_t;
 
+// clang-format off
 static const bunny_db_migration_t BUNNY_DB_MIGRATIONS[] = {
     {1, "ALTER TABLE posts ADD COLUMN score_up INTEGER NOT NULL DEFAULT 0;"},
     {2, "ALTER TABLE posts ADD COLUMN score_down INTEGER NOT NULL DEFAULT 0;"},
     {3, "ALTER TABLE searches ADD COLUMN auto_favorite INTEGER NOT NULL DEFAULT 0;"},
+    {4, "ALTER TABLE searches ADD COLUMN auto_favorite_stars INTEGER NOT NULL DEFAULT 1;"},
+    {5, "ALTER TABLE searches ADD COLUMN auto_upvote INTEGER NOT NULL DEFAULT 0;"},
 };
+// clang-format on
 
 static bunny_db_result_t bunny_db_apply_migrations(sqlite3 *handle)
 {

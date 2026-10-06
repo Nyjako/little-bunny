@@ -60,6 +60,34 @@ void main() {
     expect(repository.searches.single.autoFavorite, isTrue);
   });
 
+  testWidgets('toggling auto-upvote creates the search with it set, hidden for Inkbunny (M9.7.2)', (WidgetTester tester) async {
+    final repository = FakeBunnyRepository();
+    await tester.pumpWidget(_wrap(repository));
+    await tester.pumpAndSettle();
+
+    expect(find.widgetWithText(SwitchListTile, 'Auto-upvote new posts'), findsOneWidget);
+
+    await tester.enterText(find.widgetWithText(TextFormField, 'Label'), 'Foxes');
+    await tester.enterText(find.widgetWithText(TextFormField, 'Query'), 'fox');
+    await tester.tap(find.widgetWithText(SwitchListTile, 'Auto-upvote new posts'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Create'));
+    await tester.pumpAndSettle();
+
+    expect(repository.searches.single.autoUpvote, isTrue);
+  });
+
+  testWidgets('auto-upvote switch is hidden for Inkbunny searches (M9.7.2)', (WidgetTester tester) async {
+    final repository = FakeBunnyRepository();
+    await tester.pumpWidget(_wrap(repository));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Inkbunny'));
+    await tester.pumpAndSettle();
+
+    expect(find.widgetWithText(SwitchListTile, 'Auto-upvote new posts'), findsNothing);
+  });
+
   testWidgets('typing a query word shows debounced tag suggestions for that word only', (WidgetTester tester) async {
     final repository = FakeBunnyRepository();
     repository.tagStats.addAll(const [BunnyTagStat(name: 'fox', count: 10), BunnyTagStat(name: 'wolf', count: 5)]);

@@ -20,6 +20,8 @@ BunnySearch _searchFromMap(Map<String, Object?> m) => BunnySearch(
   lastRunAt: m['lastRunAt'] as String?,
   unseenCount: m['unseenCount'] as int,
   autoFavorite: m['autoFavorite'] as bool,
+  autoFavoriteStars: m['autoFavoriteStars'] as int,
+  autoUpvote: m['autoUpvote'] as bool,
 );
 
 BunnyPost _postFromMap(Map<String, Object?> m) => BunnyPost(
@@ -130,8 +132,8 @@ class FfiBunnyRepository implements BunnyRepository {
   Future<void> deleteAccount(BunnySite site) => _wrapped(() => _native.deleteAccount(site.toWireString()));
 
   @override
-  Future<int> createSearch(BunnySite site, String label, String query, {int intervalHours = 24, bool autoFavorite = false}) =>
-      _wrapped(() => _native.createSearch(site.toWireString(), label, query, intervalHours, autoFavorite: autoFavorite));
+  Future<int> createSearch(BunnySite site, String label, String query, {int intervalHours = 24, bool autoFavorite = false, int autoFavoriteStars = 1, bool autoUpvote = false}) =>
+      _wrapped(() => _native.createSearch(site.toWireString(), label, query, intervalHours, autoFavorite: autoFavorite, autoFavoriteStars: autoFavoriteStars, autoUpvote: autoUpvote));
 
   @override
   Future<List<BunnySearch>> listSearches() async {
@@ -143,7 +145,8 @@ class FfiBunnyRepository implements BunnyRepository {
   Future<void> deleteSearch(int searchId) => _wrapped(() => _native.deleteSearch(searchId));
 
   @override
-  Future<void> setSearchAutoFavorite(int searchId, bool autoFavorite) => _wrapped(() => _native.setSearchAutoFavorite(searchId, autoFavorite));
+  Future<void> updateSearch(int searchId, String label, String query, {int intervalHours = 24, bool autoFavorite = false, int autoFavoriteStars = 1, bool autoUpvote = false}) =>
+      _wrapped(() => _native.updateSearch(searchId, label, query, intervalHours, autoFavorite: autoFavorite, autoFavoriteStars: autoFavoriteStars, autoUpvote: autoUpvote));
 
   @override
   Future<List<BunnyPost>> listSearchPosts(int searchId, {bool unseenOnly = false}) async {

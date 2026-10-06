@@ -1754,6 +1754,66 @@ mirror` has no way to detect this from the API response it currently inspects (j
 status), so it always records whichever direction was just successfully sent -- the same
 toggle-blind-spot `apply_favorite_mirror` already has, not a new regression introduced here.
 
+**Search edit screen: rename/requery, Inkbunny star level, e621 auto-upvote (M9.7.2)**:
+`bunny_db_search_create`'s signature had grown a new parameter in nearly every sub-milestone that
+touched searches (`interval_hours`, then `auto_favorite` in M9.6.8) -- rather than letting that
+keep happening, a `bunny_db_search_options_t { auto_favorite; auto_favorite_stars; auto_upvote; }`
+struct (`libs/db/include/bunny_db/types.h`) now carries every editable per-search toggle, passed
+by pointer the same way `bunny_core_sync_stats_t` already crosses the FFI boundary by pointer.
+`bunny_db_search_create` takes `const bunny_db_search_options_t *options` (a `NULL` options
+pointer falls back to a static all-off default, so every existing call site that only cared about
+the bare `auto_favorite` bool keeps compiling as `NULL`). A new `bunny_db_search_update(db,
+search_id, label, query, interval_hours, options)` replaces `bunny_db_search_set_auto_favorite`
+outright -- that function's only caller, the searches-list quick-toggle heart icon, is deleted in
+this same sub-milestone in favor of a full edit screen, so there was no reason to keep both
+narrow and broad update paths alive side by side. Two new migrations (`libs/db/src/db.c`, versions
+4 and 5): `searches.auto_favorite_stars INTEGER NOT NULL DEFAULT 1` and `searches.auto_upvote
+INTEGER NOT NULL DEFAULT 0` -- two separate `ALTER TABLE` statements rather than one, since
+SQLite's `ADD COLUMN` only accepts a single column per statement (the same constraint M8.5.0's
+migration runner doc comment already notes).
+
+Sync hooks in `libs/core/src/sync.c`: the existing `auto_favorite` hook (`sync_e621_search`,
+alongside `bunny_db_search_add_result`) now passes `search->auto_favorite_stars` instead of a
+hardcoded `-1`, since e621 ignores the stars payload for favorites anyway (`process_e621_action`'s
+`BUNNY_DB_ACTION_FAVORITE_ADD` branch calls `e621_favorite_add` with no payload argument at all) --
+no site branching needed to thread a real value through. A new `auto_upvote` hook calls
+`bunny_core_queue_vote(core, post_id, 1, false)` right next to it. This hook is only ever wired up
+from the e621 sync path, but even if it weren't, `process_inkbunny_action` already rejects any
+queued vote action outright (confirmed back in M4.3, leaned on again by M9.7.1's `apply_vote_
+mirror` reasoning) -- so there's no explicit site check anywhere in this hook, matching the "the
+backend already fails safe, don't duplicate the guard" pattern used throughout this codebase.
+`bunny_core_search_create`/new `bunny_core_search_update` are thin pass-throughs mirroring the db
+layer's signatures exactly, same as every other `bunny_core` search function.
+
+Server: `POST /searches`'s body parsing gains `auto_favorite_stars`/`auto_upvote` via the same
+`bunny_json_get_int_or`/`bunny_json_get_bool_or` defaulting pattern M9.6.8 introduced for
+`auto_favorite`. A new `PUT /searches/{id}` (parsed the same way `server_route_parse_id` already
+handles `DELETE /searches/{id}`) takes the full editable field set and calls `bunny_core_search_
+update`; it replaces `POST /searches/{id}/auto_favorite` from M9.6.8, which is deleted along with
+its handler. `BunnySearch` gains `autoFavoriteStars`/`autoUpvote`; `BunnyRepository.createSearch`
+gains the two matching named params (defaulting to `1`/`false`, preserving every existing call
+site's behavior); `setSearchAutoFavorite` is replaced by `updateSearch(searchId, label, query,
+{intervalHours, autoFavorite, autoFavoriteStars, autoUpvote})` across the FFI isolate wrapper
+(a new `_UpdateSearchRequest`, mirroring `_CreateSearchRequest`'s shape), `HttpBunnyRepository`
+(a `PUT` request via `http.Client.put`, same JSON body shape as `POST /searches`), and
+`FakeBunnyRepository`.
+
+UI: `CreateSearchScreen` gains a second `SwitchListTile` ("Auto-upvote new posts"), shown only
+when `_site == BunnySite.e621` -- the same per-site `SwitchListTile`-visibility pattern used
+elsewhere for vote-related controls. No star picker appears at creation time at all (a new
+Inkbunny search's `auto_favorite_stars` always starts at the struct's default of `1` until
+edited), per the scope confirmed with the user before this sub-milestone was planned. New
+`app/lib/screens/edit_search_screen.dart` mirrors `CreateSearchScreen`'s form shape closely
+(including the same tag-autocomplete wiring against `tag_query.dart`'s pure functions), but is a
+separate widget rather than a re-parameterized `CreateSearchScreen`, since its state is pre-filled
+from an existing `BunnySearch` rather than starting blank, its site is fixed (shown as plain text,
+not a `SegmentedButton`) to avoid orphaning already-synced posts tagged to the old site, and it
+has the Inkbunny-only 1-3 star `SegmentedButton` picker `CreateSearchScreen` never shows.
+`SearchesScreen`'s `ListTile` gains `onLongPress` opening this screen and refreshing on a `true`
+pop -- the same push-then-conditionally-refresh shape `_createSearch` already uses for the FAB
+flow -- and the heart `IconButton`/`_toggleAutoFavorite` are deleted, since the edit screen now
+covers (and extends) what that icon did.
+
 **Video/GIF badge on grid thumbnails (M9.7.3)**: `PostDetailScreen` already had everything this
 needed, just private to that one file -- `_videoExtensions`/the gif-is-just-another-image-
 extension check moved into a new shared `app/lib/util/media_type.dart` (`isVideoExt`/`isGifExt`),

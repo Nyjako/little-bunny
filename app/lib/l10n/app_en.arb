@@ -61,19 +61,26 @@
   "searchesTabPools": "Pools",
   "searchesPoolsEmptyState": "No saved pools yet. Tap + to add one.",
   "searchesNewPoolTooltip": "Add pool",
-  "searchesAutoFavoriteOnTooltip": "Auto-favorite is on -- tap to turn off",
-  "searchesAutoFavoriteOffTooltip": "Auto-favorite is off -- tap to turn on",
 
   "createSearchScreenTitle": "New search",
   "createSearchLabelField": "Label",
   "createSearchQueryField": "Query",
   "createSearchIntervalLabel": "Sync interval (hours)",
   "createSearchAutoFavoriteLabel": "Auto-favorite new posts",
+  "createSearchAutoUpvoteLabel": "Auto-upvote new posts",
   "createSearchSubmit": "Create",
 
   "createPoolSearchDialogTitle": "Add pool",
   "createPoolSearchIdLabel": "Pool ID",
   "createPoolSearchSubmit": "Add",
+
+  "editSearchScreenTitle": "Edit search",
+  "editSearchSiteLabel": "Site: {site}",
+  "@editSearchSiteLabel": {
+    "placeholders": {"site": {"type": "String"}}
+  },
+  "editSearchStarsLabel": "Favorite level",
+  "editSearchSubmit": "Save",
 
   "postGridUnseenOnlyTooltip": "Show unseen only",
   "postGridRefreshTooltip": "Refresh",

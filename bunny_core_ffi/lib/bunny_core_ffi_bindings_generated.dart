@@ -436,7 +436,7 @@ class BunnyCoreFfiBindings {
     ffi.Pointer<ffi.Char> label,
     ffi.Pointer<ffi.Char> query,
     int interval_hours,
-    bool auto_favorite,
+    ffi.Pointer<bunny_db_search_options_t> options,
     ffi.Pointer<ffi.Int64> out_id,
   ) {
     return bunny_core_result_t.fromValue(
@@ -446,7 +446,7 @@ class BunnyCoreFfiBindings {
         label,
         query,
         interval_hours,
-        auto_favorite,
+        options,
         out_id,
       ),
     );
@@ -461,7 +461,7 @@ class BunnyCoreFfiBindings {
             ffi.Pointer<ffi.Char>,
             ffi.Pointer<ffi.Char>,
             ffi.Int,
-            ffi.Bool,
+            ffi.Pointer<bunny_db_search_options_t>,
             ffi.Pointer<ffi.Int64>,
           )
         >
@@ -474,7 +474,7 @@ class BunnyCoreFfiBindings {
           ffi.Pointer<ffi.Char>,
           ffi.Pointer<ffi.Char>,
           int,
-          bool,
+          ffi.Pointer<bunny_db_search_options_t>,
           ffi.Pointer<ffi.Int64>,
         )
       >();
@@ -555,32 +555,55 @@ class BunnyCoreFfiBindings {
         )
       >();
 
-  /// Toggles auto-favorite on an existing search (M9.6.8) -- editable after
-  /// creation, not just at bunny_core_search_create time, so a search doesn't
-  /// need to be deleted and recreated to turn this on/off.
-  bunny_core_result_t bunny_core_search_set_auto_favorite(
+  /// Updates a search's editable fields in place (M9.7.2) -- replaces
+  /// bunny_core_search_set_auto_favorite, so a search's label/query/interval/
+  /// auto-favorite/auto-upvote settings can all be changed from one edit screen
+  /// without deleting and recreating the search. The site itself is not
+  /// editable (not a param here).
+  bunny_core_result_t bunny_core_search_update(
     ffi.Pointer<bunny_core_t> core,
     int search_id,
-    bool auto_favorite,
+    ffi.Pointer<ffi.Char> label,
+    ffi.Pointer<ffi.Char> query,
+    int interval_hours,
+    ffi.Pointer<bunny_db_search_options_t> options,
   ) {
     return bunny_core_result_t.fromValue(
-      _bunny_core_search_set_auto_favorite(core, search_id, auto_favorite),
+      _bunny_core_search_update(
+        core,
+        search_id,
+        label,
+        query,
+        interval_hours,
+        options,
+      ),
     );
   }
 
-  late final _bunny_core_search_set_auto_favoritePtr =
+  late final _bunny_core_search_updatePtr =
       _lookup<
         ffi.NativeFunction<
           ffi.UnsignedInt Function(
             ffi.Pointer<bunny_core_t>,
             ffi.Int64,
-            ffi.Bool,
+            ffi.Pointer<ffi.Char>,
+            ffi.Pointer<ffi.Char>,
+            ffi.Int,
+            ffi.Pointer<bunny_db_search_options_t>,
           )
         >
-      >('bunny_core_search_set_auto_favorite');
-  late final _bunny_core_search_set_auto_favorite =
-      _bunny_core_search_set_auto_favoritePtr
-          .asFunction<int Function(ffi.Pointer<bunny_core_t>, int, bool)>();
+      >('bunny_core_search_update');
+  late final _bunny_core_search_update = _bunny_core_search_updatePtr
+      .asFunction<
+        int Function(
+          ffi.Pointer<bunny_core_t>,
+          int,
+          ffi.Pointer<ffi.Char>,
+          ffi.Pointer<ffi.Char>,
+          int,
+          ffi.Pointer<bunny_db_search_options_t>,
+        )
+      >();
 
   /// Fetches a single cached post by its local id -- a thin pass-through to
   /// bunny_db, used when a post detail view needs to open a *different* post
@@ -1305,6 +1328,24 @@ final class bunny_db_account_t extends ffi.Struct {
   external ffi.Pointer<ffi.Char> created_at;
 }
 
+/// Editable settings shared by bunny_db_search_create and bunny_db_search_update
+/// (M9.7.2) -- kept as one struct instead of ever-more positional bool/int
+/// params, since this set has grown with nearly every sub-milestone that's
+/// touched searches.
+final class bunny_db_search_options_t extends ffi.Struct {
+  /// queue a favorite for every post this search finds during sync
+  @ffi.Bool()
+  external bool auto_favorite;
+
+  /// Inkbunny favorite level (1-3); ignored by e621, which has no stars concept
+  @ffi.Int()
+  external int auto_favorite_stars;
+
+  /// e621 only -- queue an upvote for every post this search finds during sync
+  @ffi.Bool()
+  external bool auto_upvote;
+}
+
 final class bunny_db_search_t extends ffi.Struct {
   @ffi.Int64()
   external int id;
@@ -1333,6 +1374,14 @@ final class bunny_db_search_t extends ffi.Struct {
   /// queue a favorite for every post this search finds during sync
   @ffi.Bool()
   external bool auto_favorite;
+
+  /// Inkbunny favorite level (1-3); ignored by e621
+  @ffi.Int()
+  external int auto_favorite_stars;
+
+  /// e621 only -- queue an upvote for every post this search finds during sync
+  @ffi.Bool()
+  external bool auto_upvote;
 }
 
 final class bunny_db_search_list_t extends ffi.Struct {
