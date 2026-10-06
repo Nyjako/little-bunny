@@ -221,12 +221,17 @@ class _PostGridScreenState extends State<PostGridScreen> {
       return;
     }
 
+    final autoFavorite = await widget.downloadSettingsStore.loadAutoFavoriteOnDownload();
+    if (!mounted) {
+      return;
+    }
+
     setState(() => _massDownloadProgress = (0, selected.length));
     var succeeded = 0;
     var mismatched = 0;
     var failed = 0;
     for (final post in selected) {
-      final result = await widget.downloadManager.downloadPost(post, widget.repository, folder);
+      final result = await widget.downloadManager.downloadPost(post, widget.repository, folder, autoFavorite: autoFavorite);
       switch (result.outcome) {
         case DownloadOutcome.verified:
           succeeded++;
@@ -241,6 +246,9 @@ class _PostGridScreenState extends State<PostGridScreen> {
       setState(() => _massDownloadProgress = (succeeded + mismatched + failed, selected.length));
     }
 
+    if (autoFavorite && succeeded + mismatched > 0) {
+      await widget.repository.processQueue();
+    }
     if (!mounted) {
       return;
     }
