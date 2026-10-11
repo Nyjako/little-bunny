@@ -139,9 +139,11 @@ void main() {
             'created_at': '2026-01-01T00:00:00Z',
             'last_run_at': null,
             'unseen_count': 3,
+            'total_count': 5,
             'auto_favorite': true,
             'auto_favorite_stars': 2,
             'auto_upvote': true,
+            'pinned': true,
           },
         ]),
         200,
@@ -154,9 +156,11 @@ void main() {
       expect(searches.single.label, 'my search');
       expect(searches.single.lastRunAt, isNull);
       expect(searches.single.unseenCount, 3);
+      expect(searches.single.totalCount, 5);
       expect(searches.single.autoFavorite, isTrue);
       expect(searches.single.autoFavoriteStars, 2);
       expect(searches.single.autoUpvote, isTrue);
+      expect(searches.single.pinned, isTrue);
     });
 
     test('deleteSearch sends DELETE to the right path', () async {

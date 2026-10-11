@@ -31,9 +31,11 @@ static cJSON *search_to_json(const bunny_db_search_t *search)
     cJSON_AddStringToObject(json, "created_at", search->created_at);
     add_optional_string(json, "last_run_at", search->last_run_at);
     cJSON_AddNumberToObject(json, "unseen_count", search->unseen_count);
+    cJSON_AddNumberToObject(json, "total_count", search->total_count);
     cJSON_AddBoolToObject(json, "auto_favorite", search->auto_favorite);
     cJSON_AddNumberToObject(json, "auto_favorite_stars", search->auto_favorite_stars);
     cJSON_AddBoolToObject(json, "auto_upvote", search->auto_upvote);
+    cJSON_AddBoolToObject(json, "pinned", search->pinned);
     return json;
 }
 
@@ -212,6 +214,31 @@ static int handle_sync_search(struct mg_connection *conn, server_context_t *ctx,
     return status;
 }
 
+static int handle_pin_search(struct mg_connection *conn, server_context_t *ctx, int64_t search_id)
+{
+    cJSON *body = server_json_read_request_body(conn);
+    if (!body) {
+        return server_json_respond_error(conn, BUNNY_CORE_ERR_INVALID_ARG);
+    }
+
+    bool pinned = bunny_json_get_bool_or(body, "pinned", false);
+    cJSON_Delete(body);
+
+    pthread_mutex_lock(&ctx->core_mutex);
+    bunny_core_result_t result = bunny_core_search_set_pinned(ctx->core, search_id, pinned);
+    pthread_mutex_unlock(&ctx->core_mutex);
+
+    if (result != BUNNY_CORE_OK) {
+        return server_json_respond_error(conn, result);
+    }
+
+    cJSON *response = cJSON_CreateObject();
+    cJSON_AddBoolToObject(response, "ok", true);
+    int status = server_json_respond(conn, 200, response);
+    cJSON_Delete(response);
+    return status;
+}
+
 static int handle_put_search(struct mg_connection *conn, server_context_t *ctx, int64_t search_id)
 {
     cJSON *body = server_json_read_request_body(conn);
@@ -276,6 +303,9 @@ static int searches_handler(struct mg_connection *conn, void *cbdata)
         }
         if (strcmp(method, "POST") == 0 && server_route_parse_id_with_suffix(sub_path, "sync", &search_id)) {
             return handle_sync_search(conn, ctx, search_id);
+        }
+        if (strcmp(method, "POST") == 0 && server_route_parse_id_with_suffix(sub_path, "pin", &search_id)) {
+            return handle_pin_search(conn, ctx, search_id);
         }
         if (strcmp(method, "PUT") == 0 && server_route_parse_id(sub_path, &search_id)) {
             return handle_put_search(conn, ctx, search_id);
