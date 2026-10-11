@@ -1296,6 +1296,18 @@ this file is the single source of truth for "what's done" across sessions.
   recently created) applied client-side after `listSearches()` returns -- no backend change needed,
   `BunnySearch` already carries every field the three orders sort by.
 
+- [x] **M13.2 — Manual "check for updates" with per-search progress**
+  New `bunny_core_sync_search(core, search_id, out_stats)` (`libs/core/src/sync.c`) syncs exactly
+  one search, unconditionally -- unlike `bunny_core_sync_due_searches`, it ignores the search's own
+  due-interval entirely, since a manual "check everything now" button should actually check
+  everything. Full plumbing: FFI, `POST /searches/{id}/sync` (a new branch in the existing
+  `searches_handler`), `BunnyRepository.syncSearch(int) -> Future<BunnySyncStats>` across
+  FFI/HTTP/Fake. `SearchesScreen` gained a "check for updates" app bar icon that loads the current
+  search list, then calls `syncSearch` once per search sequentially, swapping the app bar title for
+  a `n/total checked` counter while running (same shape `PostGridScreen`'s mass-download progress
+  already established) -- a single search failing (network error, etc.) doesn't abort the rest,
+  matching the tolerance the scheduled sync already has.
+
 - [ ] **M12 — Cross-platform polish**
   Responsive desktop/mobile layout, consistent theming pass, Windows cross-build via
   dockcross validated end-to-end (server + core), packaging. Needs to resolve the OpenSSL-

@@ -223,6 +223,16 @@ typedef struct
  * unless `core` itself or listing the searches fails; out_stats may be NULL. */
 bunny_core_result_t bunny_core_sync_due_searches(bunny_core_t *core, bunny_core_sync_stats_t *out_stats);
 
+/* Syncs exactly one search by id, unconditionally -- unlike
+ * bunny_core_sync_due_searches, this ignores search_is_due() entirely, so a
+ * search that was just synced a minute ago still gets checked again. Used
+ * by a manual "check for updates" action that wants per-search progress
+ * (M13.2), which a single batched bunny_core_sync_due_searches call can't
+ * give a caller mid-flight. Returns BUNNY_CORE_ERR_NOT_FOUND if no search
+ * with that id exists; out_stats (searches_checked/searches_synced always
+ * 0 or 1 here) may be NULL. */
+bunny_core_result_t bunny_core_sync_search(bunny_core_t *core, int64_t search_id, bunny_core_sync_stats_t *out_stats);
+
 /* --- Action queue --------------------------------------------------------------
  * Proxies favorite/vote/comment calls to the sites: enqueue now (fast, no
  * network), process later via bunny_core_process_queue (typically on a

@@ -290,6 +290,23 @@ class FakeBunnyRepository implements BunnyRepository {
     return const BunnySyncStats(searchesChecked: 0, searchesSynced: 0, postsUpserted: 0);
   }
 
+  /// Each entry is the `searchId` passed to [syncSearch] (M13.2).
+  final List<int> syncSearchCalls = [];
+
+  /// Set here to make [syncSearch] throw for that search id instead of
+  /// succeeding -- same per-key-failure convention as [verifyFailures].
+  final Map<int, String> syncSearchFailures = {};
+
+  @override
+  Future<BunnySyncStats> syncSearch(int searchId) async {
+    syncSearchCalls.add(searchId);
+    final failure = syncSearchFailures[searchId];
+    if (failure != null) {
+      throw BunnyRepositoryException(failure);
+    }
+    return const BunnySyncStats(searchesChecked: 1, searchesSynced: 1, postsUpserted: 0);
+  }
+
   /// Each entry is the `postId` passed to [queueFavoriteAdd].
   final List<int> favoriteAddCalls = [];
 

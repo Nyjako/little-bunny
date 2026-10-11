@@ -1214,6 +1214,43 @@ class BunnyCoreFfiBindings {
         )
       >();
 
+  /// Syncs exactly one search by id, unconditionally -- unlike
+  /// bunny_core_sync_due_searches, this ignores search_is_due() entirely, so a
+  /// search that was just synced a minute ago still gets checked again. Used
+  /// by a manual "check for updates" action that wants per-search progress
+  /// (M13.2), which a single batched bunny_core_sync_due_searches call can't
+  /// give a caller mid-flight. Returns BUNNY_CORE_ERR_NOT_FOUND if no search
+  /// with that id exists; out_stats (searches_checked/searches_synced always
+  /// 0 or 1 here) may be NULL.
+  bunny_core_result_t bunny_core_sync_search(
+    ffi.Pointer<bunny_core_t> core,
+    int search_id,
+    ffi.Pointer<bunny_core_sync_stats_t> out_stats,
+  ) {
+    return bunny_core_result_t.fromValue(
+      _bunny_core_sync_search(core, search_id, out_stats),
+    );
+  }
+
+  late final _bunny_core_sync_searchPtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.UnsignedInt Function(
+            ffi.Pointer<bunny_core_t>,
+            ffi.Int64,
+            ffi.Pointer<bunny_core_sync_stats_t>,
+          )
+        >
+      >('bunny_core_sync_search');
+  late final _bunny_core_sync_search = _bunny_core_sync_searchPtr
+      .asFunction<
+        int Function(
+          ffi.Pointer<bunny_core_t>,
+          int,
+          ffi.Pointer<bunny_core_sync_stats_t>,
+        )
+      >();
+
   /// stars: Inkbunny's 1-3 rating, or -1 if not applicable (e621's plain favorite).
   bunny_core_result_t bunny_core_queue_favorite_add(
     ffi.Pointer<bunny_core_t> core,
