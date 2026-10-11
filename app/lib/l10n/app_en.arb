@@ -64,6 +64,18 @@
   "searchesTabPools": "Pools",
   "searchesPoolsEmptyState": "No saved pools yet. Tap + to add one.",
   "searchesNewPoolTooltip": "Add pool",
+  "searchesSortTooltip": "Sort",
+  "searchesSortMostUnseen": "Most unseen",
+  "searchesSortLabel": "Label (A-Z)",
+  "searchesSortRecentlyCreated": "Recently created",
+  "searchesCheckForUpdatesTooltip": "Check for updates",
+  "searchesSyncAllProgress": "{done}/{total} checked",
+  "@searchesSyncAllProgress": {
+    "placeholders": {
+      "done": {"type": "int"},
+      "total": {"type": "int"}
+    }
+  },
 
   "tagStatsScreenTitle": "Tag stats",
   "tagStatsEmptyState": "No favorited posts yet -- favorite some to see their tags here.",

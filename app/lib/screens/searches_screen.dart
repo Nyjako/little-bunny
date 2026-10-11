@@ -53,11 +53,38 @@ class _SearchesScreenState extends State<SearchesScreen> with SingleTickerProvid
   BunnyRepository? _repository;
   Future<List<BunnySearch>>? _searchesFuture;
   late final TabController _tabController;
+  SearchSortOrder _sortOrder = SearchSortOrder.mostUnseen;
 
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 2, vsync: this)..addListener(() => setState(() {}));
+    _loadSortOrder();
+  }
+
+  Future<void> _loadSortOrder() async {
+    final order = await widget.displaySettingsStore.loadSearchSortOrder();
+    if (mounted) {
+      setState(() => _sortOrder = order);
+    }
+  }
+
+  Future<void> _setSortOrder(SearchSortOrder order) async {
+    setState(() => _sortOrder = order);
+    await widget.displaySettingsStore.saveSearchSortOrder(order);
+  }
+
+  List<BunnySearch> _sorted(List<BunnySearch> searches) {
+    final sorted = [...searches];
+    switch (_sortOrder) {
+      case SearchSortOrder.mostUnseen:
+        sorted.sort((a, b) => b.unseenCount.compareTo(a.unseenCount));
+      case SearchSortOrder.label:
+        sorted.sort((a, b) => a.label.toLowerCase().compareTo(b.label.toLowerCase()));
+      case SearchSortOrder.recentlyCreated:
+        sorted.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+    }
+    return sorted;
   }
 
   @override
@@ -233,20 +260,38 @@ class _SearchesScreenState extends State<SearchesScreen> with SingleTickerProvid
           IconButton(
             icon: const Icon(Icons.settings_outlined),
             tooltip: l10n.searchesSettingsTooltip,
-            onPressed: () => Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (context) => SettingsScreen(
-                  repository: _repository!,
-                  themeSettingsStore: widget.themeSettingsStore,
-                  lockService: widget.lockService,
-                  syncSettingsStore: widget.syncSettingsStore,
-                  displaySettingsStore: widget.displaySettingsStore,
-                  downloadSettingsStore: widget.downloadSettingsStore,
-                  onThemeModeChanged: widget.onThemeModeChanged,
+            onPressed: () async {
+              await Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => SettingsScreen(
+                    repository: _repository!,
+                    themeSettingsStore: widget.themeSettingsStore,
+                    lockService: widget.lockService,
+                    syncSettingsStore: widget.syncSettingsStore,
+                    displaySettingsStore: widget.displaySettingsStore,
+                    downloadSettingsStore: widget.downloadSettingsStore,
+                    onThemeModeChanged: widget.onThemeModeChanged,
+                  ),
                 ),
-              ),
-            ),
+              );
+              // Settings can create searches (the Backup section's import,
+              // M11) -- unconditionally refresh on return rather than
+              // threading a bool pop result through, since there's no
+              // "cancelled" case worth skipping a cheap reload for.
+              _refresh();
+            },
+          ),
+          PopupMenuButton<SearchSortOrder>(
+            icon: const Icon(Icons.sort),
+            tooltip: l10n.searchesSortTooltip,
+            initialValue: _sortOrder,
+            onSelected: _setSortOrder,
+            itemBuilder: (context) => [
+              CheckedPopupMenuItem(value: SearchSortOrder.mostUnseen, checked: _sortOrder == SearchSortOrder.mostUnseen, child: Text(l10n.searchesSortMostUnseen)),
+              CheckedPopupMenuItem(value: SearchSortOrder.label, checked: _sortOrder == SearchSortOrder.label, child: Text(l10n.searchesSortLabel)),
+              CheckedPopupMenuItem(value: SearchSortOrder.recentlyCreated, checked: _sortOrder == SearchSortOrder.recentlyCreated, child: Text(l10n.searchesSortRecentlyCreated)),
+            ],
           ),
         ],
         bottom: TabBar(
@@ -262,8 +307,8 @@ class _SearchesScreenState extends State<SearchesScreen> with SingleTickerProvid
             return const Center(child: CircularProgressIndicator());
           }
           final all = snapshot.data!;
-          final searches = all.where((search) => !_isPoolSearch(search)).toList();
-          final pools = all.where(_isPoolSearch).toList();
+          final searches = _sorted(all.where((search) => !_isPoolSearch(search)).toList());
+          final pools = _sorted(all.where(_isPoolSearch).toList());
           return TabBarView(controller: _tabController, children: [_searchList(searches, l10n.searchesEmptyState), _searchList(pools, l10n.searchesPoolsEmptyState)]);
         },
       ),

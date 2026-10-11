@@ -137,6 +137,26 @@ class AppLocalizationsEn extends AppLocalizations {
   String get searchesNewPoolTooltip => 'Add pool';
 
   @override
+  String get searchesSortTooltip => 'Sort';
+
+  @override
+  String get searchesSortMostUnseen => 'Most unseen';
+
+  @override
+  String get searchesSortLabel => 'Label (A-Z)';
+
+  @override
+  String get searchesSortRecentlyCreated => 'Recently created';
+
+  @override
+  String get searchesCheckForUpdatesTooltip => 'Check for updates';
+
+  @override
+  String searchesSyncAllProgress(int done, int total) {
+    return '$done/$total checked';
+  }
+
+  @override
   String get tagStatsScreenTitle => 'Tag stats';
 
   @override
