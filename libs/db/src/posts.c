@@ -434,12 +434,24 @@ bunny_db_result_t bunny_db_search_list_posts(bunny_db_t *db, int64_t search_id, 
      * app happened to find it (sr.found_at) -- a single sync pass can link
      * posts spanning a wide date range all at once, so found_at doesn't
      * track actual recency. Falls back to cached_at for the rare post with
-     * no created_at_site rather than sorting it to the very end. */
+     * no created_at_site rather than sorting it to the very end.
+     *
+     * The NOT EXISTS clause excludes any post carrying a tag blacklisted
+     * for its own site (M13.3) -- this is the one and only post-listing
+     * query the blacklist applies to; bunny_core_preview_search's separate
+     * query (tag/pool browsing, "my favorites" previews) is deliberately
+     * untouched, so those never hide anything by default. Matching on
+     * t.site rather than joining the searches table means this works
+     * without knowing this search's own site. */
     const char *sql_seen = "SELECT " BUNNY_DB_POST_SELECT_COLUMNS BUNNY_DB_POST_SELECT_FROM_JOIN "JOIN search_results sr ON sr.post_id = p.id "
                            "WHERE sr.search_id = ? "
+                           "AND NOT EXISTS (SELECT 1 FROM post_tags pt JOIN tags t ON t.id = pt.tag_id "
+                           "JOIN blacklist_tags bl ON bl.site = t.site AND bl.tag = t.name WHERE pt.post_id = p.id) "
                            "ORDER BY COALESCE(p.created_at_site, p.cached_at) DESC;";
     const char *sql_unseen = "SELECT " BUNNY_DB_POST_SELECT_COLUMNS BUNNY_DB_POST_SELECT_FROM_JOIN "JOIN search_results sr ON sr.post_id = p.id "
                              "WHERE sr.search_id = ? AND seen.post_id IS NULL "
+                             "AND NOT EXISTS (SELECT 1 FROM post_tags pt JOIN tags t ON t.id = pt.tag_id "
+                             "JOIN blacklist_tags bl ON bl.site = t.site AND bl.tag = t.name WHERE pt.post_id = p.id) "
                              "ORDER BY COALESCE(p.created_at_site, p.cached_at) DESC;";
 
     const char *sql = unseen_only ? sql_unseen : sql_seen;

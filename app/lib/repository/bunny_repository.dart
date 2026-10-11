@@ -121,6 +121,15 @@ abstract interface class BunnyRepository {
   /// post in no pools).
   Future<List<int>> getPostPoolIds(int postId);
 
+  /// The per-site tag blacklist (M13.3), exact-match tag names, alphabetical.
+  /// Applied only to [listSearchPosts] -- tag/pool browsing and favorites
+  /// previews are deliberately unaffected, so nothing is hidden there.
+  Future<List<String>> getBlacklist(BunnySite site);
+
+  Future<void> addBlacklistTag(BunnySite site, String tag);
+
+  Future<void> removeBlacklistTag(BunnySite site, String tag);
+
   /// Fetches a single post live from its site and caches it, without
   /// requiring it to already be linked to any saved search -- used when a
   /// parent/child/pool chip points at a post that was never independently

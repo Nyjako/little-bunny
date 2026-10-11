@@ -152,6 +152,18 @@ bunny_db_result_t bunny_db_favorite_list(bunny_db_t *db, bunny_db_post_list_t *o
 
 bunny_db_result_t bunny_db_vote_set(bunny_db_t *db, int64_t post_id, int score /* -1 or 1 */);
 
+/* --- Tag blacklist (M13.3) ---------------------------------------------------
+ * A per-site list of exact tag names -- not foreign-keyed into tags(id),
+ * since a tag someone wants to blacklist may never have been synced
+ * locally. bunny_db_search_list_posts (below) excludes any post carrying a
+ * blacklisted tag; bunny_core_preview_search's underlying post-listing
+ * query is a separate function and is deliberately left unaffected, so
+ * tag/pool browsing never hides anything by default. */
+
+bunny_db_result_t bunny_db_blacklist_list(bunny_db_t *db, bunny_db_site_t site, bunny_db_string_list_t *out_list);
+bunny_db_result_t bunny_db_blacklist_add(bunny_db_t *db, bunny_db_site_t site, const char *tag);
+bunny_db_result_t bunny_db_blacklist_remove(bunny_db_t *db, bunny_db_site_t site, const char *tag);
+
 /* --- Downloads -------------------------------------------------------------- */
 
 bunny_db_result_t bunny_db_download_record(bunny_db_t *db, int64_t post_id, const char *file_path, const char *checksum_md5, bool verified, int64_t *out_id);

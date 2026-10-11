@@ -416,6 +416,91 @@ void test_vote_set_rejects_an_invalid_score(void)
     TEST_ASSERT_EQUAL(BUNNY_DB_ERR_INVALID_ARG, result);
 }
 
+void test_blacklist_add_remove_list(void)
+{
+    bunny_db_result_t result = bunny_db_blacklist_add(g_db, BUNNY_DB_SITE_E621, "young");
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, result);
+    bunny_db_blacklist_add(g_db, BUNNY_DB_SITE_E621, "gore");
+    /* Re-adding the same (site, tag) pair is a no-op, not an error or a
+     * duplicate row. */
+    result = bunny_db_blacklist_add(g_db, BUNNY_DB_SITE_E621, "young");
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, result);
+    /* Same tag text, different site -- must not bleed into e621's list. */
+    bunny_db_blacklist_add(g_db, BUNNY_DB_SITE_INKBUNNY, "gore");
+
+    bunny_db_string_list_t e621_list;
+    result = bunny_db_blacklist_list(g_db, BUNNY_DB_SITE_E621, &e621_list);
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, result);
+    TEST_ASSERT_EQUAL(2, (int)e621_list.count);
+    TEST_ASSERT_EQUAL_STRING("gore", e621_list.items[0]); /* alphabetical */
+    TEST_ASSERT_EQUAL_STRING("young", e621_list.items[1]);
+    bunny_db_string_list_free(&e621_list);
+
+    bunny_db_string_list_t ib_list;
+    result = bunny_db_blacklist_list(g_db, BUNNY_DB_SITE_INKBUNNY, &ib_list);
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, result);
+    TEST_ASSERT_EQUAL(1, (int)ib_list.count);
+    TEST_ASSERT_EQUAL_STRING("gore", ib_list.items[0]);
+    bunny_db_string_list_free(&ib_list);
+
+    result = bunny_db_blacklist_remove(g_db, BUNNY_DB_SITE_E621, "young");
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, result);
+    bunny_db_blacklist_list(g_db, BUNNY_DB_SITE_E621, &e621_list);
+    TEST_ASSERT_EQUAL(1, (int)e621_list.count);
+    TEST_ASSERT_EQUAL_STRING("gore", e621_list.items[0]);
+    bunny_db_string_list_free(&e621_list);
+
+    /* Removing from e621 must not touch Inkbunny's identically-named entry. */
+    bunny_db_blacklist_list(g_db, BUNNY_DB_SITE_INKBUNNY, &ib_list);
+    TEST_ASSERT_EQUAL(1, (int)ib_list.count);
+    bunny_db_string_list_free(&ib_list);
+}
+
+void test_search_list_posts_excludes_blacklisted_tags(void)
+{
+    int64_t search_id = 0;
+    bunny_db_search_create(g_db, BUNNY_DB_SITE_E621, "wolves", "wolf", 24, NULL, &search_id);
+
+    const char *tags1[] = {"wolf", "forest"};
+    const char *tags2[] = {"wolf", "young"};
+    bunny_db_post_upsert_t post1;
+    bunny_db_post_upsert_t post2;
+    make_test_post(&post1, 1101, 1);
+    make_test_post(&post2, 1102, 1);
+    post1.tags = tags1;
+    post1.tag_count = 2;
+    post2.tags = tags2;
+    post2.tag_count = 2;
+
+    int64_t id1 = 0;
+    int64_t id2 = 0;
+    bunny_db_post_upsert(g_db, &post1, &id1);
+    bunny_db_post_upsert(g_db, &post2, &id2);
+    bunny_db_search_add_result(g_db, search_id, id1);
+    bunny_db_search_add_result(g_db, search_id, id2);
+
+    bunny_db_post_list_t before;
+    bunny_db_search_list_posts(g_db, search_id, false, &before);
+    TEST_ASSERT_EQUAL(2, (int)before.count);
+    bunny_db_post_list_free(&before);
+
+    bunny_db_blacklist_add(g_db, BUNNY_DB_SITE_E621, "young");
+
+    bunny_db_post_list_t after;
+    bunny_db_result_t result = bunny_db_search_list_posts(g_db, search_id, false, &after);
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, result);
+    TEST_ASSERT_EQUAL(1, (int)after.count);
+    TEST_ASSERT_EQUAL(id1, after.items[0].id);
+    bunny_db_post_list_free(&after);
+
+    /* A blacklist entry for a different site never affects this search. */
+    bunny_db_blacklist_add(g_db, BUNNY_DB_SITE_INKBUNNY, "forest");
+    bunny_db_post_list_t still_one;
+    bunny_db_search_list_posts(g_db, search_id, false, &still_one);
+    TEST_ASSERT_EQUAL(1, (int)still_one.count);
+    bunny_db_post_list_free(&still_one);
+}
+
 void test_search_results_and_list_posts(void)
 {
     int64_t search_id = 0;
@@ -1189,6 +1274,8 @@ int main(void)
     RUN_TEST(test_favorite_add_remove_list);
     RUN_TEST(test_vote_set_upserts_and_is_read_back);
     RUN_TEST(test_vote_set_rejects_an_invalid_score);
+    RUN_TEST(test_blacklist_add_remove_list);
+    RUN_TEST(test_search_list_posts_excludes_blacklisted_tags);
     RUN_TEST(test_search_results_and_list_posts);
     RUN_TEST(test_search_list_posts_orders_newest_first_by_site_date);
     RUN_TEST(test_download_record_and_list);

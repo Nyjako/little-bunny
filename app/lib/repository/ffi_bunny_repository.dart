@@ -194,6 +194,15 @@ class FfiBunnyRepository implements BunnyRepository {
   Future<int> fetchPost(BunnySite site, int externalId) => _wrapped(() => _native.fetchAndCachePost(site.toWireString(), externalId));
 
   @override
+  Future<List<String>> getBlacklist(BunnySite site) => _wrapped(() => _native.blacklistList(site.toWireString()));
+
+  @override
+  Future<void> addBlacklistTag(BunnySite site, String tag) => _wrapped(() => _native.blacklistAdd(site.toWireString(), tag));
+
+  @override
+  Future<void> removeBlacklistTag(BunnySite site, String tag) => _wrapped(() => _native.blacklistRemove(site.toWireString(), tag));
+
+  @override
   Future<BunnyPoolInfo> fetchPool(int poolId) async {
     final map = await _wrapped(() => _native.fetchPool(poolId));
     return _poolInfoFromMap(map);
