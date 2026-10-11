@@ -1308,6 +1308,24 @@ this file is the single source of truth for "what's done" across sessions.
   already established) -- a single search failing (network error, etc.) doesn't abort the rest,
   matching the tolerance the scheduled sync already has.
 
+- [x] **M13.3 — Tag blacklist**
+  A per-site, exact-match tag blacklist, direct user feedback. New `blacklist_tags` table
+  (`site`, `tag`, `UNIQUE(site, tag)`, not foreign-keyed into `tags(id)` since a blacklisted tag
+  may never have been synced locally) backs new `libs/db/src/blacklist.c`
+  (`bunny_db_blacklist_list/add/remove`). `bunny_db_search_list_posts` -- and only that query --
+  gained a `NOT EXISTS` clause excluding any post carrying a tag blacklisted for its own site;
+  `bunny_core_preview_search`'s separate query (tag/pool browsing, "my favorites" previews) is
+  deliberately untouched, so nothing is hidden there by default, per the user's explicit
+  decision. Full plumbing: `bunny_core_blacklist_list/add/remove`, FFI, `GET/POST/DELETE
+  /blacklist` (new `routes_blacklist.c`), `BunnyRepository.getBlacklist/addBlacklistTag/
+  removeBlacklistTag` across FFI/HTTP/Fake. `SettingsScreen` gained a new "Blacklist" section:
+  a site toggle, a chip list with per-tag delete, and an add-tag field.
+  `PostDetailScreen._openExternalPost` (the one shared path both parent and child chips already
+  route through) now checks the target post's tags against its site's blacklist before
+  navigating, showing a confirmation dialog naming the matched tag(s) with "Cancel"/"View
+  anyway" if any match -- the only place in the app a blacklisted post can still surface, since
+  parent/child navigation doesn't go through the filtered search-listing query.
+
 - [ ] **M12 — Cross-platform polish**
   Responsive desktop/mobile layout, consistent theming pass, Windows cross-build via
   dockcross validated end-to-end (server + core), packaging. Needs to resolve the OpenSSL-

@@ -252,6 +252,26 @@ class _GetPostRelationshipsRequest extends _Request {
   const _GetPostRelationshipsRequest(this.postId);
 }
 
+class _BlacklistListRequest extends _Request {
+  final String site;
+
+  const _BlacklistListRequest(this.site);
+}
+
+class _BlacklistAddRequest extends _Request {
+  final String site;
+  final String tag;
+
+  const _BlacklistAddRequest(this.site, this.tag);
+}
+
+class _BlacklistRemoveRequest extends _Request {
+  final String site;
+  final String tag;
+
+  const _BlacklistRemoveRequest(this.site, this.tag);
+}
+
 class _GetPostPoolIdsRequest extends _Request {
   final int postId;
 
@@ -439,6 +459,19 @@ List<String> _handleGetPostSources(Pointer<bunny_core_t> core, _GetPostSourcesRe
   return using((arena) {
     final out = arena<bunny_db_string_list_t>();
     _check(_bindings.bunny_core_post_get_sources(core, r.postId, out));
+    final items = <String>[];
+    for (var i = 0; i < out.ref.count; i++) {
+      items.add(out.ref.items[i].cast<Utf8>().toDartString());
+    }
+    _bindings.bunny_db_string_list_free(out);
+    return items;
+  });
+}
+
+List<String> _handleBlacklistList(Pointer<bunny_core_t> core, _BlacklistListRequest r) {
+  return using((arena) {
+    final out = arena<bunny_db_string_list_t>();
+    _check(_bindings.bunny_core_blacklist_list(core, _siteFromWire(r.site), out));
     final items = <String>[];
     for (var i = 0; i < out.ref.count; i++) {
       items.add(out.ref.items[i].cast<Utf8>().toDartString());
@@ -667,6 +700,14 @@ Object? _dispatch(Pointer<bunny_core_t>? core, _Request request, void Function(P
         return _handleGetPostSources(c, r);
       case _GetPostRelationshipsRequest r:
         return _handleGetPostRelationships(c, r);
+      case _BlacklistListRequest r:
+        return _handleBlacklistList(c, r);
+      case _BlacklistAddRequest r:
+        _check(_bindings.bunny_core_blacklist_add(c, _siteFromWire(r.site), r.tag.toNativeUtf8(allocator: arena).cast()));
+        return null;
+      case _BlacklistRemoveRequest r:
+        _check(_bindings.bunny_core_blacklist_remove(c, _siteFromWire(r.site), r.tag.toNativeUtf8(allocator: arena).cast()));
+        return null;
       case _GetPostPoolIdsRequest r:
         return _handleGetPostPoolIds(c, r);
       case _FetchAndCachePostRequest r:
@@ -816,6 +857,12 @@ class BunnyCoreNative {
   Future<List<Map<String, Object?>>> getPostTagsByCategory(int postId) => _send<List<Map<String, Object?>>>(_GetPostTagsByCategoryRequest(postId));
 
   Future<List<String>> getPostSources(int postId) => _send<List<String>>(_GetPostSourcesRequest(postId));
+
+  Future<List<String>> blacklistList(String site) => _send<List<String>>(_BlacklistListRequest(site));
+
+  Future<void> blacklistAdd(String site, String tag) => _send<void>(_BlacklistAddRequest(site, tag));
+
+  Future<void> blacklistRemove(String site, String tag) => _send<void>(_BlacklistRemoveRequest(site, tag));
 
   Future<Map<String, Object?>> getPostRelationships(int postId) => _send<Map<String, Object?>>(_GetPostRelationshipsRequest(postId));
 

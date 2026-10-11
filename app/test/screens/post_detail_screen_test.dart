@@ -304,6 +304,53 @@ void main() {
     expect(find.text('Parent post'), findsOneWidget);
   });
 
+  testWidgets('opening a blacklisted parent shows a confirmation, cancelling stays put (M13.3)', (WidgetTester tester) async {
+    final repository = FakeBunnyRepository();
+    final post = _post(fileExt: 'jpg');
+    repository.relationshipsByPostId[1] = const BunnyPostRelationships(hasParent: true, parentExternalId: 55, hasActiveChildren: false, children: []);
+    repository.fetchPostResults['e621:55'] = 2;
+    repository.postsById[2] = _post(id: 2, externalId: 55, title: 'Parent post');
+    repository.tagsByPostId[2] = const [BunnyPostTag(name: 'young', category: 'general')];
+    repository.blacklistBySite[BunnySite.e621] = {'young'};
+
+    await tester.pumpWidget(wrapWithLocalization(PostDetailScreen(post: post, repository: repository, displaySettingsStore: const DisplaySettingsStore(), syncSettingsStore: const SyncSettingsStore(), downloadSettingsStore: const DownloadSettingsStore())));
+    await tester.pumpAndSettle();
+    await scrollToEnd(tester);
+
+    await tester.tap(find.text('#55'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Blacklisted tag'), findsOneWidget);
+    expect(find.text('This post has a blacklisted tag: young'), findsOneWidget);
+
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Parent post'), findsNothing);
+  });
+
+  testWidgets('"View anyway" on a blacklisted parent navigates through (M13.3)', (WidgetTester tester) async {
+    final repository = FakeBunnyRepository();
+    final post = _post(fileExt: 'jpg');
+    repository.relationshipsByPostId[1] = const BunnyPostRelationships(hasParent: true, parentExternalId: 55, hasActiveChildren: false, children: []);
+    repository.fetchPostResults['e621:55'] = 2;
+    repository.postsById[2] = _post(id: 2, externalId: 55, title: 'Parent post');
+    repository.tagsByPostId[2] = const [BunnyPostTag(name: 'young', category: 'general')];
+    repository.blacklistBySite[BunnySite.e621] = {'young'};
+
+    await tester.pumpWidget(wrapWithLocalization(PostDetailScreen(post: post, repository: repository, displaySettingsStore: const DisplaySettingsStore(), syncSettingsStore: const SyncSettingsStore(), downloadSettingsStore: const DownloadSettingsStore())));
+    await tester.pumpAndSettle();
+    await scrollToEnd(tester);
+
+    await tester.tap(find.text('#55'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('View anyway'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Parent post'), findsOneWidget);
+  });
+
   testWidgets('hides the relationships and pools sections for Inkbunny posts', (WidgetTester tester) async {
     final repository = FakeBunnyRepository();
     final post = _post(fileExt: 'jpg', site: BunnySite.inkbunny);

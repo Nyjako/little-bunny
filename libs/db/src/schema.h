@@ -148,6 +148,15 @@ static const char *const BUNNY_DB_SCHEMA_SQL = "PRAGMA foreign_keys = ON;"
                                                "    attempted_at TEXT,"
                                                "    error_message TEXT"
                                                ");"
+                                               /* Not a foreign key into tags(id) -- a tag someone wants to blacklist
+                                                * may never have been synced locally, so it has to be stored as plain
+                                                * text rather than requiring a tags row to already exist (M13.3). */
+                                               "CREATE TABLE IF NOT EXISTS blacklist_tags ("
+                                               "    id INTEGER PRIMARY KEY,"
+                                               "    site TEXT NOT NULL CHECK (site IN ('e621', 'inkbunny')),"
+                                               "    tag TEXT NOT NULL,"
+                                               "    UNIQUE (site, tag)"
+                                               ");"
                                                "CREATE INDEX IF NOT EXISTS idx_post_tags_tag_id ON post_tags(tag_id);"
                                                "CREATE INDEX IF NOT EXISTS idx_search_results_search_id ON search_results(search_id);"
                                                "CREATE INDEX IF NOT EXISTS idx_downloads_post_id ON downloads(post_id);"

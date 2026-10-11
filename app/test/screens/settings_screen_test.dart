@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:little_bunny/repository/bunny_models.dart';
 import 'package:little_bunny/screens/settings_screen.dart';
 import 'package:little_bunny/settings/app_lock_service.dart';
 import 'package:little_bunny/settings/display_settings_store.dart';
@@ -168,5 +169,51 @@ void main() {
 
     expect(await displayStore.loadPreviewQuality(), PreviewQuality.medium);
     expect(await displayStore.loadGridColumns(), 5);
+  });
+
+  testWidgets('blacklist editor adds/removes tags per site (M13.3)', (WidgetTester tester) async {
+    final repository = FakeBunnyRepository();
+    repository.blacklistBySite[BunnySite.inkbunny] = {'gore'};
+
+    await tester.pumpWidget(
+      wrapWithLocalization(
+        SettingsScreen(
+          repository: repository,
+          themeSettingsStore: const ThemeSettingsStore(),
+          lockService: AppLockService(FakeSecretStore()),
+          syncSettingsStore: const SyncSettingsStore(),
+          downloadSettingsStore: const DownloadSettingsStore(),
+          displaySettingsStore: const DisplaySettingsStore(),
+          onThemeModeChanged: (_) {},
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.dragUntilVisible(find.text('Add tag'), find.byType(ListView), const Offset(0, -200));
+    await tester.pumpAndSettle();
+
+    expect(find.text('No blacklisted tags yet.'), findsOneWidget);
+
+    await tester.enterText(find.widgetWithText(TextField, 'Add tag'), 'young');
+    await tester.tap(find.byIcon(Icons.add));
+    await tester.pumpAndSettle();
+
+    expect(find.text('young'), findsOneWidget);
+    expect(await repository.getBlacklist(BunnySite.e621), ['young']);
+    // Inkbunny's own list must stay untouched by an e621 addition.
+    expect(await repository.getBlacklist(BunnySite.inkbunny), ['gore']);
+
+    await tester.tap(find.text('Inkbunny').last);
+    await tester.pumpAndSettle();
+
+    expect(find.text('gore'), findsOneWidget);
+    expect(find.text('young'), findsNothing);
+
+    await tester.tap(find.descendant(of: find.widgetWithText(Chip, 'gore'), matching: find.byIcon(Icons.cancel)));
+    await tester.pumpAndSettle();
+
+    expect(find.text('gore'), findsNothing);
+    expect(await repository.getBlacklist(BunnySite.inkbunny), isEmpty);
   });
 }

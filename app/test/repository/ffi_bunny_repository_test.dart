@@ -52,6 +52,17 @@ void main() {
     expect(await repository.getPostSources(1), isEmpty);
   });
 
+  test('addBlacklistTag/getBlacklist/removeBlacklistTag round-trip per site (M13.3)', () async {
+    expect(await repository.getBlacklist(BunnySite.e621), isEmpty);
+
+    await repository.addBlacklistTag(BunnySite.e621, 'young');
+    expect(await repository.getBlacklist(BunnySite.e621), ['young']);
+    expect(await repository.getBlacklist(BunnySite.inkbunny), isEmpty);
+
+    await repository.removeBlacklistTag(BunnySite.e621, 'young');
+    expect(await repository.getBlacklist(BunnySite.e621), isEmpty);
+  });
+
   test('getPostRelationships returns all-empty/false for a nonexistent post', () async {
     final relationships = await repository.getPostRelationships(1);
     expect(relationships.hasParent, isFalse);

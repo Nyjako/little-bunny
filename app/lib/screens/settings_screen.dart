@@ -5,6 +5,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 
 import '../l10n/app_localizations.dart';
+import '../repository/bunny_models.dart';
 import '../repository/bunny_repository.dart';
 import '../services/search_backup_service.dart';
 import '../settings/app_lock_service.dart';
@@ -58,16 +59,22 @@ class _SettingsScreenState extends State<SettingsScreen> {
   /// own label with a running count, re-enable on completion" shape (M9.5).
   (int, int)? _importProgress;
 
+  BunnySite _blacklistSite = BunnySite.e621;
+  List<String> _blacklistTags = [];
+  final _blacklistTagController = TextEditingController();
+
   @override
   void initState() {
     super.initState();
     _load();
+    _loadBlacklist();
   }
 
   @override
   void dispose() {
     _intervalController.dispose();
     _gridColumnsController.dispose();
+    _blacklistTagController.dispose();
     super.dispose();
   }
 
@@ -130,6 +137,33 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Future<void> _setAutoFavoriteOnDownload(bool value) async {
     setState(() => _autoFavoriteOnDownload = value);
     await widget.downloadSettingsStore.saveAutoFavoriteOnDownload(value);
+  }
+
+  Future<void> _loadBlacklist() async {
+    final tags = await widget.repository.getBlacklist(_blacklistSite);
+    if (mounted) {
+      setState(() => _blacklistTags = tags);
+    }
+  }
+
+  Future<void> _setBlacklistSite(BunnySite site) async {
+    setState(() => _blacklistSite = site);
+    await _loadBlacklist();
+  }
+
+  Future<void> _addBlacklistTag() async {
+    final tag = _blacklistTagController.text.trim();
+    if (tag.isEmpty) {
+      return;
+    }
+    await widget.repository.addBlacklistTag(_blacklistSite, tag);
+    _blacklistTagController.clear();
+    await _loadBlacklist();
+  }
+
+  Future<void> _removeBlacklistTag(String tag) async {
+    await widget.repository.removeBlacklistTag(_blacklistSite, tag);
+    await _loadBlacklist();
   }
 
   Future<void> _exportSearches(AppLocalizations l10n) async {
@@ -266,6 +300,26 @@ class _SettingsScreenState extends State<SettingsScreen> {
             contentPadding: EdgeInsets.zero,
             title: Text(switch (_importProgress) { (final done, final total) => l10n.settingsBackupImportProgress(done, total), null => l10n.settingsBackupImportLabel }),
             trailing: TextButton(onPressed: _importProgress == null ? () => _importSearches(l10n) : null, child: Text(l10n.settingsBackupImportButton)),
+          ),
+          const SizedBox(height: 24),
+          Text(l10n.settingsBlacklistSection, style: Theme.of(context).textTheme.titleMedium),
+          const SizedBox(height: 8),
+          SegmentedButton<BunnySite>(
+            segments: const [ButtonSegment(value: BunnySite.e621, label: Text('e621')), ButtonSegment(value: BunnySite.inkbunny, label: Text('Inkbunny'))],
+            selected: {_blacklistSite},
+            onSelectionChanged: (selection) => _setBlacklistSite(selection.first),
+          ),
+          const SizedBox(height: 8),
+          if (_blacklistTags.isEmpty)
+            Padding(padding: const EdgeInsets.symmetric(vertical: 4), child: Text(l10n.settingsBlacklistEmpty))
+          else
+            Wrap(spacing: 8, runSpacing: 4, children: _blacklistTags.map((tag) => Chip(label: Text(tag), onDeleted: () => _removeBlacklistTag(tag))).toList()),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Expanded(child: TextField(controller: _blacklistTagController, decoration: InputDecoration(labelText: l10n.settingsBlacklistAddLabel), onSubmitted: (_) => _addBlacklistTag())),
+              IconButton(icon: const Icon(Icons.add), onPressed: _addBlacklistTag),
+            ],
           ),
           const SizedBox(height: 24),
           Text(l10n.settingsAppLockSection, style: Theme.of(context).textTheme.titleMedium),

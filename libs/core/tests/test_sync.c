@@ -491,6 +491,28 @@ void test_preview_search_upserts_posts_without_creating_a_search(void)
     free(fixture);
 }
 
+void test_preview_search_is_unaffected_by_the_tag_blacklist(void)
+{
+    /* M13.3: the blacklist only applies to bunny_db_search_list_posts (a
+     * saved search's own grid) -- tag/pool browsing and "my favorites"
+     * previews, both of which go through preview_search, must never hide
+     * anything by default. */
+    char *fixture = read_fixture("e621_posts_search.json");
+    TEST_ASSERT_NOT_NULL(fixture);
+    g_e621_state.bodies[0] = fixture;
+    g_e621_state.body_count = 1;
+
+    bunny_core_blacklist_add(g_core, BUNNY_DB_SITE_E621, "one");
+
+    bunny_db_post_list_t posts;
+    bunny_core_result_t result = bunny_core_preview_search(g_core, BUNNY_DB_SITE_E621, "wolf", 1, &posts);
+    TEST_ASSERT_EQUAL(BUNNY_CORE_OK, result);
+    TEST_ASSERT_EQUAL(1, (int)posts.count);
+    bunny_db_post_list_free(&posts);
+
+    free(fixture);
+}
+
 void test_preview_search_requests_the_given_e621_page(void)
 {
     g_e621_transport.send = capturing_fake_send;
@@ -970,6 +992,7 @@ int main(void)
     RUN_TEST(test_list_comments_rejects_inkbunny_posts);
     RUN_TEST(test_fetch_pool_returns_live_pool_info);
     RUN_TEST(test_preview_search_upserts_posts_without_creating_a_search);
+    RUN_TEST(test_preview_search_is_unaffected_by_the_tag_blacklist);
     RUN_TEST(test_preview_search_requests_the_given_e621_page);
     RUN_TEST(test_preview_search_requests_the_given_inkbunny_page);
     RUN_TEST(test_preview_search_rejects_a_page_below_one);
