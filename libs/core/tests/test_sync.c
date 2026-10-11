@@ -871,6 +871,39 @@ void test_sync_skips_search_not_due_yet(void)
     free(fixture);
 }
 
+void test_sync_search_forces_a_non_due_search_to_sync(void)
+{
+    char *fixture = read_fixture("e621_posts_search.json");
+    TEST_ASSERT_NOT_NULL(fixture);
+    g_e621_state.bodies[0] = fixture;
+    g_e621_state.bodies[1] = fixture;
+    g_e621_state.body_count = 2;
+
+    int64_t search_id = 0;
+    bunny_core_search_create(g_core, BUNNY_DB_SITE_E621, "wolves", "wolf", 24, NULL, &search_id);
+
+    bunny_core_sync_stats_t stats;
+    bunny_core_sync_due_searches(g_core, &stats);
+    TEST_ASSERT_EQUAL(1, stats.searches_synced);
+
+    /* bunny_core_sync_due_searches would skip this (just touched, 24h
+     * interval) -- bunny_core_sync_search must force it anyway (M13.2). */
+    bunny_core_result_t result = bunny_core_sync_search(g_core, search_id, &stats);
+    TEST_ASSERT_EQUAL(BUNNY_CORE_OK, result);
+    TEST_ASSERT_EQUAL(1, stats.searches_checked);
+    TEST_ASSERT_EQUAL(1, stats.searches_synced);
+    TEST_ASSERT_EQUAL(1, stats.posts_upserted);
+
+    free(fixture);
+}
+
+void test_sync_search_returns_not_found_for_unknown_id(void)
+{
+    bunny_core_sync_stats_t stats;
+    bunny_core_result_t result = bunny_core_sync_search(g_core, 999, &stats);
+    TEST_ASSERT_EQUAL(BUNNY_CORE_ERR_NOT_FOUND, result);
+}
+
 void test_verify_e621_accepts_valid_credentials(void)
 {
     char *fixture = read_fixture("e621_posts_search.json");
@@ -953,6 +986,8 @@ int main(void)
     RUN_TEST(test_sync_inkbunny_search_upserts_post);
     RUN_TEST(test_sync_inkbunny_search_marks_a_favorited_submission_locally);
     RUN_TEST(test_sync_skips_search_not_due_yet);
+    RUN_TEST(test_sync_search_forces_a_non_due_search_to_sync);
+    RUN_TEST(test_sync_search_returns_not_found_for_unknown_id);
     RUN_TEST(test_verify_e621_accepts_valid_credentials);
     RUN_TEST(test_verify_e621_rejects_when_site_call_fails);
     RUN_TEST(test_verify_inkbunny_accepts_valid_credentials);

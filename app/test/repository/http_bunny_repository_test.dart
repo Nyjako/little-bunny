@@ -515,6 +515,18 @@ void main() {
       expect(stats.postsUpserted, 10);
     });
 
+    test('syncSearch posts to /searches/{id}/sync and maps the stats response (M13.2)', () async {
+      respond = (_) => http.Response(jsonEncode({'searches_checked': 1, 'searches_synced': 1, 'posts_upserted': 4}), 200);
+
+      final stats = await buildRepository().syncSearch(7);
+
+      expect(capturedMethod, 'POST');
+      expect(capturedUri.path, '/searches/7/sync');
+      expect(stats.searchesChecked, 1);
+      expect(stats.searchesSynced, 1);
+      expect(stats.postsUpserted, 4);
+    });
+
     test('queueFavoriteAdd omits the body when stars is null', () async {
       respond = (_) => http.Response(jsonEncode({'queued': true}), 202);
 

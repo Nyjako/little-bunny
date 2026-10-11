@@ -201,6 +201,12 @@ class _SyncDueSearchesRequest extends _Request {
   const _SyncDueSearchesRequest();
 }
 
+class _SyncSearchRequest extends _Request {
+  final int searchId;
+
+  const _SyncSearchRequest(this.searchId);
+}
+
 class _TagAutocompleteRequest extends _Request {
   final String site;
   final String prefix;
@@ -641,6 +647,10 @@ Object? _dispatch(Pointer<bunny_core_t>? core, _Request request, void Function(P
         final outStats = arena<bunny_core_sync_stats_t>();
         _check(_bindings.bunny_core_sync_due_searches(c, outStats));
         return _syncStatsToMap(outStats.ref);
+      case _SyncSearchRequest r:
+        final outStats = arena<bunny_core_sync_stats_t>();
+        _check(_bindings.bunny_core_sync_search(c, r.searchId, outStats));
+        return _syncStatsToMap(outStats.ref);
       case _TagAutocompleteRequest r:
         return _handleTagAutocomplete(c, r);
       case _TopFavoritedTagsRequest r:
@@ -792,6 +802,8 @@ class BunnyCoreNative {
   Future<Map<String, Object?>> getPostById(int postId) => _send<Map<String, Object?>>(_GetPostByIdRequest(postId));
 
   Future<Map<String, Object?>> syncDueSearches() => _send<Map<String, Object?>>(const _SyncDueSearchesRequest());
+
+  Future<Map<String, Object?>> syncSearch(int searchId) => _send<Map<String, Object?>>(_SyncSearchRequest(searchId));
 
   Future<List<Map<String, Object?>>> tagAutocomplete(String site, String prefix, int limit) => _send<List<Map<String, Object?>>>(_TagAutocompleteRequest(site, prefix, limit));
 

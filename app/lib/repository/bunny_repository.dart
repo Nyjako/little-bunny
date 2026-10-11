@@ -176,6 +176,11 @@ abstract interface class BunnyRepository {
   /// "refresh now" action.
   Future<BunnySyncStats> syncDueSearches();
 
+  /// Syncs exactly one search right now, ignoring its own due-interval
+  /// (M13.2) -- used by a "check for updates" action that wants per-search
+  /// progress, which a single [syncDueSearches] call can't give mid-flight.
+  Future<BunnySyncStats> syncSearch(int searchId);
+
   /// Enqueues a favorite-add action; it isn't sent to the site until
   /// [processQueue] runs. `stars` is Inkbunny's 1-3 rating, or omitted for
   /// e621's plain favorite.
