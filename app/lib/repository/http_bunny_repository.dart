@@ -347,6 +347,31 @@ class HttpBunnyRepository implements BunnyRepository {
   }
 
   @override
+  Future<List<String>> getBlacklist(BunnySite site) async {
+    final response = await _client.get(_uri('/blacklist', {'site': site.toWireString()}), headers: _headers);
+    if (response.statusCode != 200) {
+      _throwError(response);
+    }
+    return (jsonDecode(response.body) as List).cast<String>();
+  }
+
+  @override
+  Future<void> addBlacklistTag(BunnySite site, String tag) async {
+    final response = await _client.post(_uri('/blacklist'), headers: _headers, body: jsonEncode({'site': site.toWireString(), 'tag': tag}));
+    if (response.statusCode != 200) {
+      _throwError(response);
+    }
+  }
+
+  @override
+  Future<void> removeBlacklistTag(BunnySite site, String tag) async {
+    final response = await _client.delete(_uri('/blacklist', {'site': site.toWireString(), 'tag': tag}), headers: _headers);
+    if (response.statusCode != 200) {
+      _throwError(response);
+    }
+  }
+
+  @override
   Future<BunnyPoolInfo> fetchPool(int poolId) async {
     final response = await _client.get(_uri('/pools/$poolId'), headers: _headers);
     if (response.statusCode != 200) {

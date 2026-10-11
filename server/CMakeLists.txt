@@ -15,6 +15,7 @@ add_library(bunny_server_lib STATIC
     src/routes_tags.c
     src/routes_pools.c
     src/routes_search.c
+    src/routes_blacklist.c
 )
 
 target_include_directories(bunny_server_lib

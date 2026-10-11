@@ -493,10 +493,42 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
     },
   );
 
+  /// Parent/child chips are the one place this app navigates to a post that
+  /// wasn't reached through a (possibly blacklist-filtered) saved search --
+  /// so unlike the normal grid, a blacklisted post can actually surface here.
+  /// Named for the match found, not the whole blacklist, since that's what's
+  /// actually useful to show in the confirmation (M13.3).
+  Future<bool> _confirmIfBlacklisted(AppLocalizations l10n, BunnyPost post) async {
+    final tags = await widget.repository.getPostTagsByCategory(post.id);
+    final blacklist = await widget.repository.getBlacklist(post.site);
+    final matched = tags.map((tag) => tag.name).where(blacklist.contains).toList();
+    if (matched.isEmpty || !mounted) {
+      return true;
+    }
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(l10n.postDetailBlacklistedDialogTitle),
+        content: Text(l10n.postDetailBlacklistedDialogContent(matched.join(', '))),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: Text(l10n.commonCancel)),
+          TextButton(onPressed: () => Navigator.pop(context, true), child: Text(l10n.postDetailBlacklistedViewAnyway)),
+        ],
+      ),
+    );
+    return confirmed == true;
+  }
+
   Future<void> _openExternalPost(AppLocalizations l10n, int externalId) async {
     try {
       final postId = await widget.repository.fetchPost(widget.post.site, externalId);
       final post = await widget.repository.getPost(postId);
+      if (!mounted) {
+        return;
+      }
+      if (!await _confirmIfBlacklisted(l10n, post)) {
+        return;
+      }
       if (!mounted) {
         return;
       }

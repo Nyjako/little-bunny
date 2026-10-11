@@ -2052,6 +2052,40 @@ already established (M9.5). A single search failing (network error, etc.) is cau
 rather than aborting the whole run, matching the tolerance `bunny_core_sync_due_searches` already
 has for one search's failure during a scheduled pass.
 
+**Tag blacklist (M13.3)**: a per-site, exact-match-only tag blacklist, direct user feedback.
+The new `blacklist_tags` table (`site`, `tag`, `UNIQUE(site, tag)`) is deliberately *not*
+foreign-keyed into `tags(id)`, since a tag someone wants to blacklist may never have been
+synced locally -- it has to be storable as plain text regardless. New `libs/db/src/blacklist.c`
+(`bunny_db_blacklist_list/add/remove`) follows the exact CRUD shape `favorites.c`/`votes.c`
+already established. The filter itself lives in exactly one place:
+`bunny_db_search_list_posts`'s SQL (`libs/db/src/posts.c`) gained a `NOT EXISTS (SELECT 1 FROM
+post_tags pt JOIN tags t ON t.id = pt.tag_id JOIN blacklist_tags bl ON bl.site = t.site AND
+bl.tag = t.name WHERE pt.post_id = p.id)` clause. Matching on `t.site` rather than joining the
+`searches` table means the query never needs to know its own search's site to apply the right
+per-site blacklist. `bunny_core_preview_search`'s separate query (the one tag/pool browsing and
+"my favorites" previews both run through) is deliberately left untouched -- confirmed by a test
+that blacklists a tag the preview fixture carries and asserts the result is still returned --
+so nothing is hidden by default outside a normal saved search's own grid, per the user's
+explicit decision. Full plumbing: `bunny_core_blacklist_list/add/remove`
+(`libs/core/src/blacklist.c`), FFI, `GET/POST/DELETE /blacklist` (new `routes_blacklist.c`,
+following the one-file-per-resource convention every other route file already set),
+`BunnyRepository.getBlacklist/addBlacklistTag/removeBlacklistTag` across FFI/HTTP/Fake.
+
+`SettingsScreen` gained a "Blacklist" section: a `SegmentedButton<BunnySite>` (matching
+`CreateSearchScreen`'s own site toggle) above a `Wrap` of removable `Chip`s and a text field +
+add button, the first list-editor UI in this app. The one place a blacklisted post can still
+surface is parent/child relation navigation (`PostDetailScreen._openExternalPost`, the single
+method both the parent chip and every child chip already route through) -- a saved search's
+grid filters blacklisted posts out entirely via the query above, but a parent/child target was
+never reached through that filtered listing in the first place, and by design (per the user's
+request) isn't silently hidden either. Before navigating, `_confirmIfBlacklisted` fetches the
+target post's own tags (`getPostTagsByCategory`, already used elsewhere on this screen) and
+intersects them with its site's blacklist; a non-empty match shows an `AlertDialog` naming the
+matched tag(s) with "Cancel"/"View anyway" (same `showDialog<bool>` shape `SearchesScreen`'s
+remove-confirmation already uses), and navigation only proceeds on an empty match or an explicit
+"View anyway". Pools are unaffected entirely, by design -- they route through `TagBrowseScreen`'s
+`previewSearch` call, the same unfiltered path tag/pool browsing always uses.
+
 ## Inkbunny API constraints (found in M2)
 
 Verified against the live API and the official docs while building `libinkbunny`:
