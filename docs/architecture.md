@@ -2086,6 +2086,25 @@ remove-confirmation already uses), and navigation only proceeds on an empty matc
 "View anyway". Pools are unaffected entirely, by design -- they route through `TagBrowseScreen`'s
 `previewSearch` call, the same unfiltered path tag/pool browsing always uses.
 
+## M14 -- Pinning, auto-upvote, DB backups, split tag stats, staleness fix, row cleanup
+
+Direct user feedback after M13 shipped, bundling several requests. This section covers M14.3;
+the remaining M14.N sub-milestones are documented as they land.
+
+**Searches-list progressive-refresh fix (M14.3)**: bug fix. `SearchesScreen._checkForUpdates`
+(M13.2) synced every search sequentially but only called `_refresh()` once, after the whole
+loop finished -- so a long run, or a widget disposed mid-loop for any reason (both of
+`_checkForUpdates`'s `if (!mounted) { return; }` guards sit *before* that final call), could
+leave the unseen-count badges stale until the app restarted. The fix moves the refresh
+(`_searchesFuture = _repository!.listSearches()`) inside the loop, right after each individual
+`syncSearch` call resolves (success or caught failure), instead of only after the loop exits --
+whatever has synced so far is always reflected, and badges now update live during a long run
+rather than all at once at the end. Tested with a `FakeBunnyRepository` extended with
+per-search `Completer`-gated `syncSearch` calls (`syncSearchGates`) plus a
+`syncSearchNewPosts` map simulating a sync that actually finds something new -- letting the
+test pause mid-loop and assert one search's badge is already visible while the other's sync is
+still pending, which the old end-of-loop-only refresh could not do.
+
 ## Inkbunny API constraints (found in M2)
 
 Verified against the live API and the official docs while building `libinkbunny`:
