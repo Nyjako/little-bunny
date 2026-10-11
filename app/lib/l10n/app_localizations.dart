@@ -952,6 +952,12 @@ abstract class AppLocalizations {
   /// **'Auto-favorite on download'**
   String get settingsAutoFavoriteOnDownloadLabel;
 
+  /// No description provided for @settingsAutoUpvoteOnDownloadLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Auto-upvote on download'**
+  String get settingsAutoUpvoteOnDownloadLabel;
+
   /// No description provided for @settingsBackupSection.
   ///
   /// In en, this message translates to:

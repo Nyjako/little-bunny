@@ -2088,8 +2088,8 @@ remove-confirmation already uses), and navigation only proceeds on an empty matc
 
 ## M14 -- Pinning, auto-upvote, DB backups, split tag stats, staleness fix, row cleanup
 
-Direct user feedback after M13 shipped, bundling several requests. This section covers M14.1
-and M14.3; the remaining M14.N sub-milestones are documented as they land.
+Direct user feedback after M13 shipped, bundling several requests. This section covers M14.1,
+M14.2, and M14.3; the remaining M14.N sub-milestones are documented as they land.
 
 **Pin searches, total post count, and row-action cleanup (M14.1)**: three requests bundled
 into one branch since all three reshape the same `SearchesScreen` row UI and
@@ -2117,6 +2117,21 @@ interfering with each other or with the app-bar-level "check for updates" action
 deliberately keeps its own `Icons.sync` icon; the per-row button uses `Icons.refresh` instead,
 partly for a visually distinct affordance and partly so widget-test finders can target one
 without ambiguity now that both exist on screen at once).
+
+**Auto-upvote on download (M14.2)**: direct user feedback, an exact mirror of the existing
+auto-favorite-on-download (M10.1). `DownloadSettingsStore` gained
+`loadAutoUpvoteOnDownload`/`saveAutoUpvoteOnDownload` (key `auto_upvote_on_download`, same
+shape as the favorite key). `DownloadManager.downloadPost` gained `{bool autoUpvote = false}`:
+once a download outcome is `verified` or `checksumMismatch` (the file was actually written in
+both cases), and only for `BunnySite.e621` -- Inkbunny has no vote API at all, the same gate
+every other vote-related feature in this app (M4.3/M9.6.9/M9.7.2) already applies -- it calls
+`repository.queueVote(post.id, 1)`, queuing only, same "queue, let the caller drain" shape the
+`autoFavorite` branch right above it already follows. Both call sites that already loaded
+`autoFavorite` (`PostDetailScreen._downloadFile`, `PostGridScreen`'s mass-download loop) now
+also load `autoUpvote` and widen their existing `if (autoFavorite) { await processQueue(); }`
+drain condition to `if (autoFavorite || autoUpvote)`, so a single drain still covers whichever
+of the two actions (or both) got queued. `SettingsScreen`'s Downloads section gained a second
+`SwitchListTile` beside the existing auto-favorite one.
 
 **Searches-list progressive-refresh fix (M14.3)**: bug fix. `SearchesScreen._checkForUpdates`
 (M13.2) synced every search sequentially but only called `_refresh()` once, after the whole

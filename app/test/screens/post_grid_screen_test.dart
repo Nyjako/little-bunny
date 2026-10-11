@@ -454,5 +454,48 @@ void main() {
       expect(repository.favoriteAddCalls, [1]); // only post 1 actually downloaded
       expect(repository.processQueueCallCount, 1); // queued once, drained once after the loop
     });
+
+    testWidgets('queues an upvote per successfully-downloaded post and drains once when auto-upvote-on-download is on (M14.2)', (WidgetTester tester) async {
+      SharedPreferences.setMockInitialValues({'download_destination_folder': tempDir.path, 'auto_upvote_on_download': true});
+      final repository = FakeBunnyRepository();
+      repository.postsBySearchId[1] = [
+        _post(id: 1, isSeen: false, fileUrl: 'https://example.invalid/1.jpg', fileExt: 'jpg', artist: 'wolf'),
+        _post(id: 2, isSeen: false, fileUrl: 'https://example.invalid/2.jpg', fileExt: 'jpg', artist: 'fox'),
+        _post(id: 3, isSeen: false), // no fileUrl -- never queues
+      ];
+      final downloadManager = DownloadManager(client: MockClient((request) async => http.Response.bytes([1, 2, 3], request.url.path.endsWith('2.jpg') ? 500 : 200)));
+
+      await tester.pumpWidget(
+        wrapWithLocalization(
+          PostGridScreen(
+            search: search,
+            repository: repository,
+            displaySettingsStore: const DisplaySettingsStore(),
+            syncSettingsStore: const SyncSettingsStore(),
+            downloadSettingsStore: const DownloadSettingsStore(),
+            downloadManager: downloadManager,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.longPress(find.byKey(const ValueKey(1)));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey(2)));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey(3)));
+      await tester.pumpAndSettle();
+
+      await tester.runAsync(() async {
+        await tester.tap(find.descendant(of: find.byType(AppBar), matching: find.byIcon(Icons.download)));
+        await tester.pump();
+        await Future<void>.delayed(const Duration(milliseconds: 100));
+        await tester.pump();
+      });
+      await tester.pumpAndSettle();
+
+      expect(repository.voteCalls, [(1, 1)]); // only post 1 actually downloaded
+      expect(repository.processQueueCallCount, 1); // queued once, drained once after the loop
+    });
   });
 }

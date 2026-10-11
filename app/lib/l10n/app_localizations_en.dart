@@ -471,6 +471,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get settingsAutoFavoriteOnDownloadLabel => 'Auto-favorite on download';
 
   @override
+  String get settingsAutoUpvoteOnDownloadLabel => 'Auto-upvote on download';
+
+  @override
   String get settingsBackupSection => 'Backup';
 
   @override

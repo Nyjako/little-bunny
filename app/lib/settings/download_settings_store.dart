@@ -11,6 +11,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 class DownloadSettingsStore {
   static const _key = 'download_destination_folder';
   static const _autoFavoriteKey = 'auto_favorite_on_download';
+  static const _autoUpvoteKey = 'auto_upvote_on_download';
 
   const DownloadSettingsStore();
 
@@ -41,5 +42,20 @@ class DownloadSettingsStore {
   Future<void> saveAutoFavoriteOnDownload(bool enabled) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_autoFavoriteKey, enabled);
+  }
+
+  /// Whether downloading a post should also queue an upvote for it (M14.2)
+  /// -- the vote counterpart to [loadAutoFavoriteOnDownload]/
+  /// [saveAutoFavoriteOnDownload], same shape. Gated to e621 by
+  /// [DownloadManager.downloadPost] itself, not here, since Inkbunny has no
+  /// vote API at all. Defaults to off.
+  Future<bool> loadAutoUpvoteOnDownload() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(_autoUpvoteKey) ?? false;
+  }
+
+  Future<void> saveAutoUpvoteOnDownload(bool enabled) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_autoUpvoteKey, enabled);
   }
 }
