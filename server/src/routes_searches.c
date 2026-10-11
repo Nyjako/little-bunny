@@ -192,6 +192,26 @@ static int handle_mark_all_seen(struct mg_connection *conn, server_context_t *ct
     return status;
 }
 
+static int handle_sync_search(struct mg_connection *conn, server_context_t *ctx, int64_t search_id)
+{
+    bunny_core_sync_stats_t stats;
+    pthread_mutex_lock(&ctx->core_mutex);
+    bunny_core_result_t result = bunny_core_sync_search(ctx->core, search_id, &stats);
+    pthread_mutex_unlock(&ctx->core_mutex);
+
+    if (result != BUNNY_CORE_OK) {
+        return server_json_respond_error(conn, result);
+    }
+
+    cJSON *response = cJSON_CreateObject();
+    cJSON_AddNumberToObject(response, "searches_checked", stats.searches_checked);
+    cJSON_AddNumberToObject(response, "searches_synced", stats.searches_synced);
+    cJSON_AddNumberToObject(response, "posts_upserted", stats.posts_upserted);
+    int status = server_json_respond(conn, 200, response);
+    cJSON_Delete(response);
+    return status;
+}
+
 static int handle_put_search(struct mg_connection *conn, server_context_t *ctx, int64_t search_id)
 {
     cJSON *body = server_json_read_request_body(conn);
@@ -253,6 +273,9 @@ static int searches_handler(struct mg_connection *conn, void *cbdata)
         }
         if (strcmp(method, "POST") == 0 && server_route_parse_id_with_suffix(sub_path, "mark_all_seen", &search_id)) {
             return handle_mark_all_seen(conn, ctx, search_id);
+        }
+        if (strcmp(method, "POST") == 0 && server_route_parse_id_with_suffix(sub_path, "sync", &search_id)) {
+            return handle_sync_search(conn, ctx, search_id);
         }
         if (strcmp(method, "PUT") == 0 && server_route_parse_id(sub_path, &search_id)) {
             return handle_put_search(conn, ctx, search_id);

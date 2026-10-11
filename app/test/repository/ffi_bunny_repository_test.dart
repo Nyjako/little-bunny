@@ -130,6 +130,10 @@ void main() {
     expect(stats.postsUpserted, 0);
   });
 
+  test('syncSearch throws for a nonexistent search id (M13.2)', () async {
+    await expectLater(repository.syncSearch(1), throwsA(isA<BunnyRepositoryException>()));
+  });
+
   test('processQueue returns a BunnyQueueStats', () async {
     final stats = await repository.processQueue();
 

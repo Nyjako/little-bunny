@@ -426,6 +426,36 @@ void test_full_account_search_sync_favorite_flow(void)
     free(response.data);
 }
 
+void test_sync_single_search_forces_even_when_not_due(void)
+{
+    response_buffer_t response = {0};
+
+    long status = do_request("POST", "/searches", "{\"site\":\"e621\",\"label\":\"wolves\",\"query\":\"wolf\",\"interval_hours\":24}", &response, true, NULL);
+    TEST_ASSERT_EQUAL(201, status);
+    free(response.data);
+    memset(&response, 0, sizeof(response));
+
+    status = do_request("POST", "/searches/1/sync", NULL, &response, true, NULL);
+    TEST_ASSERT_EQUAL(200, status);
+    TEST_ASSERT_NOT_NULL(strstr(response.data, "\"searches_checked\":1"));
+    TEST_ASSERT_NOT_NULL(strstr(response.data, "\"searches_synced\":1"));
+    TEST_ASSERT_NOT_NULL(strstr(response.data, "\"posts_upserted\":1"));
+    free(response.data);
+    memset(&response, 0, sizeof(response));
+
+    /* The batch POST /sync would skip this (just touched, 24h interval) --
+     * the per-search route must force it anyway (M13.2). */
+    status = do_request("POST", "/searches/1/sync", NULL, &response, true, NULL);
+    TEST_ASSERT_EQUAL(200, status);
+    TEST_ASSERT_NOT_NULL(strstr(response.data, "\"searches_synced\":1"));
+    free(response.data);
+    memset(&response, 0, sizeof(response));
+
+    status = do_request("POST", "/searches/999/sync", NULL, &response, true, NULL);
+    TEST_ASSERT_EQUAL(404, status);
+    free(response.data);
+}
+
 void test_search_auto_favorite_create_and_update(void)
 {
     response_buffer_t response = {0};
@@ -514,6 +544,7 @@ int main(void)
     RUN_TEST(test_request_with_wrong_token_is_rejected);
     RUN_TEST(test_verify_account);
     RUN_TEST(test_full_account_search_sync_favorite_flow);
+    RUN_TEST(test_sync_single_search_forces_even_when_not_due);
     RUN_TEST(test_search_auto_favorite_create_and_update);
     RUN_TEST(test_my_inkbunny_favorites_searches_and_caches_with_favorite_marked);
     RUN_TEST(test_scheduler_syncs_search_automatically);

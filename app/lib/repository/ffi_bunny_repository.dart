@@ -239,6 +239,12 @@ class FfiBunnyRepository implements BunnyRepository {
   }
 
   @override
+  Future<BunnySyncStats> syncSearch(int searchId) async {
+    final map = await _wrapped(() => _native.syncSearch(searchId));
+    return _syncStatsFromMap(map);
+  }
+
+  @override
   Future<void> queueFavoriteAdd(int postId, {int? stars}) => _wrapped(() => _native.queueFavoriteAdd(postId, stars ?? -1));
 
   @override

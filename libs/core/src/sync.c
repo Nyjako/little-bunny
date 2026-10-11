@@ -636,3 +636,44 @@ bunny_core_result_t bunny_core_sync_due_searches(bunny_core_t *core, bunny_core_
     }
     return BUNNY_CORE_OK;
 }
+
+bunny_core_result_t bunny_core_sync_search(bunny_core_t *core, int64_t search_id, bunny_core_sync_stats_t *out_stats)
+{
+    if (!core) {
+        return BUNNY_CORE_ERR_INVALID_ARG;
+    }
+
+    bunny_db_search_list_t searches;
+    bunny_db_result_t list_result = bunny_db_search_list(core->db, &searches);
+    if (list_result != BUNNY_DB_OK) {
+        return bunny_core_map_db_result(list_result);
+    }
+
+    const bunny_db_search_t *search = NULL;
+    for (size_t i = 0; i < searches.count; i++) {
+        if (searches.items[i].id == search_id) {
+            search = &searches.items[i];
+            break;
+        }
+    }
+    if (!search) {
+        bunny_db_search_list_free(&searches);
+        return BUNNY_CORE_ERR_NOT_FOUND;
+    }
+
+    bunny_core_sync_stats_t stats;
+    memset(&stats, 0, sizeof(stats));
+    stats.searches_checked = 1;
+
+    bunny_core_result_t sync_result = search->site == BUNNY_DB_SITE_E621 ? sync_e621_search(core, search, &stats) : sync_inkbunny_search(core, search, &stats);
+    if (sync_result == BUNNY_CORE_OK) {
+        stats.searches_synced = 1;
+        bunny_db_search_touch_last_run(core->db, search_id);
+    }
+
+    bunny_db_search_list_free(&searches);
+    if (out_stats) {
+        *out_stats = stats;
+    }
+    return sync_result;
+}

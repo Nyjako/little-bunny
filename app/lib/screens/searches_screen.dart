@@ -106,6 +106,42 @@ class _SearchesScreenState extends State<SearchesScreen> with SingleTickerProvid
     });
   }
 
+  /// Non-null only while [_checkForUpdates]'s loop is running -- same
+  /// `(done, total)` shape `PostGridScreen._massDownloadProgress` uses
+  /// (M9.5), swapped into the app bar title the same way that screen swaps
+  /// it into its own title.
+  (int, int)? _syncAllProgress;
+
+  /// Forces every saved search to sync right now (M13.2), ignoring each
+  /// search's own due-interval -- unlike the scheduled/manual batch sync
+  /// (`syncDueSearches`), this syncs one search at a time so progress can
+  /// be shown, and keeps going past a single search's failure (network
+  /// error, etc.) rather than aborting the whole run.
+  Future<void> _checkForUpdates() async {
+    final searches = await _repository!.listSearches();
+    if (searches.isEmpty) {
+      return;
+    }
+    setState(() => _syncAllProgress = (0, searches.length));
+    for (var i = 0; i < searches.length; i++) {
+      try {
+        await _repository!.syncSearch(searches[i].id);
+      } catch (_) {
+        // Leave it and move on -- same tolerance the scheduled sync already
+        // has for a single search failing.
+      }
+      if (!mounted) {
+        return;
+      }
+      setState(() => _syncAllProgress = (i + 1, searches.length));
+    }
+    if (!mounted) {
+      return;
+    }
+    setState(() => _syncAllProgress = null);
+    _refresh();
+  }
+
   Future<void> _createSearch() async {
     final created = await Navigator.push<bool>(context, MaterialPageRoute(builder: (context) => CreateSearchScreen(repository: _repository!, syncSettingsStore: widget.syncSettingsStore)));
     if (created == true) {
@@ -225,8 +261,13 @@ class _SearchesScreenState extends State<SearchesScreen> with SingleTickerProvid
     return Scaffold(
       appBar: AppBar(
         toolbarHeight: wide ? compactToolbarHeight : null,
-        title: Text(l10n.searchesScreenTitle),
+        title: Text(switch (_syncAllProgress) { (final done, final total) => l10n.searchesSyncAllProgress(done, total), null => l10n.searchesScreenTitle }),
         actions: [
+          IconButton(
+            icon: _syncAllProgress != null ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.sync),
+            tooltip: l10n.searchesCheckForUpdatesTooltip,
+            onPressed: _syncAllProgress != null ? null : _checkForUpdates,
+          ),
           IconButton(
             icon: const Icon(Icons.person_outline),
             tooltip: l10n.searchesAccountsTooltip,
