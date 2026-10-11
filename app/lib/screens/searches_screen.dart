@@ -237,6 +237,7 @@ class _SearchesScreenState extends State<SearchesScreen> with SingleTickerProvid
               context,
               MaterialPageRoute(
                 builder: (context) => SettingsScreen(
+                  repository: _repository!,
                   themeSettingsStore: widget.themeSettingsStore,
                   lockService: widget.lockService,
                   syncSettingsStore: widget.syncSettingsStore,

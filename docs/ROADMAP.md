@@ -1265,10 +1265,22 @@ this file is the single source of truth for "what's done" across sessions.
   in-place and fullscreen views in one change. No existing test needed updating --
   `find.byType(VideoPlayer)` still finds the `VideoPlayer` Chewie renders internally.
 
-- [ ] **M11 — Backup & import**
-  Export/import of our own searches. Import from "The Wolf's Stash"
-  (`https://zepiwolf.se/tws/`) `.tws_plain` export format — **needs a sample export file
-  from the user**, no public format spec exists.
+- [x] **M11 — Backup & import**
+  Export/import of our own saved searches, plus import from "The Wolf's Stash"
+  (`https://zepiwolf.se/tws/`) export format -- a sample file provided by the user confirmed
+  the real shape (a flat JSON array of `{a,b,c,d,e,f}` objects: `a` label, `b` unconfirmed
+  integer -- ignored on import, `c` array of tag tokens ANDed together including
+  `-exclude`/`~or`/`pool:<id>` forms, `d`/`e` timestamps and `f` unseen-count -- all ignored).
+  No backend changes needed: `BunnyRepository.createSearch`/`listSearches` already cover
+  everything. New `app/lib/services/search_backup_service.dart` (pure logic, no widget, same
+  `services/` shape as `DownloadManager`) sniffs the parsed JSON's own structure to tell this
+  app's own export format apart from Wolf's Stash's, rather than trusting a file's name or
+  extension (the real sample was named `.tws2`, not the `.tws_plain` originally guessed at).
+  `SettingsScreen` gained a new "Backup" section (export/import buttons, using `file_picker`'s
+  `saveFile`/`pickFile` for the first time in this codebase) that dedupes imports against the
+  current `(site, query)` set so re-importing the same file is a no-op. Tested with a small
+  synthetic fixture covering the same shapes -- the real sample is a third party's personal
+  data (their followed artists/tracked pools) and was never committed to the repo.
 
 - [ ] **M12 — Cross-platform polish**
   Responsive desktop/mobile layout, consistent theming pass, Windows cross-build via

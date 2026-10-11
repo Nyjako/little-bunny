@@ -874,6 +874,60 @@ abstract class AppLocalizations {
   /// **'Auto-favorite on download'**
   String get settingsAutoFavoriteOnDownloadLabel;
 
+  /// No description provided for @settingsBackupSection.
+  ///
+  /// In en, this message translates to:
+  /// **'Backup'**
+  String get settingsBackupSection;
+
+  /// No description provided for @settingsBackupExportLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Export searches'**
+  String get settingsBackupExportLabel;
+
+  /// No description provided for @settingsBackupExportButton.
+  ///
+  /// In en, this message translates to:
+  /// **'Export'**
+  String get settingsBackupExportButton;
+
+  /// No description provided for @settingsBackupImportLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Import searches'**
+  String get settingsBackupImportLabel;
+
+  /// No description provided for @settingsBackupImportButton.
+  ///
+  /// In en, this message translates to:
+  /// **'Import'**
+  String get settingsBackupImportButton;
+
+  /// No description provided for @settingsBackupImportProgress.
+  ///
+  /// In en, this message translates to:
+  /// **'{done}/{total} imported'**
+  String settingsBackupImportProgress(int done, int total);
+
+  /// No description provided for @settingsBackupExportSuccess.
+  ///
+  /// In en, this message translates to:
+  /// **'Exported {count} searches'**
+  String settingsBackupExportSuccess(int count);
+
+  /// No description provided for @settingsBackupImportSummary.
+  ///
+  /// In en, this message translates to:
+  /// **'{imported} imported, {duplicates} already saved, {invalid} invalid'**
+  String settingsBackupImportSummary(int imported, int duplicates, int invalid);
+
+  /// No description provided for @settingsBackupImportUnrecognizedFormat.
+  ///
+  /// In en, this message translates to:
+  /// **'Unrecognized file format'**
+  String get settingsBackupImportUnrecognizedFormat;
+
   /// No description provided for @postDetailDownloadTooltip.
   ///
   /// In en, this message translates to:
