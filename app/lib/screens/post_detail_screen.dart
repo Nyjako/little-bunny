@@ -253,9 +253,10 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
       return;
     }
     final autoFavorite = await widget.downloadSettingsStore.loadAutoFavoriteOnDownload();
-    final result = await widget.downloadManager.downloadPost(_post, widget.repository, folder, autoFavorite: autoFavorite);
+    final autoUpvote = await widget.downloadSettingsStore.loadAutoUpvoteOnDownload();
+    final result = await widget.downloadManager.downloadPost(_post, widget.repository, folder, autoFavorite: autoFavorite, autoUpvote: autoUpvote);
     final downloaded = result.outcome == DownloadOutcome.verified || result.outcome == DownloadOutcome.checksumMismatch;
-    if (autoFavorite && downloaded) {
+    if ((autoFavorite || autoUpvote) && downloaded) {
       await widget.repository.processQueue();
     }
     if (!mounted) {

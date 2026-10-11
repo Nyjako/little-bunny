@@ -27,4 +27,17 @@ void main() {
 
     expect(await store.loadDestinationFolder(), '/home/someone/MyDownloads');
   });
+
+  test('loadAutoUpvoteOnDownload defaults to false (M14.2)', () async {
+    const store = DownloadSettingsStore();
+
+    expect(await store.loadAutoUpvoteOnDownload(), isFalse);
+  });
+
+  test('saveAutoUpvoteOnDownload then loadAutoUpvoteOnDownload round-trips (M14.2)', () async {
+    const store = DownloadSettingsStore();
+    await store.saveAutoUpvoteOnDownload(true);
+
+    expect(await store.loadAutoUpvoteOnDownload(), isTrue);
+  });
 }
