@@ -166,6 +166,59 @@ void main() {
     expect(find.text('Settings'), findsOneWidget);
   });
 
+  testWidgets('returning from SettingsScreen refreshes the search list (M13.1)', (WidgetTester tester) async {
+    final repository = FakeBunnyRepository();
+
+    await tester.pumpWidget(_wrap(repository));
+    await tester.pumpAndSettle();
+    expect(find.text('No saved searches yet. Tap + to add one.'), findsOneWidget);
+
+    await tester.tap(find.byIcon(Icons.settings_outlined));
+    await tester.pumpAndSettle();
+
+    // Simulates what Settings' Import feature (M11) does: creating searches
+    // directly through the repository while SearchesScreen is paused behind
+    // it, with no pop result to signal it.
+    await repository.createSearch(BunnySite.e621, 'Foxes', 'fox');
+
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+
+    expect(find.text('Foxes'), findsOneWidget);
+  });
+
+  testWidgets('sort order defaults to most-unseen-first and persists a change (M13.1)', (WidgetTester tester) async {
+    final repository = FakeBunnyRepository();
+    final fewUnseenId = await repository.createSearch(BunnySite.e621, 'Alpha', 'alpha');
+    final manyUnseenId = await repository.createSearch(BunnySite.e621, 'Zebra', 'zebra');
+    repository.postsBySearchId[fewUnseenId] = [
+      BunnyPost(id: 1, site: BunnySite.e621, externalId: 1, score: 0, favCount: 0, commentCount: 0, width: 100, height: 100, cachedAt: '2026-01-01T00:00:00Z', isSeen: false, isFavorited: false),
+    ];
+    repository.postsBySearchId[manyUnseenId] = [
+      BunnyPost(id: 2, site: BunnySite.e621, externalId: 2, score: 0, favCount: 0, commentCount: 0, width: 100, height: 100, cachedAt: '2026-01-01T00:00:00Z', isSeen: false, isFavorited: false),
+      BunnyPost(id: 3, site: BunnySite.e621, externalId: 3, score: 0, favCount: 0, commentCount: 0, width: 100, height: 100, cachedAt: '2026-01-01T00:00:00Z', isSeen: false, isFavorited: false),
+    ];
+
+    await tester.pumpWidget(_wrap(repository));
+    await tester.pumpAndSettle();
+
+    // Default: most unseen first -- "Zebra" (2 unseen) before "Alpha" (1).
+    expect(tester.getTopLeft(find.text('Zebra')).dy, lessThan(tester.getTopLeft(find.text('Alpha')).dy));
+
+    await tester.tap(find.byIcon(Icons.sort));
+    await tester.pumpAndSettle();
+    // CheckedPopupMenuItem's leading checkmark shifts the text's hit-test
+    // center slightly outside its own bounds at this viewport size --
+    // harmless, same non-fatal warning every CheckedPopupMenuItem tap gets.
+    await tester.tap(find.text('Label (A-Z)'), warnIfMissed: false);
+    await tester.pumpAndSettle();
+
+    expect(tester.getTopLeft(find.text('Alpha')).dy, lessThan(tester.getTopLeft(find.text('Zebra')).dy));
+
+    final store = const DisplaySettingsStore();
+    expect(await store.loadSearchSortOrder(), SearchSortOrder.label);
+  });
+
   testWidgets('tapping the FAB opens CreateSearchScreen and refreshes on success', (WidgetTester tester) async {
     final repository = FakeBunnyRepository();
 

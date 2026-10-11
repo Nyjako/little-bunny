@@ -2008,6 +2008,30 @@ reach `createSearch`/`listSearches` at all (every other screen already receives 
 `SettingsScreen` previously didn't need it) -- its one call site in `SearchesScreen` already
 held the repository via `BunnyRepositoryScope`, so this was a one-line addition there.
 
+## M13 -- Searches list UX, manual sync-all, and tag blacklist
+
+Direct user feedback after M11 shipped, bundling several requests. This section covers M13.1;
+M13.2 (manual sync-all with progress) and M13.3 (tag blacklist) are documented as they land.
+
+**Searches list UX (M13.1)**: three independent fixes. The pool-name-as-label gap was narrow --
+`PostDetailScreen._openPool`, the Pools tab's "add pool by ID" dialog, and `TagBrowseScreen`'s
+"add to searches" action (which forwards `initialLabel`) all already fetched and used the real
+pool name; only `CreateSearchScreen`'s own label-mirroring had no pool-awareness, so typing a
+raw `pool:<id>` query directly just mirrored the literal text. `_maybeFetchPoolName` (called
+alongside the existing `_mirrorQueryIntoLabel`) debounces 300ms (reusing the same `Timer`-based
+shape the query's tag-autocomplete already uses), then calls `fetchPool` and swaps the label to
+the resolved name if the user hasn't manually edited it meanwhile; it skips entirely when
+`widget.initialLabel` is already set, since that means one of the three working flows above is
+the caller and a fetch would just be wasted. The restart-after-import bug was a missing refresh,
+not a data bug: every other `SearchesScreen` navigation that can change the search list
+(`CreateSearchScreen`, `EditSearchScreen`) already captured a `bool` pop result and called
+`_refresh()` on `true`; the `SettingsScreen` navigation (added in M11, since Settings previously
+never mutated the list) had no such handling. Fixed by just awaiting the push and unconditionally
+refreshing afterward -- Settings has no "cancelled" case worth optimizing a reload away for.
+Sort order (`DisplaySettingsStore.SearchSortOrder`: `mostUnseen` default, `label`,
+`recentlyCreated`) is a pure client-side `List.sort` applied after `listSearches()` returns, no
+backend change needed since `BunnySearch` already carries every field each order sorts by.
+
 ## Inkbunny API constraints (found in M2)
 
 Verified against the live API and the official docs while building `libinkbunny`:
