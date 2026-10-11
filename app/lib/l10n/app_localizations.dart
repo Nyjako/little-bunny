@@ -394,6 +394,24 @@ abstract class AppLocalizations {
   /// **'No favorited posts yet -- favorite some to see their tags here.'**
   String get tagStatsEmptyState;
 
+  /// No description provided for @tagStatsAllEmptyState.
+  ///
+  /// In en, this message translates to:
+  /// **'No synced posts yet -- sync a search to see their tags here.'**
+  String get tagStatsAllEmptyState;
+
+  /// No description provided for @tagStatsFavoritesLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Favorites'**
+  String get tagStatsFavoritesLabel;
+
+  /// No description provided for @tagStatsAllLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'All'**
+  String get tagStatsAllLabel;
+
   /// No description provided for @createSearchScreenTitle.
   ///
   /// In en, this message translates to:

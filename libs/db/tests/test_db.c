@@ -857,6 +857,72 @@ void test_top_favorited_tags_is_scoped_per_site(void)
     bunny_db_tag_stat_list_free(&inkbunny_stats);
 }
 
+void test_top_used_tags_counts_non_favorited_posts(void)
+{
+    const char *tags1[] = {"wolf", "forest"};
+    const char *tags2[] = {"wolf", "meadow"};
+
+    bunny_db_post_upsert_t post1;
+    bunny_db_post_upsert_t post2;
+    make_test_post(&post1, 711, 1);
+    make_test_post(&post2, 712, 1);
+    post1.tags = tags1;
+    post1.tag_count = 2;
+    post2.tags = tags2;
+    post2.tag_count = 2;
+
+    int64_t id1 = 0;
+    int64_t id2 = 0;
+    bunny_db_post_upsert(g_db, &post1, &id1);
+    bunny_db_post_upsert(g_db, &post2, &id2);
+
+    /* Neither post is favorited -- bunny_db_top_favorited_tags would see
+     * nothing, but bunny_db_top_used_tags ranks every synced post's tags. */
+    bunny_db_tag_stat_list_t favorited_stats;
+    bunny_db_result_t result = bunny_db_top_favorited_tags(g_db, BUNNY_DB_SITE_E621, 10, &favorited_stats);
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, result);
+    TEST_ASSERT_EQUAL(0, (int)favorited_stats.count);
+    bunny_db_tag_stat_list_free(&favorited_stats);
+
+    bunny_db_tag_stat_list_t used_stats;
+    result = bunny_db_top_used_tags(g_db, BUNNY_DB_SITE_E621, 10, &used_stats);
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, result);
+    TEST_ASSERT_EQUAL(3, (int)used_stats.count); /* wolf, forest, meadow */
+    TEST_ASSERT_EQUAL_STRING("wolf", used_stats.items[0].name);
+    TEST_ASSERT_EQUAL(2, used_stats.items[0].count);
+    bunny_db_tag_stat_list_free(&used_stats);
+}
+
+void test_top_used_tags_is_scoped_per_site(void)
+{
+    const char *e621_tags[] = {"wolf"};
+    const char *inkbunny_tags[] = {"wolf"};
+
+    bunny_db_post_upsert_t e621_post;
+    make_test_post(&e621_post, 811, 1);
+    e621_post.tags = e621_tags;
+    e621_post.tag_count = 1;
+
+    bunny_db_post_upsert_t inkbunny_post;
+    memset(&inkbunny_post, 0, sizeof(inkbunny_post));
+    inkbunny_post.site = BUNNY_DB_SITE_INKBUNNY;
+    inkbunny_post.external_id = 812;
+    inkbunny_post.tags = inkbunny_tags;
+    inkbunny_post.tag_count = 1;
+
+    int64_t e621_id = 0;
+    int64_t inkbunny_id = 0;
+    bunny_db_post_upsert(g_db, &e621_post, &e621_id);
+    bunny_db_post_upsert(g_db, &inkbunny_post, &inkbunny_id);
+
+    bunny_db_tag_stat_list_t e621_stats;
+    bunny_db_result_t result = bunny_db_top_used_tags(g_db, BUNNY_DB_SITE_E621, 10, &e621_stats);
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, result);
+    TEST_ASSERT_EQUAL(1, (int)e621_stats.count);
+    TEST_ASSERT_EQUAL(1, e621_stats.items[0].count); /* not 2 -- Inkbunny's "wolf" doesn't bleed in */
+    bunny_db_tag_stat_list_free(&e621_stats);
+}
+
 void test_tag_autocomplete_prefix_match(void)
 {
     const char *tags1[] = {"wolf"};
@@ -1354,6 +1420,8 @@ int main(void)
     RUN_TEST(test_action_queue_mark_failed_records_error);
     RUN_TEST(test_top_favorited_tags);
     RUN_TEST(test_top_favorited_tags_is_scoped_per_site);
+    RUN_TEST(test_top_used_tags_counts_non_favorited_posts);
+    RUN_TEST(test_top_used_tags_is_scoped_per_site);
     RUN_TEST(test_tag_autocomplete_prefix_match);
     RUN_TEST(test_tag_autocomplete_orders_by_usage_then_name);
     RUN_TEST(test_tag_autocomplete_is_per_site);

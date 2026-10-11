@@ -101,6 +101,11 @@ bunny_core_result_t bunny_core_tag_autocomplete(bunny_core_t *core, bunny_db_sit
  * autocomplete above. */
 bunny_core_result_t bunny_core_top_favorited_tags(bunny_core_t *core, bunny_db_site_t site, int limit, bunny_db_tag_stat_list_t *out_list);
 
+/* Same ranking across every synced post on `site`, not just favorited ones
+ * (M14.4) -- the Tag Stats screen's "All" view, alongside its "Favorites"
+ * view above. */
+bunny_core_result_t bunny_core_top_used_tags(bunny_core_t *core, bunny_db_site_t site, int limit, bunny_db_tag_stat_list_t *out_list);
+
 /* Marks a post seen (global per post, not per search) -- lets a post detail
  * view clear the unseen marker bunny_core_search_list_posts's unseen_only
  * filter and bunny_db_post_t.is_seen are based on. Returns

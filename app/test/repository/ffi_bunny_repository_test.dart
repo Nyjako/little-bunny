@@ -30,6 +30,10 @@ void main() {
     expect(await repository.topFavoritedTags(BunnySite.e621), isEmpty);
   });
 
+  test('topUsedTags returns an empty list when nothing is synced (M14.4)', () async {
+    expect(await repository.topUsedTags(BunnySite.e621), isEmpty);
+  });
+
   test('markPostSeen rejects a post id with no cached post', () async {
     await expectLater(repository.markPostSeen(1), throwsA(isA<BunnyRepositoryException>()));
   });

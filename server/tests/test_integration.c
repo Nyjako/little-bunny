@@ -406,6 +406,16 @@ void test_full_account_search_sync_favorite_flow(void)
     free(response.data);
     memset(&response, 0, sizeof(response));
 
+    /* M14.4: same tags show up here too, since the "all" view is a superset
+     * of the "favorites" one -- this route's own exclusive behavior (a
+     * non-favorited post still counting) is covered at the C level. */
+    status = do_request("GET", "/tags/top_used?site=e621", NULL, &response, true, NULL);
+    TEST_ASSERT_EQUAL(200, status);
+    TEST_ASSERT_NOT_NULL(strstr(response.data, "\"name\":\"one\""));
+    TEST_ASSERT_NOT_NULL(strstr(response.data, "\"name\":\"someartist\""));
+    free(response.data);
+    memset(&response, 0, sizeof(response));
+
     status = do_request("GET", "/posts/1/downloads", NULL, &response, true, NULL);
     TEST_ASSERT_EQUAL(200, status);
     TEST_ASSERT_EQUAL_STRING("[]", response.data);
