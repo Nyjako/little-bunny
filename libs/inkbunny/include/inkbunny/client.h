@@ -49,6 +49,13 @@ void inkbunny_client_destroy(inkbunny_client_t *client);
 inkbunny_result_t inkbunny_login(inkbunny_client_t *client, const char *username, const char *password);
 inkbunny_result_t inkbunny_logout(inkbunny_client_t *client);
 
+/* The numeric Inkbunny user id of the account currently logged in via
+ * inkbunny_login() -- 0 before any login, or for a guest login (the same
+ * sentinel Inkbunny's own login response uses for a guest session). Feeds
+ * inkbunny_search_params_t.favorited_by_user_id for a "my own favorites"
+ * search, since that field needs the numeric id, not a username. */
+int64_t inkbunny_client_get_user_id(const inkbunny_client_t *client);
+
 typedef struct
 {
     const char *text;                 /* may be NULL; matched against title/description/keywords by default */

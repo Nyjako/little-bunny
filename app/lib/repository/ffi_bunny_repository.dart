@@ -212,6 +212,12 @@ class FfiBunnyRepository implements BunnyRepository {
   }
 
   @override
+  Future<List<BunnyPost>> myInkbunnyFavorites({int page = 1}) async {
+    final items = await _wrapped(() => _native.listMyInkbunnyFavorites(page: page));
+    return items.map(_postFromMap).toList();
+  }
+
+  @override
   Future<List<BunnyComment>> getPostComments(int postId) async {
     final items = await _wrapped(() => _native.listComments(postId));
     return items.map(_commentFromMap).toList();

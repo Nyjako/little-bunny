@@ -200,7 +200,21 @@ class _SearchesScreenState extends State<SearchesScreen> with SingleTickerProvid
         toolbarHeight: wide ? compactToolbarHeight : null,
         title: Text(l10n.searchesScreenTitle),
         actions: [
-          IconButton(icon: const Icon(Icons.person_outline), tooltip: l10n.searchesAccountsTooltip, onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (context) => AccountsScreen(repository: _repository!)))),
+          IconButton(
+            icon: const Icon(Icons.person_outline),
+            tooltip: l10n.searchesAccountsTooltip,
+            onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => AccountsScreen(
+                  repository: _repository!,
+                  displaySettingsStore: widget.displaySettingsStore,
+                  syncSettingsStore: widget.syncSettingsStore,
+                  downloadSettingsStore: widget.downloadSettingsStore,
+                ),
+              ),
+            ),
+          ),
           IconButton(
             icon: const Icon(Icons.bar_chart_outlined),
             tooltip: l10n.searchesTagStatsTooltip,

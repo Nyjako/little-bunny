@@ -6,7 +6,8 @@
 #include "context.h"
 
 /* POST /search/preview?site=&query= -> bunny_core_preview_search (stateless
- * one-page live search + cache, no searches/search_results row created) */
+ * one-page live search + cache, no searches/search_results row created)
+ * POST /favorites/inkbunny/mine?page= -> bunny_core_list_my_inkbunny_favorites */
 void server_routes_register_search(struct mg_context *mg_ctx, server_context_t *ctx);
 
 #endif /* BUNNY_SERVER_ROUTES_SEARCH_H */

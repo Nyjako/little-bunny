@@ -169,6 +169,18 @@ bunny_core_result_t bunny_core_fetch_pool(bunny_core_t *core, int64_t pool_id, b
  * saved search. Returns BUNNY_CORE_ERR_INVALID_ARG for page < 1. */
 bunny_core_result_t bunny_core_preview_search(bunny_core_t *core, bunny_db_site_t site, const char *query, int page, bunny_db_post_list_t *out_list);
 
+/* Inkbunny only -- e621's equivalent is just `fav:<username>` as a literal
+ * bunny_core_preview_search query, since e621's tag search already supports
+ * it natively. Inkbunny has no equivalent query syntax; it needs the
+ * logged-in account's own numeric user id in a dedicated search param
+ * (inkbunny_search_params_t.favorited_by_user_id) instead, resolved here via
+ * the already-logged-in client bunny_core_build_inkbunny_client returns (M10.3)
+ * -- no bunny_db changes, no caching, resolved fresh on every call. Same
+ * "stateless fetch and cache" shape as bunny_core_preview_search otherwise:
+ * upserts results without creating a searches/search_results row. Returns
+ * BUNNY_CORE_ERR_INVALID_ARG for page < 1. */
+bunny_core_result_t bunny_core_list_my_inkbunny_favorites(bunny_core_t *core, int page, bunny_db_post_list_t *out_list);
+
 /* A post's existing comments, fetched live (e621 only -- no persistence, no
  * equivalent on Inkbunny, same reasoning as bunny_core_pool_info_t above).
  * Takes the local post id (not the site's external id) and looks up the

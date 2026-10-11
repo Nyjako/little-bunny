@@ -374,6 +374,15 @@ class HttpBunnyRepository implements BunnyRepository {
   }
 
   @override
+  Future<List<BunnyPost>> myInkbunnyFavorites({int page = 1}) async {
+    final response = await _client.post(_uri('/favorites/inkbunny/mine', {'page': '$page'}), headers: _headers);
+    if (response.statusCode != 200) {
+      _throwError(response);
+    }
+    return _decodeList(response).map(_postFromJson).toList();
+  }
+
+  @override
   Future<List<BunnyComment>> getPostComments(int postId) async {
     final response = await _client.get(_uri('/posts/$postId/comments'), headers: _headers);
     if (response.statusCode != 200) {

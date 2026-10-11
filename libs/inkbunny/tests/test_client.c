@@ -125,6 +125,28 @@ void test_login_success(void)
     inkbunny_client_destroy(client);
 }
 
+void test_get_user_id_is_zero_before_any_login(void)
+{
+    inkbunny_client_t *client = make_test_client();
+    TEST_ASSERT_EQUAL(0, inkbunny_client_get_user_id(client));
+    inkbunny_client_destroy(client);
+}
+
+void test_get_user_id_returns_the_id_captured_by_login(void)
+{
+    inkbunny_client_t *client = make_test_client();
+    const char *fixture = "{\"sid\":\"x\",\"user_id\":\"12345\",\"ratingsmask\":\"101\"}";
+    g_state.response_status = 200;
+    g_state.response_body = (char *)fixture;
+    g_state.response_body_len = strlen(fixture);
+
+    inkbunny_result_t result = inkbunny_login(client, "someuser", "somepass");
+    TEST_ASSERT_EQUAL(INKBUNNY_OK, result);
+    TEST_ASSERT_EQUAL(12345, inkbunny_client_get_user_id(client));
+
+    inkbunny_client_destroy(client);
+}
+
 void test_login_failure(void)
 {
     inkbunny_client_t *client = make_test_client();
@@ -337,6 +359,8 @@ int main(void)
 {
     UNITY_BEGIN();
     RUN_TEST(test_login_success);
+    RUN_TEST(test_get_user_id_is_zero_before_any_login);
+    RUN_TEST(test_get_user_id_returns_the_id_captured_by_login);
     RUN_TEST(test_login_failure);
     RUN_TEST(test_search_requires_login);
     RUN_TEST(test_search_success);

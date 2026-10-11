@@ -48,6 +48,14 @@ class FakeBunnyRepository implements BunnyRepository {
 
   /// Each entry is the `(site, query, page)` passed to [previewSearch].
   final List<(BunnySite, String, int)> previewSearchCalls = [];
+
+  /// Keyed by `page` -- the posts [myInkbunnyFavorites] returns for that page
+  /// (M10.3); an unregistered page returns an empty list, same convention as
+  /// [previewSearchResults] above.
+  final Map<int, List<BunnyPost>> myInkbunnyFavoritesResults = {};
+
+  /// Each entry is the `page` passed to [myInkbunnyFavorites].
+  final List<int> myInkbunnyFavoritesCalls = [];
   int _nextSearchId = 1;
   int syncCallCount = 0;
 
@@ -254,6 +262,12 @@ class FakeBunnyRepository implements BunnyRepository {
   Future<List<BunnyPost>> previewSearch(BunnySite site, String query, {int page = 1}) async {
     previewSearchCalls.add((site, query, page));
     return List.of(previewSearchResults['${site.toWireString()}:$query:$page'] ?? const []);
+  }
+
+  @override
+  Future<List<BunnyPost>> myInkbunnyFavorites({int page = 1}) async {
+    myInkbunnyFavoritesCalls.add(page);
+    return List.of(myInkbunnyFavoritesResults[page] ?? const []);
   }
 
   @override

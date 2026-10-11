@@ -3,7 +3,11 @@ import 'package:flutter/material.dart';
 import '../l10n/app_localizations.dart';
 import '../repository/bunny_models.dart';
 import '../repository/bunny_repository.dart';
+import '../settings/display_settings_store.dart';
+import '../settings/download_settings_store.dart';
+import '../settings/sync_settings_store.dart';
 import 'login_form_screen.dart';
+import 'tag_browse_screen.dart';
 
 /// Site login management (M7.3) -- reachable from [SearchesScreen]'s app bar
 /// (M8.2 promoted browse/search to the app's actual home, since that's the
@@ -12,11 +16,16 @@ import 'login_form_screen.dart';
 /// `BunnyRepositoryScope.of(context)` -- it's only ever reached via
 /// `Navigator.push`, which puts it in a separate route subtree from
 /// wherever the scope is set up, same reasoning as [LoginFormScreen] and
-/// `CreateSearchScreen`.
+/// `CreateSearchScreen`. The three settings stores (unused by this screen's
+/// own UI) are only here to pass through to [TagBrowseScreen] for the
+/// "view my favorites" heart icon (M10.3).
 class AccountsScreen extends StatefulWidget {
   final BunnyRepository repository;
+  final DisplaySettingsStore displaySettingsStore;
+  final SyncSettingsStore syncSettingsStore;
+  final DownloadSettingsStore downloadSettingsStore;
 
-  const AccountsScreen({super.key, required this.repository});
+  const AccountsScreen({super.key, required this.repository, required this.displaySettingsStore, required this.syncSettingsStore, required this.downloadSettingsStore});
 
   @override
   State<AccountsScreen> createState() => _AccountsScreenState();
@@ -70,6 +79,51 @@ class _AccountsScreenState extends State<AccountsScreen> {
     _refresh();
   }
 
+  /// e621's own tag-search syntax treats `fav:<username>` as a literal query
+  /// -- `previewSearch`/`TagBrowseScreen` already handle this with zero
+  /// backend changes, the same way `pool:<id>` already does (M10.3).
+  Future<void> _openMyE621Favorites(String username) async {
+    final l10n = AppLocalizations.of(context)!;
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => TagBrowseScreen(
+          site: BunnySite.e621,
+          query: 'fav:$username',
+          title: l10n.accountsMyFavoritesTitle,
+          repository: widget.repository,
+          displaySettingsStore: widget.displaySettingsStore,
+          syncSettingsStore: widget.syncSettingsStore,
+          downloadSettingsStore: widget.downloadSettingsStore,
+        ),
+      ),
+    );
+  }
+
+  /// Inkbunny has no equivalent query syntax -- it needs the logged-in
+  /// account's own numeric user id in a dedicated search param instead,
+  /// resolved entirely server/core-side via [BunnyRepository.
+  /// myInkbunnyFavorites] (M10.3), so this uses [TagBrowseScreen]'s
+  /// `customFetch` override rather than a crafted query string.
+  Future<void> _openMyInkbunnyFavorites() async {
+    final l10n = AppLocalizations.of(context)!;
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => TagBrowseScreen(
+          site: BunnySite.inkbunny,
+          query: '',
+          title: l10n.accountsMyFavoritesTitle,
+          customFetch: (page) => widget.repository.myInkbunnyFavorites(page: page),
+          repository: widget.repository,
+          displaySettingsStore: widget.displaySettingsStore,
+          syncSettingsStore: widget.syncSettingsStore,
+          downloadSettingsStore: widget.downloadSettingsStore,
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
@@ -88,7 +142,19 @@ class _AccountsScreenState extends State<AccountsScreen> {
               return ListTile(
                 title: Text(site.toWireString()),
                 subtitle: Text(account != null ? l10n.accountsLoggedInAs(account.username) : l10n.accountsNotConnected),
-                trailing: account != null ? IconButton(icon: const Icon(Icons.delete), onPressed: () => _removeAccount(site)) : null,
+                trailing: account == null
+                    ? null
+                    : Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          IconButton(
+                            icon: const Icon(Icons.favorite),
+                            tooltip: l10n.accountsMyFavoritesTooltip,
+                            onPressed: site == BunnySite.e621 ? () => _openMyE621Favorites(account.username) : () => _openMyInkbunnyFavorites(),
+                          ),
+                          IconButton(icon: const Icon(Icons.delete), onPressed: () => _removeAccount(site)),
+                        ],
+                      ),
                 onTap: account == null ? () => _openLoginForm(site) : null,
               );
             }).toList(),
