@@ -172,6 +172,12 @@ class FfiBunnyRepository implements BunnyRepository {
   }
 
   @override
+  Future<List<BunnyTagStat>> topUsedTags(BunnySite site, {int limit = 20}) async {
+    final items = await _wrapped(() => _native.topUsedTags(site.toWireString(), limit));
+    return items.map(_tagStatFromMap).toList();
+  }
+
+  @override
   Future<void> markPostSeen(int postId) => _wrapped(() => _native.markPostSeen(postId));
 
   @override

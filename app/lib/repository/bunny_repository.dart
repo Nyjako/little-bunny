@@ -97,6 +97,13 @@ abstract interface class BunnyRepository {
     int limit = 20,
   });
 
+  /// Same ranking across every synced [site] post, not just favorited ones
+  /// (M14.4) -- the Tag Stats screen's "All" view.
+  Future<List<BunnyTagStat>> topUsedTags(
+    BunnySite site, {
+    int limit = 20,
+  });
+
   /// Marks a post seen (global per post, not per search) -- clears the
   /// unseen marker [listSearchPosts]'s `unseenOnly` filter and
   /// `BunnyPost.isSeen` are based on.

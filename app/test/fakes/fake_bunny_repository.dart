@@ -200,6 +200,14 @@ class FakeBunnyRepository implements BunnyRepository {
     return matches.length > limit ? matches.sublist(0, limit) : matches;
   }
 
+  final Map<BunnySite, List<BunnyTagStat>> topUsedTagsBySite = {};
+
+  @override
+  Future<List<BunnyTagStat>> topUsedTags(BunnySite site, {int limit = 20}) async {
+    final matches = topUsedTagsBySite[site] ?? const [];
+    return matches.length > limit ? matches.sublist(0, limit) : matches;
+  }
+
   BunnyPost _markedSeen(BunnyPost post) => BunnyPost(
     id: post.id,
     site: post.site,

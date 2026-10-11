@@ -57,6 +57,33 @@ void main() {
     expect(find.text('wolf'), findsNothing);
   });
 
+  testWidgets('switching to "All" shows tags from every synced post, not just favorited ones (M14.4)', (WidgetTester tester) async {
+    final repository = FakeBunnyRepository();
+    repository.topFavoritedTagsBySite[BunnySite.e621] = const [BunnyTagStat(name: 'wolf', count: 5)];
+    repository.topUsedTagsBySite[BunnySite.e621] = const [BunnyTagStat(name: 'wolf', count: 5), BunnyTagStat(name: 'forest', count: 9)];
+
+    await tester.pumpWidget(wrap(repository));
+    await tester.pumpAndSettle();
+    expect(find.text('forest'), findsNothing);
+
+    await tester.tap(find.text('All'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('wolf'), findsOneWidget);
+    expect(find.text('forest'), findsOneWidget);
+    expect(find.text('9'), findsOneWidget);
+  });
+
+  testWidgets('shows the "All" empty state when nothing is synced (M14.4)', (WidgetTester tester) async {
+    await tester.pumpWidget(wrap(FakeBunnyRepository()));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('All'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('No synced posts yet -- sync a search to see their tags here.'), findsOneWidget);
+  });
+
   testWidgets('tapping a tag opens TagBrowseScreen for it on the selected site', (WidgetTester tester) async {
     final repository = FakeBunnyRepository();
     repository.topFavoritedTagsBySite[BunnySite.e621] = const [BunnyTagStat(name: 'wolf', count: 5)];

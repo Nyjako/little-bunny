@@ -1375,6 +1375,17 @@ this file is the single source of truth for "what's done" across sessions.
   autoUpvote)`. `SettingsScreen`'s Downloads section gained a second `SwitchListTile`
   ("Auto-upvote on download") next to the existing auto-favorite toggle.
 
+- [x] **M14.4 — Tag stats split: Favorites vs All**
+  Direct user feedback: the Tag Stats screen (M10.2) only ever showed favorited-tag rankings.
+  New `bunny_db_top_used_tags` (`libs/db/src/stats.c`) is the exact same query as `bunny_db_
+  top_favorited_tags` minus its `JOIN favorites` clause, so it ranks every synced post's tags
+  per site instead of only favorited ones. Full plumbing: `bunny_core_top_used_tags`, FFI,
+  `GET /tags/top_used?site=&limit=` (sibling to the existing `/tags/top_favorited` in
+  `routes_tags.c`), `BunnyRepository.topUsedTags(site, {limit}) -> Future<List<BunnyTagStat>>`
+  across FFI/HTTP/Fake, reusing `BunnyTagStat` unchanged. `TagStatsScreen` gained a second
+  `SegmentedButton<bool>` ("Favorites"/"All") beside its existing site toggle, picking
+  `topFavoritedTags`/`topUsedTags` accordingly, each with its own empty-state message.
+
 - [ ] **M12 — Cross-platform polish**
   Responsive desktop/mobile layout, consistent theming pass, Windows cross-build via
   dockcross validated end-to-end (server + core), packaging. Needs to resolve the OpenSSL-

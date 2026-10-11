@@ -83,6 +83,9 @@
 
   "tagStatsScreenTitle": "Tag stats",
   "tagStatsEmptyState": "No favorited posts yet -- favorite some to see their tags here.",
+  "tagStatsAllEmptyState": "No synced posts yet -- sync a search to see their tags here.",
+  "tagStatsFavoritesLabel": "Favorites",
+  "tagStatsAllLabel": "All",
 
   "createSearchScreenTitle": "New search",
   "createSearchLabelField": "Label",

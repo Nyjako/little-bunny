@@ -2089,7 +2089,7 @@ remove-confirmation already uses), and navigation only proceeds on an empty matc
 ## M14 -- Pinning, auto-upvote, DB backups, split tag stats, staleness fix, row cleanup
 
 Direct user feedback after M13 shipped, bundling several requests. This section covers M14.1,
-M14.2, and M14.3; the remaining M14.N sub-milestones are documented as they land.
+M14.2, M14.3, and M14.4; the remaining M14.N sub-milestones are documented as they land.
 
 **Pin searches, total post count, and row-action cleanup (M14.1)**: three requests bundled
 into one branch since all three reshape the same `SearchesScreen` row UI and
@@ -2146,6 +2146,19 @@ per-search `Completer`-gated `syncSearch` calls (`syncSearchGates`) plus a
 `syncSearchNewPosts` map simulating a sync that actually finds something new -- letting the
 test pause mid-loop and assert one search's badge is already visible while the other's sync is
 still pending, which the old end-of-loop-only refresh could not do.
+
+**Tag stats split: Favorites vs All (M14.4)**: direct user feedback -- the Tag Stats screen
+(M10.2) only ever ranked favorited-tag usage. New `bunny_db_top_used_tags`
+(`libs/db/src/stats.c`) is `bunny_db_top_favorited_tags`'s SQL with the `JOIN favorites`
+clause removed, so it ranks every synced post's tags per site instead of only favorited ones
+-- same result shape, row-building, and error handling, copy-paste-and-trim. Full plumbing:
+`bunny_core_top_used_tags`, FFI, `GET /tags/top_used?site=&limit=` (a sibling to the existing
+`/tags/top_favorited` in `routes_tags.c`), `BunnyRepository.topUsedTags(site, {limit}) ->
+Future<List<BunnyTagStat>>` across FFI/HTTP/Fake, reusing `BunnyTagStat` unchanged.
+`TagStatsScreen` already had one `SegmentedButton<BunnySite>` driving `_load()`; it gained a
+second `SegmentedButton<bool>` ("Favorites"/"All") that picks `topFavoritedTags`/`topUsedTags`
+accordingly, each with its own empty-state message (favoriting something vs. syncing a search
+at all are different first steps for an empty list).
 
 ## Inkbunny API constraints (found in M2)
 

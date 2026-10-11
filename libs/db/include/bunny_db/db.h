@@ -184,6 +184,11 @@ bunny_db_result_t bunny_db_download_list_for_post(bunny_db_t *db, int64_t post_i
  * e.g. e621's "wolf" and Inkbunny's "wolf" into indistinguishable rows. */
 bunny_db_result_t bunny_db_top_favorited_tags(bunny_db_t *db, bunny_db_site_t site, int limit, bunny_db_tag_stat_list_t *out_list);
 
+/* Same ranking, but across every synced post on `site`, not just favorited
+ * ones (M14.4) -- feeds the Tag Stats screen's "All" view, alongside
+ * bunny_db_top_favorited_tags's existing "Favorites" view. */
+bunny_db_result_t bunny_db_top_used_tags(bunny_db_t *db, bunny_db_site_t site, int limit, bunny_db_tag_stat_list_t *out_list);
+
 /* Tags on `site` whose name starts with `prefix` (case-insensitive for ASCII),
  * ordered by how many cached posts carry them (most-used first) then name.
  * Feeds search-box autocomplete. Tags are already collected per-site as a
