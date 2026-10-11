@@ -328,6 +328,42 @@ abstract class AppLocalizations {
   /// **'Add pool'**
   String get searchesNewPoolTooltip;
 
+  /// No description provided for @searchesSortTooltip.
+  ///
+  /// In en, this message translates to:
+  /// **'Sort'**
+  String get searchesSortTooltip;
+
+  /// No description provided for @searchesSortMostUnseen.
+  ///
+  /// In en, this message translates to:
+  /// **'Most unseen'**
+  String get searchesSortMostUnseen;
+
+  /// No description provided for @searchesSortLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Label (A-Z)'**
+  String get searchesSortLabel;
+
+  /// No description provided for @searchesSortRecentlyCreated.
+  ///
+  /// In en, this message translates to:
+  /// **'Recently created'**
+  String get searchesSortRecentlyCreated;
+
+  /// No description provided for @searchesCheckForUpdatesTooltip.
+  ///
+  /// In en, this message translates to:
+  /// **'Check for updates'**
+  String get searchesCheckForUpdatesTooltip;
+
+  /// No description provided for @searchesSyncAllProgress.
+  ///
+  /// In en, this message translates to:
+  /// **'{done}/{total} checked'**
+  String searchesSyncAllProgress(int done, int total);
+
   /// No description provided for @tagStatsScreenTitle.
   ///
   /// In en, this message translates to:
