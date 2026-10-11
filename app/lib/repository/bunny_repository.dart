@@ -143,6 +143,15 @@ abstract interface class BunnyRepository {
   /// save. [page] beyond 1 drives that screen's infinite scroll (M9.6.2).
   Future<List<BunnyPost>> previewSearch(BunnySite site, String query, {int page = 1});
 
+  /// Inkbunny only -- the equivalent for e621 is just passing `fav:username`
+  /// to [previewSearch], since e621's own tag search already supports that
+  /// natively. Inkbunny has no such query syntax; it needs the
+  /// logged-in account's own numeric user id in a dedicated search param
+  /// instead, resolved entirely server/core-side (M10.3) -- this method takes
+  /// no username/id itself. Same "stateless fetch and cache" shape as
+  /// [previewSearch] otherwise.
+  Future<List<BunnyPost>> myInkbunnyFavorites({int page = 1});
+
   /// A post's existing comments, fetched live (e621 only -- Inkbunny has no
   /// comment concept at all, so this throws [BunnyRepositoryException] for
   /// an Inkbunny post; callers must gate on [BunnyPost.site] themselves, same

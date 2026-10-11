@@ -199,6 +199,16 @@ static bunny_core_result_t upsert_e621_post(bunny_db_t *db, const e621_post_t *p
     upsert.sample_url = post->sample.url;
 
     bunny_db_result_t result = bunny_db_post_upsert(db, &upsert, out_post_id);
+    /* The site's own "did I favorite this" signal is authoritative -- mirror
+     * it locally so favorites made directly on the website (or before this
+     * app existed) show up correctly here too, not just ones queued through
+     * this app's own favorite button (M10.3). Additive only: never clears a
+     * locally-recorded favorite just because this particular response says
+     * false, since that would turn a simple "pull favorites in" into a full
+     * two-way overwrite, which wasn't asked for. */
+    if (result == BUNNY_DB_OK && post->is_favorited) {
+        bunny_db_favorite_add(db, *out_post_id, -1);
+    }
 
     free(artist);
     free((void *)tags.items);
@@ -233,6 +243,10 @@ static bunny_core_result_t upsert_inkbunny_submission(bunny_db_t *db, const inkb
     upsert.sample_url = file ? file->url_screen : NULL;
 
     bunny_db_result_t result = bunny_db_post_upsert(db, &upsert, out_post_id);
+    /* Same reasoning as upsert_e621_post's own mirror above (M10.3). */
+    if (result == BUNNY_DB_OK && submission->is_favorite) {
+        bunny_db_favorite_add(db, *out_post_id, -1);
+    }
 
     free((void *)tags.items);
 
@@ -435,6 +449,51 @@ bunny_core_result_t bunny_core_preview_search(bunny_core_t *core, bunny_db_site_
         inkbunny_submission_list_free(&submissions);
         inkbunny_client_destroy(client);
     }
+
+    out_list->items = arr.items;
+    out_list->count = arr.count;
+    return BUNNY_CORE_OK;
+}
+
+bunny_core_result_t bunny_core_list_my_inkbunny_favorites(bunny_core_t *core, int page, bunny_db_post_list_t *out_list)
+{
+    if (!core || !out_list || page < 1) {
+        return BUNNY_CORE_ERR_INVALID_ARG;
+    }
+    memset(out_list, 0, sizeof(*out_list));
+
+    inkbunny_client_t *client = bunny_core_build_inkbunny_client(core);
+    if (!client) {
+        return BUNNY_CORE_ERR_SITE;
+    }
+
+    char user_id_text[32];
+    snprintf(user_id_text, sizeof(user_id_text), "%lld", (long long)inkbunny_client_get_user_id(client));
+
+    inkbunny_search_params_t params;
+    memset(&params, 0, sizeof(params));
+    params.favorited_by_user_id = user_id_text;
+    params.page = page;
+
+    inkbunny_submission_list_t submissions;
+    inkbunny_result_t search_result = inkbunny_search(client, &params, &submissions);
+    if (search_result != INKBUNNY_OK) {
+        inkbunny_client_destroy(client);
+        return BUNNY_CORE_ERR_SITE;
+    }
+
+    bunny_core_post_array arr;
+    bunny_core_post_array_init(&arr);
+    for (size_t i = 0; i < submissions.count; i++) {
+        int64_t post_id = 0;
+        bunny_db_post_t item;
+        memset(&item, 0, sizeof(item));
+        if (upsert_inkbunny_submission(core->db, &submissions.items[i], &post_id) == BUNNY_CORE_OK && bunny_db_post_get_by_id(core->db, post_id, &item) == BUNNY_DB_OK) {
+            bunny_core_post_array_push(&arr, item);
+        }
+    }
+    inkbunny_submission_list_free(&submissions);
+    inkbunny_client_destroy(client);
 
     out_list->items = arr.items;
     out_list->count = arr.count;

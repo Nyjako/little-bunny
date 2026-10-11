@@ -32,6 +32,18 @@ class TagBrowseScreen extends StatefulWidget {
   /// field mirroring [query] like every other browse-to-save flow.
   final String? initialLabel;
 
+  /// Overrides [query]-based fetching with a custom page-fetch callback when
+  /// set (M10.3 -- used for Inkbunny's "my own favorites", which has no
+  /// expressible query string). When set, the "add to searches" action is
+  /// omitted entirely (there's no query string to save) and [query] itself is
+  /// never read for fetching, only as the default app bar title.
+  final Future<List<BunnyPost>> Function(int page)? customFetch;
+
+  /// Overrides the app bar title -- defaults to [query] (today's behavior)
+  /// when `null`, which doesn't make sense to show verbatim when
+  /// [customFetch] is set.
+  final String? title;
+
   const TagBrowseScreen({
     super.key,
     required this.site,
@@ -41,6 +53,8 @@ class TagBrowseScreen extends StatefulWidget {
     required this.syncSettingsStore,
     required this.downloadSettingsStore,
     this.initialLabel,
+    this.customFetch,
+    this.title,
   });
 
   @override
@@ -94,8 +108,13 @@ class _TagBrowseScreenState extends State<TagBrowseScreen> {
     }
   }
 
+  Future<List<BunnyPost>> _fetchPage(int page) {
+    final customFetch = widget.customFetch;
+    return customFetch != null ? customFetch(page) : widget.repository.previewSearch(widget.site, widget.query, page: page);
+  }
+
   Future<void> _loadInitial() async {
-    final page = await widget.repository.previewSearch(widget.site, widget.query, page: 1);
+    final page = await _fetchPage(1);
     if (!mounted) {
       return;
     }
@@ -118,7 +137,7 @@ class _TagBrowseScreenState extends State<TagBrowseScreen> {
       return;
     }
     setState(() => _loadingMore = true);
-    final page = await widget.repository.previewSearch(widget.site, widget.query, page: _nextPage);
+    final page = await _fetchPage(_nextPage);
     if (!mounted) {
       return;
     }
@@ -182,8 +201,8 @@ class _TagBrowseScreenState extends State<TagBrowseScreen> {
     return Scaffold(
       appBar: AppBar(
         toolbarHeight: isWideScreen(context) ? compactToolbarHeight : null,
-        title: Text(widget.query),
-        actions: [IconButton(icon: const Icon(Icons.add), tooltip: l10n.tagBrowseAddToSearchesTooltip, onPressed: _addToSearches)],
+        title: Text(widget.title ?? widget.query),
+        actions: widget.customFetch == null ? [IconButton(icon: const Icon(Icons.add), tooltip: l10n.tagBrowseAddToSearchesTooltip, onPressed: _addToSearches)] : null,
       ),
       body: _loading
           ? const Center(child: CircularProgressIndicator())
