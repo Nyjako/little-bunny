@@ -173,6 +173,16 @@ class AppLocalizationsEn extends AppLocalizations {
       'No favorited posts yet -- favorite some to see their tags here.';
 
   @override
+  String get tagStatsAllEmptyState =>
+      'No synced posts yet -- sync a search to see their tags here.';
+
+  @override
+  String get tagStatsFavoritesLabel => 'Favorites';
+
+  @override
+  String get tagStatsAllLabel => 'All';
+
+  @override
   String get createSearchScreenTitle => 'New search';
 
   @override

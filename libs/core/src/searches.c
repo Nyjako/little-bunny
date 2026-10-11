@@ -74,6 +74,14 @@ bunny_core_result_t bunny_core_top_favorited_tags(bunny_core_t *core, bunny_db_s
     return bunny_core_map_db_result(bunny_db_top_favorited_tags(core->db, site, limit, out_list));
 }
 
+bunny_core_result_t bunny_core_top_used_tags(bunny_core_t *core, bunny_db_site_t site, int limit, bunny_db_tag_stat_list_t *out_list)
+{
+    if (!core) {
+        return BUNNY_CORE_ERR_INVALID_ARG;
+    }
+    return bunny_core_map_db_result(bunny_db_top_used_tags(core->db, site, limit, out_list));
+}
+
 bunny_core_result_t bunny_core_post_mark_seen(bunny_core_t *core, int64_t post_id)
 {
     if (!core) {
