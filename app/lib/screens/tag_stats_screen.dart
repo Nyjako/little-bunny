@@ -36,6 +36,10 @@ class TagStatsScreen extends StatefulWidget {
 
 class _TagStatsScreenState extends State<TagStatsScreen> {
   BunnySite _site = BunnySite.e621;
+
+  /// Whether to rank only favorited posts' tags (M10.2's original behavior)
+  /// or every synced post's tags (M14.4).
+  bool _favoritesOnly = true;
   Future<List<BunnyTagStat>>? _statsFuture;
 
   @override
@@ -45,7 +49,7 @@ class _TagStatsScreenState extends State<TagStatsScreen> {
   }
 
   void _load() {
-    _statsFuture = widget.repository.topFavoritedTags(_site);
+    _statsFuture = _favoritesOnly ? widget.repository.topFavoritedTags(_site) : widget.repository.topUsedTags(_site);
   }
 
   void _openTag(BunnyTagStat stat) {
@@ -82,6 +86,15 @@ class _TagStatsScreenState extends State<TagStatsScreen> {
                 _load();
               }),
             ),
+            const SizedBox(height: 8),
+            SegmentedButton<bool>(
+              segments: [ButtonSegment(value: true, label: Text(l10n.tagStatsFavoritesLabel)), ButtonSegment(value: false, label: Text(l10n.tagStatsAllLabel))],
+              selected: {_favoritesOnly},
+              onSelectionChanged: (selection) => setState(() {
+                _favoritesOnly = selection.first;
+                _load();
+              }),
+            ),
             const SizedBox(height: 16),
             Expanded(
               child: FutureBuilder<List<BunnyTagStat>>(
@@ -92,7 +105,7 @@ class _TagStatsScreenState extends State<TagStatsScreen> {
                   }
                   final stats = snapshot.data!;
                   if (stats.isEmpty) {
-                    return Center(child: Text(l10n.tagStatsEmptyState));
+                    return Center(child: Text(_favoritesOnly ? l10n.tagStatsEmptyState : l10n.tagStatsAllEmptyState));
                   }
                   return ListView.builder(
                     itemCount: stats.length,
