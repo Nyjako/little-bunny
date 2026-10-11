@@ -49,6 +49,7 @@ class _CreateSearchScreenState extends State<CreateSearchScreen> {
   BunnySite _site = BunnySite.e621;
   List<BunnyTagStat> _suggestions = [];
   Timer? _debounce;
+  Timer? _poolNameDebounce;
   bool _submitting = false;
   bool _labelManuallyEdited = false;
   bool _mirroringLabel = false;
@@ -84,6 +85,7 @@ class _CreateSearchScreenState extends State<CreateSearchScreen> {
   @override
   void dispose() {
     _debounce?.cancel();
+    _poolNameDebounce?.cancel();
     _queryController.removeListener(_onQueryChanged);
     _queryController.removeListener(_mirrorQueryIntoLabel);
     _labelController.removeListener(_onLabelChanged);
@@ -93,6 +95,8 @@ class _CreateSearchScreenState extends State<CreateSearchScreen> {
     super.dispose();
   }
 
+  static final _poolQueryPattern = RegExp(r'^pool:(\d+)$');
+
   void _mirrorQueryIntoLabel() {
     if (_labelManuallyEdited) {
       return;
@@ -100,6 +104,42 @@ class _CreateSearchScreenState extends State<CreateSearchScreen> {
     _mirroringLabel = true;
     _labelController.text = _queryController.text;
     _mirroringLabel = false;
+    _maybeFetchPoolName();
+  }
+
+  /// A raw `pool:<id>` query typed directly (rather than reached via
+  /// `TagBrowseScreen`'s "add to searches" action or the Pools tab's "add
+  /// pool by ID" dialog, both of which already fetch the pool's own name as
+  /// the label) would otherwise mirror the literal `pool:12345` text -- this
+  /// upgrades that to the pool's real title once it resolves, same
+  /// fetch-then-fallback-to-literal-on-failure shape those other two flows
+  /// already established. `widget.initialLabel` already covers that case so
+  /// skip the redundant fetch when it's set.
+  void _maybeFetchPoolName() {
+    _poolNameDebounce?.cancel();
+    if (_site != BunnySite.e621 || widget.initialLabel != null) {
+      return;
+    }
+    final query = _queryController.text.trim();
+    final match = _poolQueryPattern.firstMatch(query);
+    if (match == null) {
+      return;
+    }
+    final poolId = int.parse(match.group(1)!);
+    _poolNameDebounce = Timer(const Duration(milliseconds: 300), () async {
+      try {
+        final pool = await widget.repository.fetchPool(poolId);
+        final name = pool.name;
+        if (!mounted || _labelManuallyEdited || name == null || name.isEmpty) {
+          return;
+        }
+        _mirroringLabel = true;
+        _labelController.text = name;
+        _mirroringLabel = false;
+      } catch (_) {
+        // Leave the literal "pool:<id>" mirror in place.
+      }
+    });
   }
 
   void _onLabelChanged() {

@@ -1282,6 +1282,20 @@ this file is the single source of truth for "what's done" across sessions.
   synthetic fixture covering the same shapes -- the real sample is a third party's personal
   data (their followed artists/tracked pools) and was never committed to the repo.
 
+- [x] **M13.1 — Searches list UX: pool labels, refresh bug, sort order**
+  Three small, independent fixes bundled as one branch, direct user feedback. `CreateSearchScreen`
+  now fetches and mirrors the real pool name into the label when a raw `pool:<id>` query is typed
+  directly (debounced, same shape as its existing tag-autocomplete timer), falling back to the
+  literal query text on a failed lookup -- the three other entry points that already created pool
+  searches (`PostDetailScreen._openPool`, the Pools tab's "add pool by ID" dialog, `TagBrowseScreen`'s
+  "add to searches") already did this correctly. Fixed a real bug: `SearchesScreen` never refreshed
+  its list after returning from `SettingsScreen`, so searches created via M11's import stayed
+  invisible until the app was restarted -- every other screen that can mutate the list already
+  refreshed on return, Settings just never needed to until the import feature existed. Added a sort
+  control (`DisplaySettingsStore.SearchSortOrder`: most-unseen-first by default, label A-Z, or most
+  recently created) applied client-side after `listSearches()` returns -- no backend change needed,
+  `BunnySearch` already carries every field the three orders sort by.
+
 - [ ] **M12 — Cross-platform polish**
   Responsive desktop/mobile layout, consistent theming pass, Windows cross-build via
   dockcross validated end-to-end (server + core), packaging. Needs to resolve the OpenSSL-

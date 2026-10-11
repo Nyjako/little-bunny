@@ -203,4 +203,45 @@ void main() {
     expect(repository.searches.single.site, BunnySite.inkbunny);
     expect(repository.searches.single.query, 'someartist');
   });
+
+  testWidgets('typing a raw pool query mirrors the fetched pool name into the label (M13.1)', (WidgetTester tester) async {
+    final repository = FakeBunnyRepository();
+    repository.poolInfoById[12345] = const BunnyPoolInfo(id: 12345, name: 'Some Comic', postCount: 10);
+
+    await tester.pumpWidget(_wrap(repository));
+    await tester.pumpAndSettle();
+
+    await tester.enterText(find.widgetWithText(TextFormField, 'Query'), 'pool:12345');
+    await tester.pump(const Duration(milliseconds: 350));
+    await tester.pumpAndSettle();
+
+    expect(tester.widget<TextFormField>(find.widgetWithText(TextFormField, 'Label')).controller!.text, 'Some Comic');
+  });
+
+  testWidgets('a raw pool query falls back to the literal text when the pool lookup fails (M13.1)', (WidgetTester tester) async {
+    final repository = FakeBunnyRepository();
+
+    await tester.pumpWidget(_wrap(repository));
+    await tester.pumpAndSettle();
+
+    await tester.enterText(find.widgetWithText(TextFormField, 'Query'), 'pool:99999');
+    await tester.pump(const Duration(milliseconds: 350));
+    await tester.pumpAndSettle();
+
+    expect(tester.widget<TextFormField>(find.widgetWithText(TextFormField, 'Label')).controller!.text, 'pool:99999');
+  });
+
+  testWidgets('the pool-name fetch is skipped when initialLabel is already set (M13.1)', (WidgetTester tester) async {
+    final repository = FakeBunnyRepository();
+    repository.poolInfoById[12345] = const BunnyPoolInfo(id: 12345, name: 'Some Comic', postCount: 10);
+
+    await tester.pumpWidget(
+      wrapWithLocalization(CreateSearchScreen(repository: repository, syncSettingsStore: const SyncSettingsStore(), initialSite: BunnySite.e621, initialQuery: 'pool:12345', initialLabel: 'My Own Label')),
+    );
+    await tester.pumpAndSettle();
+    await tester.pump(const Duration(milliseconds: 350));
+    await tester.pumpAndSettle();
+
+    expect(tester.widget<TextFormField>(find.widgetWithText(TextFormField, 'Label')).controller!.text, 'My Own Label');
+  });
 }
