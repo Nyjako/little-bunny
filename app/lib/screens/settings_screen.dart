@@ -49,6 +49,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   PreviewQuality? _previewQuality;
   String? _downloadFolder;
   bool _autoFavoriteOnDownload = false;
+  bool _autoUpvoteOnDownload = false;
   final _intervalController = TextEditingController();
   final _gridColumnsController = TextEditingController();
 
@@ -85,6 +86,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final gridColumns = await widget.displaySettingsStore.loadGridColumns();
     final downloadFolder = await widget.downloadSettingsStore.loadDestinationFolder();
     final autoFavoriteOnDownload = await widget.downloadSettingsStore.loadAutoFavoriteOnDownload();
+    final autoUpvoteOnDownload = await widget.downloadSettingsStore.loadAutoUpvoteOnDownload();
     if (!mounted) {
       return;
     }
@@ -95,6 +97,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       _gridColumnsController.text = '$gridColumns';
       _downloadFolder = downloadFolder;
       _autoFavoriteOnDownload = autoFavoriteOnDownload;
+      _autoUpvoteOnDownload = autoUpvoteOnDownload;
     });
   }
 
@@ -137,6 +140,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Future<void> _setAutoFavoriteOnDownload(bool value) async {
     setState(() => _autoFavoriteOnDownload = value);
     await widget.downloadSettingsStore.saveAutoFavoriteOnDownload(value);
+  }
+
+  Future<void> _setAutoUpvoteOnDownload(bool value) async {
+    setState(() => _autoUpvoteOnDownload = value);
+    await widget.downloadSettingsStore.saveAutoUpvoteOnDownload(value);
   }
 
   Future<void> _loadBlacklist() async {
@@ -287,6 +295,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
             title: Text(l10n.settingsAutoFavoriteOnDownloadLabel),
             value: _autoFavoriteOnDownload,
             onChanged: _setAutoFavoriteOnDownload,
+          ),
+          SwitchListTile(
+            contentPadding: EdgeInsets.zero,
+            title: Text(l10n.settingsAutoUpvoteOnDownloadLabel),
+            value: _autoUpvoteOnDownload,
+            onChanged: _setAutoUpvoteOnDownload,
           ),
           const SizedBox(height: 24),
           Text(l10n.settingsBackupSection, style: Theme.of(context).textTheme.titleMedium),
