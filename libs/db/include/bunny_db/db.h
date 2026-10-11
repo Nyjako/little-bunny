@@ -38,6 +38,12 @@ bunny_db_result_t bunny_db_search_delete(bunny_db_t *db, int64_t search_id);
 bunny_db_result_t bunny_db_search_list(bunny_db_t *db, bunny_db_search_list_t *out_list);
 bunny_db_result_t bunny_db_search_touch_last_run(bunny_db_t *db, int64_t search_id);
 
+/* Pin/unpin, toggled directly from the searches list row rather than
+ * through the full edit form (M14.1) -- a dedicated setter rather than a
+ * fourth bunny_db_search_options_t field, same reasoning as
+ * bunny_db_search_touch_last_run already being its own function. */
+bunny_db_result_t bunny_db_search_set_pinned(bunny_db_t *db, int64_t search_id, bool pinned);
+
 /* Updates a search's editable fields in place (M9.7.2) -- replaces the
  * narrower bunny_db_search_set_auto_favorite, whose only caller (the
  * searches-list quick-toggle icon) was removed in favor of a full edit

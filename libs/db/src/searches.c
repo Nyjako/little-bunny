@@ -74,9 +74,11 @@ static void fill_search_from_row(sqlite3_stmt *stmt, bunny_db_search_t *out)
     out->created_at = bunny_db_column_text_dup(stmt, 5);
     out->last_run_at = bunny_db_column_text_dup(stmt, 6);
     out->unseen_count = sqlite3_column_int(stmt, 7);
-    out->auto_favorite = sqlite3_column_int(stmt, 8) != 0;
-    out->auto_favorite_stars = sqlite3_column_int(stmt, 9);
-    out->auto_upvote = sqlite3_column_int(stmt, 10) != 0;
+    out->total_count = sqlite3_column_int(stmt, 8);
+    out->auto_favorite = sqlite3_column_int(stmt, 9) != 0;
+    out->auto_favorite_stars = sqlite3_column_int(stmt, 10);
+    out->auto_upvote = sqlite3_column_int(stmt, 11) != 0;
+    out->pinned = sqlite3_column_int(stmt, 12) != 0;
 }
 
 bunny_db_result_t bunny_db_search_list(bunny_db_t *db, bunny_db_search_list_t *out_list)
@@ -88,11 +90,14 @@ bunny_db_result_t bunny_db_search_list(bunny_db_t *db, bunny_db_search_list_t *o
 
     /* unseen_count: how many of this search's linked posts have no
      * seen_posts row -- feeds SearchesScreen's "N new" badge without a
-     * separate round trip per row. */
+     * separate round trip per row. total_count (M14.1): how many posts are
+     * linked at all, seen or not -- same live-subquery shape, shown
+     * alongside the badge in the row's subtitle. */
     const char *sql = "SELECT s.id, s.site, s.label, s.query, s.interval_hours, s.created_at, s.last_run_at, "
                       "(SELECT COUNT(*) FROM search_results sr LEFT JOIN seen_posts seen ON seen.post_id = sr.post_id "
                       " WHERE sr.search_id = s.id AND seen.post_id IS NULL) AS unseen_count, "
-                      "s.auto_favorite, s.auto_favorite_stars, s.auto_upvote "
+                      "(SELECT COUNT(*) FROM search_results sr WHERE sr.search_id = s.id) AS total_count, "
+                      "s.auto_favorite, s.auto_favorite_stars, s.auto_upvote, s.pinned "
                       "FROM searches s ORDER BY s.id;";
     sqlite3_stmt *stmt = NULL;
     if (sqlite3_prepare_v2(db->handle, sql, -1, &stmt, NULL) != SQLITE_OK) {
@@ -144,6 +149,24 @@ bunny_db_result_t bunny_db_search_touch_last_run(bunny_db_t *db, int64_t search_
         return BUNNY_DB_ERR_QUERY_FAILED;
     }
     sqlite3_bind_int64(stmt, 1, search_id);
+    int rc = sqlite3_step(stmt);
+    sqlite3_finalize(stmt);
+    return rc == SQLITE_DONE ? BUNNY_DB_OK : bunny_db_sqlite_rc_to_result(rc);
+}
+
+bunny_db_result_t bunny_db_search_set_pinned(bunny_db_t *db, int64_t search_id, bool pinned)
+{
+    if (!db) {
+        return BUNNY_DB_ERR_INVALID_ARG;
+    }
+
+    const char *sql = "UPDATE searches SET pinned = ? WHERE id = ?;";
+    sqlite3_stmt *stmt = NULL;
+    if (sqlite3_prepare_v2(db->handle, sql, -1, &stmt, NULL) != SQLITE_OK) {
+        return BUNNY_DB_ERR_QUERY_FAILED;
+    }
+    sqlite3_bind_int(stmt, 1, pinned ? 1 : 0);
+    sqlite3_bind_int64(stmt, 2, search_id);
     int rc = sqlite3_step(stmt);
     sqlite3_finalize(stmt);
     return rc == SQLITE_DONE ? BUNNY_DB_OK : bunny_db_sqlite_rc_to_result(rc);

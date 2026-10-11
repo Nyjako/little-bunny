@@ -75,16 +75,24 @@ class _SearchesScreenState extends State<SearchesScreen> with SingleTickerProvid
   }
 
   List<BunnySearch> _sorted(List<BunnySearch> searches) {
-    final sorted = [...searches];
-    switch (_sortOrder) {
-      case SearchSortOrder.mostUnseen:
-        sorted.sort((a, b) => b.unseenCount.compareTo(a.unseenCount));
-      case SearchSortOrder.label:
-        sorted.sort((a, b) => a.label.toLowerCase().compareTo(b.label.toLowerCase()));
-      case SearchSortOrder.recentlyCreated:
-        sorted.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+    void sortBy(List<BunnySearch> list) {
+      switch (_sortOrder) {
+        case SearchSortOrder.mostUnseen:
+          list.sort((a, b) => b.unseenCount.compareTo(a.unseenCount));
+        case SearchSortOrder.label:
+          list.sort((a, b) => a.label.toLowerCase().compareTo(b.label.toLowerCase()));
+        case SearchSortOrder.recentlyCreated:
+          list.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+      }
     }
-    return sorted;
+
+    // Pinned searches always come first (M14.1), each group internally
+    // ordered by the usual sort choice.
+    final pinned = searches.where((search) => search.pinned).toList();
+    final unpinned = searches.where((search) => !search.pinned).toList();
+    sortBy(pinned);
+    sortBy(unpinned);
+    return [...pinned, ...unpinned];
   }
 
   @override
@@ -193,23 +201,29 @@ class _SearchesScreenState extends State<SearchesScreen> with SingleTickerProvid
     _refresh();
   }
 
-  Future<void> _removeSearch(BunnySearch search) async {
-    final l10n = AppLocalizations.of(context)!;
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text(l10n.searchesRemoveDialogTitle),
-        content: Text(l10n.searchesRemoveDialogContent(search.label)),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: Text(l10n.commonCancel)),
-          TextButton(onPressed: () => Navigator.pop(context, true), child: Text(l10n.commonRemove)),
-        ],
-      ),
-    );
-    if (confirmed != true) {
+  Future<void> _togglePin(BunnySearch search) async {
+    await _repository!.setSearchPinned(search.id, !search.pinned);
+    _refresh();
+  }
+
+  /// Which searches currently have a per-row sync in flight (M14.1) -- a set
+  /// rather than a single flag, since multiple rows can be synced
+  /// independently and concurrently, unlike the single sequential "check
+  /// for updates" app bar action above.
+  final Set<int> _syncingSearchIds = {};
+
+  Future<void> _syncOneSearch(BunnySearch search) async {
+    setState(() => _syncingSearchIds.add(search.id));
+    try {
+      await _repository!.syncSearch(search.id);
+    } catch (_) {
+      // Same tolerance as "check for updates" -- leave it, the user can
+      // retry the single row.
+    }
+    if (!mounted) {
       return;
     }
-    await _repository!.deleteSearch(search.id);
+    setState(() => _syncingSearchIds.remove(search.id));
     _refresh();
   }
 
@@ -230,7 +244,7 @@ class _SearchesScreenState extends State<SearchesScreen> with SingleTickerProvid
           .map(
             (search) => ListTile(
               title: Text(search.label),
-              subtitle: Text(l10n.searchesIntervalSubtitle(search.site.toWireString(), search.intervalHours)),
+              subtitle: Text(l10n.searchesIntervalSubtitle(search.site.toWireString(), search.intervalHours, search.totalCount)),
               trailing: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
@@ -241,7 +255,14 @@ class _SearchesScreenState extends State<SearchesScreen> with SingleTickerProvid
                       decoration: BoxDecoration(color: Theme.of(context).colorScheme.primary, borderRadius: BorderRadius.circular(12)),
                       child: Text('${search.unseenCount}', style: TextStyle(color: Theme.of(context).colorScheme.onPrimary, fontSize: 12)),
                     ),
-                  IconButton(icon: const Icon(Icons.delete), onPressed: () => _removeSearch(search)),
+                  IconButton(
+                    icon: Icon(search.pinned ? Icons.push_pin : Icons.push_pin_outlined),
+                    tooltip: search.pinned ? l10n.searchesUnpinTooltip : l10n.searchesPinTooltip,
+                    onPressed: () => _togglePin(search),
+                  ),
+                  _syncingSearchIds.contains(search.id)
+                      ? const Padding(padding: EdgeInsets.all(12), child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)))
+                      : IconButton(icon: const Icon(Icons.refresh), tooltip: l10n.searchesSyncRowTooltip, onPressed: () => _syncOneSearch(search)),
                 ],
               ),
               onTap: () => Navigator.push(

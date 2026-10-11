@@ -71,7 +71,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Foxes'), findsOneWidget);
-    expect(find.text('e621 • every 6h'), findsOneWidget);
+    expect(find.text('e621 • every 6h • 0 posts'), findsOneWidget);
   });
 
   testWidgets('shows an unseen-count badge only when there are unseen posts', (WidgetTester tester) async {
@@ -107,12 +107,16 @@ void main() {
     expect(repository.searches.single.label, 'Renamed foxes');
   });
 
-  testWidgets('tapping remove then confirming deletes the search', (WidgetTester tester) async {
+  testWidgets('deleting from EditSearchScreen removes the search from the list (M14.1)', (WidgetTester tester) async {
     final repository = FakeBunnyRepository();
     await repository.createSearch(BunnySite.e621, 'Foxes', 'fox');
 
     await tester.pumpWidget(_wrap(repository));
     await tester.pumpAndSettle();
+
+    await tester.longPress(find.text('Foxes'));
+    await tester.pumpAndSettle();
+    expect(find.text('Edit search'), findsOneWidget);
 
     await tester.tap(find.byIcon(Icons.delete));
     await tester.pumpAndSettle();
@@ -123,6 +127,39 @@ void main() {
 
     expect(repository.searches, isEmpty);
     expect(find.text('No saved searches yet. Tap + to add one.'), findsOneWidget);
+  });
+
+  testWidgets('tapping the pin icon pins a search to the top (M14.1)', (WidgetTester tester) async {
+    final repository = FakeBunnyRepository();
+    await repository.createSearch(BunnySite.e621, 'Alpha', 'alpha');
+    await repository.createSearch(BunnySite.e621, 'Beta', 'beta');
+
+    await tester.pumpWidget(_wrap(repository));
+    await tester.pumpAndSettle();
+
+    // Beta's own pin button -- same row-finding shape as other per-row
+    // action tests below.
+    final betaPinButton = find.descendant(of: find.widgetWithText(ListTile, 'Beta'), matching: find.byIcon(Icons.push_pin_outlined));
+    await tester.tap(betaPinButton);
+    await tester.pumpAndSettle();
+
+    expect(tester.getTopLeft(find.text('Beta')).dy, lessThan(tester.getTopLeft(find.text('Alpha')).dy));
+    expect(find.descendant(of: find.widgetWithText(ListTile, 'Beta'), matching: find.byIcon(Icons.push_pin)), findsOneWidget);
+  });
+
+  testWidgets('tapping the per-row sync button syncs only that search (M14.1)', (WidgetTester tester) async {
+    final repository = FakeBunnyRepository();
+    final id1 = await repository.createSearch(BunnySite.e621, 'Foxes', 'fox');
+    await repository.createSearch(BunnySite.e621, 'Wolves', 'wolf');
+
+    await tester.pumpWidget(_wrap(repository));
+    await tester.pumpAndSettle();
+
+    final foxesSyncButton = find.descendant(of: find.widgetWithText(ListTile, 'Foxes'), matching: find.byIcon(Icons.refresh));
+    await tester.tap(foxesSyncButton);
+    await tester.pumpAndSettle();
+
+    expect(repository.syncSearchCalls, [id1]);
   });
 
   testWidgets('tapping a search row opens PostGridScreen for that search', (WidgetTester tester) async {

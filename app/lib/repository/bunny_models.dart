@@ -43,6 +43,10 @@ class BunnySearch {
   final String createdAt;
   final String? lastRunAt;
   final int unseenCount;
+
+  /// Posts linked to this search, seen or not (M14.1) -- shown alongside
+  /// [unseenCount] in the searches list, not just the "new" subset.
+  final int totalCount;
   final bool autoFavorite;
 
   /// Inkbunny favorite level (1-3) queued by [autoFavorite]; ignored by e621,
@@ -53,6 +57,10 @@ class BunnySearch {
   /// sync (M9.7.2). Always false for Inkbunny, which has no vote API.
   final bool autoUpvote;
 
+  /// Shown first in the searches list, ahead of the normal sort order
+  /// (M14.1), toggled directly from the row rather than the edit form.
+  final bool pinned;
+
   const BunnySearch({
     required this.id,
     required this.site,
@@ -62,9 +70,11 @@ class BunnySearch {
     required this.createdAt,
     this.lastRunAt,
     this.unseenCount = 0,
+    this.totalCount = 0,
     this.autoFavorite = false,
     this.autoFavoriteStars = 1,
     this.autoUpvote = false,
+    this.pinned = false,
   });
 }
 

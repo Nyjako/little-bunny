@@ -119,9 +119,11 @@ class FakeBunnyRepository implements BunnyRepository {
           createdAt: search.createdAt,
           lastRunAt: search.lastRunAt,
           unseenCount: (postsBySearchId[search.id] ?? const []).where((post) => !post.isSeen).length,
+          totalCount: (postsBySearchId[search.id] ?? const []).length,
           autoFavorite: search.autoFavorite,
           autoFavoriteStars: search.autoFavoriteStars,
           autoUpvote: search.autoUpvote,
+          pinned: search.pinned,
         ),
       )
       .toList();
@@ -130,6 +132,30 @@ class FakeBunnyRepository implements BunnyRepository {
   Future<void> deleteSearch(int searchId) async {
     searches.removeWhere((search) => search.id == searchId);
     postsBySearchId.remove(searchId);
+  }
+
+  @override
+  Future<void> setSearchPinned(int searchId, bool pinned) async {
+    final index = searches.indexWhere((search) => search.id == searchId);
+    if (index == -1) {
+      return;
+    }
+    final search = searches[index];
+    searches[index] = BunnySearch(
+      id: search.id,
+      site: search.site,
+      label: search.label,
+      query: search.query,
+      intervalHours: search.intervalHours,
+      createdAt: search.createdAt,
+      lastRunAt: search.lastRunAt,
+      unseenCount: search.unseenCount,
+      totalCount: search.totalCount,
+      autoFavorite: search.autoFavorite,
+      autoFavoriteStars: search.autoFavoriteStars,
+      autoUpvote: search.autoUpvote,
+      pinned: pinned,
+    );
   }
 
   @override
@@ -148,9 +174,11 @@ class FakeBunnyRepository implements BunnyRepository {
       createdAt: search.createdAt,
       lastRunAt: search.lastRunAt,
       unseenCount: search.unseenCount,
+      totalCount: search.totalCount,
       autoFavorite: autoFavorite,
       autoFavoriteStars: autoFavoriteStars,
       autoUpvote: autoUpvote,
+      pinned: search.pinned,
     );
   }
 

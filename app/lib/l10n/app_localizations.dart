@@ -289,8 +289,26 @@ abstract class AppLocalizations {
   /// No description provided for @searchesIntervalSubtitle.
   ///
   /// In en, this message translates to:
-  /// **'{site} • every {hours}h'**
-  String searchesIntervalSubtitle(String site, int hours);
+  /// **'{site} • every {hours}h • {total} posts'**
+  String searchesIntervalSubtitle(String site, int hours, int total);
+
+  /// No description provided for @searchesPinTooltip.
+  ///
+  /// In en, this message translates to:
+  /// **'Pin'**
+  String get searchesPinTooltip;
+
+  /// No description provided for @searchesUnpinTooltip.
+  ///
+  /// In en, this message translates to:
+  /// **'Unpin'**
+  String get searchesUnpinTooltip;
+
+  /// No description provided for @searchesSyncRowTooltip.
+  ///
+  /// In en, this message translates to:
+  /// **'Sync now'**
+  String get searchesSyncRowTooltip;
 
   /// No description provided for @searchesRemoveDialogTitle.
   ///
@@ -459,6 +477,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Save'**
   String get editSearchSubmit;
+
+  /// No description provided for @editSearchDeleteTooltip.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete search'**
+  String get editSearchDeleteTooltip;
 
   /// No description provided for @postGridUnseenOnlyTooltip.
   ///
