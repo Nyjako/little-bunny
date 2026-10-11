@@ -1928,6 +1928,28 @@ only the two new "my favorites" screens, every sync pass and preview search now 
 backfills local favorite status for anything favorited directly on the website, not just posts
 reached through this specific feature.
 
+**Video playback controls (M10.4)**: direct user feedback -- video posts only had a tap-anywhere
+play/pause, no timeline, no mute toggle (and audio wasn't muted by default), no fullscreen, and
+the in-place player could visibly stretch a video because it sized itself off
+`controller.value.aspectRatio` (the decoded video's own reported ratio) instead of
+`post.width`/`post.height` -- the same class of bug M9.6.1 already fixed for the full-screen
+image viewer, just never applied to video. Added `chewie` (a pre-built Material/Cupertino
+controls skin over `video_player`) rather than hand-rolling a scrubber/mute/fullscreen UI.
+`PostDetailScreen._PostDetailScreenState` now holds both the `VideoPlayerController` (still
+needed for `networkUrl`/`httpHeaders` construction and for disposal -- `ChewieController.
+dispose()` does not dispose the video controller it wraps) and a `ChewieController` built once
+the former finishes initializing. Muted-by-default is `controller.setVolume(0)` called
+immediately after construction, before `initialize()`: `VideoPlayerController.setVolume` writes
+to `value.volume` synchronously (before its first `await`), and the platform side applies
+whatever `value.volume` holds once the `initialized` event fires, so the ordering works out
+without a separate "apply volume post-init" step. The aspect-ratio fix is one value threaded to
+two places: the same `(post.width > 0 && post.height > 0) ? post.width / post.height : 16/9`
+calculation `_buildMedia`'s image branch already used is now also passed as `ChewieController.
+aspectRatio` (used for both the in-place view and Chewie's fullscreen route) instead of leaving
+it `null` and letting Chewie fall back to the decoded video's own value. No existing widget test
+needed updating -- Chewie renders a real `VideoPlayer` internally (`PlayerWithControls.
+_buildLocal`), so `find.byType(VideoPlayer)` still finds it.
+
 ## Inkbunny API constraints (found in M2)
 
 Verified against the live API and the official docs while building `libinkbunny`:

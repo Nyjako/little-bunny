@@ -1,4 +1,5 @@
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:chewie/chewie.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -103,6 +104,7 @@ class PostDetailScreen extends StatefulWidget {
 
 class _PostDetailScreenState extends State<PostDetailScreen> {
   VideoPlayerController? _videoController;
+  ChewieController? _chewieController;
   Future<void>? _videoInitFuture;
 
   late final Future<List<BunnyPostTag>> _tagsFuture;
@@ -150,33 +152,36 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
     final url = widget.post.fileUrl;
     if (isVideoExt(ext) && url != null) {
       final controller = VideoPlayerController.networkUrl(Uri.parse(url), httpHeaders: imageHeadersFor(widget.post.site) ?? const {});
+      // Muted by default -- setVolume takes effect on the controller's value
+      // immediately (synchronously, before the first await inside it), so
+      // this reaches the platform side once initialize() completes below
+      // without a separate "apply volume after init" step.
+      controller.setVolume(0);
       _videoController = controller;
+      final post = widget.post;
+      final aspectRatio = (post.width > 0 && post.height > 0) ? post.width / post.height : 16 / 9;
       _videoInitFuture = controller.initialize().then((_) {
         if (!mounted) {
           return;
         }
-        controller.setLooping(true);
-        controller.play();
-        setState(() {});
+        setState(() {
+          // Pass the post-metadata aspect ratio rather than letting Chewie
+          // fall back to the decoded video's own reported value -- fixes
+          // stretching for sources whose reported aspect ratio is wrong,
+          // mirroring the fix already applied to the full-screen image
+          // viewer (M9.6.1) for the same class of bug.
+          _chewieController = ChewieController(videoPlayerController: controller, aspectRatio: aspectRatio, autoPlay: true, looping: true, allowFullScreen: true, allowMuting: true);
+        });
       });
     }
   }
 
   @override
   void dispose() {
+    _chewieController?.dispose();
     _videoController?.dispose();
     _commentController.dispose();
     super.dispose();
-  }
-
-  void _toggleVideoPlayback() {
-    final controller = _videoController;
-    if (controller == null || !controller.value.isInitialized) {
-      return;
-    }
-    setState(() {
-      controller.value.isPlaying ? controller.pause() : controller.play();
-    });
   }
 
   // Previously applied the optimistic UI update unconditionally, even when
@@ -383,11 +388,11 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
       return FutureBuilder<void>(
         future: _videoInitFuture,
         builder: (context, snapshot) {
-          final controller = _videoController!;
-          if (snapshot.connectionState != ConnectionState.done) {
+          final chewieController = _chewieController;
+          if (snapshot.connectionState != ConnectionState.done || chewieController == null) {
             return bounded(const Center(child: CircularProgressIndicator()));
           }
-          return GestureDetector(onTap: _toggleVideoPlayback, child: ConstrainedBox(constraints: BoxConstraints(maxHeight: maxHeight), child: AspectRatio(aspectRatio: controller.value.aspectRatio, child: VideoPlayer(controller))));
+          return bounded(Chewie(controller: chewieController));
         },
       );
     }
