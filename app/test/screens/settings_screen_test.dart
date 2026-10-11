@@ -9,6 +9,7 @@ import 'package:little_bunny/settings/theme_settings_store.dart';
 import 'package:path_provider_platform_interface/path_provider_platform_interface.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../fakes/fake_bunny_repository.dart';
 import '../fakes/fake_path_provider.dart';
 import '../fakes/fake_secret_store.dart';
 import '../fakes/test_app.dart';
@@ -23,7 +24,7 @@ void main() {
     const themeStore = ThemeSettingsStore();
     await themeStore.save(ThemeMode.light);
 
-    await tester.pumpWidget(wrapWithLocalization(SettingsScreen(themeSettingsStore: themeStore, lockService: AppLockService(FakeSecretStore()), syncSettingsStore: const SyncSettingsStore(), downloadSettingsStore: const DownloadSettingsStore(), displaySettingsStore: const DisplaySettingsStore(), onThemeModeChanged: (_) {})));
+    await tester.pumpWidget(wrapWithLocalization(SettingsScreen(repository: FakeBunnyRepository(), themeSettingsStore: themeStore, lockService: AppLockService(FakeSecretStore()), syncSettingsStore: const SyncSettingsStore(), downloadSettingsStore: const DownloadSettingsStore(), displaySettingsStore: const DisplaySettingsStore(), onThemeModeChanged: (_) {})));
     await tester.pumpAndSettle();
 
     final button = tester.widget<SegmentedButton<ThemeMode>>(find.byType(SegmentedButton<ThemeMode>));
@@ -34,7 +35,7 @@ void main() {
     const themeStore = ThemeSettingsStore();
     ThemeMode? notified;
 
-    await tester.pumpWidget(wrapWithLocalization(SettingsScreen(themeSettingsStore: themeStore, lockService: AppLockService(FakeSecretStore()), syncSettingsStore: const SyncSettingsStore(), downloadSettingsStore: const DownloadSettingsStore(), displaySettingsStore: const DisplaySettingsStore(), onThemeModeChanged: (mode) => notified = mode)));
+    await tester.pumpWidget(wrapWithLocalization(SettingsScreen(repository: FakeBunnyRepository(), themeSettingsStore: themeStore, lockService: AppLockService(FakeSecretStore()), syncSettingsStore: const SyncSettingsStore(), downloadSettingsStore: const DownloadSettingsStore(), displaySettingsStore: const DisplaySettingsStore(), onThemeModeChanged: (mode) => notified = mode)));
     await tester.pumpAndSettle();
 
     await tester.tap(find.text('Light'));
@@ -45,7 +46,7 @@ void main() {
   });
 
   testWidgets('tapping the app lock entry opens LockSetupScreen', (WidgetTester tester) async {
-    await tester.pumpWidget(wrapWithLocalization(SettingsScreen(themeSettingsStore: const ThemeSettingsStore(), lockService: AppLockService(FakeSecretStore()), syncSettingsStore: const SyncSettingsStore(), downloadSettingsStore: const DownloadSettingsStore(), displaySettingsStore: const DisplaySettingsStore(), onThemeModeChanged: (_) {})));
+    await tester.pumpWidget(wrapWithLocalization(SettingsScreen(repository: FakeBunnyRepository(), themeSettingsStore: const ThemeSettingsStore(), lockService: AppLockService(FakeSecretStore()), syncSettingsStore: const SyncSettingsStore(), downloadSettingsStore: const DownloadSettingsStore(), displaySettingsStore: const DisplaySettingsStore(), onThemeModeChanged: (_) {})));
     await tester.pumpAndSettle();
 
     // The Downloads section (M9.4) pushed "Manage app lock" past the
@@ -63,7 +64,7 @@ void main() {
 
     await tester.pumpWidget(
       wrapWithLocalization(
-        SettingsScreen(themeSettingsStore: const ThemeSettingsStore(), lockService: AppLockService(FakeSecretStore()), syncSettingsStore: const SyncSettingsStore(), downloadSettingsStore: const DownloadSettingsStore(), displaySettingsStore: const DisplaySettingsStore(), onThemeModeChanged: (_) {}),
+        SettingsScreen(repository: FakeBunnyRepository(), themeSettingsStore: const ThemeSettingsStore(), lockService: AppLockService(FakeSecretStore()), syncSettingsStore: const SyncSettingsStore(), downloadSettingsStore: const DownloadSettingsStore(), displaySettingsStore: const DisplaySettingsStore(), onThemeModeChanged: (_) {}),
       ),
     );
     await tester.pumpAndSettle();
@@ -77,6 +78,7 @@ void main() {
     await tester.pumpWidget(
       wrapWithLocalization(
         SettingsScreen(
+          repository: FakeBunnyRepository(),
           themeSettingsStore: const ThemeSettingsStore(),
           lockService: AppLockService(FakeSecretStore()),
           syncSettingsStore: syncStore,
@@ -100,6 +102,7 @@ void main() {
     await tester.pumpWidget(
       wrapWithLocalization(
         SettingsScreen(
+          repository: FakeBunnyRepository(),
           themeSettingsStore: const ThemeSettingsStore(),
           lockService: AppLockService(FakeSecretStore()),
           syncSettingsStore: const SyncSettingsStore(), downloadSettingsStore: const DownloadSettingsStore(),
@@ -121,6 +124,7 @@ void main() {
     await tester.pumpWidget(
       wrapWithLocalization(
         SettingsScreen(
+          repository: FakeBunnyRepository(),
           themeSettingsStore: const ThemeSettingsStore(),
           lockService: AppLockService(FakeSecretStore()),
           syncSettingsStore: const SyncSettingsStore(),
@@ -146,6 +150,7 @@ void main() {
     await tester.pumpWidget(
       wrapWithLocalization(
         SettingsScreen(
+          repository: FakeBunnyRepository(),
           themeSettingsStore: const ThemeSettingsStore(),
           lockService: AppLockService(FakeSecretStore()),
           syncSettingsStore: const SyncSettingsStore(), downloadSettingsStore: const DownloadSettingsStore(),

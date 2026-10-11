@@ -1,7 +1,12 @@
+import 'dart:convert';
+import 'dart:typed_data';
+
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 
 import '../l10n/app_localizations.dart';
+import '../repository/bunny_repository.dart';
+import '../services/search_backup_service.dart';
 import '../settings/app_lock_service.dart';
 import '../settings/display_settings_store.dart';
 import '../settings/download_settings_store.dart';
@@ -12,9 +17,10 @@ import 'lock_setup_screen.dart';
 /// One place for cross-cutting app preferences -- reachable from
 /// [AccountsScreen]'s app bar. Structured so adding more appearance options
 /// later (or more sections entirely) doesn't need a redesign: each concern
-/// (theme, app lock, sync, display, downloads) is its own section backed by
-/// its own settings store.
+/// (theme, app lock, sync, display, downloads, backup) is its own section
+/// backed by its own settings store.
 class SettingsScreen extends StatefulWidget {
+  final BunnyRepository repository;
   final ThemeSettingsStore themeSettingsStore;
   final AppLockService lockService;
   final SyncSettingsStore syncSettingsStore;
@@ -24,6 +30,7 @@ class SettingsScreen extends StatefulWidget {
 
   const SettingsScreen({
     super.key,
+    required this.repository,
     required this.themeSettingsStore,
     required this.lockService,
     required this.syncSettingsStore,
@@ -43,6 +50,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _autoFavoriteOnDownload = false;
   final _intervalController = TextEditingController();
   final _gridColumnsController = TextEditingController();
+
+  static const _backupService = SearchBackupService();
+
+  /// Non-null only while [_importSearches]'s create loop is running --
+  /// mirrors `PostGridScreen._massDownloadProgress`'s "replace the action's
+  /// own label with a running count, re-enable on completion" shape (M9.5).
+  (int, int)? _importProgress;
 
   @override
   void initState() {
@@ -118,6 +132,62 @@ class _SettingsScreenState extends State<SettingsScreen> {
     await widget.downloadSettingsStore.saveAutoFavoriteOnDownload(value);
   }
 
+  Future<void> _exportSearches(AppLocalizations l10n) async {
+    final searches = await widget.repository.listSearches();
+    final json = jsonEncode(_backupService.exportSearches(searches));
+    final saved = await FilePicker.saveFile(fileName: 'little_bunny_searches.json', bytes: Uint8List.fromList(utf8.encode(json)));
+    if (!mounted || saved == null) {
+      return;
+    }
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(l10n.settingsBackupExportSuccess(searches.length))));
+  }
+
+  /// Dedupes against the current `(site, query)` set so re-importing the
+  /// same file is a no-op the second time (M11) -- mirrors the "queue N,
+  /// drain once" mass-action shape elsewhere in this app by doing all the
+  /// reads up front, then looping `createSearch` without re-checking
+  /// anything already decided.
+  Future<void> _importSearches(AppLocalizations l10n) async {
+    final file = await FilePicker.pickFile();
+    if (file == null) {
+      return;
+    }
+    final contents = utf8.decode(await file.readAsBytes());
+    final defaultIntervalHours = await widget.syncSettingsStore.loadDefaultIntervalHours();
+    final parsed = _backupService.parseImportFile(contents, defaultIntervalHours: defaultIntervalHours);
+    if (!mounted) {
+      return;
+    }
+    if (parsed.format == ImportFormat.unrecognized) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(l10n.settingsBackupImportUnrecognizedFormat)));
+      return;
+    }
+
+    final existing = (await widget.repository.listSearches()).map((search) => (search.site, search.query)).toSet();
+    var imported = 0;
+    var duplicates = 0;
+    setState(() => _importProgress = (0, parsed.entries.length));
+    for (final entry in parsed.entries) {
+      final key = (entry.site, entry.query);
+      if (existing.contains(key)) {
+        duplicates++;
+      } else {
+        await widget.repository.createSearch(entry.site, entry.label, entry.query, intervalHours: entry.intervalHours, autoFavorite: entry.autoFavorite, autoFavoriteStars: entry.autoFavoriteStars, autoUpvote: entry.autoUpvote);
+        existing.add(key); // catches duplicates within the same file too, not just against what was already saved
+        imported++;
+      }
+      if (!mounted) {
+        return;
+      }
+      setState(() => _importProgress = (imported + duplicates, parsed.entries.length));
+    }
+    if (!mounted) {
+      return;
+    }
+    setState(() => _importProgress = null);
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(l10n.settingsBackupImportSummary(imported, duplicates, parsed.invalidCount))));
+  }
+
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
@@ -183,6 +253,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
             title: Text(l10n.settingsAutoFavoriteOnDownloadLabel),
             value: _autoFavoriteOnDownload,
             onChanged: _setAutoFavoriteOnDownload,
+          ),
+          const SizedBox(height: 24),
+          Text(l10n.settingsBackupSection, style: Theme.of(context).textTheme.titleMedium),
+          const SizedBox(height: 8),
+          ListTile(
+            contentPadding: EdgeInsets.zero,
+            title: Text(l10n.settingsBackupExportLabel),
+            trailing: TextButton(onPressed: () => _exportSearches(l10n), child: Text(l10n.settingsBackupExportButton)),
+          ),
+          ListTile(
+            contentPadding: EdgeInsets.zero,
+            title: Text(switch (_importProgress) { (final done, final total) => l10n.settingsBackupImportProgress(done, total), null => l10n.settingsBackupImportLabel }),
+            trailing: TextButton(onPressed: _importProgress == null ? () => _importSearches(l10n) : null, child: Text(l10n.settingsBackupImportButton)),
           ),
           const SizedBox(height: 24),
           Text(l10n.settingsAppLockSection, style: Theme.of(context).textTheme.titleMedium),
