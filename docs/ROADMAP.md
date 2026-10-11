@@ -1326,6 +1326,14 @@ this file is the single source of truth for "what's done" across sessions.
   anyway" if any match -- the only place in the app a blacklisted post can still surface, since
   parent/child navigation doesn't go through the filtered search-listing query.
 
+- [x] **M14.3 — Searches-list progressive-refresh fix**
+  Bug fix, direct user feedback: after tapping "check for updates" (M13.2), newly-found posts
+  didn't show up in the Searches list's unseen-count badges until the app was restarted.
+  `SearchesScreen._checkForUpdates` only refreshed its list once, after the entire sequential
+  sync loop finished; now it refreshes after every individual search's sync completes, so each
+  badge updates live as its own search finishes rather than only once at the very end (and
+  nothing already-synced is lost if the run is ever interrupted partway through).
+
 - [ ] **M12 — Cross-platform polish**
   Responsive desktop/mobile layout, consistent theming pass, Windows cross-build via
   dockcross validated end-to-end (server + core), packaging. Needs to resolve the OpenSSL-

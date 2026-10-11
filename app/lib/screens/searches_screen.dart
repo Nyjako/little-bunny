@@ -116,7 +116,10 @@ class _SearchesScreenState extends State<SearchesScreen> with SingleTickerProvid
   /// search's own due-interval -- unlike the scheduled/manual batch sync
   /// (`syncDueSearches`), this syncs one search at a time so progress can
   /// be shown, and keeps going past a single search's failure (network
-  /// error, etc.) rather than aborting the whole run.
+  /// error, etc.) rather than aborting the whole run. Refreshes the list
+  /// after every search (not just once at the end) so unseen-count badges
+  /// update live and nothing is lost if the run is interrupted partway
+  /// through (M14.3).
   Future<void> _checkForUpdates() async {
     final searches = await _repository!.listSearches();
     if (searches.isEmpty) {
@@ -133,13 +136,15 @@ class _SearchesScreenState extends State<SearchesScreen> with SingleTickerProvid
       if (!mounted) {
         return;
       }
-      setState(() => _syncAllProgress = (i + 1, searches.length));
+      setState(() {
+        _syncAllProgress = (i + 1, searches.length);
+        _searchesFuture = _repository!.listSearches();
+      });
     }
     if (!mounted) {
       return;
     }
     setState(() => _syncAllProgress = null);
-    _refresh();
   }
 
   Future<void> _createSearch() async {
