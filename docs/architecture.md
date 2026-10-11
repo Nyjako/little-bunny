@@ -1880,6 +1880,54 @@ deliberately left out). `SearchesScreen`'s app bar gained one more icon (next to
 accounts/settings icons) opening this screen -- the same `IconButton` + `Navigator.push` pattern
 already used for the other two.
 
+**View my own favorites (M10.3)**: direct user feedback -- e621 supports `fav:<username>` as a
+literal tag-search token, and Inkbunny's official search API has a dedicated `favorited_by_
+user_id` parameter for the same purpose, and the user wanted an accessible way to jump to either.
+The two sites needed genuinely different plumbing. e621 needed nothing new at all: `fav:<username>`
+is just literal query text, already fully supported by the existing `bunny_core_preview_search`/
+`previewSearch`/`TagBrowseScreen` pipeline (the same mechanism `pool:<id>` already rides on) --
+the e621 heart icon on `AccountsScreen` just navigates to `TagBrowseScreen(site: e621, query: 'fav:
+$username')`, reusing `BunnyAccount.username` which was already stored. As a free side effect, the
+user can also hit `TagBrowseScreen`'s existing "add to searches" action on this view to turn it
+into a standing synced "my e621 favorites" search.
+
+Inkbunny needed a new code path. `inkbunny_login` (`libs/inkbunny/src/client.c`) already parses
+the logged-in account's own numeric `user_id` out of the login response into the opaque
+`inkbunny_client_t`, but `inkbunny/client.h` had no public getter for it -- a one-line
+`inkbunny_client_get_user_id` fixes that. `bunny_core_build_inkbunny_client` (`libs/core/src/
+site_clients.c`) already logs in on every call before any caller gets to use the client, so a new
+`bunny_core_list_my_inkbunny_favorites(core, page, out_list)` (`libs/core/src/sync.c`) needs no
+separate account lookup -- it builds the client, reads the id straight off it, and otherwise
+mirrors `bunny_core_preview_search`'s existing Inkbunny branch almost line for line, just building
+`inkbunny_search_params_t.favorited_by_user_id` instead of `.text`. No new `bunny_db` migration, no
+caching -- the id is read live every call, the same "fetch live, don't persist" pattern `bunny_
+core_fetch_pool` already uses. Full plumbing: FFI, a new `POST /favorites/inkbunny/mine?page=`
+route (a sibling registration in `server/src/routes_search.c`, which already owns the structurally
+similar `POST /search/preview`), and `BunnyRepository.myInkbunnyFavorites({page})` across
+FFI/HTTP/Fake. `TagBrowseScreen` gained an optional `customFetch`/`title` override -- when set,
+`_loadInitial`/`_loadMore` call it instead of `previewSearch`, and the "add to searches" action is
+omitted entirely (not just disabled), since Inkbunny's favorites can't be expressed as a saved
+search's query string at all. This reuses every line of `TagBrowseScreen`'s pagination/grid code
+for Inkbunny's favorites rather than building a second, mostly-duplicate screen.
+
+A third finding came directly from the user during this sub-milestone's planning: posts pulled
+back from either site's "my favorites" list are, by definition, actually favorited according to
+the site -- and that fact needs to land in the local `favorites` mirror table, not just be
+displayed. This exposed a pre-existing gap: `e621_post_t.is_favorited`/`inkbunny_submission_t.
+is_favorite` (parsed off every search/get response since M2) had never been read anywhere in
+`libs/core/src/sync.c` -- the local `favorites` table was, until now, written *only* when the user
+favorited something through this app's own action queue (`apply_favorite_mirror`, M4.3), never
+reconciled with the site's own "already favorited" truth. Fixed at the shared upsert functions
+(`upsert_e621_post`/`upsert_inkbunny_submission`): right after a successful `bunny_db_post_upsert`,
+if the site reports the post as favorited, `bunny_db_favorite_add` is called too (already an
+upsert itself, so calling it unconditionally is cheap and idempotent). This is **additive only** --
+it never calls `bunny_db_favorite_remove` on a `false` report, since that would turn a simple "pull
+favorites in" into a full bidirectional overwrite of whatever's already recorded locally, a bigger
+behavior change than what was asked for. Because this lives in the shared upsert path rather than
+only the two new "my favorites" screens, every sync pass and preview search now also correctly
+backfills local favorite status for anything favorited directly on the website, not just posts
+reached through this specific feature.
+
 ## Inkbunny API constraints (found in M2)
 
 Verified against the live API and the official docs while building `libinkbunny`:

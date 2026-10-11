@@ -273,6 +273,12 @@ class _PreviewSearchRequest extends _Request {
   const _PreviewSearchRequest(this.site, this.query, this.page);
 }
 
+class _ListMyInkbunnyFavoritesRequest extends _Request {
+  final int page;
+
+  const _ListMyInkbunnyFavoritesRequest(this.page);
+}
+
 class _ListCommentsRequest extends _Request {
   final int postId;
 
@@ -494,6 +500,19 @@ List<Map<String, Object?>> _handlePreviewSearch(Pointer<bunny_core_t> core, _Pre
   });
 }
 
+List<Map<String, Object?>> _handleListMyInkbunnyFavorites(Pointer<bunny_core_t> core, _ListMyInkbunnyFavoritesRequest r) {
+  return using((arena) {
+    final out = arena<bunny_db_post_list_t>();
+    _check(_bindings.bunny_core_list_my_inkbunny_favorites(core, r.page, out));
+    final items = <Map<String, Object?>>[];
+    for (var i = 0; i < out.ref.count; i++) {
+      items.add(_postToMap(out.ref.items[i]));
+    }
+    _bindings.bunny_db_post_list_free(out);
+    return items;
+  });
+}
+
 List<Map<String, Object?>> _handleListComments(Pointer<bunny_core_t> core, _ListCommentsRequest r) {
   return using((arena) {
     final out = arena<bunny_core_comment_list_t>();
@@ -646,6 +665,8 @@ Object? _dispatch(Pointer<bunny_core_t>? core, _Request request, void Function(P
         return _handleFetchPool(c, r);
       case _PreviewSearchRequest r:
         return _handlePreviewSearch(c, r);
+      case _ListMyInkbunnyFavoritesRequest r:
+        return _handleListMyInkbunnyFavorites(c, r);
       case _ListCommentsRequest r:
         return _handleListComments(c, r);
       case _RecordDownloadRequest r:
@@ -793,6 +814,8 @@ class BunnyCoreNative {
   Future<Map<String, Object?>> fetchPool(int poolId) => _send<Map<String, Object?>>(_FetchPoolRequest(poolId));
 
   Future<List<Map<String, Object?>>> previewSearch(String site, String query, {int page = 1}) => _send<List<Map<String, Object?>>>(_PreviewSearchRequest(site, query, page));
+
+  Future<List<Map<String, Object?>>> listMyInkbunnyFavorites({int page = 1}) => _send<List<Map<String, Object?>>>(_ListMyInkbunnyFavoritesRequest(page));
 
   Future<List<Map<String, Object?>>> listComments(int postId) => _send<List<Map<String, Object?>>>(_ListCommentsRequest(postId));
 

@@ -88,6 +88,34 @@ static int handle_preview_search(struct mg_connection *conn, server_context_t *c
     return status;
 }
 
+static int handle_my_inkbunny_favorites(struct mg_connection *conn, server_context_t *ctx, const char *query_string)
+{
+    char page_value[16];
+    int64_t page = 1;
+    if (query_string && mg_get_var(query_string, strlen(query_string), "page", page_value, sizeof(page_value)) > 0 && !server_route_parse_id(page_value, &page)) {
+        return server_json_respond_error(conn, BUNNY_CORE_ERR_INVALID_ARG);
+    }
+
+    bunny_db_post_list_t posts;
+    pthread_mutex_lock(&ctx->core_mutex);
+    bunny_core_result_t result = bunny_core_list_my_inkbunny_favorites(ctx->core, (int)page, &posts);
+    pthread_mutex_unlock(&ctx->core_mutex);
+
+    if (result != BUNNY_CORE_OK) {
+        return server_json_respond_error(conn, result);
+    }
+
+    cJSON *response = cJSON_CreateArray();
+    for (size_t i = 0; i < posts.count; i++) {
+        cJSON_AddItemToArray(response, post_to_json(&posts.items[i]));
+    }
+    bunny_db_post_list_free(&posts);
+
+    int status = server_json_respond(conn, 200, response);
+    cJSON_Delete(response);
+    return status;
+}
+
 static int search_handler(struct mg_connection *conn, void *cbdata)
 {
     server_context_t *ctx = (server_context_t *)cbdata;
@@ -105,7 +133,23 @@ static int search_handler(struct mg_connection *conn, void *cbdata)
     return server_json_respond_error(conn, BUNNY_CORE_ERR_NOT_FOUND);
 }
 
+static int my_inkbunny_favorites_handler(struct mg_connection *conn, void *cbdata)
+{
+    server_context_t *ctx = (server_context_t *)cbdata;
+    if (!server_auth_check_request(ctx->auth, conn)) {
+        return 401;
+    }
+
+    const struct mg_request_info *info = mg_get_request_info(conn);
+    if (strcmp(info->request_method, "POST") == 0) {
+        return handle_my_inkbunny_favorites(conn, ctx, info->query_string);
+    }
+
+    return server_json_respond_error(conn, BUNNY_CORE_ERR_NOT_FOUND);
+}
+
 void server_routes_register_search(struct mg_context *mg_ctx, server_context_t *ctx)
 {
     mg_set_request_handler(mg_ctx, "/search", search_handler, ctx);
+    mg_set_request_handler(mg_ctx, "/favorites/inkbunny/mine", my_inkbunny_favorites_handler, ctx);
 }

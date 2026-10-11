@@ -143,4 +143,51 @@ void main() {
     final queryField = tester.widget<TextFormField>(find.widgetWithText(TextFormField, 'Query'));
     expect(queryField.controller!.text, 'someartist');
   });
+
+  group('customFetch (M10.3)', () {
+    Widget wrapWithCustomFetch(FakeBunnyRepository repository, Future<List<BunnyPost>> Function(int page) customFetch, {String? title}) => wrapWithLocalization(
+      TagBrowseScreen(
+        site: BunnySite.inkbunny,
+        query: '',
+        repository: repository,
+        displaySettingsStore: const DisplaySettingsStore(),
+        syncSettingsStore: const SyncSettingsStore(),
+        downloadSettingsStore: const DownloadSettingsStore(),
+        customFetch: customFetch,
+        title: title,
+      ),
+    );
+
+    testWidgets('fetches via the custom callback instead of previewSearch', (WidgetTester tester) async {
+      final repository = FakeBunnyRepository();
+      final calls = <int>[];
+      Future<List<BunnyPost>> customFetch(int page) async {
+        calls.add(page);
+        return page == 1 ? [_post(1)] : const [];
+      }
+
+      await tester.pumpWidget(wrapWithCustomFetch(repository, customFetch));
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const ValueKey(1)), findsOneWidget);
+      expect(calls, [1]);
+      expect(repository.previewSearchCalls, isEmpty);
+    });
+
+    testWidgets('shows the given title instead of the (empty) query', (WidgetTester tester) async {
+      final repository = FakeBunnyRepository();
+      await tester.pumpWidget(wrapWithCustomFetch(repository, (page) async => const [], title: 'My favorites'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('My favorites'), findsOneWidget);
+    });
+
+    testWidgets('omits the add-to-searches action entirely', (WidgetTester tester) async {
+      final repository = FakeBunnyRepository();
+      await tester.pumpWidget(wrapWithCustomFetch(repository, (page) async => const []));
+      await tester.pumpAndSettle();
+
+      expect(find.byTooltip('Save as a search'), findsNothing);
+    });
+  });
 }

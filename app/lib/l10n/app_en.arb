@@ -39,6 +39,8 @@
     "placeholders": {"username": {"type": "String"}}
   },
   "accountsNotConnected": "Not connected",
+  "accountsMyFavoritesTooltip": "View my favorites",
+  "accountsMyFavoritesTitle": "My favorites",
 
   "searchesScreenTitle": "Searches",
   "searchesAccountsTooltip": "Accounts",

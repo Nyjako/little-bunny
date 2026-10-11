@@ -238,6 +238,18 @@ abstract class AppLocalizations {
   /// **'Not connected'**
   String get accountsNotConnected;
 
+  /// No description provided for @accountsMyFavoritesTooltip.
+  ///
+  /// In en, this message translates to:
+  /// **'View my favorites'**
+  String get accountsMyFavoritesTooltip;
+
+  /// No description provided for @accountsMyFavoritesTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'My favorites'**
+  String get accountsMyFavoritesTitle;
+
   /// No description provided for @searchesScreenTitle.
   ///
   /// In en, this message translates to:

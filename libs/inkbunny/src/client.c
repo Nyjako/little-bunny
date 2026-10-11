@@ -207,6 +207,11 @@ inkbunny_result_t inkbunny_logout(inkbunny_client_t *client)
     return result;
 }
 
+int64_t inkbunny_client_get_user_id(const inkbunny_client_t *client)
+{
+    return client ? client->user_id : 0;
+}
+
 inkbunny_result_t inkbunny_search(inkbunny_client_t *client, const inkbunny_search_params_t *params, inkbunny_submission_list_t *out_submissions)
 {
     if (!client || !out_submissions) {

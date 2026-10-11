@@ -88,6 +88,12 @@ class AppLocalizationsEn extends AppLocalizations {
   String get accountsNotConnected => 'Not connected';
 
   @override
+  String get accountsMyFavoritesTooltip => 'View my favorites';
+
+  @override
+  String get accountsMyFavoritesTitle => 'My favorites';
+
+  @override
   String get searchesScreenTitle => 'Searches';
 
   @override
