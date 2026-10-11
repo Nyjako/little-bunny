@@ -2032,6 +2032,26 @@ Sort order (`DisplaySettingsStore.SearchSortOrder`: `mostUnseen` default, `label
 `recentlyCreated`) is a pure client-side `List.sort` applied after `listSearches()` returns, no
 backend change needed since `BunnySearch` already carries every field each order sorts by.
 
+**Manual "check for updates" with per-search progress (M13.2)**: `bunny_core_sync_due_searches`
+(`libs/core/src/sync.c`) loops over every search internally, calling its private
+`sync_e621_search`/`sync_inkbunny_search` helpers only for ones `search_is_due()` accepts, and
+returns one aggregate `bunny_core_sync_stats_t` to the caller -- no per-search granularity ever
+surfaces, and there was no way to force a non-due search to sync. New `bunny_core_sync_search(core,
+search_id, out_stats)` calls those same two static helpers unconditionally for exactly one search
+(found via a linear scan of `bunny_db_search_list`'s result -- no dedicated single-search-lookup
+db function exists, and at personal-use scale this is simpler than adding one), returning
+`BUNNY_CORE_ERR_NOT_FOUND` if the id doesn't exist. Full plumbing: FFI, a new `POST
+/searches/{id}/sync` branch in the existing `searches_handler` (`routes_searches.c`),
+`BunnyRepository.syncSearch(int) -> Future<BunnySyncStats>` across FFI/HTTP/Fake (reusing
+`BunnySyncStats` as-is). `SearchesScreen` gained a "check for updates" app bar icon: tapping it
+loads the current search list, then calls `syncSearch` once per search *sequentially* (not in
+parallel -- this is a manual, personal-use action, and sequential calls are what let the UI show
+real incremental progress), swapping the app bar title for a `n/total checked` counter while
+running, the same `(done, total)` state-and-title-swap shape `PostGridScreen._massDownloadProgress`
+already established (M9.5). A single search failing (network error, etc.) is caught and skipped
+rather than aborting the whole run, matching the tolerance `bunny_core_sync_due_searches` already
+has for one search's failure during a scheduled pass.
+
 ## Inkbunny API constraints (found in M2)
 
 Verified against the live API and the official docs while building `libinkbunny`:

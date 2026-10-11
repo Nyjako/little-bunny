@@ -219,6 +219,40 @@ void main() {
     expect(await store.loadSearchSortOrder(), SearchSortOrder.label);
   });
 
+  testWidgets('tapping "check for updates" syncs every search and re-enables the button when done (M13.2)', (WidgetTester tester) async {
+    final repository = FakeBunnyRepository();
+    final id1 = await repository.createSearch(BunnySite.e621, 'Foxes', 'fox');
+    final id2 = await repository.createSearch(BunnySite.e621, 'Wolves', 'wolf');
+
+    await tester.pumpWidget(_wrap(repository));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byIcon(Icons.sync));
+    await tester.pumpAndSettle();
+
+    expect(repository.syncSearchCalls, containsAll([id1, id2]));
+    expect(repository.syncSearchCalls, hasLength(2));
+    // Back to the normal sync icon, tappable again -- not left stuck on
+    // the spinner.
+    final button = tester.widget<IconButton>(find.ancestor(of: find.byIcon(Icons.sync), matching: find.byType(IconButton)));
+    expect(button.onPressed, isNotNull);
+  });
+
+  testWidgets('"check for updates" keeps going past a single search failing (M13.2)', (WidgetTester tester) async {
+    final repository = FakeBunnyRepository();
+    final id1 = await repository.createSearch(BunnySite.e621, 'Foxes', 'fox');
+    final id2 = await repository.createSearch(BunnySite.e621, 'Wolves', 'wolf');
+    repository.syncSearchFailures[id1] = 'network error';
+
+    await tester.pumpWidget(_wrap(repository));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byIcon(Icons.sync));
+    await tester.pumpAndSettle();
+
+    expect(repository.syncSearchCalls, [id1, id2]);
+  });
+
   testWidgets('tapping the FAB opens CreateSearchScreen and refreshes on success', (WidgetTester tester) async {
     final repository = FakeBunnyRepository();
 
