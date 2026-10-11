@@ -1250,6 +1250,21 @@ this file is the single source of truth for "what's done" across sessions.
   repository tests, and widget tests for `TagBrowseScreen`'s new override params and
   `AccountsScreen`'s heart icons (absent when no account, routes to the right flow per site).
 
+- [x] **M10.4 — Video playback controls**
+  Direct user feedback: video posts had no visible controls beyond a tap-anywhere play/pause,
+  audio wasn't muted by default, there was no way to go fullscreen, and the video could be
+  visibly stretched since the in-place player sized itself off the decoded video's own reported
+  aspect ratio instead of the post's metadata (the same class of bug fixed for the full-screen
+  image viewer back in M9.6.1). Added the `chewie` dependency and replaced
+  `PostDetailScreen`'s hand-rolled `GestureDetector` + bare `VideoPlayer` with a
+  `ChewieController` wrapping the existing `VideoPlayerController` -- gets a timeline/scrubber,
+  play/pause, a mute toggle, and a fullscreen button for free. `controller.setVolume(0)` right
+  after construction (before `initialize()`) mutes audio by default; `ChewieController.
+  aspectRatio` and the existing metadata-derived `aspectRatio` wrapper both use `post.width`/
+  `post.height` instead of the decoded video's own value, fixing the stretching for both the
+  in-place and fullscreen views in one change. No existing test needed updating --
+  `find.byType(VideoPlayer)` still finds the `VideoPlayer` Chewie renders internally.
+
 - [ ] **M11 — Backup & import**
   Export/import of our own searches. Import from "The Wolf's Stash"
   (`https://zepiwolf.se/tws/`) `.tws_plain` export format — **needs a sample export file
