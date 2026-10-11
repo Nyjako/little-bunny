@@ -48,13 +48,17 @@
   "searchesTagStatsTooltip": "Tag stats",
   "searchesNewSearchTooltip": "New search",
   "searchesEmptyState": "No saved searches yet. Tap + to add one.",
-  "searchesIntervalSubtitle": "{site} • every {hours}h",
+  "searchesIntervalSubtitle": "{site} • every {hours}h • {total} posts",
   "@searchesIntervalSubtitle": {
     "placeholders": {
       "site": {"type": "String"},
-      "hours": {"type": "int"}
+      "hours": {"type": "int"},
+      "total": {"type": "int"}
     }
   },
+  "searchesPinTooltip": "Pin",
+  "searchesUnpinTooltip": "Unpin",
+  "searchesSyncRowTooltip": "Sync now",
   "searchesRemoveDialogTitle": "Remove search?",
   "searchesRemoveDialogContent": "This removes the saved search \"{label}\" from this app.",
   "@searchesRemoveDialogContent": {
@@ -99,6 +103,7 @@
   },
   "editSearchStarsLabel": "Favorite level",
   "editSearchSubmit": "Save",
+  "editSearchDeleteTooltip": "Delete search",
 
   "postGridUnseenOnlyTooltip": "Show unseen only",
   "postGridRefreshTooltip": "Refresh",

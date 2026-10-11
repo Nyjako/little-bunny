@@ -112,9 +112,18 @@ class AppLocalizationsEn extends AppLocalizations {
   String get searchesEmptyState => 'No saved searches yet. Tap + to add one.';
 
   @override
-  String searchesIntervalSubtitle(String site, int hours) {
-    return '$site • every ${hours}h';
+  String searchesIntervalSubtitle(String site, int hours, int total) {
+    return '$site • every ${hours}h • $total posts';
   }
+
+  @override
+  String get searchesPinTooltip => 'Pin';
+
+  @override
+  String get searchesUnpinTooltip => 'Unpin';
+
+  @override
+  String get searchesSyncRowTooltip => 'Sync now';
 
   @override
   String get searchesRemoveDialogTitle => 'Remove search?';
@@ -206,6 +215,9 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get editSearchSubmit => 'Save';
+
+  @override
+  String get editSearchDeleteTooltip => 'Delete search';
 
   @override
   String get postGridUnseenOnlyTooltip => 'Show unseen only';

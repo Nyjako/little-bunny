@@ -555,6 +555,31 @@ class BunnyCoreFfiBindings {
         )
       >();
 
+  /// Pin/unpin a search, toggled directly from the searches list row (M14.1)
+  /// rather than through the full edit form -- see bunny_db_search_set_pinned.
+  bunny_core_result_t bunny_core_search_set_pinned(
+    ffi.Pointer<bunny_core_t> core,
+    int search_id,
+    bool pinned,
+  ) {
+    return bunny_core_result_t.fromValue(
+      _bunny_core_search_set_pinned(core, search_id, pinned),
+    );
+  }
+
+  late final _bunny_core_search_set_pinnedPtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.UnsignedInt Function(
+            ffi.Pointer<bunny_core_t>,
+            ffi.Int64,
+            ffi.Bool,
+          )
+        >
+      >('bunny_core_search_set_pinned');
+  late final _bunny_core_search_set_pinned = _bunny_core_search_set_pinnedPtr
+      .asFunction<int Function(ffi.Pointer<bunny_core_t>, int, bool)>();
+
   /// Updates a search's editable fields in place (M9.7.2) -- replaces
   /// bunny_core_search_set_auto_favorite, so a search's label/query/interval/
   /// auto-favorite/auto-upvote settings can all be changed from one edit screen
@@ -1566,6 +1591,10 @@ final class bunny_db_search_t extends ffi.Struct {
   @ffi.Int()
   external int unseen_count;
 
+  /// posts linked to this search, seen or not
+  @ffi.Int()
+  external int total_count;
+
   /// queue a favorite for every post this search finds during sync
   @ffi.Bool()
   external bool auto_favorite;
@@ -1577,6 +1606,10 @@ final class bunny_db_search_t extends ffi.Struct {
   /// e621 only -- queue an upvote for every post this search finds during sync
   @ffi.Bool()
   external bool auto_upvote;
+
+  /// shown first in SearchesScreen, ahead of the normal sort order
+  @ffi.Bool()
+  external bool pinned;
 }
 
 final class bunny_db_search_list_t extends ffi.Struct {

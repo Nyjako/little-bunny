@@ -1334,6 +1334,33 @@ this file is the single source of truth for "what's done" across sessions.
   badge updates live as its own search finishes rather than only once at the very end (and
   nothing already-synced is lost if the run is ever interrupted partway through).
 
+- [x] **M14.1 — Pin searches, total post count, and row-action cleanup**
+  Three direct user requests bundled into one branch since they all reshape the same
+  `SearchesScreen` row UI and `bunny_db_search_list` query. New `pinned` column
+  (`ALTER TABLE searches ADD COLUMN pinned INTEGER NOT NULL DEFAULT 0;`) with a dedicated
+  `bunny_db_search_set_pinned(db, search_id, bool)` setter -- not folded into
+  `bunny_db_search_options_t`, since pinning is toggled directly from the row rather than
+  through the full edit form, same reasoning `bunny_db_search_touch_last_run` already follows.
+  `bunny_db_search_list`'s SQL also gained a `total_count` live subquery alongside the existing
+  `unseen_count` one, so the row's subtitle can show how many posts a search has found overall,
+  not just the unseen subset. Full plumbing for pinning: `bunny_core_search_set_pinned`, FFI,
+  `POST /searches/{id}/pin` (new branch in the existing `searches_handler`),
+  `BunnyRepository.setSearchPinned(int, bool)` across FFI/HTTP/Fake. `SearchesScreen` gained a
+  pin/unpin icon per row and a partitioned sort (pinned items first, each group still ordered by
+  the existing sort choice) in place of one flat sort. The row's old delete icon was removed
+  entirely -- deletion (with its original confirmation dialog) moved into `EditSearchScreen`'s
+  app bar instead -- and replaced with a per-row "sync this search now" icon reusing M13.2's
+  existing `syncSearch(id)`, with its own busy indicator so multiple rows can sync independently
+  without blocking each other or the app-bar "check for updates" action.
+
+- [x] **M14.3 — Searches-list progressive-refresh fix**
+  Bug fix, direct user feedback: after tapping "check for updates" (M13.2), newly-found posts
+  didn't show up in the Searches list's unseen-count badges until the app was restarted.
+  `SearchesScreen._checkForUpdates` only refreshed its list once, after the entire sequential
+  sync loop finished; now it refreshes after every individual search's sync completes, so each
+  badge updates live as its own search finishes rather than only once at the very end (and
+  nothing already-synced is lost if the run is ever interrupted partway through).
+
 - [ ] **M12 — Cross-platform polish**
   Responsive desktop/mobile layout, consistent theming pass, Windows cross-build via
   dockcross validated end-to-end (server + core), packaging. Needs to resolve the OpenSSL-

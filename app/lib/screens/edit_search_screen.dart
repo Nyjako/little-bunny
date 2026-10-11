@@ -103,12 +103,38 @@ class _EditSearchScreenState extends State<EditSearchScreen> {
     Navigator.pop(context, true);
   }
 
+  /// Moved here from the searches list row (M14.1), so deleting a search no
+  /// longer needs a dedicated row icon -- same confirmation dialog shape
+  /// the row used to show, just triggered from this screen's app bar now.
+  Future<void> _delete() async {
+    final l10n = AppLocalizations.of(context)!;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(l10n.searchesRemoveDialogTitle),
+        content: Text(l10n.searchesRemoveDialogContent(widget.search.label)),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: Text(l10n.commonCancel)),
+          TextButton(onPressed: () => Navigator.pop(context, true), child: Text(l10n.commonRemove)),
+        ],
+      ),
+    );
+    if (confirmed != true) {
+      return;
+    }
+    await widget.repository.deleteSearch(widget.search.id);
+    if (!mounted) {
+      return;
+    }
+    Navigator.pop(context, true);
+  }
+
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
     final isInkbunny = widget.search.site == BunnySite.inkbunny;
     return Scaffold(
-      appBar: AppBar(title: Text(l10n.editSearchScreenTitle)),
+      appBar: AppBar(title: Text(l10n.editSearchScreenTitle), actions: [IconButton(icon: const Icon(Icons.delete), tooltip: l10n.editSearchDeleteTooltip, onPressed: _submitting ? null : _delete)]),
       body: Padding(
         padding: const EdgeInsets.all(16),
         child: Form(

@@ -25,9 +25,11 @@ BunnySearch _searchFromJson(Map<String, Object?> j) => BunnySearch(
   createdAt: j['created_at'] as String,
   lastRunAt: j['last_run_at'] as String?,
   unseenCount: (j['unseen_count'] as num).toInt(),
+  totalCount: (j['total_count'] as num).toInt(),
   autoFavorite: j['auto_favorite'] as bool,
   autoFavoriteStars: (j['auto_favorite_stars'] as num).toInt(),
   autoUpvote: j['auto_upvote'] as bool,
+  pinned: j['pinned'] as bool,
 );
 
 BunnyPost _postFromJson(Map<String, Object?> j) => BunnyPost(
@@ -234,6 +236,14 @@ class HttpBunnyRepository implements BunnyRepository {
   @override
   Future<void> deleteSearch(int searchId) async {
     final response = await _client.delete(_uri('/searches/$searchId'), headers: _headers);
+    if (response.statusCode != 200) {
+      _throwError(response);
+    }
+  }
+
+  @override
+  Future<void> setSearchPinned(int searchId, bool pinned) async {
+    final response = await _client.post(_uri('/searches/$searchId/pin'), headers: _headers, body: jsonEncode({'pinned': pinned}));
     if (response.statusCode != 200) {
       _throwError(response);
     }

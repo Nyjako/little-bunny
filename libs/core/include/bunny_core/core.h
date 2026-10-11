@@ -71,6 +71,10 @@ bunny_core_result_t bunny_core_search_delete(bunny_core_t *core, int64_t search_
 bunny_core_result_t bunny_core_search_list(bunny_core_t *core, bunny_db_search_list_t *out_list);
 bunny_core_result_t bunny_core_search_list_posts(bunny_core_t *core, int64_t search_id, bool unseen_only, bunny_db_post_list_t *out_list);
 
+/* Pin/unpin a search, toggled directly from the searches list row (M14.1)
+ * rather than through the full edit form -- see bunny_db_search_set_pinned. */
+bunny_core_result_t bunny_core_search_set_pinned(bunny_core_t *core, int64_t search_id, bool pinned);
+
 /* Updates a search's editable fields in place (M9.7.2) -- replaces
  * bunny_core_search_set_auto_favorite, so a search's label/query/interval/
  * auto-favorite/auto-upvote settings can all be changed from one edit screen

@@ -58,6 +58,38 @@ void main() {
     expect(updated.query, 'wolf');
   });
 
+  testWidgets('tapping delete then confirming removes the search (M14.1)', (WidgetTester tester) async {
+    final repository = FakeBunnyRepository();
+    final search = await _seedSearch(repository);
+
+    await tester.pumpWidget(wrapWithLocalization(EditSearchScreen(repository: repository, search: search)));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byIcon(Icons.delete));
+    await tester.pumpAndSettle();
+    expect(find.text('Remove search?'), findsOneWidget);
+
+    await tester.tap(find.text('Remove'));
+    await tester.pumpAndSettle();
+
+    expect(repository.searches, isEmpty);
+  });
+
+  testWidgets('tapping delete then cancelling keeps the search (M14.1)', (WidgetTester tester) async {
+    final repository = FakeBunnyRepository();
+    final search = await _seedSearch(repository);
+
+    await tester.pumpWidget(wrapWithLocalization(EditSearchScreen(repository: repository, search: search)));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byIcon(Icons.delete));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
+
+    expect(repository.searches, hasLength(1));
+  });
+
   testWidgets('picking a star level for an Inkbunny search updates auto_favorite_stars', (WidgetTester tester) async {
     final repository = FakeBunnyRepository();
     final search = await _seedSearch(repository, site: BunnySite.inkbunny);
