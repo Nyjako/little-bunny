@@ -646,6 +646,24 @@ abstract class AppLocalizations {
   /// **'Couldn\'t open that post'**
   String get postDetailOpenPostFailed;
 
+  /// No description provided for @postDetailBlacklistedDialogTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Blacklisted tag'**
+  String get postDetailBlacklistedDialogTitle;
+
+  /// No description provided for @postDetailBlacklistedDialogContent.
+  ///
+  /// In en, this message translates to:
+  /// **'This post has a blacklisted tag: {tags}'**
+  String postDetailBlacklistedDialogContent(String tags);
+
+  /// No description provided for @postDetailBlacklistedViewAnyway.
+  ///
+  /// In en, this message translates to:
+  /// **'View anyway'**
+  String get postDetailBlacklistedViewAnyway;
+
   /// No description provided for @postDetailActionFailed.
   ///
   /// In en, this message translates to:
@@ -963,6 +981,24 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Unrecognized file format'**
   String get settingsBackupImportUnrecognizedFormat;
+
+  /// No description provided for @settingsBlacklistSection.
+  ///
+  /// In en, this message translates to:
+  /// **'Blacklist'**
+  String get settingsBlacklistSection;
+
+  /// No description provided for @settingsBlacklistEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'No blacklisted tags yet.'**
+  String get settingsBlacklistEmpty;
+
+  /// No description provided for @settingsBlacklistAddLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Add tag'**
+  String get settingsBlacklistAddLabel;
 
   /// No description provided for @postDetailDownloadTooltip.
   ///

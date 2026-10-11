@@ -152,6 +152,12 @@
   "postDetailChildrenLabel": "Children",
   "postDetailPoolsLabel": "Pools",
   "postDetailOpenPostFailed": "Couldn't open that post",
+  "postDetailBlacklistedDialogTitle": "Blacklisted tag",
+  "postDetailBlacklistedDialogContent": "This post has a blacklisted tag: {tags}",
+  "@postDetailBlacklistedDialogContent": {
+    "placeholders": {"tags": {"type": "String"}}
+  },
+  "postDetailBlacklistedViewAnyway": "View anyway",
   "postDetailActionFailed": "Couldn't send that action -- it wasn't saved",
   "postDetailFavoriteAddTooltip": "Add to favorites",
   "postDetailFavoriteRemoveTooltip": "Remove from favorites",
@@ -224,6 +230,9 @@
     }
   },
   "settingsBackupImportUnrecognizedFormat": "Unrecognized file format",
+  "settingsBlacklistSection": "Blacklist",
+  "settingsBlacklistEmpty": "No blacklisted tags yet.",
+  "settingsBlacklistAddLabel": "Add tag",
 
   "postDetailDownloadTooltip": "Download",
   "postDetailDownloadVerified": "Downloaded and checksum verified",

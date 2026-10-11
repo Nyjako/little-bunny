@@ -7,6 +7,7 @@
 
 #include "auth.h"
 #include "routes_accounts.h"
+#include "routes_blacklist.h"
 #include "routes_pools.h"
 #include "routes_queue.h"
 #include "routes_search.h"
@@ -94,6 +95,7 @@ server_app_t *server_app_start(const bunny_core_config_t *core_config, const cha
     server_routes_register_tags(app->mg_ctx, &app->ctx);
     server_routes_register_pools(app->mg_ctx, &app->ctx);
     server_routes_register_search(app->mg_ctx, &app->ctx);
+    server_routes_register_blacklist(app->mg_ctx, &app->ctx);
 
     if (!server_scheduler_start(&app->scheduler, &app->ctx, poll_interval_sec)) {
         mg_stop(app->mg_ctx);

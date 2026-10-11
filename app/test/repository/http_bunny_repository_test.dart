@@ -301,6 +301,37 @@ void main() {
       expect(sources, ['https://example.com/a', 'https://example.com/b']);
     });
 
+    test('getBlacklist sends GET with the site query param and returns a list of strings (M13.3)', () async {
+      respond = (_) => http.Response(jsonEncode(['gore', 'young']), 200);
+
+      final tags = await buildRepository().getBlacklist(BunnySite.e621);
+
+      expect(capturedMethod, 'GET');
+      expect(capturedUri.path, '/blacklist');
+      expect(capturedUri.queryParameters, {'site': 'e621'});
+      expect(tags, ['gore', 'young']);
+    });
+
+    test('addBlacklistTag posts the site and tag as JSON (M13.3)', () async {
+      respond = (_) => http.Response(jsonEncode({'ok': true}), 200);
+
+      await buildRepository().addBlacklistTag(BunnySite.e621, 'young');
+
+      expect(capturedMethod, 'POST');
+      expect(capturedUri.path, '/blacklist');
+      expect(jsonDecode(capturedBody), {'site': 'e621', 'tag': 'young'});
+    });
+
+    test('removeBlacklistTag sends DELETE with site/tag query params (M13.3)', () async {
+      respond = (_) => http.Response(jsonEncode({'ok': true}), 200);
+
+      await buildRepository().removeBlacklistTag(BunnySite.e621, 'young');
+
+      expect(capturedMethod, 'DELETE');
+      expect(capturedUri.path, '/blacklist');
+      expect(capturedUri.queryParameters, {'site': 'e621', 'tag': 'young'});
+    });
+
     test('getPostRelationships sends GET to the right path and maps the response', () async {
       respond = (_) => http.Response(
         jsonEncode({'has_parent': true, 'parent_external_id': 999, 'has_active_children': true, 'children': [101, 102]}),

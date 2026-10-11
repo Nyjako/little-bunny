@@ -970,6 +970,88 @@ class BunnyCoreFfiBindings {
             )
           >();
 
+  /// --- Tag blacklist (M13.3) -- thin pass-throughs to bunny_db_blacklist_*.
+  /// See bunny_db/db.h for which post-listing query the blacklist does (and
+  /// deliberately does not) apply to.
+  bunny_core_result_t bunny_core_blacklist_list(
+    ffi.Pointer<bunny_core_t> core,
+    bunny_db_site_t site,
+    ffi.Pointer<bunny_db_string_list_t> out_list,
+  ) {
+    return bunny_core_result_t.fromValue(
+      _bunny_core_blacklist_list(core, site.value, out_list),
+    );
+  }
+
+  late final _bunny_core_blacklist_listPtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.UnsignedInt Function(
+            ffi.Pointer<bunny_core_t>,
+            ffi.UnsignedInt,
+            ffi.Pointer<bunny_db_string_list_t>,
+          )
+        >
+      >('bunny_core_blacklist_list');
+  late final _bunny_core_blacklist_list = _bunny_core_blacklist_listPtr
+      .asFunction<
+        int Function(
+          ffi.Pointer<bunny_core_t>,
+          int,
+          ffi.Pointer<bunny_db_string_list_t>,
+        )
+      >();
+
+  bunny_core_result_t bunny_core_blacklist_add(
+    ffi.Pointer<bunny_core_t> core,
+    bunny_db_site_t site,
+    ffi.Pointer<ffi.Char> tag,
+  ) {
+    return bunny_core_result_t.fromValue(
+      _bunny_core_blacklist_add(core, site.value, tag),
+    );
+  }
+
+  late final _bunny_core_blacklist_addPtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.UnsignedInt Function(
+            ffi.Pointer<bunny_core_t>,
+            ffi.UnsignedInt,
+            ffi.Pointer<ffi.Char>,
+          )
+        >
+      >('bunny_core_blacklist_add');
+  late final _bunny_core_blacklist_add = _bunny_core_blacklist_addPtr
+      .asFunction<
+        int Function(ffi.Pointer<bunny_core_t>, int, ffi.Pointer<ffi.Char>)
+      >();
+
+  bunny_core_result_t bunny_core_blacklist_remove(
+    ffi.Pointer<bunny_core_t> core,
+    bunny_db_site_t site,
+    ffi.Pointer<ffi.Char> tag,
+  ) {
+    return bunny_core_result_t.fromValue(
+      _bunny_core_blacklist_remove(core, site.value, tag),
+    );
+  }
+
+  late final _bunny_core_blacklist_removePtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.UnsignedInt Function(
+            ffi.Pointer<bunny_core_t>,
+            ffi.UnsignedInt,
+            ffi.Pointer<ffi.Char>,
+          )
+        >
+      >('bunny_core_blacklist_remove');
+  late final _bunny_core_blacklist_remove = _bunny_core_blacklist_removePtr
+      .asFunction<
+        int Function(ffi.Pointer<bunny_core_t>, int, ffi.Pointer<ffi.Char>)
+      >();
+
   /// Fetches a single post live from its site and caches it (upserting into the
   /// local post cache exactly like a sync pass would for one post), without
   /// requiring it to already be linked to any saved search. Used when a

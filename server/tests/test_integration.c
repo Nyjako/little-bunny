@@ -456,6 +456,46 @@ void test_sync_single_search_forces_even_when_not_due(void)
     free(response.data);
 }
 
+void test_blacklist_add_list_remove(void)
+{
+    response_buffer_t response = {0};
+
+    long status = do_request("GET", "/blacklist?site=e621", NULL, &response, true, NULL);
+    TEST_ASSERT_EQUAL(200, status);
+    TEST_ASSERT_EQUAL_STRING("[]", response.data);
+    free(response.data);
+    memset(&response, 0, sizeof(response));
+
+    status = do_request("POST", "/blacklist", "{\"site\":\"e621\",\"tag\":\"young\"}", &response, true, NULL);
+    TEST_ASSERT_EQUAL(200, status);
+    TEST_ASSERT_NOT_NULL(strstr(response.data, "\"ok\":true"));
+    free(response.data);
+    memset(&response, 0, sizeof(response));
+
+    status = do_request("GET", "/blacklist?site=e621", NULL, &response, true, NULL);
+    TEST_ASSERT_EQUAL(200, status);
+    TEST_ASSERT_NOT_NULL(strstr(response.data, "\"young\""));
+    free(response.data);
+    memset(&response, 0, sizeof(response));
+
+    /* A different site's list must stay empty. */
+    status = do_request("GET", "/blacklist?site=inkbunny", NULL, &response, true, NULL);
+    TEST_ASSERT_EQUAL(200, status);
+    TEST_ASSERT_EQUAL_STRING("[]", response.data);
+    free(response.data);
+    memset(&response, 0, sizeof(response));
+
+    status = do_request("DELETE", "/blacklist?site=e621&tag=young", NULL, &response, true, NULL);
+    TEST_ASSERT_EQUAL(200, status);
+    free(response.data);
+    memset(&response, 0, sizeof(response));
+
+    status = do_request("GET", "/blacklist?site=e621", NULL, &response, true, NULL);
+    TEST_ASSERT_EQUAL(200, status);
+    TEST_ASSERT_EQUAL_STRING("[]", response.data);
+    free(response.data);
+}
+
 void test_search_auto_favorite_create_and_update(void)
 {
     response_buffer_t response = {0};
@@ -545,6 +585,7 @@ int main(void)
     RUN_TEST(test_verify_account);
     RUN_TEST(test_full_account_search_sync_favorite_flow);
     RUN_TEST(test_sync_single_search_forces_even_when_not_due);
+    RUN_TEST(test_blacklist_add_list_remove);
     RUN_TEST(test_search_auto_favorite_create_and_update);
     RUN_TEST(test_my_inkbunny_favorites_searches_and_caches_with_favorite_marked);
     RUN_TEST(test_scheduler_syncs_search_automatically);

@@ -139,6 +139,13 @@ bunny_core_result_t bunny_core_record_download(bunny_core_t *core, int64_t post_
  * bunny_db_download_list_for_post. Empty for a post never downloaded. */
 bunny_core_result_t bunny_core_list_downloads_for_post(bunny_core_t *core, int64_t post_id, bunny_db_download_list_t *out_list);
 
+/* --- Tag blacklist (M13.3) -- thin pass-throughs to bunny_db_blacklist_*.
+ * See bunny_db/db.h for which post-listing query the blacklist does (and
+ * deliberately does not) apply to. */
+bunny_core_result_t bunny_core_blacklist_list(bunny_core_t *core, bunny_db_site_t site, bunny_db_string_list_t *out_list);
+bunny_core_result_t bunny_core_blacklist_add(bunny_core_t *core, bunny_db_site_t site, const char *tag);
+bunny_core_result_t bunny_core_blacklist_remove(bunny_core_t *core, bunny_db_site_t site, const char *tag);
+
 /* Fetches a single post live from its site and caches it (upserting into the
  * local post cache exactly like a sync pass would for one post), without
  * requiring it to already be linked to any saved search. Used when a

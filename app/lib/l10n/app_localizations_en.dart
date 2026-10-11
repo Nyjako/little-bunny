@@ -313,6 +313,17 @@ class AppLocalizationsEn extends AppLocalizations {
   String get postDetailOpenPostFailed => 'Couldn\'t open that post';
 
   @override
+  String get postDetailBlacklistedDialogTitle => 'Blacklisted tag';
+
+  @override
+  String postDetailBlacklistedDialogContent(String tags) {
+    return 'This post has a blacklisted tag: $tags';
+  }
+
+  @override
+  String get postDetailBlacklistedViewAnyway => 'View anyway';
+
+  @override
   String get postDetailActionFailed =>
       'Couldn\'t send that action -- it wasn\'t saved';
 
@@ -484,6 +495,15 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get settingsBackupImportUnrecognizedFormat =>
       'Unrecognized file format';
+
+  @override
+  String get settingsBlacklistSection => 'Blacklist';
+
+  @override
+  String get settingsBlacklistEmpty => 'No blacklisted tags yet.';
+
+  @override
+  String get settingsBlacklistAddLabel => 'Add tag';
 
   @override
   String get postDetailDownloadTooltip => 'Download';
