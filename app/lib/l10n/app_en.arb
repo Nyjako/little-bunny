@@ -187,6 +187,31 @@
   "settingsDownloadsFolderUnset": "Not set",
   "settingsDownloadsChooseFolderButton": "Choose folder",
   "settingsAutoFavoriteOnDownloadLabel": "Auto-favorite on download",
+  "settingsBackupSection": "Backup",
+  "settingsBackupExportLabel": "Export searches",
+  "settingsBackupExportButton": "Export",
+  "settingsBackupImportLabel": "Import searches",
+  "settingsBackupImportButton": "Import",
+  "settingsBackupImportProgress": "{done}/{total} imported",
+  "@settingsBackupImportProgress": {
+    "placeholders": {
+      "done": {"type": "int"},
+      "total": {"type": "int"}
+    }
+  },
+  "settingsBackupExportSuccess": "Exported {count} searches",
+  "@settingsBackupExportSuccess": {
+    "placeholders": {"count": {"type": "int"}}
+  },
+  "settingsBackupImportSummary": "{imported} imported, {duplicates} already saved, {invalid} invalid",
+  "@settingsBackupImportSummary": {
+    "placeholders": {
+      "imported": {"type": "int"},
+      "duplicates": {"type": "int"},
+      "invalid": {"type": "int"}
+    }
+  },
+  "settingsBackupImportUnrecognizedFormat": "Unrecognized file format",
 
   "postDetailDownloadTooltip": "Download",
   "postDetailDownloadVerified": "Downloaded and checksum verified",

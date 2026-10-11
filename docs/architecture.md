@@ -1950,6 +1950,64 @@ it `null` and letting Chewie fall back to the decoded video's own value. No exis
 needed updating -- Chewie renders a real `VideoPlayer` internally (`PlayerWithControls.
 _buildLocal`), so `find.byType(VideoPlayer)` still finds it.
 
+## M11 -- Backup & import
+
+The ROADMAP's M11 entry was blocked from the start: it called for exporting/importing this
+app's own saved searches, plus importing "The Wolf's Stash" (`https://zepiwolf.se/tws/`)
+export format, but no sample file existed to confirm the latter's shape against. The user
+provided a real sample (705 entries) during planning, which turned out to be a flat JSON array
+of objects with single-letter keys -- `a` (label, empty for plain tag searches, auto-filled
+with the pool's title for `pool:` searches), `b` (an integer, 702/705 are `1` with a few
+outliers on complex queries; meaning unconfirmed, no spec exists anywhere), `c` (an array of
+tag tokens to AND together -- plain tags, `-exclude`, `~or-group`, or `pool:<id>` -- joined
+with a space to get a normal e621-style query string), `d`/`e` (created/checked timestamps),
+and `f` (unseen count at export time). 422 of the 705 entries were `pool:` searches, 349 plain
+tag/artist searches -- everything e621-specific, no Inkbunny equivalent anywhere, confirming
+the tool is e621-only. Per the user's explicit decision, `b`/`d`/`e`/`f` are all ignored on
+import: `intervalHours` always comes from this app's own `SyncSettingsStore` default instead of
+guessing at `b`'s semantics, and the timestamps/unseen-count mean something different in this
+app's own scheduling model than they did in the source tool's. The real sample was named
+`.tws2`, not the `.tws_plain` the original ROADMAP entry had guessed at -- since no format spec
+exists publicly for either name, the importer sniffs the parsed JSON's own structure rather
+than trusting a file's name or extension, so it works regardless of which export option within
+the tool actually produced a given file. The sample itself is a third party's personal data
+(their own followed artists and tracked pools, not the user's), so it was never committed to
+the repo or used as a test fixture -- tests use a small hand-written synthetic file covering
+the same shapes instead.
+
+No backend changes were needed at all -- `BunnyRepository.createSearch`/`listSearches` already
+cover everything both directions need, the same "already fully wired, just needs UI" pattern
+M10.3's e621 half rode on for `fav:`. New `app/lib/services/search_backup_service.dart`
+(`SearchBackupService`) is pure logic with no widget, the same shape as `DownloadManager`
+(M9.4): `exportSearches` maps a `List<BunnySearch>` to this app's own round-trip JSON shape
+(`site`/`label`/`query`/`intervalHours`/`autoFavorite`/`autoFavoriteStars`/`autoUpvote` --
+deliberately dropping `id`/`createdAt`/`lastRunAt`/`unseenCount`, which are local/derived and
+not meaningful to round-trip), and `parseImportFile` auto-detects which of the two supported
+shapes a file is (this app's own format, keyed by the presence of `site`/`label`/`query`; Wolf's
+Stash's, keyed by the exact `{a,b,c,d,e,f}` key set) before mapping either into a shared
+`ImportSearchEntry` list the caller can feed straight into `createSearch`. The actual
+`createSearch` loop, and deduping against the searches that already exist, stays in
+`SettingsScreen` rather than the service, mirroring M10.1's established split between a
+manager that does the mechanical part and a caller that orchestrates using its own live state.
+
+`SettingsScreen` gained a new "Backup" section (following the same sectioned-control
+convention every other settings concern already uses) with "Export"/"Import" buttons. This is
+the first use in this codebase of `file_picker`'s `pickFile()` (returns a cross-platform
+`PlatformFile.readAsBytes()`, used to read the chosen import file) and `saveFile()` (takes the
+bytes directly and shows a native save dialog, used for export) -- only `getDirectoryPath()`
+(for the downloads destination folder, M9.4) had been used before. Import dedupes against the
+current `(site, query)` pairs (one `listSearches()` call up front) and adds each newly-created
+entry's key to that same set as the loop goes -- running the service against the real sample
+file during planning (without touching the db) surfaced 18 pairs that were duplicated *within
+the file itself*, which an earlier version of this loop (checking only the pre-loop snapshot)
+would have inserted twice; updating the set in-loop catches both that case and re-importing the
+same file a second time, reporting imported/already-saved/invalid counts in a summary `SnackBar` -- the same "queue N, drain once" shape mass-favorite (M9.2) and
+mass-download (M9.5) already established, just applied to search creation instead of the
+action queue. `SettingsScreen` needed a new required `repository` constructor parameter to
+reach `createSearch`/`listSearches` at all (every other screen already receives it this way;
+`SettingsScreen` previously didn't need it) -- its one call site in `SearchesScreen` already
+held the repository via `BunnyRepositoryScope`, so this was a one-line addition there.
+
 ## Inkbunny API constraints (found in M2)
 
 Verified against the live API and the official docs while building `libinkbunny`:

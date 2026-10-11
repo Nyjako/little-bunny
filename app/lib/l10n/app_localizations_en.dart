@@ -428,6 +428,44 @@ class AppLocalizationsEn extends AppLocalizations {
   String get settingsAutoFavoriteOnDownloadLabel => 'Auto-favorite on download';
 
   @override
+  String get settingsBackupSection => 'Backup';
+
+  @override
+  String get settingsBackupExportLabel => 'Export searches';
+
+  @override
+  String get settingsBackupExportButton => 'Export';
+
+  @override
+  String get settingsBackupImportLabel => 'Import searches';
+
+  @override
+  String get settingsBackupImportButton => 'Import';
+
+  @override
+  String settingsBackupImportProgress(int done, int total) {
+    return '$done/$total imported';
+  }
+
+  @override
+  String settingsBackupExportSuccess(int count) {
+    return 'Exported $count searches';
+  }
+
+  @override
+  String settingsBackupImportSummary(
+    int imported,
+    int duplicates,
+    int invalid,
+  ) {
+    return '$imported imported, $duplicates already saved, $invalid invalid';
+  }
+
+  @override
+  String get settingsBackupImportUnrecognizedFormat =>
+      'Unrecognized file format';
+
+  @override
   String get postDetailDownloadTooltip => 'Download';
 
   @override
