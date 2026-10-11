@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:little_bunny/repository/bunny_models.dart';
 import 'package:little_bunny/repository/bunny_repository.dart';
 
@@ -314,14 +316,34 @@ class FakeBunnyRepository implements BunnyRepository {
   /// succeeding -- same per-key-failure convention as [verifyFailures].
   final Map<int, String> syncSearchFailures = {};
 
+  /// If present for a given search id, [syncSearch] awaits this before
+  /// resolving (M14.3 test support) -- lets a test pause mid-loop and assert
+  /// intermediate UI state, instead of only the state once the whole
+  /// "check for updates" run has finished.
+  final Map<int, Completer<void>> syncSearchGates = {};
+
+  /// Posts [syncSearch] appends to [postsBySearchId] for that search id once
+  /// it resolves, simulating a sync that actually finds something new
+  /// (M14.3) -- plain seeding of [postsBySearchId] before the call can't
+  /// distinguish "found during this sync" from "was already there".
+  final Map<int, List<BunnyPost>> syncSearchNewPosts = {};
+
   @override
   Future<BunnySyncStats> syncSearch(int searchId) async {
     syncSearchCalls.add(searchId);
+    final gate = syncSearchGates[searchId];
+    if (gate != null) {
+      await gate.future;
+    }
     final failure = syncSearchFailures[searchId];
     if (failure != null) {
       throw BunnyRepositoryException(failure);
     }
-    return const BunnySyncStats(searchesChecked: 1, searchesSynced: 1, postsUpserted: 0);
+    final newPosts = syncSearchNewPosts[searchId];
+    if (newPosts != null) {
+      postsBySearchId.putIfAbsent(searchId, () => []).addAll(newPosts);
+    }
+    return BunnySyncStats(searchesChecked: 1, searchesSynced: 1, postsUpserted: newPosts?.length ?? 0);
   }
 
   /// Each entry is the `postId` passed to [queueFavoriteAdd].

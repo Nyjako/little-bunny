@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:little_bunny/bunny_repository_scope.dart';
@@ -251,6 +253,45 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(repository.syncSearchCalls, [id1, id2]);
+  });
+
+  testWidgets('"check for updates" refreshes unseen badges after each search, not only at the end (M14.3)', (WidgetTester tester) async {
+    final repository = FakeBunnyRepository();
+    final id1 = await repository.createSearch(BunnySite.e621, 'Foxes', 'fox');
+    final id2 = await repository.createSearch(BunnySite.e621, 'Wolves', 'wolf');
+    final gate1 = Completer<void>();
+    final gate2 = Completer<void>();
+    repository.syncSearchGates[id1] = gate1;
+    repository.syncSearchGates[id2] = gate2;
+    repository.syncSearchNewPosts[id1] = [
+      const BunnyPost(id: 101, site: BunnySite.e621, externalId: 101, score: 0, favCount: 0, commentCount: 0, width: 100, height: 100, cachedAt: '2026-01-01T00:00:00Z', isSeen: false, isFavorited: false),
+    ];
+    repository.syncSearchNewPosts[id2] = [
+      const BunnyPost(id: 102, site: BunnySite.e621, externalId: 102, score: 0, favCount: 0, commentCount: 0, width: 100, height: 100, cachedAt: '2026-01-01T00:00:00Z', isSeen: false, isFavorited: false),
+    ];
+
+    await tester.pumpWidget(_wrap(repository));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byIcon(Icons.sync));
+    await tester.pump();
+
+    // Neither search has synced yet -- no badges.
+    expect(find.text('1'), findsNothing);
+
+    gate1.complete();
+    await tester.pump();
+    await tester.pump();
+
+    // Foxes' sync resolved and found a post -- its badge should already be
+    // visible even though Wolves' sync (gated on gate2) hasn't resolved yet.
+    // With the old end-of-loop-only refresh this would still show nothing.
+    expect(find.text('1'), findsOneWidget);
+
+    gate2.complete();
+    await tester.pumpAndSettle();
+
+    expect(find.text('1'), findsNWidgets(2));
   });
 
   testWidgets('tapping the FAB opens CreateSearchScreen and refreshes on success', (WidgetTester tester) async {
