@@ -2088,8 +2088,35 @@ remove-confirmation already uses), and navigation only proceeds on an empty matc
 
 ## M14 -- Pinning, auto-upvote, DB backups, split tag stats, staleness fix, row cleanup
 
-Direct user feedback after M13 shipped, bundling several requests. This section covers M14.3;
-the remaining M14.N sub-milestones are documented as they land.
+Direct user feedback after M13 shipped, bundling several requests. This section covers M14.1
+and M14.3; the remaining M14.N sub-milestones are documented as they land.
+
+**Pin searches, total post count, and row-action cleanup (M14.1)**: three requests bundled
+into one branch since all three reshape the same `SearchesScreen` row UI and
+`bunny_db_search_list` query. `pinned` is a new `ALTER TABLE searches ADD COLUMN pinned
+INTEGER NOT NULL DEFAULT 0;` migration (`libs/db/src/db.c`'s `BUNNY_DB_MIGRATIONS`, following
+the exact pattern `auto_favorite`/`auto_upvote` already used), with its own dedicated
+`bunny_db_search_set_pinned(db, search_id, bool)` setter (`libs/db/src/searches.c`) -- not
+folded into `bunny_db_search_options_t`, since that struct holds only fields that change via
+the full edit form, and pinning is toggled directly from the row. `total_count` needed no
+migration at all: it's a second live `COUNT(*)` subquery in `bunny_db_search_list`'s SQL,
+right next to the existing `unseen_count` one, so it's always fresh with zero extra round
+trips. Full plumbing for pinning: `bunny_core_search_set_pinned`, FFI request/handler/
+dispatch, `POST /searches/{id}/pin` (body `{"pinned": bool}`, a new branch in the existing
+`searches_handler`/`routes_searches.c` dispatch), `BunnyRepository.setSearchPinned(int, bool)`
+across FFI/HTTP/Fake. `SearchesScreen._sorted()` changed from one flat sort to
+partition-then-sort: pinned searches first, unpinned after, each group still internally
+ordered by whichever `SearchSortOrder` the user picked (M13.1) -- a pin toggle therefore only
+ever moves a search between those two groups, never changes the within-group ordering logic
+itself. The row's old delete icon was removed outright; deleting a search now happens from
+`EditSearchScreen`'s app bar instead (same confirmation dialog text/shape the row used to show,
+just triggered one screen over), and the row's freed-up icon slot became a "sync this search
+now" button that calls the already-existing `syncSearch(id)` from M13.2 directly, tracked via
+a `Set<int> _syncingSearchIds` so several rows can be in flight independently without
+interfering with each other or with the app-bar-level "check for updates" action (which
+deliberately keeps its own `Icons.sync` icon; the per-row button uses `Icons.refresh` instead,
+partly for a visually distinct affordance and partly so widget-test finders can target one
+without ambiguity now that both exist on screen at once).
 
 **Searches-list progressive-refresh fix (M14.3)**: bug fix. `SearchesScreen._checkForUpdates`
 (M13.2) synced every search sequentially but only called `_refresh()` once, after the whole

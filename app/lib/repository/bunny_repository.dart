@@ -58,6 +58,10 @@ abstract interface class BunnyRepository {
 
   Future<void> deleteSearch(int searchId);
 
+  /// Pins/unpins a search, toggled directly from the searches list row
+  /// (M14.1) rather than through the full edit form.
+  Future<void> setSearchPinned(int searchId, bool pinned);
+
   /// Updates a search's editable fields in place (M9.7.2) -- replaces the
   /// narrower setSearchAutoFavorite (M9.6.8), so a search's label/query/
   /// interval/auto-favorite/auto-upvote settings can all be changed from one

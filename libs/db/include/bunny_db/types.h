@@ -47,9 +47,11 @@ typedef struct
     char *created_at;
     char *last_run_at;       /* NULL if this search has never run */
     int unseen_count;        /* posts linked to this search with no seen_posts row */
+    int total_count;         /* posts linked to this search, seen or not */
     bool auto_favorite;      /* queue a favorite for every post this search finds during sync */
     int auto_favorite_stars; /* Inkbunny favorite level (1-3); ignored by e621 */
     bool auto_upvote;        /* e621 only -- queue an upvote for every post this search finds during sync */
+    bool pinned;             /* shown first in SearchesScreen, ahead of the normal sort order */
 } bunny_db_search_t;
 
 typedef struct

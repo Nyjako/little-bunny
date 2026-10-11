@@ -24,6 +24,7 @@ static const bunny_db_migration_t BUNNY_DB_MIGRATIONS[] = {
     {3, "ALTER TABLE searches ADD COLUMN auto_favorite INTEGER NOT NULL DEFAULT 0;"},
     {4, "ALTER TABLE searches ADD COLUMN auto_favorite_stars INTEGER NOT NULL DEFAULT 1;"},
     {5, "ALTER TABLE searches ADD COLUMN auto_upvote INTEGER NOT NULL DEFAULT 0;"},
+    {6, "ALTER TABLE searches ADD COLUMN pinned INTEGER NOT NULL DEFAULT 0;"},
 };
 // clang-format on
 

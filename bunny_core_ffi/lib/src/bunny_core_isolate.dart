@@ -57,9 +57,11 @@ Map<String, Object?> _searchToMap(bunny_db_search_t search) => {
   'createdAt': _readNullableString(search.created_at),
   'lastRunAt': _readNullableString(search.last_run_at),
   'unseenCount': search.unseen_count,
+  'totalCount': search.total_count,
   'autoFavorite': search.auto_favorite,
   'autoFavoriteStars': search.auto_favorite_stars,
   'autoUpvote': search.auto_upvote,
+  'pinned': search.pinned,
 };
 
 Map<String, Object?> _postToMap(bunny_db_post_t post) => {
@@ -182,6 +184,13 @@ class _DeleteSearchRequest extends _Request {
   final int searchId;
 
   const _DeleteSearchRequest(this.searchId);
+}
+
+class _SetSearchPinnedRequest extends _Request {
+  final int searchId;
+  final bool pinned;
+
+  const _SetSearchPinnedRequest(this.searchId, this.pinned);
 }
 
 class _ListSearchPostsRequest extends _Request {
@@ -665,6 +674,9 @@ Object? _dispatch(Pointer<bunny_core_t>? core, _Request request, void Function(P
       case _DeleteSearchRequest r:
         _check(_bindings.bunny_core_search_delete(c, r.searchId));
         return null;
+      case _SetSearchPinnedRequest r:
+        _check(_bindings.bunny_core_search_set_pinned(c, r.searchId, r.pinned));
+        return null;
       case _UpdateSearchRequest r:
         final options = arena<bunny_db_search_options_t>();
         options.ref.auto_favorite = r.autoFavorite;
@@ -834,6 +846,8 @@ class BunnyCoreNative {
   Future<List<Map<String, Object?>>> listSearches() => _send<List<Map<String, Object?>>>(const _ListSearchesRequest());
 
   Future<void> deleteSearch(int searchId) => _send<void>(_DeleteSearchRequest(searchId));
+
+  Future<void> setSearchPinned(int searchId, bool pinned) => _send<void>(_SetSearchPinnedRequest(searchId, pinned));
 
   Future<void> updateSearch(int searchId, String label, String query, int intervalHours, {bool autoFavorite = false, int autoFavoriteStars = 1, bool autoUpvote = false}) =>
       _send<void>(_UpdateSearchRequest(searchId, label, query, intervalHours, autoFavorite, autoFavoriteStars, autoUpvote));

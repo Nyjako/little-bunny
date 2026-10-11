@@ -266,6 +266,72 @@ void test_search_list_unseen_count(void)
     bunny_db_search_list_free(&list);
 }
 
+void test_search_list_total_count(void)
+{
+    int64_t search1_id = 0;
+    int64_t search2_id = 0;
+    bunny_db_search_create(g_db, BUNNY_DB_SITE_E621, "wolves", "wolf", 24, NULL, &search1_id);
+    bunny_db_search_create(g_db, BUNNY_DB_SITE_E621, "foxes", "fox", 24, NULL, &search2_id);
+
+    bunny_db_post_upsert_t post1;
+    bunny_db_post_upsert_t post2;
+    bunny_db_post_upsert_t post3;
+    make_test_post(&post1, 921, 1);
+    make_test_post(&post2, 922, 1);
+    make_test_post(&post3, 923, 1);
+    int64_t post1_id = 0;
+    int64_t post2_id = 0;
+    int64_t post3_id = 0;
+    bunny_db_post_upsert(g_db, &post1, &post1_id);
+    bunny_db_post_upsert(g_db, &post2, &post2_id);
+    bunny_db_post_upsert(g_db, &post3, &post3_id);
+
+    /* search1: two posts (seen or not doesn't matter for total_count).
+     * search2: one post. Marking post1 seen must not change either count. */
+    bunny_db_search_add_result(g_db, search1_id, post1_id);
+    bunny_db_search_add_result(g_db, search1_id, post2_id);
+    bunny_db_search_add_result(g_db, search2_id, post3_id);
+    bunny_db_post_mark_seen(g_db, post1_id);
+
+    bunny_db_search_list_t list;
+    bunny_db_result_t result = bunny_db_search_list(g_db, &list);
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, result);
+    TEST_ASSERT_EQUAL(search1_id, list.items[0].id);
+    TEST_ASSERT_EQUAL(2, list.items[0].total_count);
+    TEST_ASSERT_EQUAL(search2_id, list.items[1].id);
+    TEST_ASSERT_EQUAL(1, list.items[1].total_count);
+
+    bunny_db_search_list_free(&list);
+}
+
+void test_search_set_pinned(void)
+{
+    int64_t id1 = 0;
+    int64_t id2 = 0;
+    bunny_db_search_create(g_db, BUNNY_DB_SITE_E621, "wolves", "wolf", 24, NULL, &id1);
+    bunny_db_search_create(g_db, BUNNY_DB_SITE_E621, "foxes", "fox", 24, NULL, &id2);
+
+    bunny_db_search_list_t list;
+    bunny_db_search_list(g_db, &list);
+    TEST_ASSERT_FALSE(list.items[0].pinned);
+    TEST_ASSERT_FALSE(list.items[1].pinned);
+    bunny_db_search_list_free(&list);
+
+    bunny_db_result_t result = bunny_db_search_set_pinned(g_db, id2, true);
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, result);
+
+    bunny_db_search_list(g_db, &list);
+    TEST_ASSERT_FALSE(list.items[0].pinned);
+    TEST_ASSERT_TRUE(list.items[1].pinned);
+    bunny_db_search_list_free(&list);
+
+    result = bunny_db_search_set_pinned(g_db, id2, false);
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, result);
+    bunny_db_search_list(g_db, &list);
+    TEST_ASSERT_FALSE(list.items[1].pinned);
+    bunny_db_search_list_free(&list);
+}
+
 void test_post_upsert_and_get(void)
 {
     const char *tags[] = {"forest", "wolf"};
@@ -1263,6 +1329,8 @@ int main(void)
     RUN_TEST(test_search_create_defaults_auto_favorite_stars_to_one);
     RUN_TEST(test_search_update_modifies_label_query_interval_and_options);
     RUN_TEST(test_search_list_unseen_count);
+    RUN_TEST(test_search_list_total_count);
+    RUN_TEST(test_search_set_pinned);
     RUN_TEST(test_search_default_interval);
     RUN_TEST(test_search_delete);
     RUN_TEST(test_search_touch_last_run);
