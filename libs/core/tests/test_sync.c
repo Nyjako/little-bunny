@@ -175,6 +175,53 @@ void test_sync_e621_search_upserts_post(void)
     free(fixture);
 }
 
+void test_sync_e621_search_marks_a_favorited_post_locally(void)
+{
+    /* M10.3: the site's own "is_favorited" signal is authoritative and must
+     * be mirrored locally, independent of any action queued through this
+     * app -- a separate inline fixture (not the shared e621_posts_search.json,
+     * whose "is_favorited": false backs many other tests) with two posts, only
+     * one of which the site reports as favorited. */
+    const char *fixture = "{\"posts\":["
+                          "{\"id\":1,\"created_at\":\"2024-01-01T00:00:00.000-05:00\","
+                          "\"file\":{\"width\":100,\"height\":100,\"ext\":\"png\",\"size\":1000,\"md5\":\"aaa\",\"url\":\"https://static1.e621.net/data/1.png\"},"
+                          "\"preview\":{\"width\":50,\"height\":50,\"url\":\"https://static1.e621.net/data/preview/1.png\"},"
+                          "\"score\":{\"up\":1,\"down\":0,\"total\":1},"
+                          "\"tags\":{\"general\":[],\"species\":[],\"character\":[],\"copyright\":[],\"artist\":[],\"invalid\":[],\"lore\":[],\"meta\":[]},"
+                          "\"rating\":\"s\",\"fav_count\":1,\"sources\":[],\"description\":\"favorited\",\"comment_count\":0,\"is_favorited\":true,\"pools\":[]},"
+                          "{\"id\":2,\"created_at\":\"2024-01-01T00:00:00.000-05:00\","
+                          "\"file\":{\"width\":100,\"height\":100,\"ext\":\"png\",\"size\":1000,\"md5\":\"bbb\",\"url\":\"https://static1.e621.net/data/2.png\"},"
+                          "\"preview\":{\"width\":50,\"height\":50,\"url\":\"https://static1.e621.net/data/preview/2.png\"},"
+                          "\"score\":{\"up\":1,\"down\":0,\"total\":1},"
+                          "\"tags\":{\"general\":[],\"species\":[],\"character\":[],\"copyright\":[],\"artist\":[],\"invalid\":[],\"lore\":[],\"meta\":[]},"
+                          "\"rating\":\"s\",\"fav_count\":0,\"sources\":[],\"description\":\"not favorited\",\"comment_count\":0,\"is_favorited\":false,\"pools\":[]}"
+                          "]}";
+    g_e621_state.bodies[0] = fixture;
+    g_e621_state.body_count = 1;
+
+    int64_t search_id = 0;
+    bunny_core_result_t result = bunny_core_search_create(g_core, BUNNY_DB_SITE_E621, "wolves", "wolf", 24, NULL, &search_id);
+    TEST_ASSERT_EQUAL(BUNNY_CORE_OK, result);
+
+    bunny_core_sync_stats_t stats;
+    result = bunny_core_sync_due_searches(g_core, &stats);
+    TEST_ASSERT_EQUAL(BUNNY_CORE_OK, result);
+    TEST_ASSERT_EQUAL(2, stats.posts_upserted);
+
+    bunny_db_post_list_t posts;
+    result = bunny_core_search_list_posts(g_core, search_id, false, &posts);
+    TEST_ASSERT_EQUAL(BUNNY_CORE_OK, result);
+    TEST_ASSERT_EQUAL(2, (int)posts.count);
+    for (size_t i = 0; i < posts.count; i++) {
+        if (posts.items[i].external_id == 1) {
+            TEST_ASSERT_TRUE(posts.items[i].is_favorited);
+        } else {
+            TEST_ASSERT_FALSE(posts.items[i].is_favorited);
+        }
+    }
+    bunny_db_post_list_free(&posts);
+}
+
 void test_sync_e621_search_upserts_post_tag_categories(void)
 {
     char *fixture = read_fixture("e621_posts_search.json");
@@ -484,6 +531,35 @@ void test_preview_search_requests_the_given_inkbunny_page(void)
     TEST_ASSERT_NOT_NULL(strstr(g_captured_url, "page=2"));
 }
 
+void test_list_my_inkbunny_favorites_searches_by_the_logged_in_users_own_id(void)
+{
+    g_inkbunny_transport.send = capturing_fake_send;
+
+    const char *login_fixture = "{\"sid\":\"x\",\"user_id\":\"12345\",\"ratingsmask\":\"101\"}";
+    char *search_fixture = read_fixture("inkbunny_search_response.json");
+    TEST_ASSERT_NOT_NULL(search_fixture);
+    g_inkbunny_state.bodies[0] = login_fixture;
+    g_inkbunny_state.bodies[1] = search_fixture;
+    g_inkbunny_state.body_count = 2;
+
+    bunny_db_post_list_t posts;
+    bunny_core_result_t result = bunny_core_list_my_inkbunny_favorites(g_core, 2, &posts);
+    TEST_ASSERT_EQUAL(BUNNY_CORE_OK, result);
+    TEST_ASSERT_EQUAL(1, (int)posts.count);
+    bunny_db_post_list_free(&posts);
+    free(search_fixture);
+
+    TEST_ASSERT_NOT_NULL(strstr(g_captured_url, "favs_user_id=12345"));
+    TEST_ASSERT_NOT_NULL(strstr(g_captured_url, "page=2"));
+}
+
+void test_list_my_inkbunny_favorites_rejects_a_page_below_one(void)
+{
+    bunny_db_post_list_t posts;
+    bunny_core_result_t result = bunny_core_list_my_inkbunny_favorites(g_core, 0, &posts);
+    TEST_ASSERT_EQUAL(BUNNY_CORE_ERR_INVALID_ARG, result);
+}
+
 void test_preview_search_rejects_a_page_below_one(void)
 {
     bunny_db_post_list_t posts;
@@ -730,6 +806,46 @@ void test_sync_inkbunny_search_upserts_post(void)
     free(empty_fixture);
 }
 
+void test_sync_inkbunny_search_marks_a_favorited_submission_locally(void)
+{
+    /* M10.3: same mirroring as the e621 test above, but for Inkbunny's own
+     * "favorite": "t"/"f" field (inkbunny_submission_t.is_favorite). */
+    char *login_fixture = read_fixture("inkbunny_login_success.json");
+    const char *search_fixture = "{\"sid\":\"x\",\"results_count_all\":1,\"results_count_thispage\":1,\"pages_count\":1,\"page\":1,"
+                                 "\"user_location\":\"\",\"search_params\":[],\"submissions\":["
+                                 "{\"submission_id\":\"42\",\"hidden\":\"f\",\"username\":\"someone\",\"user_id\":\"1\","
+                                 "\"create_datetime\":\"2026-01-01 00:00:00+00\",\"thumbnail_url_large_noncustom\":\"https://example.invalid/42.jpg\","
+                                 "\"title\":\"a favorited submission\",\"deleted\":\"f\",\"public\":\"t\",\"rating_id\":\"0\",\"rating_name\":\"General\","
+                                 "\"submission_type_id\":\"1\",\"friends_only\":\"f\",\"guest_block\":\"f\",\"scraps\":\"f\",\"favorite\":\"t\",\"keywords\":[]}"
+                                 "]}";
+    TEST_ASSERT_NOT_NULL(login_fixture);
+    char *empty_fixture = read_fixture("inkbunny_search_response_empty.json");
+    TEST_ASSERT_NOT_NULL(empty_fixture);
+    g_inkbunny_state.bodies[0] = login_fixture;
+    g_inkbunny_state.bodies[1] = search_fixture;
+    g_inkbunny_state.bodies[2] = empty_fixture;
+    g_inkbunny_state.body_count = 3;
+
+    int64_t search_id = 0;
+    bunny_core_result_t result = bunny_core_search_create(g_core, BUNNY_DB_SITE_INKBUNNY, "tribute", "tribute", 24, NULL, &search_id);
+    TEST_ASSERT_EQUAL(BUNNY_CORE_OK, result);
+
+    bunny_core_sync_stats_t stats;
+    result = bunny_core_sync_due_searches(g_core, &stats);
+    TEST_ASSERT_EQUAL(BUNNY_CORE_OK, result);
+    TEST_ASSERT_EQUAL(1, stats.posts_upserted);
+
+    bunny_db_post_list_t posts;
+    result = bunny_core_search_list_posts(g_core, search_id, false, &posts);
+    TEST_ASSERT_EQUAL(BUNNY_CORE_OK, result);
+    TEST_ASSERT_EQUAL(1, (int)posts.count);
+    TEST_ASSERT_TRUE(posts.items[0].is_favorited);
+    bunny_db_post_list_free(&posts);
+
+    free(login_fixture);
+    free(empty_fixture);
+}
+
 void test_sync_skips_search_not_due_yet(void)
 {
     char *fixture = read_fixture("e621_posts_search.json");
@@ -810,6 +926,7 @@ int main(void)
 {
     UNITY_BEGIN();
     RUN_TEST(test_sync_e621_search_upserts_post);
+    RUN_TEST(test_sync_e621_search_marks_a_favorited_post_locally);
     RUN_TEST(test_sync_e621_search_upserts_post_tag_categories);
     RUN_TEST(test_sync_e621_search_upserts_post_sources);
     RUN_TEST(test_sync_e621_search_upserts_post_sample_url);
@@ -823,6 +940,8 @@ int main(void)
     RUN_TEST(test_preview_search_requests_the_given_e621_page);
     RUN_TEST(test_preview_search_requests_the_given_inkbunny_page);
     RUN_TEST(test_preview_search_rejects_a_page_below_one);
+    RUN_TEST(test_list_my_inkbunny_favorites_searches_by_the_logged_in_users_own_id);
+    RUN_TEST(test_list_my_inkbunny_favorites_rejects_a_page_below_one);
     RUN_TEST(test_e621_requests_use_the_bare_user_agent_without_an_account);
     RUN_TEST(test_e621_requests_include_the_configured_username_in_the_user_agent);
     RUN_TEST(test_sync_e621_search_fetches_a_second_page_when_the_first_is_full);
@@ -832,6 +951,7 @@ int main(void)
     RUN_TEST(test_mark_seen_flips_is_seen_on_a_synced_post);
     RUN_TEST(test_mark_seen_rejects_a_nonexistent_post);
     RUN_TEST(test_sync_inkbunny_search_upserts_post);
+    RUN_TEST(test_sync_inkbunny_search_marks_a_favorited_submission_locally);
     RUN_TEST(test_sync_skips_search_not_due_yet);
     RUN_TEST(test_verify_e621_accepts_valid_credentials);
     RUN_TEST(test_verify_e621_rejects_when_site_call_fails);

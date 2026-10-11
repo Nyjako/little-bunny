@@ -1225,6 +1225,31 @@ this file is the single source of truth for "what's done" across sessions.
   state, per-site list switching, tapping a tag opening `TagBrowseScreen` with the right site/
   query) plus a `SearchesScreen` test confirming the new icon opens it.
 
+- [x] **M10.3 — View my own favorites**
+  e621 needed zero backend changes -- `fav:<username>` is literal tag-search text, already fully
+  supported by the existing `previewSearch`/`TagBrowseScreen` pipeline (the same mechanism `pool:
+  <id>`/`fav:` already ride on). A heart icon on `AccountsScreen`'s e621 row just navigates to
+  `TagBrowseScreen(site: e621, query: 'fav:$username')`. Inkbunny has no equivalent query syntax --
+  its API needs the logged-in account's own numeric user id in a dedicated `favorited_by_user_id`
+  search param instead, which was captured on every login (`inkbunny_login`) but never exposed; a
+  new `inkbunny_client_get_user_id` getter fixes that. A new `bunny_core_list_my_inkbunny_favorites`
+  (mirroring `bunny_core_preview_search`'s Inkbunny branch, just swapping the query string for the
+  freshly-logged-in client's own id) got full plumbing: FFI, a new `POST /favorites/inkbunny/mine?
+  page=` route, and `BunnyRepository.myInkbunnyFavorites({page})` across FFI/HTTP/Fake.
+  `TagBrowseScreen` gained an optional `customFetch`/`title` override so Inkbunny's favorites reuse
+  its existing grid/pagination code without a second near-duplicate screen (the "add to searches"
+  action is omitted in this mode, since there's no query string to save). Also fixed, per direct
+  user feedback: posts pulled back from either site's "my favorites" (or from *any* sync/search,
+  going forward) now have the site's own `is_favorited`/`is_favorite` signal mirrored into the
+  local `favorites` table (additive only -- a post the site reports as favorited always ends up
+  marked locally too, but a `false` response never clears an existing local favorite), closing a
+  gap where favorites added directly on the website, or before this app existed, never showed up
+  as favorited here. Tests at every layer: new C tests for the favorite-mirror fix (both sites) and
+  for `inkbunny_client_get_user_id`/`bunny_core_list_my_inkbunny_favorites`, a server integration
+  test (with a new fake Inkbunny transport, previously unused in that test file), FFI/HTTP
+  repository tests, and widget tests for `TagBrowseScreen`'s new override params and
+  `AccountsScreen`'s heart icons (absent when no account, routes to the right flow per site).
+
 - [ ] **M11 — Backup & import**
   Export/import of our own searches. Import from "The Wolf's Stash"
   (`https://zepiwolf.se/tws/`) `.tws_plain` export format — **needs a sample export file

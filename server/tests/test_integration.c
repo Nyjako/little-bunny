@@ -50,7 +50,28 @@ static bunny_http_result_t fake_e621_send(void *user_data, const bunny_http_requ
     return BUNNY_HTTP_OK;
 }
 
+static const char *INKBUNNY_LOGIN_FIXTURE = "{\"sid\":\"x\",\"user_id\":\"628881\",\"ratingsmask\":\"101\"}";
+
+static const char *INKBUNNY_MY_FAVORITES_FIXTURE = "{\"sid\":\"x\",\"results_count_all\":1,\"results_count_thispage\":1,\"pages_count\":1,\"page\":1,"
+                                                   "\"user_location\":\"\",\"search_params\":[],\"submissions\":["
+                                                   "{\"submission_id\":\"99\",\"hidden\":\"f\",\"username\":\"someone\",\"user_id\":\"628881\","
+                                                   "\"create_datetime\":\"2026-01-01 00:00:00+00\",\"thumbnail_url_large_noncustom\":\"https://example.invalid/99.jpg\","
+                                                   "\"title\":\"my favorite thing\",\"deleted\":\"f\",\"public\":\"t\",\"rating_id\":\"0\",\"rating_name\":\"General\","
+                                                   "\"submission_type_id\":\"1\",\"friends_only\":\"f\",\"guest_block\":\"f\",\"scraps\":\"f\",\"favorite\":\"t\",\"keywords\":[]}"
+                                                   "]}";
+
+static bunny_http_result_t fake_inkbunny_send(void *user_data, const bunny_http_request_t *request, bunny_http_response_t *out_response)
+{
+    (void)user_data;
+    const char *body = strstr(request->url, "api_login.php") ? INKBUNNY_LOGIN_FIXTURE : INKBUNNY_MY_FAVORITES_FIXTURE;
+    out_response->status = 200;
+    out_response->body = strdup(body);
+    out_response->body_len = strlen(body);
+    return BUNNY_HTTP_OK;
+}
+
 static bunny_http_transport_t g_e621_transport;
+static bunny_http_transport_t g_inkbunny_transport;
 static server_app_t *g_app;
 static char g_data_dir[] = "/tmp/bunny_server_test_integration_XXXXXX";
 
@@ -120,6 +141,8 @@ void setUp(void)
 {
     g_e621_transport.send = fake_e621_send;
     g_e621_transport.user_data = NULL;
+    g_inkbunny_transport.send = fake_inkbunny_send;
+    g_inkbunny_transport.user_data = NULL;
 
     strcpy(g_data_dir, "/tmp/bunny_server_test_integration_XXXXXX");
     TEST_ASSERT_NOT_NULL(mkdtemp(g_data_dir));
@@ -129,6 +152,7 @@ void setUp(void)
     core_config.db_path = ":memory:";
     core_config.user_agent = "bunny-tests/1.0 (integration)";
     core_config.e621_transport = &g_e621_transport;
+    core_config.inkbunny_transport = &g_inkbunny_transport;
     core_config.min_request_interval_sec = 0.001;
 
     /* poll_interval_sec <= 0 disables the scheduler -- these tests drive
@@ -433,6 +457,20 @@ void test_search_auto_favorite_create_and_update(void)
     free(response.data);
 }
 
+void test_my_inkbunny_favorites_searches_and_caches_with_favorite_marked(void)
+{
+    response_buffer_t response = {0};
+
+    long status = do_request("POST", "/favorites/inkbunny/mine?page=1", NULL, &response, true, NULL);
+    TEST_ASSERT_EQUAL(200, status);
+    TEST_ASSERT_NOT_NULL(strstr(response.data, "\"external_id\":99"));
+    TEST_ASSERT_NOT_NULL(strstr(response.data, "\"title\":\"my favorite thing\""));
+    /* M10.3: the fixture's "favorite":"t" must be mirrored into the local
+     * favorites table, not just displayed. */
+    TEST_ASSERT_NOT_NULL(strstr(response.data, "\"is_favorited\":true"));
+    free(response.data);
+}
+
 void test_scheduler_syncs_search_automatically(void)
 {
     /* setUp started the app with the scheduler disabled (poll_interval=0);
@@ -477,6 +515,7 @@ int main(void)
     RUN_TEST(test_verify_account);
     RUN_TEST(test_full_account_search_sync_favorite_flow);
     RUN_TEST(test_search_auto_favorite_create_and_update);
+    RUN_TEST(test_my_inkbunny_favorites_searches_and_caches_with_favorite_marked);
     RUN_TEST(test_scheduler_syncs_search_automatically);
     int result = UNITY_END();
     curl_global_cleanup();
