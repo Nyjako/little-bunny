@@ -55,6 +55,7 @@ dependencies:
   url_launcher: ^6.3.1
   photo_view: ^0.15.0
   file_picker: ^13.1.0
+  chewie: ^1.17.2
 
 dev_dependencies:
   flutter_test:
