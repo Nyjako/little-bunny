@@ -9,9 +9,9 @@ import 'package:little_bunny/services/download_manager.dart';
 
 import '../fakes/fake_bunny_repository.dart';
 
-BunnyPost _post({String? artist, String? fileUrl = 'https://static1.e621.net/data/1.png', String? fileExt = 'png', String? fileMd5}) => BunnyPost(
+BunnyPost _post({BunnySite site = BunnySite.e621, String? artist, String? fileUrl = 'https://static1.e621.net/data/1.png', String? fileExt = 'png', String? fileMd5}) => BunnyPost(
   id: 1,
-  site: BunnySite.e621,
+  site: site,
   externalId: 42,
   artist: artist,
   score: 0,
@@ -159,6 +159,64 @@ void main() {
       await manager.downloadPost(_post(), repository, tempDir.path, autoFavorite: true);
 
       expect(repository.favoriteAddCalls, isEmpty);
+    });
+  });
+
+  group('autoUpvote (M14.2)', () {
+    test('queues an upvote when a download verifies and autoUpvote is true', () async {
+      final manager = DownloadManager(client: MockClient((_) async => http.Response.bytes([1, 2, 3], 200)));
+      final repository = FakeBunnyRepository();
+
+      await manager.downloadPost(_post(fileMd5: null), repository, tempDir.path, autoUpvote: true);
+
+      expect(repository.voteCalls, [(1, 1)]);
+      expect(repository.processQueueCallCount, 0); // downloadPost only queues -- draining is the caller's job
+    });
+
+    test('queues an upvote even on a checksum mismatch, since the file was still written', () async {
+      final manager = DownloadManager(client: MockClient((_) async => http.Response.bytes([1, 2, 3], 200)));
+      final repository = FakeBunnyRepository();
+
+      final result = await manager.downloadPost(_post(fileMd5: 'not-the-real-checksum'), repository, tempDir.path, autoUpvote: true);
+
+      expect(result.outcome, DownloadOutcome.checksumMismatch);
+      expect(repository.voteCalls, [(1, 1)]);
+    });
+
+    test('does not queue an upvote when autoUpvote is false (the default)', () async {
+      final manager = DownloadManager(client: MockClient((_) async => http.Response.bytes([1, 2, 3], 200)));
+      final repository = FakeBunnyRepository();
+
+      await manager.downloadPost(_post(fileMd5: null), repository, tempDir.path);
+
+      expect(repository.voteCalls, isEmpty);
+    });
+
+    test('does not queue an upvote for an Inkbunny post, which has no vote API', () async {
+      final manager = DownloadManager(client: MockClient((_) async => http.Response.bytes([1, 2, 3], 200)));
+      final repository = FakeBunnyRepository();
+
+      await manager.downloadPost(_post(site: BunnySite.inkbunny, fileMd5: null), repository, tempDir.path, autoUpvote: true);
+
+      expect(repository.voteCalls, isEmpty);
+    });
+
+    test('does not queue an upvote when there is no file to download', () async {
+      final manager = DownloadManager(client: MockClient((_) async => fail('should not be called')));
+      final repository = FakeBunnyRepository();
+
+      await manager.downloadPost(_post(fileUrl: null), repository, tempDir.path, autoUpvote: true);
+
+      expect(repository.voteCalls, isEmpty);
+    });
+
+    test('does not queue an upvote when the download fails', () async {
+      final manager = DownloadManager(client: MockClient((_) async => http.Response('', 404)));
+      final repository = FakeBunnyRepository();
+
+      await manager.downloadPost(_post(), repository, tempDir.path, autoUpvote: true);
+
+      expect(repository.voteCalls, isEmpty);
     });
   });
 }

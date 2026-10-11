@@ -713,6 +713,69 @@ void main() {
       expect(repository.processQueueCallCount, 0);
     });
 
+    testWidgets('queues and drains an upvote after a successful download when auto-upvote-on-download is on (M14.2)', (WidgetTester tester) async {
+      SharedPreferences.setMockInitialValues({'download_destination_folder': tempDir.path, 'auto_upvote_on_download': true});
+      final repository = FakeBunnyRepository();
+      final post = _post(fileExt: 'jpg');
+      final downloadManager = DownloadManager(client: MockClient((_) async => http.Response.bytes([1, 2, 3], 200)));
+
+      await tester.pumpWidget(
+        wrapWithLocalization(
+          PostDetailScreen(
+            post: post,
+            repository: repository,
+            displaySettingsStore: const DisplaySettingsStore(),
+            syncSettingsStore: const SyncSettingsStore(),
+            downloadSettingsStore: const DownloadSettingsStore(),
+            downloadManager: downloadManager,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.runAsync(() async {
+        await tester.tap(find.ancestor(of: find.byTooltip('Download'), matching: find.byType(IconButton)));
+        await tester.pump();
+        await Future<void>.delayed(const Duration(milliseconds: 100));
+        await tester.pump();
+      });
+      await tester.pump();
+
+      expect(repository.voteCalls, [(post.id, 1)]);
+      expect(repository.processQueueCallCount, 1);
+    });
+
+    testWidgets('does not queue an upvote when auto-upvote-on-download is off (the default)', (WidgetTester tester) async {
+      final repository = FakeBunnyRepository();
+      final post = _post(fileExt: 'jpg');
+      final downloadManager = DownloadManager(client: MockClient((_) async => http.Response.bytes([1, 2, 3], 200)));
+
+      await tester.pumpWidget(
+        wrapWithLocalization(
+          PostDetailScreen(
+            post: post,
+            repository: repository,
+            displaySettingsStore: const DisplaySettingsStore(),
+            syncSettingsStore: const SyncSettingsStore(),
+            downloadSettingsStore: const DownloadSettingsStore(),
+            downloadManager: downloadManager,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.runAsync(() async {
+        await tester.tap(find.ancestor(of: find.byTooltip('Download'), matching: find.byType(IconButton)));
+        await tester.pump();
+        await Future<void>.delayed(const Duration(milliseconds: 100));
+        await tester.pump();
+      });
+      await tester.pump();
+
+      expect(repository.voteCalls, isEmpty);
+      expect(repository.processQueueCallCount, 0);
+    });
+
     testWidgets('tapping download with a mismatched checksum shows the mismatch message', (WidgetTester tester) async {
       final repository = FakeBunnyRepository();
       final post = _post(fileExt: 'jpg', fileMd5: 'not-the-real-checksum');

@@ -145,6 +145,33 @@ void main() {
     expect(await downloadStore.loadAutoFavoriteOnDownload(), isTrue);
   });
 
+  testWidgets('toggling auto-upvote on download persists it (M14.2)', (WidgetTester tester) async {
+    const downloadStore = DownloadSettingsStore();
+
+    await tester.pumpWidget(
+      wrapWithLocalization(
+        SettingsScreen(
+          repository: FakeBunnyRepository(),
+          themeSettingsStore: const ThemeSettingsStore(),
+          lockService: AppLockService(FakeSecretStore()),
+          syncSettingsStore: const SyncSettingsStore(),
+          downloadSettingsStore: downloadStore,
+          displaySettingsStore: const DisplaySettingsStore(),
+          onThemeModeChanged: (_) {},
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(await downloadStore.loadAutoUpvoteOnDownload(), isFalse);
+
+    await tester.dragUntilVisible(find.text('Auto-upvote on download'), find.byType(ListView), const Offset(0, -100));
+    await tester.tap(find.widgetWithText(SwitchListTile, 'Auto-upvote on download'));
+    await tester.pumpAndSettle();
+
+    expect(await downloadStore.loadAutoUpvoteOnDownload(), isTrue);
+  });
+
   testWidgets('picking a preview quality and editing grid columns persists both', (WidgetTester tester) async {
     const displayStore = DisplaySettingsStore();
 

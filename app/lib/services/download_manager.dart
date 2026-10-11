@@ -49,11 +49,14 @@ class DownloadManager {
   /// [autoFavorite] (M10.1) queues a favorite-add for [post] once the file is
   /// actually written to disk (a [DownloadOutcome.verified] or
   /// [DownloadOutcome.checksumMismatch] result -- never [noFileUrl]/[failed],
-  /// since nothing was downloaded in those cases). Only queues it --
-  /// draining the action queue afterward is left to the caller, which
-  /// already decides that for its own batching needs (an immediate drain for
-  /// a single download, one drain after a whole mass-download loop).
-  Future<DownloadResult> downloadPost(BunnyPost post, BunnyRepository repository, String destinationFolder, {bool autoFavorite = false}) async {
+  /// since nothing was downloaded in those cases). [autoUpvote] (M14.2) does
+  /// the same for an upvote, but e621-only -- Inkbunny has no vote API, same
+  /// gate every other vote-related feature in this app already applies.
+  /// Both only queue the action -- draining the action queue afterward is
+  /// left to the caller, which already decides that for its own batching
+  /// needs (an immediate drain for a single download, one drain after a
+  /// whole mass-download loop).
+  Future<DownloadResult> downloadPost(BunnyPost post, BunnyRepository repository, String destinationFolder, {bool autoFavorite = false, bool autoUpvote = false}) async {
     final url = post.fileUrl;
     if (url == null) {
       return const DownloadResult(DownloadOutcome.noFileUrl);
@@ -80,6 +83,9 @@ class DownloadManager {
       await repository.recordDownload(post.id, filePath, checksumMd5: checksum, verified: verified);
       if (autoFavorite) {
         await repository.queueFavoriteAdd(post.id);
+      }
+      if (autoUpvote && post.site == BunnySite.e621) {
+        await repository.queueVote(post.id, 1);
       }
 
       return DownloadResult(verified ? DownloadOutcome.verified : DownloadOutcome.checksumMismatch, filePath: filePath);

@@ -1361,6 +1361,20 @@ this file is the single source of truth for "what's done" across sessions.
   badge updates live as its own search finishes rather than only once at the very end (and
   nothing already-synced is lost if the run is ever interrupted partway through).
 
+- [x] **M14.2 — Auto-upvote on download**
+  Direct user feedback: a vote counterpart to the existing auto-favorite-on-download (M10.1),
+  mirroring its exact shape. `DownloadSettingsStore.loadAutoUpvoteOnDownload`/
+  `saveAutoUpvoteOnDownload` (key `auto_upvote_on_download`, default off).
+  `DownloadManager.downloadPost` gained `{bool autoUpvote = false}`: on a verified or
+  checksum-mismatch outcome (the file was still written either way) it calls
+  `repository.queueVote(post.id, 1)` -- but only for e621, since Inkbunny has no vote API at
+  all, the same gate every other vote-related feature in this app already applies. Both call
+  sites (`PostDetailScreen._downloadFile`, `PostGridScreen`'s mass-download loop) load the new
+  setting alongside the existing `autoFavorite` one and widen their
+  `if (autoFavorite) { await processQueue(); }` drain condition to `if (autoFavorite ||
+  autoUpvote)`. `SettingsScreen`'s Downloads section gained a second `SwitchListTile`
+  ("Auto-upvote on download") next to the existing auto-favorite toggle.
+
 - [ ] **M12 — Cross-platform polish**
   Responsive desktop/mobile layout, consistent theming pass, Windows cross-build via
   dockcross validated end-to-end (server + core), packaging. Needs to resolve the OpenSSL-
