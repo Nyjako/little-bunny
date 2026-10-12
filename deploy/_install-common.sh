@@ -11,6 +11,21 @@ bunny_install_and_start() {
     install -Dm755 "$BINARY" /usr/local/bin/bunny_server
     install -Dm644 "$REPO_ROOT/deploy/bunny-server.service" "/etc/systemd/system/$UNIT_NAME.service"
 
+    # Catches a missing shared library (e.g. the binary was built on a
+    # different distro/machine than this one, install-prebuilt.sh's main use
+    # case) before it turns into an opaque "service won't start" loop in
+    # journalctl -- the real check only means anything run on the actual
+    # target, not wherever the binary was built.
+    local missing
+    missing="$(ldd /usr/local/bin/bunny_server 2>&1 | grep "not found" || true)"
+    if [ -n "$missing" ]; then
+        echo "error: /usr/local/bin/bunny_server is missing shared libraries on this machine:" >&2
+        echo "$missing" | sed 's/^/  /' >&2
+        echo "Install the matching packages (e.g. via your package manager's search for" >&2
+        echo "the library name above) and re-run this script." >&2
+        exit 1
+    fi
+
     systemctl daemon-reload
     systemctl enable --now "$UNIT_NAME"
 
