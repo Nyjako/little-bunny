@@ -34,8 +34,72 @@ endif()
 include(cmake/get_cpm.cmake)
 
 # OpenSSL is the one dependency not fetched via CPM: it's treated as a system
-# TLS provider (like the compiler), see docs/architecture.md.
-find_package(OpenSSL REQUIRED)
+# TLS provider (like the compiler), see docs/architecture.md. Only civetweb
+# and server/src/auth.c|tls.c call into it directly, and both are already
+# gated behind BUNNY_BUILD_SERVER below -- so this find_package must be too,
+# otherwise it blocks every BUNNY_BUILD_SERVER=OFF consumer (bunny_core_ffi/,
+# i.e. every Android build) from configuring at all, since the Android NDK
+# ships no prebuilt OpenSSL (M12.1).
+if(BUNNY_BUILD_SERVER)
+  find_package(OpenSSL REQUIRED)
+endif()
+
+# curl (libs/common's HTTP client) needs a TLS backend regardless of
+# BUNNY_BUILD_SERVER, since e621/Inkbunny API calls happen from the FFI/core
+# libs too. On Android there's no prebuilt OpenSSL to use (same gap as
+# above), so it gets mbedTLS instead -- a small, pure-CMake library that
+# cross-compiles cleanly for the NDK via a plain CPM add_subdirectory, unlike
+# OpenSSL's own Configure+make build system. Every other target keeps using
+# system OpenSSL, already proven to work there.
+if(ANDROID)
+  CPMAddPackage(
+    NAME MbedTLS
+    GITHUB_REPOSITORY Mbed-TLS/mbedtls
+    GIT_TAG v3.6.6
+    OPTIONS
+      "ENABLE_PROGRAMS OFF"
+      "ENABLE_TESTING OFF"
+      "USE_STATIC_MBEDTLS_LIBRARY ON"
+      "USE_SHARED_MBEDTLS_LIBRARY OFF"
+  )
+  # curl's own CMake/FindMbedTLS.cmake module is built around discovering an
+  # already-installed mbedTLS via pkg-config/CMake-config/find_library --
+  # none of which apply to a CPM add_subdirectory fetch that never runs
+  # install(). Whether curl's find_package(MbedTLS MODULE REQUIRED) actually
+  # runs that module's own discovery logic or gets transparently redirected
+  # to CPM's already-added package instead depends on the CMake version in
+  # use (observed: redirected under a system CMake 4.4 install, NOT
+  # redirected under the Android SDK's bundled CMake 3.22.1, which runs the
+  # real module and needs its input variables satisfied) -- so satisfy both
+  # paths at once: pre-set the variables FindMbedTLS.cmake's manual-discovery
+  # branch checks, AND define the CURL::mbedtls target it would have created,
+  # so whichever path actually executes short-circuits successfully.
+  set(MBEDTLS_INCLUDE_DIR "${MbedTLS_SOURCE_DIR}/include" CACHE PATH "" FORCE)
+  set(MBEDTLS_LIBRARY "${MbedTLS_BINARY_DIR}/library/libmbedtls.a" CACHE FILEPATH "" FORCE)
+  set(MBEDX509_LIBRARY "${MbedTLS_BINARY_DIR}/library/libmbedx509.a" CACHE FILEPATH "" FORCE)
+  set(MBEDCRYPTO_LIBRARY "${MbedTLS_BINARY_DIR}/library/libmbedcrypto.a" CACHE FILEPATH "" FORCE)
+  set(MBEDTLS_VERSION "3.6.6")
+  set(MBEDTLS_FOUND TRUE)
+  if(NOT TARGET CURL::mbedtls)
+    add_library(CURL::mbedtls INTERFACE IMPORTED)
+    target_link_libraries(CURL::mbedtls INTERFACE mbedtls mbedx509 mbedcrypto)
+  endif()
+  set(MBEDTLS_VERSION "3.6.6")
+  # The HAVE_MBEDTLS_DES_CRYPT_ECB probe runs as a try_compile() in an
+  # isolated scratch project that can't see CURL::mbedtls regardless -- skip
+  # it outright. curl doesn't need legacy DES for anything this app actually
+  # uses (plain HTTPS GET/POST to e621/Inkbunny), so "not present" is a safe
+  # answer either way.
+  set(HAVE_MBEDTLS_DES_CRYPT_ECB 0 CACHE BOOL "" FORCE)
+endif()
+
+if(ANDROID)
+  set(BUNNY_CURL_USE_OPENSSL OFF)
+  set(BUNNY_CURL_USE_MBEDTLS ON)
+else()
+  set(BUNNY_CURL_USE_OPENSSL ON)
+  set(BUNNY_CURL_USE_MBEDTLS OFF)
+endif()
 
 CPMAddPackage(
   NAME curl
@@ -45,7 +109,8 @@ CPMAddPackage(
     "BUILD_CURL_EXE OFF"
     "BUILD_SHARED_LIBS OFF"
     "BUILD_TESTING OFF"
-    "CURL_USE_OPENSSL ON"
+    "CURL_USE_OPENSSL ${BUNNY_CURL_USE_OPENSSL}"
+    "CURL_USE_MBEDTLS ${BUNNY_CURL_USE_MBEDTLS}"
     "CURL_USE_LIBPSL OFF"
     "CURL_DISABLE_LDAP ON"
     "CURL_DISABLE_LDAPS ON"
@@ -89,7 +154,12 @@ if(sqlite3_ADDED)
     SQLITE_OMIT_LOAD_EXTENSION
     SQLITE_OMIT_DEPRECATED
   )
-  if(NOT WIN32)
+  # Android's Bionic libc has pthread built in -- there's no separate
+  # libpthread to link against (NDK 28 doesn't even ship the old empty
+  # compatibility stub), unlike every other non-Windows target (M12.1).
+  if(ANDROID)
+    target_link_libraries(sqlite3 PUBLIC m)
+  elseif(NOT WIN32)
     target_link_libraries(sqlite3 PUBLIC pthread m)
   endif()
 endif()

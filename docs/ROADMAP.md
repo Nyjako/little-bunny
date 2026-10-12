@@ -200,11 +200,10 @@ this file is the single source of truth for "what's done" across sessions.
   isolate. Tested against the real compiled shared library (`:memory:`-backed), both
   directly (`bunny_core_ffi/test/`) and through the repository interface
   (`app/test/repository/ffi_bunny_repository_test.dart`).
-  **Known gap**: Android's NDK has no prebuilt OpenSSL, so `fvm flutter build apk` fails at
-  the CMake configure step (`find_package(OpenSSL REQUIRED)`) — confirmed by direct
-  reproduction, same class of problem as the existing Windows gap, deferred to M12
-  alongside it. Linux desktop (this environment's only build-verifiable desktop target)
-  builds and runs correctly.
+  Android's NDK has no prebuilt OpenSSL, which used to make `fvm flutter build apk` fail at
+  the CMake configure step (`find_package(OpenSSL REQUIRED)`) — fixed in M12.1 by gating
+  that `find_package` behind `BUNNY_BUILD_SERVER` and switching curl's TLS backend to
+  mbedTLS on Android. Linux desktop builds and runs correctly, unaffected.
 
 - [x] **M6.3 — HTTP client + networked-mode repository, wired together**
   `lib/repository/http_bunny_repository.dart` implements `BunnyRepository` against the M5
@@ -310,11 +309,12 @@ this file is the single source of truth for "what's done" across sessions.
   platform theme — both required for `local_auth`'s `BiometricPrompt` to host its dialog
   fragment; the `USE_BIOMETRIC` permission itself needs no manual manifest edit, since
   `local_auth_android` already declares it in its own manifest, merged in automatically.
-  **Known gap**: none of this is verified by any real build — `flutter build apk` already
-  fails at the OpenSSL step (M6.2, deferred to M12), and `Platform.isAndroid` is false on
-  this dev machine's test host anyway, so neither a real build nor the automated test suite
-  exercises the biometric path. Written correctly per `local_auth`'s own reference example
-  regardless, to avoid revisiting this milestone once Android builds again.
+  A real `flutter build apk` now succeeds (M12.1) and confirmed these Android-specific files
+  (`MainActivity.kt`, both `styles.xml` variants) parse and package correctly through
+  Gradle — it also caught and fixed a pre-existing, unrelated invalid-XML-comment bug in
+  both `styles.xml` files. `Platform.isAndroid` is still false on this dev machine's test
+  host, so the automated test suite still doesn't exercise the biometric path itself; only a
+  real device/emulator run would confirm `BiometricPrompt` end-to-end.
 
 - [x] **M8 — Browse & search UI**
   Manage saved searches, post grid/list with unseen markers, post detail view with full
@@ -1403,7 +1403,16 @@ this file is the single source of truth for "what's done" across sessions.
   sort). `server_scheduler_start` gained a `data_dir` parameter to build this path.
 
 - [ ] **M12 — Cross-platform polish**
-  Responsive desktop/mobile layout, consistent theming pass, Windows cross-build via
-  dockcross validated end-to-end (server + core), packaging. Needs to resolve the OpenSSL-
-  for-mingw gap noted in `architecture.md` — `make windows` configures/builds fine up to
-  the `find_package(OpenSSL REQUIRED)` step today.
+  Responsive desktop/mobile layout, consistent theming pass, Windows app build, packaging.
+  - [x] **M12.1 — Android client build.** `fvm flutter build apk` now succeeds end-to-end
+    (see M6.2/M7.4 entries above for the fix); `make app-android`/`make app-linux` added as
+    convenience wrappers around the Flutter build commands.
+  - Still outstanding: a Windows build of the Flutter *app* itself, cross-compiled from
+    Linux — explicitly deferred, not attempted, after research found Flutter has no
+    official Linux→Windows cross-build support (even Dart's AOT `gen_snapshot.exe` can't
+    cross-compile for Windows from Linux — open `flutter/flutter` issue #110585 — and
+    dockcross has no x86_64 LLVM-MinGW Windows image to fit the only known third-party
+    workaround); responsive layout; theming pass; packaging. The separate Windows
+    cross-build of the *C server/libraries* via dockcross (`make windows`) is unrelated and
+    tracked by the `architecture.md` "Cross-compilation" section's own known gap, not by
+    this milestone.

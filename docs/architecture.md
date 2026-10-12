@@ -365,13 +365,27 @@ M6).
   `flutter build`/`run` does, so the library must be built once first (either via a real
   `flutter build linux`, or a standalone `cmake -S bunny_core_ffi/src -B <dir> && cmake
   --build <dir>`) with its directory on `LD_LIBRARY_PATH` when running the tests.
-- **Known gap:** Android's NDK ships no prebuilt OpenSSL, so `fvm flutter build apk` fails at
-  the CMake configure step (`find_package(OpenSSL REQUIRED)` in the reused top-level
-  `CMakeLists.txt`) — confirmed by direct reproduction of the Gradle/CMake invocation. Same
-  class of problem as the Windows cross-compilation gap above, deferred to the same milestone
-  (M12) for the same reason (needs a prebuilt/self-built OpenSSL for the target, or a
-  different curl TLS backend). Linux desktop, this environment's only build-verifiable
-  desktop target, builds and runs correctly.
+- **Android build fixed (M12.1).** The Android NDK ships no prebuilt OpenSSL, so the
+  top-level `find_package(OpenSSL REQUIRED)` used to fail `fvm flutter build apk`'s CMake
+  configure step. Fixed by gating that `find_package` behind `BUNNY_BUILD_SERVER` (it's only
+  ever needed by civetweb/`server/src/auth.c`/`server/src/tls.c`, all already
+  `BUNNY_BUILD_SERVER`-gated — Android never builds any of them) and switching curl's TLS
+  backend to mbedTLS specifically `if(ANDROID)`: a small, pure-CMake library with no system
+  dependency, fetched via CPM `add_subdirectory` (unlike OpenSSL's own `Configure`+`make`
+  build, which doesn't fit CPM's model). curl's own `CMake/FindMbedTLS.cmake` module expects
+  an already-installed mbedTLS (pkg-config/CMake-config/`find_library`), none of which apply
+  to a CPM fetch that never runs `install()`, so the top-level `CMakeLists.txt` pre-sets its
+  discovery variables (`MBEDTLS_INCLUDE_DIR`/`MBEDTLS_LIBRARY`/`MBEDX509_LIBRARY`/
+  `MBEDCRYPTO_LIBRARY`) *and* pre-creates the `CURL::mbedtls` target it would otherwise
+  create — needed because which path actually runs depends on the CMake version (the Android
+  SDK's bundled CMake 3.22.1, which is what Gradle's `externalNativeBuild.cmake` actually
+  invokes, runs the real discovery logic; a newer system CMake appeared to redirect through
+  CPM instead). Android's Bionic libc also has no separate `libpthread` (pthread is built
+  into libc), so `sqlite3`'s link libraries are `m` only on Android instead of `pthread m`.
+  Verified via a real `fvm flutter build apk --target-platform android-arm64 --debug`,
+  producing a working APK with `libbunny_core_ffi.so` for all three bundled ABIs
+  (arm64-v8a/armeabi-v7a/x86_64); Linux desktop's `make build`/`make test` continue to use
+  OpenSSL unchanged. The Windows app cross-compilation gap above remains open.
 
 **Networked mode / HTTP (M6.3)**: `lib/repository/http_bunny_repository.dart` implements
 `BunnyRepository` against the exact REST surface documented in "C server (M5)" above, using
@@ -556,24 +570,27 @@ hashing would just be extra bespoke crypto code with no real benefit.
   (set up via `LockSetupScreen`), not the phone's screen lock, matching "a per-device,
   client-side setting" independent of the OS. Every platform (and Android whenever biometric
   fails, isn't enrolled, or isn't available) falls back to the same PIN/password entry field.
-- **Android integration, unverified by any real build**: `local_auth`'s `BiometricPrompt`
-  needs a `FragmentActivity` to host its dialog fragment and an AppCompat-based activity
-  theme. Per `local_auth_android`'s own reference example
-  (`local_auth_android`'s pub cache `example/android/`), `app/android/app/src/main/kotlin/
-  .../MainActivity.kt` now extends `FlutterFragmentActivity` instead of `FlutterActivity`,
-  and both `values/styles.xml` and `values-night/styles.xml`'s `LaunchTheme`/`NormalTheme`
-  now inherit `Theme.AppCompat.*` instead of the plain `@android:style/Theme.*` Flutter
-  scaffolds by default — the `windowBackground`/splash-screen behavior is otherwise
-  unchanged, only the theme's parent lineage. No manifest edit was needed for the
-  `USE_BIOMETRIC` permission itself: `local_auth_android`'s own bundled manifest already
-  declares it, and Gradle's manifest merger folds it into the app's final manifest
-  automatically. AppCompat itself needed no new Gradle dependency either — it's already
-  transitively available via Flutter's own Android embedding. None of this can be
-  build-verified in this dev environment: `flutter build apk` already fails at the OpenSSL
-  configure step (M6.2, deferred to M12) before Gradle ever reaches these files, and
-  `Platform.isAndroid` is false on this dev machine's test host, so the automated test suite
-  never exercises the biometric branch either (`test/screens/lock_screen_test.dart` only
-  covers the PIN/password fallback, which every platform shares).
+- **Android integration**: `local_auth`'s `BiometricPrompt` needs a `FragmentActivity` to
+  host its dialog fragment and an AppCompat-based activity theme. Per `local_auth_android`'s
+  own reference example (`local_auth_android`'s pub cache `example/android/`),
+  `app/android/app/src/main/kotlin/.../MainActivity.kt` now extends `FlutterFragmentActivity`
+  instead of `FlutterActivity`, and both `values/styles.xml` and `values-night/styles.xml`'s
+  `LaunchTheme`/`NormalTheme` now inherit `Theme.AppCompat.*` instead of the plain
+  `@android:style/Theme.*` Flutter scaffolds by default — the `windowBackground`/
+  splash-screen behavior is otherwise unchanged, only the theme's parent lineage. No manifest
+  edit was needed for the `USE_BIOMETRIC` permission itself: `local_auth_android`'s own
+  bundled manifest already declares it, and Gradle's manifest merger folds it into the app's
+  final manifest automatically. AppCompat itself needed no new Gradle dependency either —
+  it's already transitively available via Flutter's own Android embedding. A real
+  `flutter build apk` now succeeds (M12.1) and confirmed these two styles.xml files parse and
+  package correctly through Gradle's resource merger (it also caught and fixed a pre-existing
+  unrelated bug: a literal `--` inside an XML comment, invalid per the XML spec, that had
+  gone unnoticed because the build never previously got far enough to validate it). The
+  biometric prompt itself still isn't exercised by the automated test suite —
+  `Platform.isAndroid` is false on this dev machine's test host, so
+  `test/screens/lock_screen_test.dart` only covers the PIN/password fallback, which every
+  platform shares — only a real device/emulator run would confirm the `BiometricPrompt` flow
+  itself.
 
 ## Browse & search (M8)
 
