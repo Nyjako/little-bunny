@@ -5,6 +5,7 @@ import 'package:little_bunny/screens/settings_screen.dart';
 import 'package:little_bunny/settings/app_lock_service.dart';
 import 'package:little_bunny/settings/display_settings_store.dart';
 import 'package:little_bunny/settings/download_settings_store.dart';
+import 'package:little_bunny/settings/repository_settings_store.dart';
 import 'package:little_bunny/settings/sync_settings_store.dart';
 import 'package:little_bunny/settings/theme_settings_store.dart';
 import 'package:path_provider_platform_interface/path_provider_platform_interface.dart';
@@ -21,11 +22,27 @@ void main() {
     PathProviderPlatform.instance = FakePathProviderPlatform();
   });
 
+  RepositorySettingsStore settingsStore() => RepositorySettingsStore(FakeSecretStore());
+
   testWidgets('shows the persisted theme mode selected', (WidgetTester tester) async {
     const themeStore = ThemeSettingsStore();
     await themeStore.save(ThemeMode.light);
 
-    await tester.pumpWidget(wrapWithLocalization(SettingsScreen(repository: FakeBunnyRepository(), themeSettingsStore: themeStore, lockService: AppLockService(FakeSecretStore()), syncSettingsStore: const SyncSettingsStore(), downloadSettingsStore: const DownloadSettingsStore(), displaySettingsStore: const DisplaySettingsStore(), onThemeModeChanged: (_) {})));
+    await tester.pumpWidget(
+      wrapWithLocalization(
+        SettingsScreen(
+          repository: FakeBunnyRepository(),
+          themeSettingsStore: themeStore,
+          lockService: AppLockService(FakeSecretStore()),
+          syncSettingsStore: const SyncSettingsStore(),
+          downloadSettingsStore: const DownloadSettingsStore(),
+          displaySettingsStore: const DisplaySettingsStore(),
+          settingsStore: settingsStore(),
+          onThemeModeChanged: (_) {},
+          onRepositoryConfigured: (_) {},
+        ),
+      ),
+    );
     await tester.pumpAndSettle();
 
     final button = tester.widget<SegmentedButton<ThemeMode>>(find.byType(SegmentedButton<ThemeMode>));
@@ -36,7 +53,21 @@ void main() {
     const themeStore = ThemeSettingsStore();
     ThemeMode? notified;
 
-    await tester.pumpWidget(wrapWithLocalization(SettingsScreen(repository: FakeBunnyRepository(), themeSettingsStore: themeStore, lockService: AppLockService(FakeSecretStore()), syncSettingsStore: const SyncSettingsStore(), downloadSettingsStore: const DownloadSettingsStore(), displaySettingsStore: const DisplaySettingsStore(), onThemeModeChanged: (mode) => notified = mode)));
+    await tester.pumpWidget(
+      wrapWithLocalization(
+        SettingsScreen(
+          repository: FakeBunnyRepository(),
+          themeSettingsStore: themeStore,
+          lockService: AppLockService(FakeSecretStore()),
+          syncSettingsStore: const SyncSettingsStore(),
+          downloadSettingsStore: const DownloadSettingsStore(),
+          displaySettingsStore: const DisplaySettingsStore(),
+          settingsStore: settingsStore(),
+          onThemeModeChanged: (mode) => notified = mode,
+          onRepositoryConfigured: (_) {},
+        ),
+      ),
+    );
     await tester.pumpAndSettle();
 
     await tester.tap(find.text('Light'));
@@ -47,7 +78,21 @@ void main() {
   });
 
   testWidgets('tapping the app lock entry opens LockSetupScreen', (WidgetTester tester) async {
-    await tester.pumpWidget(wrapWithLocalization(SettingsScreen(repository: FakeBunnyRepository(), themeSettingsStore: const ThemeSettingsStore(), lockService: AppLockService(FakeSecretStore()), syncSettingsStore: const SyncSettingsStore(), downloadSettingsStore: const DownloadSettingsStore(), displaySettingsStore: const DisplaySettingsStore(), onThemeModeChanged: (_) {})));
+    await tester.pumpWidget(
+      wrapWithLocalization(
+        SettingsScreen(
+          repository: FakeBunnyRepository(),
+          themeSettingsStore: const ThemeSettingsStore(),
+          lockService: AppLockService(FakeSecretStore()),
+          syncSettingsStore: const SyncSettingsStore(),
+          downloadSettingsStore: const DownloadSettingsStore(),
+          displaySettingsStore: const DisplaySettingsStore(),
+          settingsStore: settingsStore(),
+          onThemeModeChanged: (_) {},
+          onRepositoryConfigured: (_) {},
+        ),
+      ),
+    );
     await tester.pumpAndSettle();
 
     // The Downloads section (M9.4) pushed "Manage app lock" past the
@@ -65,7 +110,17 @@ void main() {
 
     await tester.pumpWidget(
       wrapWithLocalization(
-        SettingsScreen(repository: FakeBunnyRepository(), themeSettingsStore: const ThemeSettingsStore(), lockService: AppLockService(FakeSecretStore()), syncSettingsStore: const SyncSettingsStore(), downloadSettingsStore: const DownloadSettingsStore(), displaySettingsStore: const DisplaySettingsStore(), onThemeModeChanged: (_) {}),
+        SettingsScreen(
+          repository: FakeBunnyRepository(),
+          themeSettingsStore: const ThemeSettingsStore(),
+          lockService: AppLockService(FakeSecretStore()),
+          syncSettingsStore: const SyncSettingsStore(),
+          downloadSettingsStore: const DownloadSettingsStore(),
+          displaySettingsStore: const DisplaySettingsStore(),
+          settingsStore: settingsStore(),
+          onThemeModeChanged: (_) {},
+          onRepositoryConfigured: (_) {},
+        ),
       ),
     );
     await tester.pumpAndSettle();
@@ -85,7 +140,9 @@ void main() {
           syncSettingsStore: syncStore,
           displaySettingsStore: const DisplaySettingsStore(),
           downloadSettingsStore: const DownloadSettingsStore(),
+          settingsStore: settingsStore(),
           onThemeModeChanged: (_) {},
+          onRepositoryConfigured: (_) {},
         ),
       ),
     );
@@ -106,9 +163,12 @@ void main() {
           repository: FakeBunnyRepository(),
           themeSettingsStore: const ThemeSettingsStore(),
           lockService: AppLockService(FakeSecretStore()),
-          syncSettingsStore: const SyncSettingsStore(), downloadSettingsStore: const DownloadSettingsStore(),
+          syncSettingsStore: const SyncSettingsStore(),
+          downloadSettingsStore: const DownloadSettingsStore(),
           displaySettingsStore: const DisplaySettingsStore(),
+          settingsStore: settingsStore(),
           onThemeModeChanged: (_) {},
+          onRepositoryConfigured: (_) {},
         ),
       ),
     );
@@ -131,7 +191,9 @@ void main() {
           syncSettingsStore: const SyncSettingsStore(),
           downloadSettingsStore: downloadStore,
           displaySettingsStore: const DisplaySettingsStore(),
+          settingsStore: settingsStore(),
           onThemeModeChanged: (_) {},
+          onRepositoryConfigured: (_) {},
         ),
       ),
     );
@@ -139,6 +201,13 @@ void main() {
 
     expect(await downloadStore.loadAutoFavoriteOnDownload(), isFalse);
 
+    // A generous fixed scroll (rather than dragUntilVisible's "just enough
+    // to barely exist" stopping point) so the switch lands solidly inside
+    // the test viewport rather than clipped at its edge, where a tap can
+    // silently miss (M15 added a Connection section above this one, pushing
+    // it further down than when this test was first written).
+    await tester.drag(find.byType(ListView), const Offset(0, -400));
+    await tester.pumpAndSettle();
     await tester.tap(find.widgetWithText(SwitchListTile, 'Auto-favorite on download'));
     await tester.pumpAndSettle();
 
@@ -157,7 +226,9 @@ void main() {
           syncSettingsStore: const SyncSettingsStore(),
           downloadSettingsStore: downloadStore,
           displaySettingsStore: const DisplaySettingsStore(),
+          settingsStore: settingsStore(),
           onThemeModeChanged: (_) {},
+          onRepositoryConfigured: (_) {},
         ),
       ),
     );
@@ -181,9 +252,12 @@ void main() {
           repository: FakeBunnyRepository(),
           themeSettingsStore: const ThemeSettingsStore(),
           lockService: AppLockService(FakeSecretStore()),
-          syncSettingsStore: const SyncSettingsStore(), downloadSettingsStore: const DownloadSettingsStore(),
+          syncSettingsStore: const SyncSettingsStore(),
+          downloadSettingsStore: const DownloadSettingsStore(),
           displaySettingsStore: displayStore,
+          settingsStore: settingsStore(),
           onThemeModeChanged: (_) {},
+          onRepositoryConfigured: (_) {},
         ),
       ),
     );
@@ -211,7 +285,9 @@ void main() {
           syncSettingsStore: const SyncSettingsStore(),
           downloadSettingsStore: const DownloadSettingsStore(),
           displaySettingsStore: const DisplaySettingsStore(),
+          settingsStore: settingsStore(),
           onThemeModeChanged: (_) {},
+          onRepositoryConfigured: (_) {},
         ),
       ),
     );
@@ -242,5 +318,56 @@ void main() {
 
     expect(find.text('gore'), findsNothing);
     expect(await repository.getBlacklist(BunnySite.inkbunny), isEmpty);
+  });
+
+  testWidgets('Connection section shows the persisted mode (M15)', (WidgetTester tester) async {
+    final store = settingsStore();
+    await store.saveStandalone();
+
+    await tester.pumpWidget(
+      wrapWithLocalization(
+        SettingsScreen(
+          repository: FakeBunnyRepository(),
+          themeSettingsStore: const ThemeSettingsStore(),
+          lockService: AppLockService(FakeSecretStore()),
+          syncSettingsStore: const SyncSettingsStore(),
+          downloadSettingsStore: const DownloadSettingsStore(),
+          displaySettingsStore: const DisplaySettingsStore(),
+          settingsStore: store,
+          onThemeModeChanged: (_) {},
+          onRepositoryConfigured: (_) {},
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Standalone'), findsOneWidget);
+  });
+
+  testWidgets('tapping "Switch connection mode" opens the reconfigure screen (M15)', (WidgetTester tester) async {
+    final store = settingsStore();
+    await store.saveStandalone();
+
+    await tester.pumpWidget(
+      wrapWithLocalization(
+        SettingsScreen(
+          repository: FakeBunnyRepository(),
+          themeSettingsStore: const ThemeSettingsStore(),
+          lockService: AppLockService(FakeSecretStore()),
+          syncSettingsStore: const SyncSettingsStore(),
+          downloadSettingsStore: const DownloadSettingsStore(),
+          displaySettingsStore: const DisplaySettingsStore(),
+          settingsStore: store,
+          onThemeModeChanged: (_) {},
+          onRepositoryConfigured: (_) {},
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Switch connection mode'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Switch connection'), findsOneWidget);
   });
 }

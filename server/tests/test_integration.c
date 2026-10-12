@@ -569,6 +569,33 @@ void test_search_pin_and_unpin(void)
     free(response.data);
 }
 
+void test_search_touch_viewed(void)
+{
+    response_buffer_t response = {0};
+
+    long status = do_request("POST", "/searches", "{\"site\":\"e621\",\"label\":\"wolves\",\"query\":\"wolf\",\"interval_hours\":24}", &response, true, NULL);
+    TEST_ASSERT_EQUAL(201, status);
+    free(response.data);
+    memset(&response, 0, sizeof(response));
+
+    status = do_request("GET", "/searches", NULL, &response, true, NULL);
+    TEST_ASSERT_EQUAL(200, status);
+    TEST_ASSERT_NOT_NULL(strstr(response.data, "\"last_viewed_at\":null"));
+    free(response.data);
+    memset(&response, 0, sizeof(response));
+
+    status = do_request("POST", "/searches/1/viewed", NULL, &response, true, NULL);
+    TEST_ASSERT_EQUAL(200, status);
+    TEST_ASSERT_NOT_NULL(strstr(response.data, "\"ok\":true"));
+    free(response.data);
+    memset(&response, 0, sizeof(response));
+
+    status = do_request("GET", "/searches", NULL, &response, true, NULL);
+    TEST_ASSERT_EQUAL(200, status);
+    TEST_ASSERT_NULL(strstr(response.data, "\"last_viewed_at\":null"));
+    free(response.data);
+}
+
 void test_search_auto_favorite_create_and_update(void)
 {
     response_buffer_t response = {0};
@@ -707,6 +734,7 @@ int main(void)
     RUN_TEST(test_sync_single_search_forces_even_when_not_due);
     RUN_TEST(test_blacklist_add_list_remove);
     RUN_TEST(test_search_pin_and_unpin);
+    RUN_TEST(test_search_touch_viewed);
     RUN_TEST(test_search_auto_favorite_create_and_update);
     RUN_TEST(test_my_inkbunny_favorites_searches_and_caches_with_favorite_marked);
     RUN_TEST(test_scheduler_syncs_search_automatically);

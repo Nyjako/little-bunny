@@ -52,6 +52,19 @@ class AppLocalizationsEn extends AppLocalizations {
   String get setupCertFingerprintLabel => 'Certificate SHA-256 fingerprint';
 
   @override
+  String get setupReconfigureTitle => 'Switch connection';
+
+  @override
+  String get setupSwitchWarningTitle => 'Switch data source?';
+
+  @override
+  String get setupSwitchWarningMessage =>
+      'Standalone and networked mode use separate data stores -- your current searches/accounts won\'t automatically carry over. Use Settings → Backup to export/import searches if you want to bring them along.';
+
+  @override
+  String get setupSwitchConfirm => 'Switch';
+
+  @override
   String loginScreenTitle(String site) {
     return 'Log in to $site';
   }
@@ -156,6 +169,9 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get searchesSortRecentlyCreated => 'Recently created';
+
+  @override
+  String get searchesSortLastViewed => 'Last viewed';
 
   @override
   String get searchesCheckForUpdatesTooltip => 'Check for updates';
@@ -428,6 +444,20 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get settingsScreenTitle => 'Settings';
+
+  @override
+  String get settingsConnectionSection => 'Connection';
+
+  @override
+  String get settingsConnectionEntry => 'Switch connection mode';
+
+  @override
+  String get settingsConnectionStandalone => 'Standalone';
+
+  @override
+  String settingsConnectionNetworked(String serverUrl) {
+    return 'Networked ($serverUrl)';
+  }
 
   @override
   String get settingsAppearanceSection => 'Appearance';

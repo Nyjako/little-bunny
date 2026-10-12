@@ -62,6 +62,7 @@ Map<String, Object?> _searchToMap(bunny_db_search_t search) => {
   'autoFavoriteStars': search.auto_favorite_stars,
   'autoUpvote': search.auto_upvote,
   'pinned': search.pinned,
+  'lastViewedAt': _readNullableString(search.last_viewed_at),
 };
 
 Map<String, Object?> _postToMap(bunny_db_post_t post) => {
@@ -191,6 +192,12 @@ class _SetSearchPinnedRequest extends _Request {
   final bool pinned;
 
   const _SetSearchPinnedRequest(this.searchId, this.pinned);
+}
+
+class _TouchSearchViewedRequest extends _Request {
+  final int searchId;
+
+  const _TouchSearchViewedRequest(this.searchId);
 }
 
 class _ListSearchPostsRequest extends _Request {
@@ -697,6 +704,9 @@ Object? _dispatch(Pointer<bunny_core_t>? core, _Request request, void Function(P
       case _SetSearchPinnedRequest r:
         _check(_bindings.bunny_core_search_set_pinned(c, r.searchId, r.pinned));
         return null;
+      case _TouchSearchViewedRequest r:
+        _check(_bindings.bunny_core_search_touch_last_viewed(c, r.searchId));
+        return null;
       case _UpdateSearchRequest r:
         final options = arena<bunny_db_search_options_t>();
         options.ref.auto_favorite = r.autoFavorite;
@@ -870,6 +880,8 @@ class BunnyCoreNative {
   Future<void> deleteSearch(int searchId) => _send<void>(_DeleteSearchRequest(searchId));
 
   Future<void> setSearchPinned(int searchId, bool pinned) => _send<void>(_SetSearchPinnedRequest(searchId, pinned));
+
+  Future<void> touchSearchViewed(int searchId) => _send<void>(_TouchSearchViewedRequest(searchId));
 
   Future<void> updateSearch(int searchId, String label, String query, int intervalHours, {bool autoFavorite = false, int autoFavoriteStars = 1, bool autoUpvote = false}) =>
       _send<void>(_UpdateSearchRequest(searchId, label, query, intervalHours, autoFavorite, autoFavoriteStars, autoUpvote));

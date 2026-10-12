@@ -50,6 +50,12 @@ bunny_db_result_t bunny_db_search_touch_last_run(bunny_db_t *db, int64_t search_
  * bunny_db_search_touch_last_run already being its own function. */
 bunny_db_result_t bunny_db_search_set_pinned(bunny_db_t *db, int64_t search_id, bool pinned);
 
+/* Marks a search/pool as opened right now -- feeds the "last viewed" sort
+ * order (SearchesScreen, both tabs since a pool is just a search whose query
+ * happens to start with "pool:"). Same single-column-touch shape as
+ * bunny_db_search_touch_last_run. */
+bunny_db_result_t bunny_db_search_touch_last_viewed(bunny_db_t *db, int64_t search_id);
+
 /* Updates a search's editable fields in place (M9.7.2) -- replaces the
  * narrower bunny_db_search_set_auto_favorite, whose only caller (the
  * searches-list quick-toggle icon) was removed in favor of a full edit

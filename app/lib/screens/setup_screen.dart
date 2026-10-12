@@ -14,7 +14,14 @@ class SetupScreen extends StatefulWidget {
   final RepositorySettingsStore settingsStore;
   final ValueChanged<BunnyRepository> onConfigured;
 
-  const SetupScreen({super.key, required this.settingsStore, required this.onConfigured});
+  /// True when reached from Settings (M15) to switch an already-configured
+  /// app's connection mode, rather than the first-launch flow. Preselects
+  /// the currently active mode, shows a data-isolation warning before
+  /// committing, and pops the navigator back to the app's root on success
+  /// instead of just calling [onConfigured].
+  final bool isReconfigure;
+
+  const SetupScreen({super.key, required this.settingsStore, required this.onConfigured, this.isReconfigure = false});
 
   @override
   State<SetupScreen> createState() => _SetupScreenState();
@@ -32,6 +39,32 @@ class _SetupScreenState extends State<SetupScreen> {
   String? _error;
 
   @override
+  void initState() {
+    super.initState();
+    if (widget.isReconfigure) {
+      _preselectCurrentMode();
+    }
+  }
+
+  /// Only the server URL is prefilled -- never the bearer token/certificate
+  /// fingerprint, matching this app's existing pattern of requiring re-entry
+  /// for sensitive changes (e.g. LockSetupScreen requiring the current PIN
+  /// to disable app lock).
+  Future<void> _preselectCurrentMode() async {
+    final config = await widget.settingsStore.load();
+    if (!mounted || config == null) {
+      return;
+    }
+    switch (config) {
+      case StandaloneConfig():
+        setState(() => _mode = _Mode.standalone);
+      case NetworkedConfig(:final serverBaseUrl):
+        setState(() => _mode = _Mode.networked);
+        _serverUrlController.text = serverBaseUrl.toString();
+    }
+  }
+
+  @override
   void dispose() {
     _serverUrlController.dispose();
     _bearerTokenController.dispose();
@@ -39,7 +72,33 @@ class _SetupScreenState extends State<SetupScreen> {
     super.dispose();
   }
 
+  Future<bool> _confirmSwitch(AppLocalizations l10n) async {
+    if (!widget.isReconfigure) {
+      return true;
+    }
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(l10n.setupSwitchWarningTitle),
+        content: Text(l10n.setupSwitchWarningMessage),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: Text(l10n.commonCancel)),
+          FilledButton(onPressed: () => Navigator.pop(context, true), child: Text(l10n.setupSwitchConfirm)),
+        ],
+      ),
+    );
+    return confirmed ?? false;
+  }
+
   Future<void> _submitStandalone() async {
+    final l10n = AppLocalizations.of(context)!;
+    if (!await _confirmSwitch(l10n)) {
+      return;
+    }
+    if (!mounted) {
+      return;
+    }
+
     setState(() {
       _submitting = true;
       _error = null;
@@ -53,6 +112,7 @@ class _SetupScreenState extends State<SetupScreen> {
       return;
     }
     widget.onConfigured(repository);
+    _finishReconfigure();
   }
 
   Future<void> _submitNetworked() async {
@@ -81,6 +141,20 @@ class _SetupScreenState extends State<SetupScreen> {
       return;
     }
 
+    if (!mounted) {
+      return;
+    }
+    final l10n = AppLocalizations.of(context)!;
+    if (!await _confirmSwitch(l10n)) {
+      if (mounted) {
+        setState(() => _submitting = false);
+      }
+      return;
+    }
+    if (!mounted) {
+      return;
+    }
+
     await widget.settingsStore.saveNetworked(serverBaseUrl: baseUrl, bearerToken: bearerToken, certificateSha256Fingerprint: certFingerprint);
     final config = await widget.settingsStore.load();
     final repository = await createBunnyRepository(config!);
@@ -89,13 +163,24 @@ class _SetupScreenState extends State<SetupScreen> {
       return;
     }
     widget.onConfigured(repository);
+    _finishReconfigure();
+  }
+
+  /// Unwinds the navigator back to the app's root after a successful
+  /// reconfigure, landing on a fresh SearchesScreen bound to the new
+  /// repository rather than leaving stale pushed routes (this screen,
+  /// Settings) built against the old one.
+  void _finishReconfigure() {
+    if (widget.isReconfigure) {
+      Navigator.of(context).popUntil((route) => route.isFirst);
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
     return Scaffold(
-      appBar: AppBar(title: Text(l10n.setupScreenTitle)),
+      appBar: AppBar(title: Text(widget.isReconfigure ? l10n.setupReconfigureTitle : l10n.setupScreenTitle)),
       body: Padding(
         padding: const EdgeInsets.all(16),
         child: Form(

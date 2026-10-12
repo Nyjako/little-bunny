@@ -62,6 +62,10 @@ abstract interface class BunnyRepository {
   /// (M14.1) rather than through the full edit form.
   Future<void> setSearchPinned(int searchId, bool pinned);
 
+  /// Marks a search/pool as opened right now -- feeds the "last viewed" sort
+  /// order (M15).
+  Future<void> touchSearchViewed(int searchId);
+
   /// Updates a search's editable fields in place (M9.7.2) -- replaces the
   /// narrower setSearchAutoFavorite (M9.6.8), so a search's label/query/
   /// interval/auto-favorite/auto-upvote settings can all be changed from one
@@ -215,4 +219,11 @@ abstract interface class BunnyRepository {
   /// Manually drains the action queue. Same relationship to the server's own
   /// schedule as [syncDueSearches].
   Future<BunnyQueueStats> processQueue();
+
+  /// Releases whatever this implementation holds open -- the FFI isolate
+  /// (and the native `bunny_core_t` handle/sqlite connection it owns) or the
+  /// HTTP client's connection pool. Previously never called since a
+  /// repository lived for the app's entire lifetime; needed now that
+  /// switching connection mode from Settings (M15) can discard one mid-run.
+  Future<void> close();
 }

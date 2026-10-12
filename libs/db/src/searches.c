@@ -79,6 +79,7 @@ static void fill_search_from_row(sqlite3_stmt *stmt, bunny_db_search_t *out)
     out->auto_favorite_stars = sqlite3_column_int(stmt, 10);
     out->auto_upvote = sqlite3_column_int(stmt, 11) != 0;
     out->pinned = sqlite3_column_int(stmt, 12) != 0;
+    out->last_viewed_at = bunny_db_column_text_dup(stmt, 13);
 }
 
 bunny_db_result_t bunny_db_search_list(bunny_db_t *db, bunny_db_search_list_t *out_list)
@@ -97,7 +98,7 @@ bunny_db_result_t bunny_db_search_list(bunny_db_t *db, bunny_db_search_list_t *o
                       "(SELECT COUNT(*) FROM search_results sr LEFT JOIN seen_posts seen ON seen.post_id = sr.post_id "
                       " WHERE sr.search_id = s.id AND seen.post_id IS NULL) AS unseen_count, "
                       "(SELECT COUNT(*) FROM search_results sr WHERE sr.search_id = s.id) AS total_count, "
-                      "s.auto_favorite, s.auto_favorite_stars, s.auto_upvote, s.pinned "
+                      "s.auto_favorite, s.auto_favorite_stars, s.auto_upvote, s.pinned, s.last_viewed_at "
                       "FROM searches s ORDER BY s.id;";
     sqlite3_stmt *stmt = NULL;
     if (sqlite3_prepare_v2(db->handle, sql, -1, &stmt, NULL) != SQLITE_OK) {
@@ -144,6 +145,23 @@ bunny_db_result_t bunny_db_search_touch_last_run(bunny_db_t *db, int64_t search_
     }
 
     const char *sql = "UPDATE searches SET last_run_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?;";
+    sqlite3_stmt *stmt = NULL;
+    if (sqlite3_prepare_v2(db->handle, sql, -1, &stmt, NULL) != SQLITE_OK) {
+        return BUNNY_DB_ERR_QUERY_FAILED;
+    }
+    sqlite3_bind_int64(stmt, 1, search_id);
+    int rc = sqlite3_step(stmt);
+    sqlite3_finalize(stmt);
+    return rc == SQLITE_DONE ? BUNNY_DB_OK : bunny_db_sqlite_rc_to_result(rc);
+}
+
+bunny_db_result_t bunny_db_search_touch_last_viewed(bunny_db_t *db, int64_t search_id)
+{
+    if (!db) {
+        return BUNNY_DB_ERR_INVALID_ARG;
+    }
+
+    const char *sql = "UPDATE searches SET last_viewed_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?;";
     sqlite3_stmt *stmt = NULL;
     if (sqlite3_prepare_v2(db->handle, sql, -1, &stmt, NULL) != SQLITE_OK) {
         return BUNNY_DB_ERR_QUERY_FAILED;

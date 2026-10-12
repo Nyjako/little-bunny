@@ -580,6 +580,26 @@ class BunnyCoreFfiBindings {
   late final _bunny_core_search_set_pinned = _bunny_core_search_set_pinnedPtr
       .asFunction<int Function(ffi.Pointer<bunny_core_t>, int, bool)>();
 
+  /// Marks a search/pool as opened right now -- see bunny_db_search_touch_last_viewed.
+  bunny_core_result_t bunny_core_search_touch_last_viewed(
+    ffi.Pointer<bunny_core_t> core,
+    int search_id,
+  ) {
+    return bunny_core_result_t.fromValue(
+      _bunny_core_search_touch_last_viewed(core, search_id),
+    );
+  }
+
+  late final _bunny_core_search_touch_last_viewedPtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.UnsignedInt Function(ffi.Pointer<bunny_core_t>, ffi.Int64)
+        >
+      >('bunny_core_search_touch_last_viewed');
+  late final _bunny_core_search_touch_last_viewed =
+      _bunny_core_search_touch_last_viewedPtr
+          .asFunction<int Function(ffi.Pointer<bunny_core_t>, int)>();
+
   /// Updates a search's editable fields in place (M9.7.2) -- replaces
   /// bunny_core_search_set_auto_favorite, so a search's label/query/interval/
   /// auto-favorite/auto-upvote settings can all be changed from one edit screen
@@ -1393,6 +1413,33 @@ class BunnyCoreFfiBindings {
         )
       >();
 
+  /// Writes a timestamped backup (`<backups_dir>/bunny_<unix_ts>.db`) of the
+  /// live database into `backups_dir` via bunny_db_backup -- the server's own
+  /// periodic backup job (M14.5, server/src/scheduler.c), never called from the
+  /// Flutter app. `backups_dir` must already exist.
+  bunny_core_result_t bunny_core_backup_database(
+    ffi.Pointer<bunny_core_t> core,
+    ffi.Pointer<ffi.Char> backups_dir,
+  ) {
+    return bunny_core_result_t.fromValue(
+      _bunny_core_backup_database(core, backups_dir),
+    );
+  }
+
+  late final _bunny_core_backup_databasePtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.UnsignedInt Function(
+            ffi.Pointer<bunny_core_t>,
+            ffi.Pointer<ffi.Char>,
+          )
+        >
+      >('bunny_core_backup_database');
+  late final _bunny_core_backup_database = _bunny_core_backup_databasePtr
+      .asFunction<
+        int Function(ffi.Pointer<bunny_core_t>, ffi.Pointer<ffi.Char>)
+      >();
+
   /// stars: Inkbunny's 1-3 rating, or -1 if not applicable (e621's plain favorite).
   bunny_core_result_t bunny_core_queue_favorite_add(
     ffi.Pointer<bunny_core_t> core,
@@ -1645,6 +1692,9 @@ final class bunny_db_search_t extends ffi.Struct {
   /// shown first in SearchesScreen, ahead of the normal sort order
   @ffi.Bool()
   external bool pinned;
+
+  /// NULL if this search/pool has never been opened
+  external ffi.Pointer<ffi.Char> last_viewed_at;
 }
 
 final class bunny_db_search_list_t extends ffi.Struct {

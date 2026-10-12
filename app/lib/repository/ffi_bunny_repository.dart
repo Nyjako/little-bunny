@@ -24,6 +24,7 @@ BunnySearch _searchFromMap(Map<String, Object?> m) => BunnySearch(
   autoFavoriteStars: m['autoFavoriteStars'] as int,
   autoUpvote: m['autoUpvote'] as bool,
   pinned: m['pinned'] as bool,
+  lastViewedAt: m['lastViewedAt'] as String?,
 );
 
 BunnyPost _postFromMap(Map<String, Object?> m) => BunnyPost(
@@ -116,6 +117,7 @@ class FfiBunnyRepository implements BunnyRepository {
     return FfiBunnyRepository._(native);
   }
 
+  @override
   Future<void> close() => _native.close();
 
   @override
@@ -148,6 +150,9 @@ class FfiBunnyRepository implements BunnyRepository {
 
   @override
   Future<void> setSearchPinned(int searchId, bool pinned) => _wrapped(() => _native.setSearchPinned(searchId, pinned));
+
+  @override
+  Future<void> touchSearchViewed(int searchId) => _wrapped(() => _native.touchSearchViewed(searchId));
 
   @override
   Future<void> updateSearch(int searchId, String label, String query, {int intervalHours = 24, bool autoFavorite = false, int autoFavoriteStars = 1, bool autoUpvote = false}) =>

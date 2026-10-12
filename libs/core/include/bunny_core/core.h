@@ -75,6 +75,9 @@ bunny_core_result_t bunny_core_search_list_posts(bunny_core_t *core, int64_t sea
  * rather than through the full edit form -- see bunny_db_search_set_pinned. */
 bunny_core_result_t bunny_core_search_set_pinned(bunny_core_t *core, int64_t search_id, bool pinned);
 
+/* Marks a search/pool as opened right now -- see bunny_db_search_touch_last_viewed. */
+bunny_core_result_t bunny_core_search_touch_last_viewed(bunny_core_t *core, int64_t search_id);
+
 /* Updates a search's editable fields in place (M9.7.2) -- replaces
  * bunny_core_search_set_auto_favorite, so a search's label/query/interval/
  * auto-favorite/auto-upvote settings can all be changed from one edit screen
