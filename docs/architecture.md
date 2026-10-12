@@ -2269,6 +2269,40 @@ awaited now (previously fire-and-forget), with `_refresh()` called on return, so
 is actually visible when the user backs out rather than only taking effect on the next cold
 `FutureBuilder` rebuild.
 
+## M16 -- Server deployment tooling
+
+No server code changed here -- `bunny_server` (M5) already needs nothing beyond its own
+binary (self-signed cert and bearer token generated on first run, see "Security model" under
+"C server (M5)" above), but there was no written-down path from "fresh VM" to "running
+service," which is the actual gap "simplify server setup" was pointing at. New `deploy/`
+directory:
+
+- **`deploy/bunny-server.service`**: a systemd unit using `DynamicUser=yes` +
+  `StateDirectory=bunny-server` (systemd >= 232/230) rather than a manually-created system
+  user -- systemd allocates an ephemeral unprivileged UID per activation and
+  creates/owns `/var/lib/bunny-server` (exposed to the service via `%S/bunny-server`,
+  matched by `Environment=BUNNY_SERVER_DATA_DIR=%S/bunny-server`) automatically, including
+  under `ProtectSystem=strict`'s otherwise-read-only filesystem. No `useradd`/`chown` step
+  needed anywhere in the install flow. Rounded out with standard least-privilege hardening
+  directives (`NoNewPrivileges`, `PrivateDevices`, `ProtectKernelTunables`,
+  `MemoryDenyWriteExecute`, an empty `CapabilityBoundingSet`, ...) appropriate for a service
+  that only needs a listening socket and its own data directory.
+- **`deploy/install.sh`**: idempotent, re-runnable installer (`sudo ./deploy/install.sh`,
+  `--skip-deps` to skip the package-manager step). Detects `apt`/`dnf`/`pacman` to install
+  build prerequisites, runs `make release`, installs the binary to `/usr/local/bin/` and the
+  unit to `/etc/systemd/system/`, `daemon-reload`s, `enable --now`s the service, then polls
+  `/var/lib/bunny-server/{auth_token,server.pem}` (written by the server's own first-run
+  setup, M5.1) for up to 30s before printing the server URL, bearer token, and the
+  certificate's SHA-256 fingerprint (`openssl x509 -noout -fingerprint -sha256`) -- the three
+  values the Flutter app's Networked setup screen (or M15's reconfigure flow) needs, with no
+  manual `openssl` invocation or log-scraping required. Re-running it later (e.g. after
+  `git pull`) rebuilds and restarts the service without touching anything already in
+  `/var/lib/bunny-server`.
+- **`deploy/README.md`**: install/update/uninstall steps, plus the one gotcha specific to
+  the confirmed deployment target (Oracle Cloud free tier) -- its default Security
+  List/Network Security Group blocks all inbound traffic except SSH, so the server's port
+  needs an explicit ingress rule there in addition to any local firewall (`ufw`/`firewalld`).
+
 ## Inkbunny API constraints (found in M2)
 
 Verified against the live API and the official docs while building `libinkbunny`:
