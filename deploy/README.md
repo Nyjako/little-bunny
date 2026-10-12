@@ -34,9 +34,14 @@ Flutter app's Setup screen (or Settings -> "Switch connection mode") under "Netw
 
 If the target machine isn't powerful enough to comfortably compile the dependency chain
 (curl, civetweb, ...) itself, build on another machine first -- same CPU architecture and
-ideally the same distro family/glibc version, since the binary is dynamically linked against
-`libssl`/`libcrypto` and a handful of curl's own dependencies (`libssh2`, `libidn2`,
-`brotli`, `zstd`, `nghttp2`):
+ideally the same distro family/glibc version, since the binary is dynamically linked
+against `libssl`/`libcrypto`/`libz` (all effectively universal on any real Linux system).
+curl's own optional extras this app never uses (SCP/SFTP via libssh2, IDN domains via
+libidn2, HTTP/2 via nghttp2) are explicitly disabled in the build, so they're not a
+concern; `install-prebuilt.sh` also runs `ldd` on the installed binary before starting the
+service and fails with a clear message naming any library that's still missing on the
+target, rather than leaving you to dig through `journalctl` for an opaque "exit code
+127":
 
 ```sh
 # on the build machine

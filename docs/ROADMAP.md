@@ -1439,6 +1439,12 @@ this file is the single source of truth for "what's done" across sessions.
   on, so `install.sh`'s shared install/start/print logic moved into
   `deploy/_install-common.sh`, and a new `install-prebuilt.sh <path>` installs a binary
   built on a different (more powerful) machine with no compiler needed on the target at all.
+  That immediately surfaced a real cross-distro bug: curl auto-links whatever optional
+  libraries (`libssh2`, `libidn2`, `nghttp2`, `brotli`, `zstd`) happen to be installed on the
+  *build* machine, none of which this app needs -- now explicitly disabled in the top-level
+  `CMakeLists.txt`, plus `install-prebuilt.sh` runs `ldd` on the installed binary and fails
+  with a clear message instead of a silent `journalctl` restart-loop if anything's still
+  missing on the target.
 
 - [ ] **M12 — Cross-platform polish**
   Responsive desktop/mobile layout, consistent theming pass, Windows app build, packaging.

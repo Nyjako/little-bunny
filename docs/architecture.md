@@ -2311,12 +2311,35 @@ directory:
   sourced by the other two scripts, not meant to be run directly), so both the "build here"
   (`install.sh`) and "binary built elsewhere" (`install-prebuilt.sh <path>`, no compiler or
   build-dependency step at all) flows stay in sync rather than maintaining two copies of the
-  same systemd/polling logic. The binary needs to come from a machine of the same CPU
-  architecture and ideally the same distro family -- it's dynamically linked against
-  `libssl`/`libcrypto` plus several of curl's own optional dependencies (`libssh2`,
-  `libidn2`, `brotli`, `zstd`, `nghttp2`), none of which are vendored statically, so an
-  older/newer glibc or missing shared library on the target can still fail at runtime even
-  though the binary itself copies over fine.
+  same systemd/polling logic.
+- **Cross-distro runtime dependencies** (second follow-up): building on an Arch-family
+  desktop and deploying to an Ubuntu VM via `install-prebuilt.sh` immediately hit
+  `error while loading shared libraries: libssh2.so.1: cannot open shared object file` --
+  curl's own CMake auto-detects and dynamically links against whatever happens to already be
+  installed on the *build* machine (`libssh2` for SCP/SFTP, `libidn2` for IDN domains,
+  `nghttp2` for HTTP/2, `brotli`/`zstd` for compression negotiation), none of which this app
+  actually needs (it only ever does plain HTTPS GET/POST JSON calls to e621/Inkbunny, no
+  HTTP/2 requirement). Fixed at the top-level `CMakeLists.txt`'s curl `CPMAddPackage`:
+  `CURL_USE_LIBSSH2`/`USE_LIBIDN2`/`USE_NGHTTP2` are plain `option()` booleans, so the
+  existing `OPTIONS "VAR OFF"` list works for them; `CURL_BROTLI`/`CURL_ZSTD` are curl's own
+  `AUTO`/`ON`/`OFF` cache-`STRING` options set via a custom macro
+  (`curl_dependency_option`), and CPM's `OPTIONS` mechanism only does a plain (non-cache,
+  non-`FORCE`) `set()` -- harmless for ordinary booleans (CMake's normal-variable-shadows-
+  cache-variable rule makes the plain set still win), but curl's own macro re-declares the
+  same cache entry via its own `set(... CACHE STRING ...)` in a way that silently wins back
+  over the non-`FORCE` value, so these two needed an explicit
+  `set(CURL_BROTLI OFF CACHE STRING "" FORCE)`/`set(CURL_ZSTD OFF CACHE STRING "" FORCE)`
+  *before* the `CPMAddPackage` call instead (same pattern as the `ANDROID`-only mbedTLS
+  variables below). Separately, `libbrotli*`/`libzstd` turned out to still show up in `ldd`
+  on the build machine even with curl's own flags off -- traced to the *system's own*
+  `libssl.so.3` package having an unrelated transitive dependency on them (an
+  Arch-packaging detail, not something this project's build controls) -- so rather than
+  trying to predict every possible transitive dependency across every distro's OpenSSL
+  build, `bunny_install_and_start` (`deploy/_install-common.sh`) now runs `ldd` on the
+  installed binary right after copying it into place and fails with a clear, specific
+  "missing shared libraries" message naming exactly what's absent, instead of the install
+  silently succeeding and only surfacing the real problem later as a cryptic systemd
+  restart-loop in `journalctl`.
 
 ## Inkbunny API constraints (found in M2)
 
