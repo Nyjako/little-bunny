@@ -2088,8 +2088,8 @@ remove-confirmation already uses), and navigation only proceeds on an empty matc
 
 ## M14 -- Pinning, auto-upvote, DB backups, split tag stats, staleness fix, row cleanup
 
-Direct user feedback after M13 shipped, bundling several requests. This section covers M14.1,
-M14.2, M14.3, and M14.4; the remaining M14.N sub-milestones are documented as they land.
+Direct user feedback after M13 shipped, bundling several requests -- this section covers all
+five M14.N sub-milestones.
 
 **Pin searches, total post count, and row-action cleanup (M14.1)**: three requests bundled
 into one branch since all three reshape the same `SearchesScreen` row UI and
@@ -2159,6 +2159,40 @@ Future<List<BunnyTagStat>>` across FFI/HTTP/Fake, reusing `BunnyTagStat` unchang
 second `SegmentedButton<bool>` ("Favorites"/"All") that picks `topFavoritedTags`/`topUsedTags`
 accordingly, each with its own empty-state message (favoriting something vs. syncing a search
 at all are different first steps for an empty list).
+
+**Periodic DB backup with rotation (M14.5)**: the concrete half of a broader "later I'd like a
+shared server" request -- a corruption safety net, server-only, never invoked from the Flutter
+app (no FFI/HTTP plumbing at all). New `bunny_db_backup(db, dest_path)`
+(`libs/db/src/db.c`) uses SQLite's Online Backup API (`sqlite3_backup_init`/`_step(-1)`/
+`_finish`) against `db->handle` -- deliberately not a raw file copy, which would risk
+corruption/inconsistency against a database the server may have open and writing to
+concurrently. `bunny_core_backup_database(core, backups_dir)` (new `libs/core/src/backup.c`,
+following the one-concern-per-file convention `blacklist.c` already set) builds a
+`<backups_dir>/bunny_<unix_ts>.db` path and calls through.
+
+`server/src/scheduler.c`'s per-tick loop already ran `bunny_core_sync_due_searches`/
+`bunny_core_process_queue` under `core_mutex`; it gained a third step, `backup_due_and_prune`,
+run every tick (cheap when nothing's due) rather than on its own timer. It creates
+`<data_dir>/backups/` if missing, lists that directory for existing `bunny_*.db` files, and
+treats a backup as due if none exist or the newest one (by `stat()` mtime) is >= 24h old --
+deliberately not tracking a separate "last backup time" anywhere, since the directory itself is
+already the source of truth (same reasoning `unseen_count` uses to avoid cached state). After a
+due backup, it prunes back down to the 5 newest files; because the filenames embed a unix
+timestamp, a plain lexicographic sort of the directory listing is already chronological order,
+so no per-file `stat()` is needed for the prune itself. `server_scheduler_start` gained a
+`data_dir` parameter (its one caller, `server_app_start`, already had `data_dir` in scope) to
+build this path; `server_scheduler_stop` now also frees it.
+
+Tested with: a `libs/db` test backing up a `:memory:` db with a search in it to a real file and
+reopening it to confirm the data round-tripped; a `libs/core` test using `mkdtemp` + `opendir`
+to confirm `bunny_core_backup_database` actually writes a `bunny_*`-prefixed file into a given
+directory; and a `server` integration test that restarts the app with a 1-second poll interval
+(the same shape `test_scheduler_syncs_search_automatically` already used) and confirms a backup
+file appears within a few seconds. That last test's own cleanup -- and the shared `tearDown()`
+other scheduler-poll tests rely on -- has to stop the scheduler thread *before* touching
+`backups/`: since a backup is "due" again the instant the directory is empty, a still-running
+poll tick can otherwise recreate a file between the test's own `unlink` and `rmdir`, intermittently
+leaking a non-empty temp directory.
 
 ## Inkbunny API constraints (found in M2)
 

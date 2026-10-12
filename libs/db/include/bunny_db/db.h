@@ -19,6 +19,12 @@ typedef struct bunny_db bunny_db_t;
 bunny_db_result_t bunny_db_open(const char *path, bunny_db_t **out_db);
 void bunny_db_close(bunny_db_t *db);
 
+/* Writes a consistent snapshot of `db` to `dest_path` using SQLite's Online
+ * Backup API -- not a raw file copy, which risks corruption/inconsistency if
+ * the source is open and being written to concurrently (M14.5, the server's
+ * own periodic backup job). `dest_path` is created or overwritten. */
+bunny_db_result_t bunny_db_backup(bunny_db_t *db, const char *dest_path);
+
 /* --- Accounts ---------------------------------------------------------------
  * One account per site (e621 API key, or Inkbunny username/password). Stored
  * as plain text: the server needs to read these unattended to run scheduled

@@ -1386,6 +1386,22 @@ this file is the single source of truth for "what's done" across sessions.
   `SegmentedButton<bool>` ("Favorites"/"All") beside its existing site toggle, picking
   `topFavoritedTags`/`topUsedTags` accordingly, each with its own empty-state message.
 
+- [x] **M14.5 — Periodic DB backup with rotation**
+  The concrete, in-scope half of a broader "later I'd like a shared server" request -- a safety
+  net against database corruption, server-only (no FFI/UI, never invoked from the Flutter app).
+  New `bunny_db_backup(db, dest_path)` (`libs/db/src/db.c`) uses SQLite's Online Backup API
+  (`sqlite3_backup_init`/`_step`/`_finish`), explicitly not a raw file copy, since the server may
+  have the database open and writing to it concurrently. `bunny_core_backup_database(core,
+  backups_dir)` (new `libs/core/src/backup.c`) builds a `bunny_<unix_ts>.db` filename inside
+  `backups_dir` and calls through. `server/src/scheduler.c`'s existing per-tick loop (already
+  running `bunny_core_sync_due_searches`/`bunny_core_process_queue`) gained a third check:
+  creates `<data_dir>/backups/` if missing, determines "due" by checking whether the newest
+  existing backup file (if any) is at least a day old -- no separate "last backup time" needs
+  persisting, the directory itself is the source of truth -- and if due, backs up and prunes
+  down to the 5 newest files (backup filenames embed a unix timestamp, so they sort
+  lexicographically the same as chronologically, making the prune a plain directory listing +
+  sort). `server_scheduler_start` gained a `data_dir` parameter to build this path.
+
 - [ ] **M12 — Cross-platform polish**
   Responsive desktop/mobile layout, consistent theming pass, Windows cross-build via
   dockcross validated end-to-end (server + core), packaging. Needs to resolve the OpenSSL-

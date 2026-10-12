@@ -26,6 +26,36 @@ void test_open_close(void)
     bunny_db_close(NULL);
 }
 
+void test_backup_copies_data_to_a_new_file(void)
+{
+    int64_t id = 0;
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, bunny_db_search_create(g_db, BUNNY_DB_SITE_E621, "wolves", "wolf", 24, NULL, &id));
+
+    const char *path = "/tmp/bunny_db_test_backup.sqlite3";
+    remove(path);
+
+    bunny_db_result_t result = bunny_db_backup(g_db, path);
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, result);
+
+    bunny_db_t *restored = NULL;
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, bunny_db_open(path, &restored));
+
+    bunny_db_search_list_t list;
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, bunny_db_search_list(restored, &list));
+    TEST_ASSERT_EQUAL(1, (int)list.count);
+    TEST_ASSERT_EQUAL_STRING("wolves", list.items[0].label);
+    bunny_db_search_list_free(&list);
+
+    bunny_db_close(restored);
+    remove(path);
+}
+
+void test_backup_rejects_null_args(void)
+{
+    TEST_ASSERT_EQUAL(BUNNY_DB_ERR_INVALID_ARG, bunny_db_backup(NULL, "/tmp/wherever.sqlite3"));
+    TEST_ASSERT_EQUAL(BUNNY_DB_ERR_INVALID_ARG, bunny_db_backup(g_db, NULL));
+}
+
 void test_search_create_and_list(void)
 {
     int64_t id = 0;
@@ -1385,6 +1415,8 @@ int main(void)
 {
     UNITY_BEGIN();
     RUN_TEST(test_open_close);
+    RUN_TEST(test_backup_copies_data_to_a_new_file);
+    RUN_TEST(test_backup_rejects_null_args);
     RUN_TEST(test_account_set_and_get);
     RUN_TEST(test_account_set_upserts_by_site);
     RUN_TEST(test_account_get_not_found);

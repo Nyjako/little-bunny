@@ -249,6 +249,12 @@ bunny_core_result_t bunny_core_sync_due_searches(bunny_core_t *core, bunny_core_
  * 0 or 1 here) may be NULL. */
 bunny_core_result_t bunny_core_sync_search(bunny_core_t *core, int64_t search_id, bunny_core_sync_stats_t *out_stats);
 
+/* Writes a timestamped backup (`<backups_dir>/bunny_<unix_ts>.db`) of the
+ * live database into `backups_dir` via bunny_db_backup -- the server's own
+ * periodic backup job (M14.5, server/src/scheduler.c), never called from the
+ * Flutter app. `backups_dir` must already exist. */
+bunny_core_result_t bunny_core_backup_database(bunny_core_t *core, const char *backups_dir);
+
 /* --- Action queue --------------------------------------------------------------
  * Proxies favorite/vote/comment calls to the sites: enqueue now (fast, no
  * network), process later via bunny_core_process_queue (typically on a
