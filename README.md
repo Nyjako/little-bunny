@@ -50,5 +50,13 @@ one command on a fresh Linux VM:
 sudo ./deploy/install.sh
 ```
 
+If the target machine isn't powerful enough to build on comfortably, build elsewhere
+(`make release`) and install just the resulting binary instead -- no compiler needed on
+the target at all:
+
+```sh
+sudo ./deploy/install-prebuilt.sh /path/to/bunny_server
+```
+
 See [`deploy/README.md`](deploy/README.md) for details, firewall notes, and how to update
 or uninstall it.
