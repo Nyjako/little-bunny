@@ -1,8 +1,13 @@
 #include "unity.h"
 
+#include <dirent.h>
+#include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 
 #include "bunny_core/core.h"
+#include "bunny_db/db.h"
 
 static bunny_core_t *g_core;
 
@@ -73,6 +78,52 @@ void test_account_delete(void)
     TEST_ASSERT_EQUAL(BUNNY_CORE_ERR_NOT_FOUND, result);
 }
 
+void test_backup_database_creates_a_timestamped_file(void)
+{
+    bunny_core_account_set(g_core, BUNNY_DB_SITE_E621, "someuser", "someapikey");
+
+    char template[] = "/tmp/bunny_core_backup_test_XXXXXX";
+    char *backups_dir = mkdtemp(template);
+    TEST_ASSERT_NOT_NULL(backups_dir);
+
+    bunny_core_result_t result = bunny_core_backup_database(g_core, backups_dir);
+    TEST_ASSERT_EQUAL(BUNNY_CORE_OK, result);
+
+    /* Find the one file bunny_core_backup_database just wrote -- its name
+     * embeds a unix timestamp we don't control exactly, so scan the dir
+     * rather than guessing it (same approach the scheduler's own pruning
+     * logic will use to find backups to keep/delete, M14.5). */
+    DIR *dir = opendir(backups_dir);
+    TEST_ASSERT_NOT_NULL(dir);
+    char found_path[1100] = {0};
+    struct dirent *entry;
+    while ((entry = readdir(dir)) != NULL) {
+        if (strncmp(entry->d_name, "bunny_", 6) == 0) {
+            snprintf(found_path, sizeof(found_path), "%s/%s", backups_dir, entry->d_name);
+            break;
+        }
+    }
+    closedir(dir);
+    TEST_ASSERT_NOT_EQUAL(0, found_path[0]);
+
+    bunny_db_t *restored = NULL;
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, bunny_db_open(found_path, &restored));
+    bunny_db_account_t account;
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, bunny_db_account_get(restored, BUNNY_DB_SITE_E621, &account));
+    TEST_ASSERT_EQUAL_STRING("someuser", account.username);
+    bunny_db_account_free(&account);
+    bunny_db_close(restored);
+
+    remove(found_path);
+    rmdir(backups_dir);
+}
+
+void test_backup_database_rejects_null_args(void)
+{
+    TEST_ASSERT_EQUAL(BUNNY_CORE_ERR_INVALID_ARG, bunny_core_backup_database(NULL, "/tmp"));
+    TEST_ASSERT_EQUAL(BUNNY_CORE_ERR_INVALID_ARG, bunny_core_backup_database(g_core, NULL));
+}
+
 int main(void)
 {
     UNITY_BEGIN();
@@ -81,5 +132,7 @@ int main(void)
     RUN_TEST(test_account_set_upserts);
     RUN_TEST(test_account_get_not_found);
     RUN_TEST(test_account_delete);
+    RUN_TEST(test_backup_database_creates_a_timestamped_file);
+    RUN_TEST(test_backup_database_rejects_null_args);
     return UNITY_END();
 }
