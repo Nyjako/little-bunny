@@ -26,6 +26,14 @@ bunny_core_result_t bunny_core_search_set_pinned(bunny_core_t *core, int64_t sea
     return bunny_core_map_db_result(bunny_db_search_set_pinned(core->db, search_id, pinned));
 }
 
+bunny_core_result_t bunny_core_search_touch_last_viewed(bunny_core_t *core, int64_t search_id)
+{
+    if (!core) {
+        return BUNNY_CORE_ERR_INVALID_ARG;
+    }
+    return bunny_core_map_db_result(bunny_db_search_touch_last_viewed(core->db, search_id));
+}
+
 bunny_core_result_t bunny_core_search_delete(bunny_core_t *core, int64_t search_id)
 {
     if (!core) {

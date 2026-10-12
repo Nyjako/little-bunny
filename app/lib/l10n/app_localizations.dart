@@ -178,6 +178,30 @@ abstract class AppLocalizations {
   /// **'Certificate SHA-256 fingerprint'**
   String get setupCertFingerprintLabel;
 
+  /// No description provided for @setupReconfigureTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Switch connection'**
+  String get setupReconfigureTitle;
+
+  /// No description provided for @setupSwitchWarningTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Switch data source?'**
+  String get setupSwitchWarningTitle;
+
+  /// No description provided for @setupSwitchWarningMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'Standalone and networked mode use separate data stores -- your current searches/accounts won\'t automatically carry over. Use Settings → Backup to export/import searches if you want to bring them along.'**
+  String get setupSwitchWarningMessage;
+
+  /// No description provided for @setupSwitchConfirm.
+  ///
+  /// In en, this message translates to:
+  /// **'Switch'**
+  String get setupSwitchConfirm;
+
   /// No description provided for @loginScreenTitle.
   ///
   /// In en, this message translates to:
@@ -369,6 +393,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Recently created'**
   String get searchesSortRecentlyCreated;
+
+  /// No description provided for @searchesSortLastViewed.
+  ///
+  /// In en, this message translates to:
+  /// **'Last viewed'**
+  String get searchesSortLastViewed;
 
   /// No description provided for @searchesCheckForUpdatesTooltip.
   ///
@@ -867,6 +897,30 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Settings'**
   String get settingsScreenTitle;
+
+  /// No description provided for @settingsConnectionSection.
+  ///
+  /// In en, this message translates to:
+  /// **'Connection'**
+  String get settingsConnectionSection;
+
+  /// No description provided for @settingsConnectionEntry.
+  ///
+  /// In en, this message translates to:
+  /// **'Switch connection mode'**
+  String get settingsConnectionEntry;
+
+  /// No description provided for @settingsConnectionStandalone.
+  ///
+  /// In en, this message translates to:
+  /// **'Standalone'**
+  String get settingsConnectionStandalone;
+
+  /// No description provided for @settingsConnectionNetworked.
+  ///
+  /// In en, this message translates to:
+  /// **'Networked ({serverUrl})'**
+  String settingsConnectionNetworked(String serverUrl);
 
   /// No description provided for @settingsAppearanceSection.
   ///
