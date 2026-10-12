@@ -101,6 +101,23 @@ else()
   set(BUNNY_CURL_USE_MBEDTLS OFF)
 endif()
 
+# This app only ever does plain HTTPS GET/POST JSON calls to e621/Inkbunny --
+# none of brotli/zstd compression negotiation is needed, and leaving them at
+# curl's own default (auto-detect-if-present) silently links against
+# whatever happens to already be installed on the BUILD machine, which then
+# fails to start on a deploy target that doesn't happen to have the same
+# libraries (e.g. building on an Arch-family desktop, deploying to Ubuntu --
+# see deploy/README.md's "Installing a binary built elsewhere" section).
+# CURL_BROTLI/CURL_ZSTD are curl's own AUTO/ON/OFF cache-STRING options (set
+# via a custom macro, not a plain CMake option()) -- passing them through
+# CPMAddPackage's OPTIONS list (a plain, non-FORCE set()) gets silently
+# ignored because curl's own macro re-declares the same cache entry first,
+# so they need a real forced cache set here instead, same as the
+# ANDROID-only mbedTLS variables below. CURL_USE_LIBSSH2/USE_LIBIDN2/
+# USE_NGHTTP2 are plain option()s, so the OPTIONS list below works for them.
+set(CURL_BROTLI OFF CACHE STRING "" FORCE)
+set(CURL_ZSTD OFF CACHE STRING "" FORCE)
+
 CPMAddPackage(
   NAME curl
   GITHUB_REPOSITORY curl/curl
@@ -112,6 +129,9 @@ CPMAddPackage(
     "CURL_USE_OPENSSL ${BUNNY_CURL_USE_OPENSSL}"
     "CURL_USE_MBEDTLS ${BUNNY_CURL_USE_MBEDTLS}"
     "CURL_USE_LIBPSL OFF"
+    "CURL_USE_LIBSSH2 OFF"
+    "USE_LIBIDN2 OFF"
+    "USE_NGHTTP2 OFF"
     "CURL_DISABLE_LDAP ON"
     "CURL_DISABLE_LDAPS ON"
     "CURL_DISABLE_TELNET ON"
