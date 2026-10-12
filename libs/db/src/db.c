@@ -110,3 +110,31 @@ void bunny_db_close(bunny_db_t *db)
     sqlite3_close(db->handle);
     free(db);
 }
+
+bunny_db_result_t bunny_db_backup(bunny_db_t *db, const char *dest_path)
+{
+    if (!db || !dest_path) {
+        return BUNNY_DB_ERR_INVALID_ARG;
+    }
+
+    sqlite3 *dest_handle = NULL;
+    if (sqlite3_open(dest_path, &dest_handle) != SQLITE_OK) {
+        sqlite3_close(dest_handle);
+        return BUNNY_DB_ERR_OPEN_FAILED;
+    }
+
+    /* The Online Backup API, not a raw file copy -- safe to run against a
+     * source database the server may have open and writing to concurrently
+     * (M14.5), unlike copying the .db file directly. */
+    sqlite3_backup *backup = sqlite3_backup_init(dest_handle, "main", db->handle, "main");
+    if (!backup) {
+        sqlite3_close(dest_handle);
+        return BUNNY_DB_ERR_UNKNOWN;
+    }
+
+    int rc = sqlite3_backup_step(backup, -1);
+    sqlite3_backup_finish(backup);
+    sqlite3_close(dest_handle);
+
+    return rc == SQLITE_DONE ? BUNNY_DB_OK : bunny_db_sqlite_rc_to_result(rc);
+}
