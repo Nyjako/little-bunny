@@ -9,6 +9,7 @@ add_library(bunny_core STATIC
     src/verify.c
     src/downloads.c
     src/blacklist.c
+    src/backup.c
 )
 
 target_include_directories(bunny_core

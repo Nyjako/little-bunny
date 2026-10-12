@@ -97,7 +97,7 @@ server_app_t *server_app_start(const bunny_core_config_t *core_config, const cha
     server_routes_register_search(app->mg_ctx, &app->ctx);
     server_routes_register_blacklist(app->mg_ctx, &app->ctx);
 
-    if (!server_scheduler_start(&app->scheduler, &app->ctx, poll_interval_sec)) {
+    if (!server_scheduler_start(&app->scheduler, &app->ctx, data_dir, poll_interval_sec)) {
         mg_stop(app->mg_ctx);
         pthread_mutex_destroy(&app->ctx.core_mutex);
         bunny_core_close(app->core);

@@ -3,6 +3,7 @@
 #include <bunny_common/http.h>
 #include <curl/curl.h>
 
+#include <dirent.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -165,6 +166,10 @@ void setUp(void)
 
 void tearDown(void)
 {
+    /* Stop the scheduler (and therefore any in-flight backup_due_and_prune,
+     * M14.5) before touching the filesystem below -- otherwise a
+     * still-running poll tick could recreate backups/<file> between this
+     * cleanup's unlink and rmdir. */
     server_app_stop(g_app);
     g_app = NULL;
 
@@ -173,6 +178,26 @@ void tearDown(void)
     unlink(path);
     snprintf(path, sizeof(path), "%s/server.pem", g_data_dir);
     unlink(path);
+
+    /* Any test run with a short poll interval (e.g. test_scheduler_*) may
+     * have had the scheduler write into backups/ as a side effect, even if
+     * that specific test isn't about backups. */
+    char backups_dir[600];
+    snprintf(backups_dir, sizeof(backups_dir), "%s/backups", g_data_dir);
+    DIR *dir = opendir(backups_dir);
+    if (dir) {
+        struct dirent *entry;
+        while ((entry = readdir(dir)) != NULL) {
+            if (entry->d_name[0] == '.') {
+                continue;
+            }
+            snprintf(path, sizeof(path), "%s/%s", backups_dir, entry->d_name);
+            unlink(path);
+        }
+        closedir(dir);
+        rmdir(backups_dir);
+    }
+
     rmdir(g_data_dir);
 }
 
@@ -623,6 +648,53 @@ void test_scheduler_syncs_search_automatically(void)
     free(response.data);
 }
 
+void test_scheduler_backs_up_database_automatically(void)
+{
+    /* Same restart-with-a-short-poll-interval shape as the sync test above
+     * -- exercises the actual scheduler thread's backup check (M14.5)
+     * instead of calling anything backup-related directly, since there's
+     * no HTTP route for it (server-only background job). */
+    server_app_stop(g_app);
+
+    bunny_core_config_t core_config;
+    memset(&core_config, 0, sizeof(core_config));
+    core_config.db_path = ":memory:";
+    core_config.user_agent = "bunny-tests/1.0 (integration)";
+    core_config.e621_transport = &g_e621_transport;
+    core_config.min_request_interval_sec = 0.001;
+
+    g_app = server_app_start(&core_config, g_data_dir, TEST_PORT, 1);
+    TEST_ASSERT_NOT_NULL(g_app);
+    usleep(100000);
+
+    /* No existing backups -- the first poll tick should back up right
+     * away, no 24h wait needed on an empty backups/ dir. Stop the scheduler
+     * before inspecting backups/ -- otherwise a concurrent tick could
+     * recreate a file (count is back to 0 right after this test's own
+     * cleanup deletes it) between this test's unlink and rmdir, racing the
+     * cleanup below. */
+    sleep(3);
+    server_app_stop(g_app);
+    g_app = NULL;
+
+    /* tearDown() cleans up backups/ itself (every poll-tick test can leave
+     * one behind, not just this test) -- just confirm one exists here. */
+    char backups_dir[600];
+    snprintf(backups_dir, sizeof(backups_dir), "%s/backups", g_data_dir);
+    DIR *dir = opendir(backups_dir);
+    TEST_ASSERT_NOT_NULL(dir);
+
+    int found = 0;
+    struct dirent *entry;
+    while ((entry = readdir(dir)) != NULL) {
+        if (strncmp(entry->d_name, "bunny_", 6) == 0) {
+            found++;
+        }
+    }
+    closedir(dir);
+    TEST_ASSERT_TRUE(found > 0);
+}
+
 int main(void)
 {
     curl_global_init(CURL_GLOBAL_DEFAULT);
@@ -638,6 +710,7 @@ int main(void)
     RUN_TEST(test_search_auto_favorite_create_and_update);
     RUN_TEST(test_my_inkbunny_favorites_searches_and_caches_with_favorite_marked);
     RUN_TEST(test_scheduler_syncs_search_automatically);
+    RUN_TEST(test_scheduler_backs_up_database_automatically);
     int result = UNITY_END();
     curl_global_cleanup();
     return result;
