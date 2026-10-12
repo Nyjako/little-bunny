@@ -1435,7 +1435,10 @@ this file is the single source of truth for "what's done" across sessions.
   unit, starts the service, then prints the server URL/bearer token/certificate fingerprint
   the Flutter app's Networked setup needs, reading them straight out of the generated
   `auth_token`/`server.pem` files. No server-side code changes; this is deployment tooling
-  only.
+  only. **Follow-up**: the actual target instance turned out too weak to comfortably build
+  on, so `install.sh`'s shared install/start/print logic moved into
+  `deploy/_install-common.sh`, and a new `install-prebuilt.sh <path>` installs a binary
+  built on a different (more powerful) machine with no compiler needed on the target at all.
 
 - [ ] **M12 — Cross-platform polish**
   Responsive desktop/mobile layout, consistent theming pass, Windows app build, packaging.

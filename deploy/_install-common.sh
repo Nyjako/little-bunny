@@ -1,0 +1,60 @@
+# Shared by install.sh (builds then installs) and install-prebuilt.sh (installs
+# a binary built elsewhere, e.g. on a more powerful machine than the target
+# server) -- not meant to be run directly. Expects UNIT_NAME, DATA_DIR, and
+# REPO_ROOT to already be set, and BINARY to point at a built bunny_server
+# executable.
+bunny_install_and_start() {
+    echo "==> Installing binary and systemd unit"
+    if systemctl is-active --quiet "$UNIT_NAME" 2>/dev/null; then
+        systemctl stop "$UNIT_NAME"
+    fi
+    install -Dm755 "$BINARY" /usr/local/bin/bunny_server
+    install -Dm644 "$REPO_ROOT/deploy/bunny-server.service" "/etc/systemd/system/$UNIT_NAME.service"
+
+    systemctl daemon-reload
+    systemctl enable --now "$UNIT_NAME"
+
+    echo "==> Waiting for first-run setup (auth token + TLS certificate)"
+    for _ in $(seq 1 30); do
+        if [ -f "$DATA_DIR/auth_token" ] && [ -f "$DATA_DIR/server.pem" ]; then
+            break
+        fi
+        sleep 1
+    done
+
+    if ! systemctl is-active --quiet "$UNIT_NAME"; then
+        echo "error: $UNIT_NAME failed to start -- check: journalctl -u $UNIT_NAME -n 50" >&2
+        exit 1
+    fi
+
+    if [ ! -f "$DATA_DIR/auth_token" ] || [ ! -f "$DATA_DIR/server.pem" ]; then
+        echo "error: service is running but $DATA_DIR/auth_token or server.pem never appeared" >&2
+        echo "       check: journalctl -u $UNIT_NAME -n 50" >&2
+        exit 1
+    fi
+
+    local auth_token fingerprint port
+    auth_token="$(cat "$DATA_DIR/auth_token")"
+    fingerprint="$(openssl x509 -in "$DATA_DIR/server.pem" -noout -fingerprint -sha256 | cut -d= -f2)"
+    port="$(systemctl show -p Environment "$UNIT_NAME" | grep -oP 'BUNNY_SERVER_PORT=\K[0-9]+' || echo 8443)"
+
+    cat <<EOF
+
+==> bunny_server is running (systemctl status $UNIT_NAME)
+
+Enter these into the app's Setup screen (or Settings -> Switch connection mode),
+"Networked" mode:
+
+  Server URL:   https://<this-machine's-public-IP-or-hostname>:$port
+  Bearer token: $auth_token
+  Cert SHA-256: $fingerprint
+
+Before connecting from outside this machine, make sure the port above is open
+in both this host's firewall (ufw/firewalld/iptables) and, for a cloud VM, the
+provider's own ingress rules (e.g. Oracle Cloud's Security List/Network
+Security Group -- its default rules block everything but SSH).
+
+Logs:    journalctl -u $UNIT_NAME -f
+Restart: systemctl restart $UNIT_NAME
+EOF
+}
