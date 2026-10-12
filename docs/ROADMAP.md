@@ -1402,6 +1402,28 @@ this file is the single source of truth for "what's done" across sessions.
   lexicographically the same as chronologically, making the prune a plain directory listing +
   sort). `server_scheduler_start` gained a `data_dir` parameter to build this path.
 
+- [x] **M15 — Runtime connection switching + last-viewed sort**
+  Two independent requests. **Switching**: `SettingsScreen` gained a "Connection" section
+  showing the active mode (`RepositorySettingsStore.load()`), tappable into `SetupScreen` reused
+  with a new `isReconfigure: true` flag -- preselects the currently active mode (server URL only,
+  never secrets, re-entry required same as `LockSetupScreen`'s PIN), shows a plain "separate data
+  stores, no auto-merge" warning dialog before committing (after the existing connection-test
+  step for networked mode), and pops the navigator back to the app's root on success rather than
+  leaving stale routes built against the old repository. `BunnyRepository` gained a `close()`
+  method (both implementations already had the underlying logic; `main.dart`'s `_onConfigured`
+  now closes the outgoing repository before swapping in the new one, since for the first time a
+  repository can be discarded mid-run instead of living for the app's whole lifetime). Bringing
+  searches across modes needs no new code -- `SettingsScreen`'s existing Backup export/import
+  already round-trips through the abstract `BunnyRepository` interface. No local data is ever
+  deleted; the standalone SQLite file is simply left on disk and unused after switching away.
+  **Last-viewed sort**: new `searches.last_viewed_at` column (migration 7), threaded end-to-end
+  the same way M14.1's `pinned` column was -- `bunny_db_search_touch_last_viewed` →
+  `bunny_core_search_touch_last_viewed` → FFI isolate request → `POST /searches/{id}/viewed` →
+  both `BunnyRepository` implementations. `SearchesScreen`'s sort menu gained a "Last viewed"
+  option; opening a search or pool (the Pools tab is just `BunnySearch` rows filtered by query
+  prefix, so this covers both tabs for free) calls the new touch method without blocking
+  navigation, then refreshes the list on return so the reorder is actually visible.
+
 - [ ] **M12 — Cross-platform polish**
   Responsive desktop/mobile layout, consistent theming pass, Windows app build, packaging.
   - [x] **M12.1 — Android client build.** `fvm flutter build apk` now succeeds end-to-end

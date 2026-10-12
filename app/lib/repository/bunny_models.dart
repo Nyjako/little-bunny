@@ -61,6 +61,10 @@ class BunnySearch {
   /// (M14.1), toggled directly from the row rather than the edit form.
   final bool pinned;
 
+  /// When this search/pool was last opened, for the "last viewed" sort
+  /// order -- null if it's never been opened (M15).
+  final String? lastViewedAt;
+
   const BunnySearch({
     required this.id,
     required this.site,
@@ -75,6 +79,7 @@ class BunnySearch {
     this.autoFavoriteStars = 1,
     this.autoUpvote = false,
     this.pinned = false,
+    this.lastViewedAt,
   });
 }
 

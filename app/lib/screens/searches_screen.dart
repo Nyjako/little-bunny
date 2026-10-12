@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../bunny_repository_scope.dart';
@@ -7,6 +9,7 @@ import '../repository/bunny_repository.dart';
 import '../settings/app_lock_service.dart';
 import '../settings/display_settings_store.dart';
 import '../settings/download_settings_store.dart';
+import '../settings/repository_settings_store.dart';
 import '../settings/sync_settings_store.dart';
 import '../settings/theme_settings_store.dart';
 import '../util/responsive.dart';
@@ -27,7 +30,9 @@ class SearchesScreen extends StatefulWidget {
   final SyncSettingsStore syncSettingsStore;
   final DisplaySettingsStore displaySettingsStore;
   final DownloadSettingsStore downloadSettingsStore;
+  final RepositorySettingsStore settingsStore;
   final ValueChanged<ThemeMode> onThemeModeChanged;
+  final ValueChanged<BunnyRepository> onRepositoryConfigured;
 
   const SearchesScreen({
     super.key,
@@ -36,7 +41,9 @@ class SearchesScreen extends StatefulWidget {
     required this.syncSettingsStore,
     required this.displaySettingsStore,
     required this.downloadSettingsStore,
+    required this.settingsStore,
     required this.onThemeModeChanged,
+    required this.onRepositoryConfigured,
   });
 
   @override
@@ -83,6 +90,8 @@ class _SearchesScreenState extends State<SearchesScreen> with SingleTickerProvid
           list.sort((a, b) => a.label.toLowerCase().compareTo(b.label.toLowerCase()));
         case SearchSortOrder.recentlyCreated:
           list.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+        case SearchSortOrder.lastViewed:
+          list.sort((a, b) => (b.lastViewedAt ?? '').compareTo(a.lastViewedAt ?? ''));
       }
     }
 
@@ -227,6 +236,21 @@ class _SearchesScreenState extends State<SearchesScreen> with SingleTickerProvid
     _refresh();
   }
 
+  /// Records the open (fire-and-forget -- shouldn't delay navigation) for the
+  /// "last viewed" sort order, then awaits the post grid so returning from it
+  /// re-sorts the list and the reordering is actually visible (M15).
+  Future<void> _openSearch(BunnySearch search) async {
+    unawaited(_repository!.touchSearchViewed(search.id));
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) =>
+            PostGridScreen(search: search, repository: _repository!, displaySettingsStore: widget.displaySettingsStore, syncSettingsStore: widget.syncSettingsStore, downloadSettingsStore: widget.downloadSettingsStore),
+      ),
+    );
+    _refresh();
+  }
+
   Future<void> _editSearch(BunnySearch search) async {
     final updated = await Navigator.push<bool>(context, MaterialPageRoute(builder: (context) => EditSearchScreen(repository: _repository!, search: search)));
     if (updated == true) {
@@ -265,13 +289,7 @@ class _SearchesScreenState extends State<SearchesScreen> with SingleTickerProvid
                       : IconButton(icon: const Icon(Icons.refresh), tooltip: l10n.searchesSyncRowTooltip, onPressed: () => _syncOneSearch(search)),
                 ],
               ),
-              onTap: () => Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) =>
-                      PostGridScreen(search: search, repository: _repository!, displaySettingsStore: widget.displaySettingsStore, syncSettingsStore: widget.syncSettingsStore, downloadSettingsStore: widget.downloadSettingsStore),
-                ),
-              ),
+              onTap: () => _openSearch(search),
               onLongPress: () => _editSearch(search),
             ),
           )
@@ -338,7 +356,9 @@ class _SearchesScreenState extends State<SearchesScreen> with SingleTickerProvid
                     syncSettingsStore: widget.syncSettingsStore,
                     displaySettingsStore: widget.displaySettingsStore,
                     downloadSettingsStore: widget.downloadSettingsStore,
+                    settingsStore: widget.settingsStore,
                     onThemeModeChanged: widget.onThemeModeChanged,
+                    onRepositoryConfigured: widget.onRepositoryConfigured,
                   ),
                 ),
               );
@@ -358,6 +378,7 @@ class _SearchesScreenState extends State<SearchesScreen> with SingleTickerProvid
               CheckedPopupMenuItem(value: SearchSortOrder.mostUnseen, checked: _sortOrder == SearchSortOrder.mostUnseen, child: Text(l10n.searchesSortMostUnseen)),
               CheckedPopupMenuItem(value: SearchSortOrder.label, checked: _sortOrder == SearchSortOrder.label, child: Text(l10n.searchesSortLabel)),
               CheckedPopupMenuItem(value: SearchSortOrder.recentlyCreated, checked: _sortOrder == SearchSortOrder.recentlyCreated, child: Text(l10n.searchesSortRecentlyCreated)),
+              CheckedPopupMenuItem(value: SearchSortOrder.lastViewed, checked: _sortOrder == SearchSortOrder.lastViewed, child: Text(l10n.searchesSortLastViewed)),
             ],
           ),
         ],

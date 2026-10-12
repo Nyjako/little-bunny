@@ -36,6 +36,7 @@ static cJSON *search_to_json(const bunny_db_search_t *search)
     cJSON_AddNumberToObject(json, "auto_favorite_stars", search->auto_favorite_stars);
     cJSON_AddBoolToObject(json, "auto_upvote", search->auto_upvote);
     cJSON_AddBoolToObject(json, "pinned", search->pinned);
+    add_optional_string(json, "last_viewed_at", search->last_viewed_at);
     return json;
 }
 
@@ -194,6 +195,23 @@ static int handle_mark_all_seen(struct mg_connection *conn, server_context_t *ct
     return status;
 }
 
+static int handle_touch_search_viewed(struct mg_connection *conn, server_context_t *ctx, int64_t search_id)
+{
+    pthread_mutex_lock(&ctx->core_mutex);
+    bunny_core_result_t result = bunny_core_search_touch_last_viewed(ctx->core, search_id);
+    pthread_mutex_unlock(&ctx->core_mutex);
+
+    if (result != BUNNY_CORE_OK) {
+        return server_json_respond_error(conn, result);
+    }
+
+    cJSON *response = cJSON_CreateObject();
+    cJSON_AddBoolToObject(response, "ok", true);
+    int status = server_json_respond(conn, 200, response);
+    cJSON_Delete(response);
+    return status;
+}
+
 static int handle_sync_search(struct mg_connection *conn, server_context_t *ctx, int64_t search_id)
 {
     bunny_core_sync_stats_t stats;
@@ -306,6 +324,9 @@ static int searches_handler(struct mg_connection *conn, void *cbdata)
         }
         if (strcmp(method, "POST") == 0 && server_route_parse_id_with_suffix(sub_path, "pin", &search_id)) {
             return handle_pin_search(conn, ctx, search_id);
+        }
+        if (strcmp(method, "POST") == 0 && server_route_parse_id_with_suffix(sub_path, "viewed", &search_id)) {
+            return handle_touch_search_viewed(conn, ctx, search_id);
         }
         if (strcmp(method, "PUT") == 0 && server_route_parse_id(sub_path, &search_id)) {
             return handle_put_search(conn, ctx, search_id);

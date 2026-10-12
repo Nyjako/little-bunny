@@ -11,4 +11,11 @@ import 'package:plugin_platform_interface/plugin_platform_interface.dart';
 class FakePathProviderPlatform extends Fake with MockPlatformInterfaceMixin implements PathProviderPlatform {
   @override
   Future<String?> getDownloadsPath() async => '/fake/downloads';
+
+  /// Backs `RepositorySettingsStore`'s standalone db path resolution (M15's
+  /// Settings Connection section loads the persisted config, which touches
+  /// this for a standalone config even when the FFI repository itself is a
+  /// fake and never actually opens the path).
+  @override
+  Future<String?> getApplicationSupportPath() async => '/fake/support';
 }

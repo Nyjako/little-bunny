@@ -8,6 +8,7 @@ import 'package:little_bunny/screens/searches_screen.dart';
 import 'package:little_bunny/settings/app_lock_service.dart';
 import 'package:little_bunny/settings/display_settings_store.dart';
 import 'package:little_bunny/settings/download_settings_store.dart';
+import 'package:little_bunny/settings/repository_settings_store.dart';
 import 'package:little_bunny/settings/sync_settings_store.dart';
 import 'package:little_bunny/settings/theme_settings_store.dart';
 import 'package:path_provider_platform_interface/path_provider_platform_interface.dart';
@@ -27,7 +28,9 @@ Widget _wrap(FakeBunnyRepository repository) => wrapWithLocalization(
       syncSettingsStore: const SyncSettingsStore(),
       displaySettingsStore: const DisplaySettingsStore(),
       downloadSettingsStore: const DownloadSettingsStore(),
+      settingsStore: RepositorySettingsStore(FakeSecretStore()),
       onThemeModeChanged: (_) {},
+      onRepositoryConfigured: (_) {},
     ),
   ),
 );
@@ -256,6 +259,55 @@ void main() {
 
     final store = const DisplaySettingsStore();
     expect(await store.loadSearchSortOrder(), SearchSortOrder.label);
+  });
+
+  testWidgets('last-viewed sort orders by lastViewedAt descending, and opening a search bumps it to the top (M15)', (WidgetTester tester) async {
+    final repository = FakeBunnyRepository();
+    final alphaId = await repository.createSearch(BunnySite.e621, 'Alpha', 'alpha');
+    final zebraId = await repository.createSearch(BunnySite.e621, 'Zebra', 'zebra');
+
+    void setLastViewed(int searchId, String? timestamp) {
+      final index = repository.searches.indexWhere((search) => search.id == searchId);
+      final search = repository.searches[index];
+      repository.searches[index] = BunnySearch(
+        id: search.id,
+        site: search.site,
+        label: search.label,
+        query: search.query,
+        intervalHours: search.intervalHours,
+        createdAt: search.createdAt,
+        lastViewedAt: timestamp,
+      );
+    }
+
+    setLastViewed(alphaId, '2026-01-01T00:00:00Z');
+    setLastViewed(zebraId, null);
+
+    await tester.pumpWidget(_wrap(repository));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byIcon(Icons.sort));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Last viewed'), warnIfMissed: false);
+    await tester.pumpAndSettle();
+
+    // Alpha has a real lastViewedAt; Zebra has never been viewed (null sorts
+    // last).
+    expect(tester.getTopLeft(find.text('Alpha')).dy, lessThan(tester.getTopLeft(find.text('Zebra')).dy));
+
+    // Opening a search records it as viewed immediately (fire-and-forget,
+    // doesn't wait on navigation) -- same hook backs the Pools tab since
+    // pools are just BunnySearch rows filtered by query prefix.
+    await tester.tap(find.text('Zebra'));
+    expect(repository.searches.firstWhere((search) => search.id == zebraId).lastViewedAt, isNotNull);
+    await tester.pumpAndSettle();
+
+    // Back on the list (returning from PostGridScreen refreshes it), Zebra
+    // now sorts above Alpha.
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+
+    expect(tester.getTopLeft(find.text('Zebra')).dy, lessThan(tester.getTopLeft(find.text('Alpha')).dy));
   });
 
   testWidgets('tapping "check for updates" syncs every search and re-enables the button when done (M13.2)', (WidgetTester tester) async {

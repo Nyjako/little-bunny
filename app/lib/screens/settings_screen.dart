@@ -7,13 +7,16 @@ import 'package:flutter/material.dart';
 import '../l10n/app_localizations.dart';
 import '../repository/bunny_models.dart';
 import '../repository/bunny_repository.dart';
+import '../repository/bunny_repository_factory.dart';
 import '../services/search_backup_service.dart';
 import '../settings/app_lock_service.dart';
 import '../settings/display_settings_store.dart';
 import '../settings/download_settings_store.dart';
+import '../settings/repository_settings_store.dart';
 import '../settings/sync_settings_store.dart';
 import '../settings/theme_settings_store.dart';
 import 'lock_setup_screen.dart';
+import 'setup_screen.dart';
 
 /// One place for cross-cutting app preferences -- reachable from
 /// [AccountsScreen]'s app bar. Structured so adding more appearance options
@@ -27,7 +30,9 @@ class SettingsScreen extends StatefulWidget {
   final SyncSettingsStore syncSettingsStore;
   final DisplaySettingsStore displaySettingsStore;
   final DownloadSettingsStore downloadSettingsStore;
+  final RepositorySettingsStore settingsStore;
   final ValueChanged<ThemeMode> onThemeModeChanged;
+  final ValueChanged<BunnyRepository> onRepositoryConfigured;
 
   const SettingsScreen({
     super.key,
@@ -37,7 +42,9 @@ class SettingsScreen extends StatefulWidget {
     required this.syncSettingsStore,
     required this.displaySettingsStore,
     required this.downloadSettingsStore,
+    required this.settingsStore,
     required this.onThemeModeChanged,
+    required this.onRepositoryConfigured,
   });
 
   @override
@@ -45,6 +52,7 @@ class SettingsScreen extends StatefulWidget {
 }
 
 class _SettingsScreenState extends State<SettingsScreen> {
+  BunnyRepositoryConfig? _repositoryConfig;
   ThemeMode? _themeMode;
   PreviewQuality? _previewQuality;
   String? _downloadFolder;
@@ -80,6 +88,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Future<void> _load() async {
+    final repositoryConfig = await widget.settingsStore.load();
     final mode = await widget.themeSettingsStore.load();
     final intervalHours = await widget.syncSettingsStore.loadDefaultIntervalHours();
     final previewQuality = await widget.displaySettingsStore.loadPreviewQuality();
@@ -91,6 +100,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       return;
     }
     setState(() {
+      _repositoryConfig = repositoryConfig;
       _themeMode = mode;
       _intervalController.text = '$intervalHours';
       _previewQuality = previewQuality;
@@ -230,17 +240,47 @@ class _SettingsScreenState extends State<SettingsScreen> {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(l10n.settingsBackupImportSummary(imported, duplicates, parsed.invalidCount))));
   }
 
+  Future<void> _switchConnectionMode() async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(builder: (context) => SetupScreen(settingsStore: widget.settingsStore, onConfigured: widget.onRepositoryConfigured, isReconfigure: true)),
+    );
+    // The reconfigure flow pops itself (and this screen, and everything
+    // beneath it) back to the app's root once a new repository is ready --
+    // see SetupScreen.isReconfigure. If the user backed out instead, nothing
+    // changed and this screen is still showing, so re-load to reflect
+    // whichever outcome actually happened.
+    if (mounted) {
+      _load();
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
     final themeMode = _themeMode;
     final previewQuality = _previewQuality;
+    final repositoryConfig = _repositoryConfig;
 
     return Scaffold(
       appBar: AppBar(title: Text(l10n.settingsScreenTitle)),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
+          Text(l10n.settingsConnectionSection, style: Theme.of(context).textTheme.titleMedium),
+          const SizedBox(height: 8),
+          ListTile(
+            contentPadding: EdgeInsets.zero,
+            title: Text(l10n.settingsConnectionEntry),
+            subtitle: Text(switch (repositoryConfig) {
+              StandaloneConfig() => l10n.settingsConnectionStandalone,
+              NetworkedConfig(:final serverBaseUrl) => l10n.settingsConnectionNetworked(serverBaseUrl.toString()),
+              null => '',
+            }),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: _switchConnectionMode,
+          ),
+          const SizedBox(height: 24),
           Text(l10n.settingsAppearanceSection, style: Theme.of(context).textTheme.titleMedium),
           const SizedBox(height: 8),
           if (themeMode != null)
