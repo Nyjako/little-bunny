@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <!-- Theme applied to the Android Window while the process is starting when the OS's Dark Mode setting is off.
-         Parent is Theme.AppCompat (not the plain platform theme) -- local_auth's
+         Parent is Theme.AppCompat (not the plain platform theme): local_auth's
          BiometricPrompt needs an AppCompat-based activity theme (M7.4, app-lock). -->
     <style name="LaunchTheme" parent="@style/Theme.AppCompat.Light.NoActionBar">
         <!-- Show a splash screen on the activity. Automatically removed when
