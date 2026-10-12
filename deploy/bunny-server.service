@@ -1,0 +1,51 @@
+[Unit]
+Description=LittleBunny server (bunny_server)
+Documentation=https://github.com/Nyjako/little-bunny
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/bunny_server
+Restart=on-failure
+RestartSec=5s
+
+# StateDirectory (systemd >= 230) creates/owns %S/bunny-server (normally
+# /var/lib/bunny-server) for this unit automatically, including under
+# DynamicUser -- bunny_server's own config.c (server/src/config.c) reads
+# BUNNY_SERVER_DATA_DIR and does its own mkdir -p, but pointing it here
+# explicitly keeps storage under systemd's management instead of falling
+# back to a resolved-at-runtime XDG path for a user that doesn't really
+# exist on disk.
+StateDirectory=bunny-server
+Environment=BUNNY_SERVER_DATA_DIR=%S/bunny-server
+# Uncomment to override the default port (8443) or sync poll interval
+# (900s); see server/src/config.c for the full list of BUNNY_SERVER_*
+# variables this binary reads.
+#Environment=BUNNY_SERVER_PORT=8443
+#Environment=BUNNY_SERVER_POLL_INTERVAL_SEC=900
+
+# No real user/group needed for a single-purpose service like this --
+# systemd allocates and tears down an unprivileged one per the unit's
+# lifecycle (systemd >= 232).
+DynamicUser=yes
+
+# Hardening: least privilege for a service that only needs network access
+# and its own StateDirectory.
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictSUIDSGID=yes
+RestrictRealtime=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+CapabilityBoundingSet=
+AmbientCapabilities=
+
+[Install]
+WantedBy=multi-user.target

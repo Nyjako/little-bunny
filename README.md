@@ -12,9 +12,10 @@ progress.
 
 - `libs/common` — shared HTTP transport + JSON helpers used by the site client libraries.
 - `libs/e621` — standalone, reusable e621 API client library.
-- `libs/inkbunny` — standalone, reusable Inkbunny API client library (future milestone).
-- `server/` — the C server that owns sync state (future milestone).
-- `app/` — the Flutter GUI (future milestone).
+- `libs/inkbunny` — standalone, reusable Inkbunny API client library.
+- `server/` — the C server that owns sync state for networked mode.
+- `app/` — the Flutter GUI (desktop + mobile).
+- `deploy/` — systemd service + install script for running `bunny_server` on a VM.
 
 ## Building
 
@@ -38,3 +39,16 @@ Requires Docker. Uses [dockcross](https://github.com/dockcross/dockcross)'s
 ```sh
 make windows
 ```
+
+## Running the server
+
+For networked mode (multiple devices syncing against one server instead of each using its
+own standalone/offline database), `bunny_server` can be installed as a systemd service with
+one command on a fresh Linux VM:
+
+```sh
+sudo ./deploy/install.sh
+```
+
+See [`deploy/README.md`](deploy/README.md) for details, firewall notes, and how to update
+or uninstall it.

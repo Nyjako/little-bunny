@@ -1424,6 +1424,19 @@ this file is the single source of truth for "what's done" across sessions.
   prefix, so this covers both tabs for free) calls the new touch method without blocking
   navigation, then refreshes the list on return so the reorder is actually visible.
 
+- [x] **M16 — Server deployment tooling**
+  "Simplify server setup" -- the server itself (M5) already generates its own TLS cert and
+  bearer token on first run with no reverse proxy needed, but there was no written-down way
+  to actually get it running on a VM. New `deploy/` directory: `bunny-server.service`, a
+  systemd unit using `DynamicUser`/`StateDirectory` (no manual user/permission setup, data
+  lives at `/var/lib/bunny-server`) plus standard hardening directives; `install.sh`, a
+  one-command installer for a fresh Linux VM (confirmed target: Oracle Cloud free tier) --
+  installs build prerequisites (apt/dnf/pacman), runs `make release`, installs the binary +
+  unit, starts the service, then prints the server URL/bearer token/certificate fingerprint
+  the Flutter app's Networked setup needs, reading them straight out of the generated
+  `auth_token`/`server.pem` files. No server-side code changes; this is deployment tooling
+  only.
+
 - [ ] **M12 — Cross-platform polish**
   Responsive desktop/mobile layout, consistent theming pass, Windows app build, packaging.
   - [x] **M12.1 — Android client build.** `fvm flutter build apk` now succeeds end-to-end
