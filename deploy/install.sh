@@ -1,10 +1,17 @@
 #!/usr/bin/env bash
 # Builds bunny_server (the C server, see docs/architecture.md's "C server
-# (M5)" section) and installs it as a systemd service. Meant for a fresh
-# Linux VM with no manual TLS/proxy setup -- the server already generates
-# its own self-signed certificate and bearer token on first run (M5.1); this
-# script's only job is getting that binary running unattended and handing
-# back the two values the Flutter app's "Networked" setup screen needs.
+# (M5)" section) on THIS machine and installs it as a systemd service. Meant
+# for a fresh Linux VM with no manual TLS/proxy setup -- the server already
+# generates its own self-signed certificate and bearer token on first run
+# (M5.1); this script's only job is getting that binary running unattended
+# and handing back the values the Flutter app's "Networked" setup screen
+# needs.
+#
+# If the target machine isn't powerful enough to comfortably build the
+# dependency chain (curl, civetweb, ...) itself, build on another machine of
+# the same architecture/distro family instead (plain `make release`) and use
+# install-prebuilt.sh on the target to install that binary directly, with no
+# build step there at all.
 #
 # Usage: sudo ./deploy/install.sh [--skip-deps]
 set -euo pipefail
@@ -28,6 +35,8 @@ done
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 UNIT_NAME=bunny-server
 DATA_DIR=/var/lib/bunny-server
+# shellcheck source=_install-common.sh
+source "$REPO_ROOT/deploy/_install-common.sh"
 
 if [ "$SKIP_DEPS" -eq 0 ]; then
     echo "==> Installing build prerequisites"
@@ -55,56 +64,4 @@ if [ ! -x "$BINARY" ]; then
     exit 1
 fi
 
-echo "==> Installing binary and systemd unit"
-if systemctl is-active --quiet "$UNIT_NAME" 2>/dev/null; then
-    systemctl stop "$UNIT_NAME"
-fi
-install -Dm755 "$BINARY" /usr/local/bin/bunny_server
-install -Dm644 "$REPO_ROOT/deploy/bunny-server.service" "/etc/systemd/system/$UNIT_NAME.service"
-
-systemctl daemon-reload
-systemctl enable --now "$UNIT_NAME"
-
-echo "==> Waiting for first-run setup (auth token + TLS certificate)"
-for _ in $(seq 1 30); do
-    if [ -f "$DATA_DIR/auth_token" ] && [ -f "$DATA_DIR/server.pem" ]; then
-        break
-    fi
-    sleep 1
-done
-
-if ! systemctl is-active --quiet "$UNIT_NAME"; then
-    echo "error: $UNIT_NAME failed to start -- check: journalctl -u $UNIT_NAME -n 50" >&2
-    exit 1
-fi
-
-if [ ! -f "$DATA_DIR/auth_token" ] || [ ! -f "$DATA_DIR/server.pem" ]; then
-    echo "error: service is running but $DATA_DIR/auth_token or server.pem never appeared" >&2
-    echo "       check: journalctl -u $UNIT_NAME -n 50" >&2
-    exit 1
-fi
-
-AUTH_TOKEN="$(cat "$DATA_DIR/auth_token")"
-FINGERPRINT="$(openssl x509 -in "$DATA_DIR/server.pem" -noout -fingerprint -sha256 | cut -d= -f2)"
-PORT="$(systemctl show -p Environment "$UNIT_NAME" | grep -oP 'BUNNY_SERVER_PORT=\K[0-9]+' || echo 8443)"
-
-cat <<EOF
-
-==> bunny_server is running (systemctl status $UNIT_NAME)
-
-Enter these into the app's Setup screen (or Settings -> Switch connection mode),
-"Networked" mode:
-
-  Server URL:   https://<this-machine's-public-IP-or-hostname>:$PORT
-  Bearer token: $AUTH_TOKEN
-  Cert SHA-256: $FINGERPRINT
-
-Before connecting from outside this machine, make sure the port above is open
-in both this host's firewall (ufw/firewalld/iptables) and, for a cloud VM, the
-provider's own ingress rules (e.g. Oracle Cloud's Security List/Network
-Security Group -- its default rules block everything but SSH).
-
-Logs:    journalctl -u $UNIT_NAME -f
-Restart: systemctl restart $UNIT_NAME
-Update:  re-run this script after pulling new commits
-EOF
+bunny_install_and_start

@@ -2302,6 +2302,21 @@ directory:
   the confirmed deployment target (Oracle Cloud free tier) -- its default Security
   List/Network Security Group blocks all inbound traffic except SSH, so the server's port
   needs an explicit ingress rule there in addition to any local firewall (`ufw`/`firewalld`).
+- **`deploy/install-prebuilt.sh`** (follow-up, same milestone): the free-tier instance this
+  targets turned out to be too weak to comfortably compile curl/civetweb/sqlite/cJSON from
+  source itself, so the install flow needed a path that builds nowhere near the target at
+  all. `install.sh`'s shared tail (install binary + unit, `daemon-reload`, `enable --now`,
+  poll for `auth_token`/`server.pem`, print the connection summary) was pulled out into
+  `deploy/_install-common.sh`'s `bunny_install_and_start` function (leading underscore:
+  sourced by the other two scripts, not meant to be run directly), so both the "build here"
+  (`install.sh`) and "binary built elsewhere" (`install-prebuilt.sh <path>`, no compiler or
+  build-dependency step at all) flows stay in sync rather than maintaining two copies of the
+  same systemd/polling logic. The binary needs to come from a machine of the same CPU
+  architecture and ideally the same distro family -- it's dynamically linked against
+  `libssl`/`libcrypto` plus several of curl's own optional dependencies (`libssh2`,
+  `libidn2`, `brotli`, `zstd`, `nghttp2`), none of which are vendored statically, so an
+  older/newer glibc or missing shared library on the target can still fail at runtime even
+  though the binary itself copies over fine.
 
 ## Inkbunny API constraints (found in M2)
 
