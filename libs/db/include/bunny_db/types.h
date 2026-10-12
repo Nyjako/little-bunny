@@ -52,6 +52,7 @@ typedef struct
     int auto_favorite_stars; /* Inkbunny favorite level (1-3); ignored by e621 */
     bool auto_upvote;        /* e621 only -- queue an upvote for every post this search finds during sync */
     bool pinned;             /* shown first in SearchesScreen, ahead of the normal sort order */
+    char *last_viewed_at;    /* NULL if this search/pool has never been opened */
 } bunny_db_search_t;
 
 typedef struct

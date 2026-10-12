@@ -124,6 +124,7 @@ class FakeBunnyRepository implements BunnyRepository {
           autoFavoriteStars: search.autoFavoriteStars,
           autoUpvote: search.autoUpvote,
           pinned: search.pinned,
+          lastViewedAt: search.lastViewedAt,
         ),
       )
       .toList();
@@ -155,6 +156,7 @@ class FakeBunnyRepository implements BunnyRepository {
       autoFavoriteStars: search.autoFavoriteStars,
       autoUpvote: search.autoUpvote,
       pinned: pinned,
+      lastViewedAt: search.lastViewedAt,
     );
   }
 
@@ -426,4 +428,32 @@ class FakeBunnyRepository implements BunnyRepository {
     processQueueCallCount++;
     return processQueueResult;
   }
+
+  @override
+  Future<void> touchSearchViewed(int searchId) async {
+    final index = searches.indexWhere((search) => search.id == searchId);
+    if (index == -1) {
+      return;
+    }
+    final search = searches[index];
+    searches[index] = BunnySearch(
+      id: search.id,
+      site: search.site,
+      label: search.label,
+      query: search.query,
+      intervalHours: search.intervalHours,
+      createdAt: search.createdAt,
+      lastRunAt: search.lastRunAt,
+      unseenCount: search.unseenCount,
+      totalCount: search.totalCount,
+      autoFavorite: search.autoFavorite,
+      autoFavoriteStars: search.autoFavoriteStars,
+      autoUpvote: search.autoUpvote,
+      pinned: search.pinned,
+      lastViewedAt: DateTime.now().toUtc().toIso8601String(),
+    );
+  }
+
+  @override
+  Future<void> close() async {}
 }

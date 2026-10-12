@@ -30,6 +30,7 @@ BunnySearch _searchFromJson(Map<String, Object?> j) => BunnySearch(
   autoFavoriteStars: (j['auto_favorite_stars'] as num).toInt(),
   autoUpvote: j['auto_upvote'] as bool,
   pinned: j['pinned'] as bool,
+  lastViewedAt: j['last_viewed_at'] as String?,
 );
 
 BunnyPost _postFromJson(Map<String, Object?> j) => BunnyPost(
@@ -144,7 +145,8 @@ class HttpBunnyRepository implements BunnyRepository {
     return (cert, host, port) => matchesPinnedFingerprint(cert.der, expectedFingerprint);
   }
 
-  void close() => _client.close();
+  @override
+  Future<void> close() async => _client.close();
 
   Uri _uri(String path, [Map<String, String>? query]) => _baseUrl.replace(path: path, queryParameters: query);
 
@@ -244,6 +246,14 @@ class HttpBunnyRepository implements BunnyRepository {
   @override
   Future<void> setSearchPinned(int searchId, bool pinned) async {
     final response = await _client.post(_uri('/searches/$searchId/pin'), headers: _headers, body: jsonEncode({'pinned': pinned}));
+    if (response.statusCode != 200) {
+      _throwError(response);
+    }
+  }
+
+  @override
+  Future<void> touchSearchViewed(int searchId) async {
+    final response = await _client.post(_uri('/searches/$searchId/viewed'), headers: _headers);
     if (response.statusCode != 200) {
       _throwError(response);
     }

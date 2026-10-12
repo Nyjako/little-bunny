@@ -2211,6 +2211,64 @@ other scheduler-poll tests rely on -- has to stop the scheduler thread *before* 
 poll tick can otherwise recreate a file between the test's own `unlink` and `rmdir`, intermittently
 leaking a non-empty temp directory.
 
+## M15 -- Runtime connection switching + last-viewed sort
+
+Two independent, user-requested features in one branch since both are small and don't touch
+overlapping code.
+
+**Switch standalone ↔ networked from Settings**: previously `BunnyRepositoryConfig` was chosen
+once, at first launch via `SetupScreen`, and `main.dart`'s `_LittleBunnyAppState` held the
+resulting `BunnyRepository` for the app's entire lifetime. The key enabler already existed:
+`_onConfigured(BunnyRepository)` already `setState`s a new `_repository`, which
+`BunnyRepositoryScope` propagates down to a rebuilt tree -- the exact mechanism `SetupScreen`'s
+first-launch flow already used. The whole feature is reusing that same callback from inside
+Settings rather than building new state plumbing. `SetupScreen` gained an `isReconfigure: bool`
+field (default `false`, so the first-launch call site is unaffected): when `true`, `initState`
+loads the existing `BunnyRepositoryConfig` to preselect the segmented button (and prefill the
+server URL for networked -- never the bearer token/certificate fingerprint, matching
+`LockSetupScreen`'s existing "re-enter credentials for sensitive changes" pattern), both submit
+paths show a plain `AlertDialog` warning that the two modes are separate data stores with no
+auto-merge before persisting (after the existing connection-test step for networked), and on
+success it calls `Navigator.of(context).popUntil((route) => route.isFirst)` instead of just
+returning -- needed because the reconfigure screen is reached via `SearchesScreen` →
+`SettingsScreen` → `SetupScreen`, and simply swapping `_repository` in `main.dart` wouldn't
+retroactively rebuild those already-pushed routes (still holding the old repository reference);
+popping back to root lands on a freshly-built `SearchesScreen` bound to the new one instead.
+`BunnyRepository` gained a `close()` method on the abstract interface (both implementations
+already had the underlying logic -- `FfiBunnyRepository.close()` killed the FFI isolate,
+`HttpBunnyRepository.close()`'s `_client.close()` just needed wrapping in `Future<void>` to match
+the signature) since `_onConfigured` now closes the *outgoing* repository before replacing it,
+the first time in the app's life a repository can be discarded while the app keeps running
+rather than living until process exit. No data is ever deleted as part of switching -- per
+explicit discussion, the standalone SQLite file is simply left on disk and unreferenced after
+switching to networked (and vice versa, switching back just reopens the same file at its usual
+path, so nothing was lost). `SettingsScreen` gained a "Connection" section at the top (a
+`ListTile` showing the active mode, loaded the same way the rest of `_load()` already works)
+whose tap pushes `SetupScreen(..., isReconfigure: true)`.
+
+Moving searches across a switch needs no new code: `SettingsScreen`'s existing Backup
+export/import (M11) already goes through the abstract `BunnyRepository.listSearches()`/
+`createSearch()`, so exporting while standalone and importing the same file after switching to
+networked already works unchanged.
+
+**"Last viewed" sort for Searches/Pools**: a new `SearchSortOrder.lastViewed` option, threaded
+through the exact same full-stack pattern M14.1's `pinned` column established. Schema: migration
+7, `ALTER TABLE searches ADD COLUMN last_viewed_at TEXT;` (`libs/db/src/db.c`). New
+`bunny_db_search_touch_last_viewed(db, search_id)` (`libs/db/src/searches.c`) is identical in
+shape to the pre-existing `bunny_db_search_touch_last_run`, just a different column; added to
+`bunny_db_search_list`'s `SELECT` and `fill_search_from_row` the same way `pinned` was. Thin
+`bunny_core_search_touch_last_viewed` wrapper, an FFI isolate request/handler pair (mirroring
+`_SetSearchPinnedRequest`), a new `POST /searches/{id}/viewed` route (no request body needed,
+unlike `/pin` -- mirrors `/sync`/`/mark_all_seen`'s shape instead), and a
+`touchSearchViewed(int)` method on both `BunnyRepository` implementations and the abstract
+interface. Since the Pools tab isn't a separate entity -- `_isPoolSearch` just filters the same
+`BunnySearch` list by `query.startsWith('pool:')` -- hooking the touch into `SearchesScreen`'s
+one shared row `onTap` covers both tabs automatically. The touch call is fire-and-forget
+(`unawaited`, since it shouldn't delay opening the post grid); the `Navigator.push` itself is
+awaited now (previously fire-and-forget), with `_refresh()` called on return, so the reordering
+is actually visible when the user backs out rather than only taking effect on the next cold
+`FutureBuilder` rebuild.
+
 ## Inkbunny API constraints (found in M2)
 
 Verified against the live API and the official docs while building `libinkbunny`:

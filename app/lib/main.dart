@@ -110,6 +110,12 @@ class _LittleBunnyAppState extends State<LittleBunnyApp> {
   }
 
   Future<void> _onConfigured(BunnyRepository repository) async {
+    // Previously only ever called once at first launch, when _repository was
+    // still null -- now also reachable from Settings (M15) to switch
+    // standalone <-> networked mid-run, so the old repository must be closed
+    // (kills the FFI isolate / closes the HTTP client) rather than just
+    // dropped, or it would leak.
+    await _repository?.close();
     final locked = await widget.lockService.isEnabled();
     if (!mounted) {
       return;
@@ -142,7 +148,9 @@ class _LittleBunnyAppState extends State<LittleBunnyApp> {
           syncSettingsStore: widget.syncSettingsStore,
           displaySettingsStore: widget.displaySettingsStore,
           downloadSettingsStore: widget.downloadSettingsStore,
+          settingsStore: widget.settingsStore,
           onThemeModeChanged: (mode) => setState(() => _themeMode = mode),
+          onRepositoryConfigured: _onConfigured,
         ),
       );
     }
