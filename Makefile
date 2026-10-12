@@ -5,7 +5,7 @@ TOOLS_DIR ?= build-tools
 
 SOURCES := $(shell find libs tools server -name '*.c' -o -name '*.h')
 
-.PHONY: build test release clean dockcross windows tools format format-check
+.PHONY: build test release clean dockcross windows tools format format-check app-linux app-android
 
 build:
 	cmake -S . -B $(BUILD_DIR) -DCMAKE_BUILD_TYPE=Debug -DBUNNY_BUILD_TESTS=ON
@@ -38,3 +38,9 @@ format:
 
 format-check:
 	clang-format --dry-run --Werror $(SOURCES)
+
+app-linux:
+	cd app && fvm flutter build linux
+
+app-android:
+	cd app && fvm flutter build apk
