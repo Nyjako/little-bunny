@@ -30,6 +30,33 @@ Flutter app's Setup screen (or Settings -> "Switch connection mode") under "Netw
 - your cloud provider's ingress rules -- Oracle Cloud's default Security List/Network
   Security Group blocks everything but SSH out of the box.
 
+## Installing a binary built elsewhere
+
+If the target machine isn't powerful enough to comfortably compile the dependency chain
+(curl, civetweb, ...) itself, build on another machine first -- same CPU architecture and
+ideally the same distro family/glibc version, since the binary is dynamically linked against
+`libssl`/`libcrypto` and a handful of curl's own dependencies (`libssh2`, `libidn2`,
+`brotli`, `zstd`, `nghttp2`):
+
+```sh
+# on the build machine
+git clone https://github.com/Nyjako/little-bunny.git
+cd little-bunny
+make release
+scp build-release/server/bunny_server you@target:/tmp/bunny_server
+```
+
+```sh
+# on the target machine
+git clone https://github.com/Nyjako/little-bunny.git   # just for deploy/, nothing is built here
+cd little-bunny
+sudo ./deploy/install-prebuilt.sh /tmp/bunny_server
+```
+
+`install-prebuilt.sh` never touches a compiler or installs build dependencies -- it only
+installs the given binary, the systemd unit, starts the service, and prints the same
+server URL/bearer token/fingerprint summary `install.sh` does.
+
 ## Operating
 
 ```sh
@@ -54,7 +81,8 @@ sudo ./deploy/install.sh --skip-deps
 Re-running the installer rebuilds and replaces the binary, then restarts the service.
 Existing data, the auth token, and the TLS certificate are untouched (nothing in
 `/var/lib/bunny-server` is ever written by the installer itself, only by `bunny_server`
-on its own first run).
+on its own first run). If you're building elsewhere, the same idea applies to
+`install-prebuilt.sh`: rebuild, re-copy the binary over, re-run it.
 
 ## Uninstalling
 
