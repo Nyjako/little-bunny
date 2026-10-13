@@ -1444,7 +1444,12 @@ this file is the single source of truth for "what's done" across sessions.
   *build* machine, none of which this app needs -- now explicitly disabled in the top-level
   `CMakeLists.txt`, plus `install-prebuilt.sh` runs `ldd` on the installed binary and fails
   with a clear message instead of a silent `journalctl` restart-loop if anything's still
-  missing on the target.
+  missing on the target. A real deploy attempt then hit a second, unrelated problem no
+  missing-library check can fix: the build machine's glibc/OpenSSL were simply *newer* than
+  the target's, and symbol versioning only goes one way. New `make release-portable`
+  builds inside a pinned `ubuntu:22.04` Docker container instead of on the host directly,
+  producing a binary whose glibc/OpenSSL symbol requirements are old enough to run on
+  essentially any currently-supported Ubuntu/Debian release.
 
 - [ ] **M12 — Cross-platform polish**
   Responsive desktop/mobile layout, consistent theming pass, Windows app build, packaging.

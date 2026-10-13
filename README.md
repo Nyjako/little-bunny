@@ -25,10 +25,13 @@ Prerequisites: a C11 compiler, CMake (>= 3.21), and OpenSSL development headers
 [CPM](https://github.com/cpm-cmake/CPM.cmake) — no other manual installs needed.
 
 ```sh
-make build   # debug build with tests enabled
-make test    # build + run the test suite
-make release # optimized build, tests disabled
-make clean   # remove all build directories
+make build            # debug build with tests enabled
+make test             # build + run the test suite
+make release          # optimized build, tests disabled
+make release-portable # like release, but built inside a pinned Ubuntu 22.04 container
+                       # (Docker required) for a binary that runs on other Linux machines --
+                       # see "Running the server" below
+make clean            # remove all build directories
 ```
 
 ### Cross-compiling for Windows
@@ -51,7 +54,9 @@ sudo ./deploy/install.sh
 ```
 
 If the target machine isn't powerful enough to build on comfortably, build elsewhere
-(`make release`) and install just the resulting binary instead -- no compiler needed on
+(`make release-portable` -- not plain `make release`, unless the build machine runs the
+exact same distro/version as the target, since glibc/OpenSSL symbol compatibility only
+goes one direction) and install just the resulting binary instead -- no compiler needed on
 the target at all:
 
 ```sh

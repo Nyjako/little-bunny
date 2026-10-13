@@ -33,23 +33,33 @@ Flutter app's Setup screen (or Settings -> "Switch connection mode") under "Netw
 ## Installing a binary built elsewhere
 
 If the target machine isn't powerful enough to comfortably compile the dependency chain
-(curl, civetweb, ...) itself, build on another machine first -- same CPU architecture and
-ideally the same distro family/glibc version, since the binary is dynamically linked
-against `libssl`/`libcrypto`/`libz` (all effectively universal on any real Linux system).
-curl's own optional extras this app never uses (SCP/SFTP via libssh2, IDN domains via
-libidn2, HTTP/2 via nghttp2) are explicitly disabled in the build, so they're not a
-concern; `install-prebuilt.sh` also runs `ldd` on the installed binary before starting the
-service and fails with a clear message naming any library that's still missing on the
-target, rather than leaving you to dig through `journalctl` for an opaque "exit code
-127":
+(curl, civetweb, ...) itself, build on another machine first and copy just the binary
+over. Use `make release-portable`, **not** plain `make release`, unless the build machine
+is running the exact same distro/version as the target:
 
 ```sh
-# on the build machine
+# on the build machine (requires Docker; the host's own compiler/CMake/OpenSSL are
+# never used -- the whole build runs inside an ubuntu:22.04 container)
 git clone https://github.com/Nyjako/little-bunny.git
 cd little-bunny
-make release
-scp build-release/server/bunny_server you@target:/tmp/bunny_server
+make release-portable
+scp build-release-portable/server/bunny_server you@target:/tmp/bunny_server
 ```
+
+**Why not plain `make release`**: glibc and OpenSSL's symbol versioning is
+forward-compatible only -- a binary built against a *newer* glibc/OpenSSL than the target
+has can't run there at all (`error while loading shared libraries: ...: version
+'GLIBC_2.43' not found`), even on the same CPU architecture. This bit us for real building
+on a rolling-release desktop (glibc 2.43) and deploying to an Oracle Cloud Ubuntu instance
+(glibc nowhere near that new). `make release-portable` builds inside a pinned `ubuntu:22.04`
+container instead (glibc 2.35, OpenSSL 3.0.x) -- old enough that the resulting binary runs
+on effectively every currently-supported Ubuntu/Debian release, new enough to share the
+same OpenSSL 3.x SONAME every current distro ships. curl's own optional extras this app
+never uses (SCP/SFTP via libssh2, IDN domains via libidn2, HTTP/2 via nghttp2) are also
+explicitly disabled in the build, so they're never a concern either way; either way,
+`install-prebuilt.sh` also runs `ldd` on the installed binary before starting the service
+and fails with a clear message naming any library that's still missing on the target,
+rather than leaving you to dig through `journalctl` for an opaque "exit code 127".
 
 ```sh
 # on the target machine
