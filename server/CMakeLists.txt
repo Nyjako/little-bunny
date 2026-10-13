@@ -6,6 +6,7 @@ add_library(bunny_server_lib STATIC
     src/config.c
     src/auth.c
     src/tls.c
+    src/log.c
     src/scheduler.c
     src/route_utils.c
     src/json_helpers.c
@@ -16,6 +17,7 @@ add_library(bunny_server_lib STATIC
     src/routes_pools.c
     src/routes_search.c
     src/routes_blacklist.c
+    src/routes_logs.c
 )
 
 target_include_directories(bunny_server_lib
