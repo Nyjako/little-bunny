@@ -35,6 +35,13 @@ void e621_client_destroy(e621_client_t *client);
 
 e621_result_t e621_search_posts(e621_client_t *client, const char *tags, int page, int limit, e621_post_list_t *out_posts);
 
+/* Cursor-based pagination (e621's recommended method for iterating a large
+ * result set -- plain numeric `page` can duplicate/skip posts that are
+ * created/deleted between requests, and errors above page 750). Overrides
+ * any `order:` meta-tag in `tags`, always walking strictly by post id. */
+e621_result_t e621_search_posts_after(e621_client_t *client, const char *tags, int64_t after_post_id, int limit, e621_post_list_t *out_posts);
+e621_result_t e621_search_posts_before(e621_client_t *client, const char *tags, int64_t before_post_id, int limit, e621_post_list_t *out_posts);
+
 e621_result_t e621_get_post(e621_client_t *client, int64_t post_id, e621_post_t *out_post);
 
 /* Requires username/api_key on the client config. */

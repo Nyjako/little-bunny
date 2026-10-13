@@ -80,6 +80,8 @@ static void fill_search_from_row(sqlite3_stmt *stmt, bunny_db_search_t *out)
     out->auto_upvote = sqlite3_column_int(stmt, 11) != 0;
     out->pinned = sqlite3_column_int(stmt, 12) != 0;
     out->last_viewed_at = bunny_db_column_text_dup(stmt, 13);
+    out->initial_sync_done = sqlite3_column_int(stmt, 14) != 0;
+    out->highest_synced_external_id = sqlite3_column_int64(stmt, 15);
 }
 
 bunny_db_result_t bunny_db_search_list(bunny_db_t *db, bunny_db_search_list_t *out_list)
@@ -98,7 +100,8 @@ bunny_db_result_t bunny_db_search_list(bunny_db_t *db, bunny_db_search_list_t *o
                       "(SELECT COUNT(*) FROM search_results sr LEFT JOIN seen_posts seen ON seen.post_id = sr.post_id "
                       " WHERE sr.search_id = s.id AND seen.post_id IS NULL) AS unseen_count, "
                       "(SELECT COUNT(*) FROM search_results sr WHERE sr.search_id = s.id) AS total_count, "
-                      "s.auto_favorite, s.auto_favorite_stars, s.auto_upvote, s.pinned, s.last_viewed_at "
+                      "s.auto_favorite, s.auto_favorite_stars, s.auto_upvote, s.pinned, s.last_viewed_at, "
+                      "s.initial_sync_done, s.highest_synced_external_id "
                       "FROM searches s ORDER BY s.id;";
     sqlite3_stmt *stmt = NULL;
     if (sqlite3_prepare_v2(db->handle, sql, -1, &stmt, NULL) != SQLITE_OK) {
@@ -184,6 +187,24 @@ bunny_db_result_t bunny_db_search_set_pinned(bunny_db_t *db, int64_t search_id, 
         return BUNNY_DB_ERR_QUERY_FAILED;
     }
     sqlite3_bind_int(stmt, 1, pinned ? 1 : 0);
+    sqlite3_bind_int64(stmt, 2, search_id);
+    int rc = sqlite3_step(stmt);
+    sqlite3_finalize(stmt);
+    return rc == SQLITE_DONE ? BUNNY_DB_OK : bunny_db_sqlite_rc_to_result(rc);
+}
+
+bunny_db_result_t bunny_db_search_update_sync_progress(bunny_db_t *db, int64_t search_id, int64_t highest_external_id)
+{
+    if (!db) {
+        return BUNNY_DB_ERR_INVALID_ARG;
+    }
+
+    const char *sql = "UPDATE searches SET initial_sync_done = 1, highest_synced_external_id = ? WHERE id = ?;";
+    sqlite3_stmt *stmt = NULL;
+    if (sqlite3_prepare_v2(db->handle, sql, -1, &stmt, NULL) != SQLITE_OK) {
+        return BUNNY_DB_ERR_QUERY_FAILED;
+    }
+    sqlite3_bind_int64(stmt, 1, highest_external_id);
     sqlite3_bind_int64(stmt, 2, search_id);
     int rc = sqlite3_step(stmt);
     sqlite3_finalize(stmt);

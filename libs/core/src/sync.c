@@ -31,11 +31,11 @@ typedef struct
 
 /* e621's real API allows up to 320 posts/page; Inkbunny has no explicit
  * per-page limit param (the site's own implicit page size applies), so its
- * loop below instead keeps paging until a page comes back empty. Both loops
- * are capped at this many pages so one sync pass can't run unboundedly long
- * against a search matching an enormous number of posts. */
+ * loop below instead keeps paging until a page comes back empty. Neither
+ * sync_e621_search nor sync_inkbunny_search caps the number of pages -- both
+ * terminate purely on the site returning a short/empty page (see the
+ * comments on each). */
 #define BUNNY_CORE_SYNC_E621_PAGE_LIMIT 320
-#define BUNNY_CORE_SYNC_MAX_PAGES 20
 
 /* Used only to accumulate bunny_core_preview_search's results below --
  * file-local, like every GOBLIN_DYN_ARRAY_DECL instantiation in this
@@ -253,6 +253,38 @@ static bunny_core_result_t upsert_inkbunny_submission(bunny_db_t *db, const inkb
     return bunny_core_map_db_result(result);
 }
 
+/* Upserts every post in `posts` and links it to `search`, bumping `stats`
+ * and queuing auto-favorite/upvote as needed -- shared by the first-scan and
+ * incremental branches of sync_e621_search below. */
+static void upsert_e621_search_page(bunny_core_t *core, const bunny_db_search_t *search, const e621_post_list_t *posts, bunny_core_sync_stats_t *stats)
+{
+    for (size_t i = 0; i < posts->count; i++) {
+        int64_t post_id = 0;
+        if (upsert_e621_post(core->db, &posts->items[i], &post_id) == BUNNY_CORE_OK) {
+            bunny_db_search_add_result(core->db, search->id, post_id);
+            if (search->auto_favorite) {
+                bunny_core_queue_favorite_add(core, post_id, search->auto_favorite_stars);
+            }
+            if (search->auto_upvote) {
+                bunny_core_queue_vote(core, post_id, 1, false);
+            }
+            if (stats) {
+                stats->posts_upserted++;
+            }
+        }
+    }
+}
+
+/* e621's own API docs recommend against plain numeric `page=<N>` for
+ * iterating a large result set -- posts can shift between pages if anything
+ * is created/deleted on the site between requests, and page numbers above
+ * 750 return an outright error. The `page=a<ID>`/`page=b<ID>` cursor form
+ * has neither problem (and overrides any `order:` meta-tag, so it stays
+ * correct by id regardless of the search's own sort order), so both the
+ * first full scan and every later incremental sync use it exclusively --
+ * there is no numeric-page pagination left in this function at all, and
+ * deliberately no page-count cap either: both loops below terminate purely
+ * on the site returning a short/empty page. */
 static bunny_core_result_t sync_e621_search(bunny_core_t *core, const bunny_db_search_t *search, bunny_core_sync_stats_t *stats)
 {
     e621_client_t *client = bunny_core_build_e621_client(core);
@@ -260,37 +292,74 @@ static bunny_core_result_t sync_e621_search(bunny_core_t *core, const bunny_db_s
         return BUNNY_CORE_ERR_SITE;
     }
 
-    for (int page = 1; page <= BUNNY_CORE_SYNC_MAX_PAGES; page++) {
-        e621_post_list_t posts;
-        e621_result_t search_result = e621_search_posts(client, search->query, page, BUNNY_CORE_SYNC_E621_PAGE_LIMIT, &posts);
-        if (search_result != E621_OK) {
-            e621_client_destroy(client);
-            return BUNNY_CORE_ERR_SITE;
-        }
+    int64_t max_id_seen = search->highest_synced_external_id;
 
-        for (size_t i = 0; i < posts.count; i++) {
-            int64_t post_id = 0;
-            if (upsert_e621_post(core->db, &posts.items[i], &post_id) == BUNNY_CORE_OK) {
-                bunny_db_search_add_result(core->db, search->id, post_id);
-                if (search->auto_favorite) {
-                    bunny_core_queue_favorite_add(core, post_id, search->auto_favorite_stars);
+    if (!search->initial_sync_done) {
+        /* First scan: bare request (no page param -- newest first), then
+         * walk backward via page=b<lowest_id_seen_so_far> until the site
+         * signals "nothing older left" with a short page. */
+        bool first_request = true;
+        int64_t cursor = 0;
+        for (;;) {
+            e621_post_list_t posts;
+            e621_result_t search_result = first_request ? e621_search_posts(client, search->query, 1, BUNNY_CORE_SYNC_E621_PAGE_LIMIT, &posts)
+                                                          : e621_search_posts_before(client, search->query, cursor, BUNNY_CORE_SYNC_E621_PAGE_LIMIT, &posts);
+            first_request = false;
+            if (search_result != E621_OK) {
+                e621_client_destroy(client);
+                return BUNNY_CORE_ERR_SITE;
+            }
+
+            upsert_e621_search_page(core, search, &posts, stats);
+            for (size_t i = 0; i < posts.count; i++) {
+                int64_t id = posts.items[i].id;
+                if (id > max_id_seen) {
+                    max_id_seen = id;
                 }
-                if (search->auto_upvote) {
-                    bunny_core_queue_vote(core, post_id, 1, false);
-                }
-                if (stats) {
-                    stats->posts_upserted++;
+                if (cursor == 0 || id < cursor) {
+                    cursor = id;
                 }
             }
-        }
 
-        bool last_page = posts.count < BUNNY_CORE_SYNC_E621_PAGE_LIMIT;
-        e621_post_list_free(&posts);
-        if (last_page) {
-            break;
+            bool last_page = posts.count < BUNNY_CORE_SYNC_E621_PAGE_LIMIT;
+            e621_post_list_free(&posts);
+            if (last_page) {
+                break;
+            }
+        }
+    } else {
+        /* Incremental: only ask for posts newer than the highest one any
+         * sync has seen so far, walking forward via
+         * page=a<highest_id_seen_so_far> until a short page. */
+        int64_t cursor = search->highest_synced_external_id;
+        for (;;) {
+            e621_post_list_t posts;
+            e621_result_t search_result = e621_search_posts_after(client, search->query, cursor, BUNNY_CORE_SYNC_E621_PAGE_LIMIT, &posts);
+            if (search_result != E621_OK) {
+                e621_client_destroy(client);
+                return BUNNY_CORE_ERR_SITE;
+            }
+
+            upsert_e621_search_page(core, search, &posts, stats);
+            for (size_t i = 0; i < posts.count; i++) {
+                int64_t id = posts.items[i].id;
+                if (id > max_id_seen) {
+                    max_id_seen = id;
+                }
+                if (id > cursor) {
+                    cursor = id;
+                }
+            }
+
+            bool last_page = posts.count < BUNNY_CORE_SYNC_E621_PAGE_LIMIT;
+            e621_post_list_free(&posts);
+            if (last_page) {
+                break;
+            }
         }
     }
 
+    bunny_db_search_update_sync_progress(core->db, search->id, max_id_seen);
     e621_client_destroy(client);
     return BUNNY_CORE_OK;
 }
@@ -302,10 +371,16 @@ static bunny_core_result_t sync_inkbunny_search(bunny_core_t *core, const bunny_
         return BUNNY_CORE_ERR_SITE;
     }
 
-    /* Inkbunny's search has no explicit per-page limit param (unlike e621's),
-     * so there's no "requested vs. returned count" signal for the last page
-     * -- keep paging until one comes back empty instead. */
-    for (int page = 1; page <= BUNNY_CORE_SYNC_MAX_PAGES; page++) {
+    /* Inkbunny has no confirmed id-cursor pagination like e621's a<ID>/b<ID>,
+     * so this still walks plain numeric pages (newest first, since nothing
+     * in this codebase sets a custom Inkbunny sort order) -- but stops as
+     * soon as it hits a post already linked to this search from a previous
+     * sync, since everything from there on (this page and all later pages)
+     * was already synced last time. On a first-ever sync nothing is linked
+     * yet, so this never triggers and the full walk runs as before. No
+     * page-count cap, same reasoning as the e621 first scan above -- keeps
+     * going until the site itself returns an empty page. */
+    for (int page = 1;; page++) {
         inkbunny_search_params_t params;
         memset(&params, 0, sizeof(params));
         params.text = search->query;
@@ -323,19 +398,32 @@ static bunny_core_result_t sync_inkbunny_search(bunny_core_t *core, const bunny_
             break;
         }
 
+        bool reached_already_synced = false;
         for (size_t i = 0; i < submissions.count; i++) {
             int64_t post_id = 0;
-            if (upsert_inkbunny_submission(core->db, &submissions.items[i], &post_id) == BUNNY_CORE_OK) {
-                bunny_db_search_add_result(core->db, search->id, post_id);
-                if (search->auto_favorite) {
-                    bunny_core_queue_favorite_add(core, post_id, -1);
-                }
-                if (stats) {
-                    stats->posts_upserted++;
-                }
+            if (upsert_inkbunny_submission(core->db, &submissions.items[i], &post_id) != BUNNY_CORE_OK) {
+                continue;
+            }
+
+            bool already_linked = false;
+            bunny_db_search_has_result(core->db, search->id, post_id, &already_linked);
+            if (already_linked) {
+                reached_already_synced = true;
+                break;
+            }
+
+            bunny_db_search_add_result(core->db, search->id, post_id);
+            if (search->auto_favorite) {
+                bunny_core_queue_favorite_add(core, post_id, -1);
+            }
+            if (stats) {
+                stats->posts_upserted++;
             }
         }
         inkbunny_submission_list_free(&submissions);
+        if (reached_already_synced) {
+            break;
+        }
     }
 
     inkbunny_client_destroy(client);
