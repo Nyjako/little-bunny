@@ -2340,6 +2340,29 @@ directory:
   "missing shared libraries" message naming exactly what's absent, instead of the install
   silently succeeding and only surfacing the real problem later as a cryptic systemd
   restart-loop in `journalctl`.
+- **`make release-portable`** (third follow-up): fixing the optional-dependency coupling
+  above wasn't the whole story -- the real deploy attempt (building on a rolling-release
+  desktop, installing on an Oracle Cloud Ubuntu instance) still failed, this time with
+  `version 'GLIBC_2.43' not found` and `version 'OPENSSL_3.2.0' not found`. Unlike the
+  missing-library case, this isn't fixable by disabling a feature: glibc and OpenSSL's
+  symbol versioning is forward-compatible only (a system with an older glibc/OpenSSL can
+  never satisfy symbol versions newer than what it ships), and the two machines' installed
+  versions were simply too far apart -- the `ldd` check above correctly *detects* this class
+  of failure too, but can't work around it, since there's no package to install that makes
+  an Ubuntu 22.04 box grow glibc 2.43. Fixed with a new `make release-portable` target:
+  builds inside a pinned `ubuntu:22.04` Docker container (the host's own compiler/CMake/
+  OpenSSL are never used) instead of on the host directly. Ubuntu 22.04's glibc (2.35) and
+  OpenSSL (3.0.x) are old enough that the resulting binary's maximum required symbol
+  versions (`GLIBC_2.34`, `OPENSSL_3.0.0`, confirmed via `objdump -T | grep GLIBC_` on the
+  output) are satisfied by essentially every currently-supported Ubuntu/Debian release,
+  while still being new enough to share the same `libssl.so.3` SONAME every current distro
+  ships (an *old-glibc* build pinned to something like CentOS 7/`manylinux2014` would avoid
+  the glibc problem even further but ships OpenSSL 1.0.2, a different SONAME entirely that
+  wouldn't even attempt to load against a modern system's `libssl.so.3`). The container runs
+  as root (needed for `apt-get install`), so the recipe finishes with an explicit `chown` of
+  the output back to the invoking host user/group (captured via `$(shell id -u)`/
+  `$(shell id -g)` at `Makefile` parse time, since `id -u` evaluated *inside* the container
+  would just report root).
 
 ## Inkbunny API constraints (found in M2)
 
