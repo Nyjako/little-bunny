@@ -1,4 +1,13 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Flutter's default template only adds this to the debug/profile
+         manifests (for the dev tooling's own VM-service connection): this
+         app genuinely needs real network access in every build variant,
+         including release, for e621/Inkbunny API calls (standalone mode) and
+         the networked-mode HTTP client. Without it, every socket connect
+         attempt on-device fails with EPERM (not EACCES): Android enforces
+         this permission at the kernel level via app UID group membership,
+         not just at the Dalvik/ART layer. -->
+    <uses-permission android:name="android.permission.INTERNET"/>
     <application
         android:label="little_bunny"
         android:name="${applicationName}"

@@ -203,7 +203,12 @@ this file is the single source of truth for "what's done" across sessions.
   Android's NDK has no prebuilt OpenSSL, which used to make `fvm flutter build apk` fail at
   the CMake configure step (`find_package(OpenSSL REQUIRED)`) — fixed in M12.1 by gating
   that `find_package` behind `BUNNY_BUILD_SERVER` and switching curl's TLS backend to
-  mbedTLS on Android. Linux desktop builds and runs correctly, unaffected.
+  mbedTLS on Android. Linux desktop builds and runs correctly, unaffected. **Follow-up**:
+  once a built APK could actually run (M12.1), real on-device testing found every network
+  call failing with `EPERM` — Flutter's template only adds the `INTERNET` permission to the
+  debug/profile manifests, never the main one `release` builds use. Fixed by adding
+  `<uses-permission android:name="android.permission.INTERNET"/>` directly to
+  `android/app/src/main/AndroidManifest.xml`.
 
 - [x] **M6.3 — HTTP client + networked-mode repository, wired together**
   `lib/repository/http_bunny_repository.dart` implements `BunnyRepository` against the M5
