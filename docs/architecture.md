@@ -386,6 +386,22 @@ M6).
   producing a working APK with `libbunny_core_ffi.so` for all three bundled ABIs
   (arm64-v8a/armeabi-v7a/x86_64); Linux desktop's `make build`/`make test` continue to use
   OpenSSL unchanged. The Windows app cross-compilation gap above remains open.
+- **Missing `INTERNET` permission (M15 follow-up, found on real-device testing)**: once a
+  built APK could actually be installed, every socket connect attempt on-device
+  (standalone-mode e621/Inkbunny API calls and the networked-mode HTTP client alike) failed
+  with `OSError: Operation not permitted, errno = 1` (`EPERM`, not the more commonly-cited
+  `EACCES`/errno 13 for this class of Android error — the kernel enforces `INTERNET` via app
+  UID group membership, not just a Dalvik/ART-level check). Root cause: Flutter's default
+  project template only adds `<uses-permission android:name="android.permission.INTERNET"/>`
+  to `android/app/src/debug/AndroidManifest.xml` and the `profile` variant (for the dev
+  tooling's own VM-service connection) — never to the `main` manifest that `release` builds
+  use, and nobody had exercised real on-device networking (as opposed to `flutter run`'s
+  debug/attached path) until now. Fixed by adding the permission to
+  `android/app/src/main/AndroidManifest.xml` directly, so it's present in every build
+  variant; confirmed via the actual merged manifest Gradle produces
+  (`build/app/intermediates/merged_manifest/release/.../AndroidManifest.xml`) rather than
+  just the source file, since manifest merging across the three source sets is what
+  actually determines the shipped permission set.
 
 **Networked mode / HTTP (M6.3)**: `lib/repository/http_bunny_repository.dart` implements
 `BunnyRepository` against the exact REST surface documented in "C server (M5)" above, using
