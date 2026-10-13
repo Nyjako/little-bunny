@@ -8,6 +8,8 @@
 #include <string.h>
 #include <sys/stat.h>
 
+#include "log.h"
+
 #define SERVER_AUTH_TOKEN_BYTES 32
 #define SERVER_AUTH_TOKEN_HEX_LEN (SERVER_AUTH_TOKEN_BYTES * 2)
 
@@ -95,7 +97,7 @@ server_auth_t *server_auth_load(const char *data_dir)
             return NULL;
         }
         if (write_file_restricted(path, token) != 0) {
-            fprintf(stderr, "failed to write auth token to %s\n", path);
+            server_log("ERROR", "failed to write auth token to %s", path);
             free(token);
             free(path);
             return NULL;
@@ -105,8 +107,8 @@ server_auth_t *server_auth_load(const char *data_dir)
     free(path);
 
     if (generated) {
-        fprintf(stdout, "Generated new server auth token: %s\n", token);
-        fprintf(stdout, "Copy this into your client's server settings -- it will not be shown again automatically.\n");
+        server_log("INFO", "Generated new server auth token: %s", token);
+        server_log("INFO", "Copy this into your client's server settings -- it will not be shown again automatically.");
     }
 
     server_auth_t *auth = calloc(1, sizeof(server_auth_t));

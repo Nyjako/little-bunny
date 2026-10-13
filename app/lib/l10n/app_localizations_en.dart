@@ -460,6 +460,18 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String get settingsServerLogsEntry => 'Server logs';
+
+  @override
+  String get serverLogsScreenTitle => 'Server logs';
+
+  @override
+  String get serverLogsEmptyState => 'No log lines yet.';
+
+  @override
+  String get serverLogsRefreshTooltip => 'Refresh';
+
+  @override
   String get settingsAppearanceSection => 'Appearance';
 
   @override

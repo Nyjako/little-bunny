@@ -11,6 +11,8 @@
 #include <stdlib.h>
 #include <sys/stat.h>
 
+#include "log.h"
+
 #define SERVER_CERT_VALIDITY_SECONDS ((long)10 * 365 * 24 * 60 * 60)
 #define SERVER_CERT_RSA_BITS 2048
 
@@ -106,11 +108,11 @@ char *server_tls_ensure_cert(const char *data_dir)
     EVP_PKEY_free(key);
 
     if (result != 0) {
-        fprintf(stderr, "failed to write TLS certificate to %s\n", path);
+        server_log("ERROR", "failed to write TLS certificate to %s", path);
         free(path);
         return NULL;
     }
 
-    fprintf(stdout, "Generated new self-signed TLS certificate at %s\n", path);
+    server_log("INFO", "Generated new self-signed TLS certificate at %s", path);
     return path;
 }

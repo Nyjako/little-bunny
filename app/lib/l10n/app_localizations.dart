@@ -922,6 +922,30 @@ abstract class AppLocalizations {
   /// **'Networked ({serverUrl})'**
   String settingsConnectionNetworked(String serverUrl);
 
+  /// No description provided for @settingsServerLogsEntry.
+  ///
+  /// In en, this message translates to:
+  /// **'Server logs'**
+  String get settingsServerLogsEntry;
+
+  /// No description provided for @serverLogsScreenTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Server logs'**
+  String get serverLogsScreenTitle;
+
+  /// No description provided for @serverLogsEmptyState.
+  ///
+  /// In en, this message translates to:
+  /// **'No log lines yet.'**
+  String get serverLogsEmptyState;
+
+  /// No description provided for @serverLogsRefreshTooltip.
+  ///
+  /// In en, this message translates to:
+  /// **'Refresh'**
+  String get serverLogsRefreshTooltip;
+
   /// No description provided for @settingsAppearanceSection.
   ///
   /// In en, this message translates to:
