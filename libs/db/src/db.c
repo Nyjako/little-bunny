@@ -26,6 +26,8 @@ static const bunny_db_migration_t BUNNY_DB_MIGRATIONS[] = {
     {5, "ALTER TABLE searches ADD COLUMN auto_upvote INTEGER NOT NULL DEFAULT 0;"},
     {6, "ALTER TABLE searches ADD COLUMN pinned INTEGER NOT NULL DEFAULT 0;"},
     {7, "ALTER TABLE searches ADD COLUMN last_viewed_at TEXT;"},
+    {8, "ALTER TABLE searches ADD COLUMN initial_sync_done INTEGER NOT NULL DEFAULT 0;"},
+    {9, "ALTER TABLE searches ADD COLUMN highest_synced_external_id INTEGER NOT NULL DEFAULT 0;"},
 };
 // clang-format on
 

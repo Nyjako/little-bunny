@@ -1482,6 +1482,28 @@ this file is the single source of truth for "what's done" across sessions.
   server setup flow was discussed alongside this but deliberately deferred to a later,
   separate round.
 
+- [x] **M18 — Incremental sync (stop re-walking every search on every tick)**
+  A real run on 700 saved searches took 6+ hours and was still going -- traced to
+  `sync_e621_search`/`sync_inkbunny_search` having no "first scan vs. incremental"
+  distinction at all: every due search was re-walked from page 1 up to a 20-page/320-post-
+  per-page cap on *every* sync, forever. e621's own API docs also flag plain numeric
+  `page=<N>` as unsafe for iterating a large result set (posts can shift between pages
+  under concurrent site changes, and page numbers above 750 error outright), recommending
+  the `page=a<ID>`/`page=b<ID>` cursor form instead. New `searches.initial_sync_done`/
+  `highest_synced_external_id` columns (migrations 8-9) track, per search, whether the
+  first full scan has completed and the highest post id any sync has seen so far. e621's
+  first scan now walks backward via `page=b<ID>` from a bare (newest-first) request with no
+  page-count cap, until the site returns a short page; every later sync instead asks only
+  for posts after the stored high-water-mark via the new `e621_search_posts_after`/
+  `_before` client functions, also uncapped. Inkbunny (no confirmed id-cursor in its
+  official API) keeps plain numeric paging but gains a cheap early-stop: it stops as soon as
+  it hits a post already linked to the search from a previous sync (new
+  `bunny_db_search_has_result`), since results are always effectively newest-first in this
+  app's Inkbunny integration. Net effect: the first sync of a search is unchanged in shape
+  (still a full walk, now just via a safer pagination method with no artificial cap), but
+  every subsequent sync only fetches genuinely new posts instead of re-walking from
+  scratch.
+
 - [ ] **M12 — Cross-platform polish**
   Responsive desktop/mobile layout, consistent theming pass, Windows app build, packaging.
   - [x] **M12.1 — Android client build.** `fvm flutter build apk` now succeeds end-to-end

@@ -62,6 +62,12 @@ bunny_db_result_t bunny_db_search_touch_last_viewed(bunny_db_t *db, int64_t sear
  * screen. The site itself is not editable (not a param here). */
 bunny_db_result_t bunny_db_search_update(bunny_db_t *db, int64_t search_id, const char *label, const char *query, int interval_hours, const bunny_db_search_options_t *options);
 
+/* Marks a search's first full scan as complete and records the highest post
+ * id any sync has seen so far (see libs/core/src/sync.c) -- called after
+ * both the first (capped) full scan and every later incremental sync, so a
+ * single idempotent setter covers both. */
+bunny_db_result_t bunny_db_search_update_sync_progress(bunny_db_t *db, int64_t search_id, int64_t highest_external_id);
+
 /* --- Posts cache ----------------------------------------------------------
  * Upserts are keyed on (site, external_id): calling this again for a post
  * already cached updates it in place rather than duplicating it. */
@@ -120,6 +126,13 @@ bunny_db_result_t bunny_db_post_get_by_id(bunny_db_t *db, int64_t post_id, bunny
 /* Associates a cached post with a search's result set (e.g. after running that
  * search against the site). Idempotent: re-adding the same pair is a no-op. */
 bunny_db_result_t bunny_db_search_add_result(bunny_db_t *db, int64_t search_id, int64_t post_id);
+
+/* Whether `post_id` is already linked to `search_id` from a previous sync --
+ * used by the Inkbunny incremental-sync early-stop (libs/core/src/sync.c):
+ * since results come back newest-first, hitting an already-linked post means
+ * everything after it was already synced last time. */
+bunny_db_result_t bunny_db_search_has_result(bunny_db_t *db, int64_t search_id, int64_t post_id, bool *out_has_result);
+
 bunny_db_result_t bunny_db_search_list_posts(bunny_db_t *db, int64_t search_id, bool unseen_only, bunny_db_post_list_t *out_list);
 
 /* A post's tags with their categories, for a post detail view's sectioned

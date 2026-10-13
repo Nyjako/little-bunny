@@ -2441,6 +2441,58 @@ separate round.
   refresh" convention (e.g. `SearchesScreen`'s check-for-updates button) rather than
   introducing a new polling pattern just for this screen.
 
+## M18 -- Incremental sync
+
+A real deployment with 700 saved searches took over 6 hours and was still mid-pass --
+traced to `sync_e621_search`/`sync_inkbunny_search` (`libs/core/src/sync.c`) having no
+"first scan vs. incremental" distinction at all: every due search was re-walked from
+numeric page 1 up to a 20-page x 320-post-per-page cap on *every* sync, forever, re-issuing
+and re-upserting everything it had already synced. e621's own API docs also explicitly
+discourage plain numeric `page=<N>` for iterating a large result set -- posts can shift
+between pages if anything is created/deleted on the site between requests, and page numbers
+above 750 error outright -- recommending the `page=a<ID>`/`page=b<ID>` cursor form instead
+(get everything after/before a given post id; this also overrides any `order:` meta-tag, so
+it stays correct by id regardless of a search's own sort order).
+
+- **Two new `searches` columns** (migrations 8/9, `libs/db/src/db.c`):
+  `initial_sync_done` (has the first full scan completed) and
+  `highest_synced_external_id` (highest post id any sync has seen so far). Kept as two
+  separate fields rather than inferring "first sync done" from the id being non-zero,
+  because a search matching nothing on its first scan must still flip into incremental mode
+  afterward rather than re-walking forever -- `bunny_db_search_update_sync_progress` sets
+  both together, idempotently, after *every* successful sync (first or incremental alike).
+- **e621 (`libs/e621/`)**: two new client functions alongside the untouched
+  `e621_search_posts` (still used by manual browsing/preview, which has no cursor concept) --
+  `e621_search_posts_after`/`_before`, building `page=a<ID>`/`page=b<ID>` respectively, via a
+  shared internal helper that both and the original function now call. `sync_e621_search`
+  branches on `initial_sync_done`: a first scan does a bare request (no page param --
+  newest-first) then walks backward with `page=b<lowest_id_seen_so_far>` until a short page;
+  every later sync instead asks only for posts after `highest_synced_external_id` via
+  `page=a<highest_id_seen_so_far>`, advancing the cursor as it goes, same short-page
+  termination. Neither loop has a page-count cap anymore (the old `BUNNY_CORE_SYNC_MAX_PAGES`
+  constant is gone) -- both terminate purely on the site signaling "nothing more," which is
+  the correct way to use this cursor form per the docs, and was an explicit requirement
+  (a fixed cap would silently stop short for any search matching more than the old 6400-post
+  limit).
+- **Inkbunny (`libs/core/src/sync.c`)**: no confirmed id-cursor equivalent to e621's
+  `a<ID>`/`b<ID>` exists in Inkbunny's official API from what's verified in this codebase, so
+  `sync_inkbunny_search` keeps plain numeric paging (also now uncapped, same "walk until an
+  empty page" reasoning as e621's first scan) -- but gains a cheap early-stop: a new
+  `bunny_db_search_has_result` lookup (`SELECT 1 FROM search_results WHERE search_id = ? AND
+  post_id = ?`, covered by that table's own primary key) checks each submission after
+  upserting it, and the loop stops the moment it hits one already linked to this search from
+  a previous sync -- safe because nothing in this app's Inkbunny integration sets a custom
+  sort order, so results are always effectively newest-first, meaning everything after an
+  already-seen post was already synced last time too. A first-ever sync never triggers this
+  (nothing is linked yet), so no separate first-sync branch is needed on this side.
+- **Known limitation, not addressed here**: editing a search's query
+  (`bunny_core_search_update`/`bunny_db_search_update`) doesn't reset either new column, so a
+  query change could in theory interact oddly with the Inkbunny early-stop or skip e621 posts
+  that would match the new query but sit below the old query's high-water-mark, if the new
+  and old result sets overlap unpredictably. Flagged with a comment at the call site rather
+  than engineered around, since query edits are rare and the failure mode is "sync looks a
+  little stale until the next full resync," not data loss.
+
 ## Inkbunny API constraints (found in M2)
 
 Verified against the live API and the official docs while building `libinkbunny`:

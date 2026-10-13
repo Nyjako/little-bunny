@@ -9,7 +9,7 @@
 
 typedef struct
 {
-    const char *bodies[4];
+    const char *bodies[6];
     size_t body_count;
     size_t next_index;
 } fake_transport_state_t;
@@ -700,6 +700,71 @@ void test_sync_e621_search_stops_after_a_single_short_page(void)
     free(fixture);
 }
 
+void test_sync_e621_search_second_sync_uses_cursor_and_only_upserts_new_posts(void)
+{
+    g_e621_transport.send = capturing_fake_send;
+
+    char *page1 = build_e621_posts_page_json(5, 10); /* ids 10-14, short page -- first scan stops here */
+    char *page2 = build_e621_posts_page_json(2, 15); /* ids 15-16 -- genuinely new, on the second sync */
+    TEST_ASSERT_NOT_NULL(page1);
+    TEST_ASSERT_NOT_NULL(page2);
+    g_e621_state.bodies[0] = page1;
+    g_e621_state.bodies[1] = page2;
+    g_e621_state.body_count = 2;
+
+    int64_t search_id = 0;
+    bunny_core_search_create(g_core, BUNNY_DB_SITE_E621, "wolves", "wolf", 24, NULL, &search_id);
+
+    bunny_core_sync_stats_t stats;
+    bunny_core_sync_due_searches(g_core, &stats);
+    TEST_ASSERT_EQUAL(1, stats.searches_synced);
+    TEST_ASSERT_EQUAL(5, stats.posts_upserted);
+
+    /* bunny_core_sync_due_searches would skip this (just touched, 24h
+     * interval) -- force it, same as M13.2's own test above. */
+    bunny_core_result_t result = bunny_core_sync_search(g_core, search_id, &stats);
+    TEST_ASSERT_EQUAL(BUNNY_CORE_OK, result);
+    TEST_ASSERT_EQUAL(2, stats.posts_upserted);
+    /* The highest id seen on the first (capped) scan was 14 -- the second
+     * sync must ask for posts after it, not re-walk from page 1. */
+    TEST_ASSERT_NOT_NULL(strstr(g_captured_url, "page=a14"));
+    /* Exactly 2 requests total across both syncs -- no extra probing page. */
+    TEST_ASSERT_EQUAL(2, (int)g_e621_state.next_index);
+
+    free(page1);
+    free(page2);
+}
+
+void test_sync_e621_search_with_zero_matches_still_flips_to_incremental_mode(void)
+{
+    g_e621_transport.send = capturing_fake_send;
+
+    const char *empty_page = "{\"posts\":[]}";
+    char *page2 = build_e621_posts_page_json(1, 5); /* id 5 -- first match, appears after the zero-match first scan */
+    TEST_ASSERT_NOT_NULL(page2);
+    g_e621_state.bodies[0] = empty_page;
+    g_e621_state.bodies[1] = page2;
+    g_e621_state.body_count = 2;
+
+    int64_t search_id = 0;
+    bunny_core_search_create(g_core, BUNNY_DB_SITE_E621, "wolves", "wolf", 24, NULL, &search_id);
+
+    bunny_core_sync_stats_t stats;
+    bunny_core_sync_due_searches(g_core, &stats);
+    TEST_ASSERT_EQUAL(1, stats.searches_synced);
+    TEST_ASSERT_EQUAL(0, stats.posts_upserted);
+
+    bunny_core_result_t result = bunny_core_sync_search(g_core, search_id, &stats);
+    TEST_ASSERT_EQUAL(BUNNY_CORE_OK, result);
+    TEST_ASSERT_EQUAL(1, stats.posts_upserted);
+    /* A zero-match first scan must still flip to incremental mode (page=a0 --
+     * "everything after post id 0," i.e. everything) rather than re-walking
+     * from the bare request forever. */
+    TEST_ASSERT_NOT_NULL(strstr(g_captured_url, "page=a0"));
+
+    free(page2);
+}
+
 void test_tag_autocomplete_finds_tags_from_synced_posts(void)
 {
     char *fixture = read_fixture("e621_posts_search.json");
@@ -868,6 +933,94 @@ void test_sync_inkbunny_search_marks_a_favorited_submission_locally(void)
     free(empty_fixture);
 }
 
+void test_sync_inkbunny_search_second_sync_stops_at_already_synced_submission(void)
+{
+    char *login_fixture = read_fixture("inkbunny_login_success.json");
+    char *search_fixture = read_fixture("inkbunny_search_response.json");
+    char *empty_fixture = read_fixture("inkbunny_search_response_empty.json");
+    TEST_ASSERT_NOT_NULL(login_fixture);
+    TEST_ASSERT_NOT_NULL(search_fixture);
+    TEST_ASSERT_NOT_NULL(empty_fixture);
+    /* First sync: login + page 1 (1 result) + page 2 (empty). Second sync
+     * (forced): login + page 1 -- the *same* submission, already linked
+     * from the first sync, so the early-stop must fire immediately with no
+     * page-2 probe at all. */
+    g_inkbunny_state.bodies[0] = login_fixture;
+    g_inkbunny_state.bodies[1] = search_fixture;
+    g_inkbunny_state.bodies[2] = empty_fixture;
+    g_inkbunny_state.bodies[3] = login_fixture;
+    g_inkbunny_state.bodies[4] = search_fixture;
+    g_inkbunny_state.body_count = 5;
+
+    int64_t search_id = 0;
+    bunny_core_search_create(g_core, BUNNY_DB_SITE_INKBUNNY, "tribute", "tribute", 24, NULL, &search_id);
+
+    bunny_core_sync_stats_t stats;
+    bunny_core_sync_due_searches(g_core, &stats);
+    TEST_ASSERT_EQUAL(1, stats.posts_upserted);
+    TEST_ASSERT_EQUAL(3, (int)g_inkbunny_state.next_index);
+
+    bunny_core_result_t result = bunny_core_sync_search(g_core, search_id, &stats);
+    TEST_ASSERT_EQUAL(BUNNY_CORE_OK, result);
+    TEST_ASSERT_EQUAL(0, stats.posts_upserted);
+    TEST_ASSERT_EQUAL(5, (int)g_inkbunny_state.next_index);
+
+    free(login_fixture);
+    free(search_fixture);
+    free(empty_fixture);
+}
+
+void test_sync_inkbunny_search_second_sync_upserts_only_the_new_submission(void)
+{
+    char *login_fixture = read_fixture("inkbunny_login_success.json");
+    char *search_fixture = read_fixture("inkbunny_search_response.json");
+    char *empty_fixture = read_fixture("inkbunny_search_response_empty.json");
+    TEST_ASSERT_NOT_NULL(login_fixture);
+    TEST_ASSERT_NOT_NULL(search_fixture);
+    TEST_ASSERT_NOT_NULL(empty_fixture);
+    g_inkbunny_state.bodies[0] = login_fixture;
+    g_inkbunny_state.bodies[1] = search_fixture;
+    g_inkbunny_state.bodies[2] = empty_fixture;
+    g_inkbunny_state.bodies[3] = login_fixture;
+    /* Second sync's page 1: a genuinely new submission (id 9999999) ahead of
+     * the previously-synced one (id 3955918, still present further down the
+     * newest-first feed) -- only the new one should be upserted before the
+     * early-stop fires on the old one. */
+    const char *two_submissions = "{\"sid\":\"x\",\"submissions\":["
+                                  "{\"submission_id\":\"9999999\",\"hidden\":\"f\",\"username\":\"someoneelse\",\"user_id\":\"1\","
+                                  "\"create_datetime\":\"2026-09-28 00:00:00+00\",\"thumbnail_url_large_noncustom\":\"https://example.invalid/9999999.jpg\","
+                                  "\"title\":\"a brand new submission\",\"deleted\":\"f\",\"public\":\"t\",\"rating_id\":\"0\",\"rating_name\":\"General\","
+                                  "\"submission_type_id\":\"1\",\"friends_only\":\"f\",\"guest_block\":\"f\",\"scraps\":\"f\",\"keywords\":[]},"
+                                  "{\"submission_id\":\"3955918\",\"hidden\":\"f\",\"username\":\"OvineSatanOMG\",\"user_id\":\"628881\","
+                                  "\"create_datetime\":\"2026-09-27 22:22:21.223627+00\",\"thumbnail_url_large_noncustom\":\"https://example.invalid/3955918.jpg\","
+                                  "\"title\":\"Thank you, Digimon Beatbreak\",\"deleted\":\"f\",\"public\":\"t\",\"rating_id\":\"0\",\"rating_name\":\"General\","
+                                  "\"submission_type_id\":\"1\",\"friends_only\":\"f\",\"guest_block\":\"f\",\"scraps\":\"f\",\"keywords\":[]}"
+                                  "]}";
+    g_inkbunny_state.bodies[4] = two_submissions;
+    g_inkbunny_state.body_count = 5;
+
+    int64_t search_id = 0;
+    bunny_core_search_create(g_core, BUNNY_DB_SITE_INKBUNNY, "tribute", "tribute", 24, NULL, &search_id);
+
+    bunny_core_sync_stats_t stats;
+    bunny_core_sync_due_searches(g_core, &stats);
+    TEST_ASSERT_EQUAL(1, stats.posts_upserted);
+
+    bunny_core_result_t result = bunny_core_sync_search(g_core, search_id, &stats);
+    TEST_ASSERT_EQUAL(BUNNY_CORE_OK, result);
+    TEST_ASSERT_EQUAL(1, stats.posts_upserted);
+
+    bunny_db_post_list_t posts;
+    result = bunny_core_search_list_posts(g_core, search_id, false, &posts);
+    TEST_ASSERT_EQUAL(BUNNY_CORE_OK, result);
+    TEST_ASSERT_EQUAL(2, (int)posts.count);
+    bunny_db_post_list_free(&posts);
+
+    free(login_fixture);
+    free(search_fixture);
+    free(empty_fixture);
+}
+
 void test_sync_skips_search_not_due_yet(void)
 {
     char *fixture = read_fixture("e621_posts_search.json");
@@ -1002,12 +1155,16 @@ int main(void)
     RUN_TEST(test_e621_requests_include_the_configured_username_in_the_user_agent);
     RUN_TEST(test_sync_e621_search_fetches_a_second_page_when_the_first_is_full);
     RUN_TEST(test_sync_e621_search_stops_after_a_single_short_page);
+    RUN_TEST(test_sync_e621_search_second_sync_uses_cursor_and_only_upserts_new_posts);
+    RUN_TEST(test_sync_e621_search_with_zero_matches_still_flips_to_incremental_mode);
     RUN_TEST(test_tag_autocomplete_finds_tags_from_synced_posts);
     RUN_TEST(test_tag_autocomplete_returns_empty_list_for_no_match);
     RUN_TEST(test_mark_seen_flips_is_seen_on_a_synced_post);
     RUN_TEST(test_mark_seen_rejects_a_nonexistent_post);
     RUN_TEST(test_sync_inkbunny_search_upserts_post);
     RUN_TEST(test_sync_inkbunny_search_marks_a_favorited_submission_locally);
+    RUN_TEST(test_sync_inkbunny_search_second_sync_stops_at_already_synced_submission);
+    RUN_TEST(test_sync_inkbunny_search_second_sync_upserts_only_the_new_submission);
     RUN_TEST(test_sync_skips_search_not_due_yet);
     RUN_TEST(test_sync_search_forces_a_non_due_search_to_sync);
     RUN_TEST(test_sync_search_returns_not_found_for_unknown_id);

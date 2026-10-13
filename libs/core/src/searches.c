@@ -15,6 +15,12 @@ bunny_core_result_t bunny_core_search_update(bunny_core_t *core, int64_t search_
     if (!core) {
         return BUNNY_CORE_ERR_INVALID_ARG;
     }
+    /* Deliberately doesn't reset initial_sync_done/highest_synced_external_id
+     * (see sync.c) -- a query edit could in theory interact oddly with the
+     * incremental-sync high-water-mark or Inkbunny's already-synced
+     * early-stop if the new query's results overlap unpredictably with the
+     * old one's, but that's rare enough in practice to flag rather than
+     * engineer around here. */
     return bunny_core_map_db_result(bunny_db_search_update(core->db, search_id, label, query, interval_hours, options));
 }
 

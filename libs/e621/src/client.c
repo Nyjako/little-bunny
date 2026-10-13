@@ -267,7 +267,9 @@ void e621_client_destroy(e621_client_t *client)
     free(client);
 }
 
-e621_result_t e621_search_posts(e621_client_t *client, const char *tags, int page, int limit, e621_post_list_t *out_posts)
+/* Shared by e621_search_posts/_after/_before -- `page_param` is the exact
+ * value of the `page=` query param (e.g. "1", "a42", "b42"). */
+static e621_result_t search_posts_with_page_param(e621_client_t *client, const char *tags, const char *page_param, int limit, e621_post_list_t *out_posts)
 {
     if (!client || !out_posts) {
         return E621_ERR_INVALID_ARG;
@@ -279,7 +281,7 @@ e621_result_t e621_search_posts(e621_client_t *client, const char *tags, int pag
     }
 
     char query[1600];
-    snprintf(query, sizeof(query), "tags=%s&page=%d&limit=%d", encoded_tags, page > 0 ? page : 1, limit > 0 ? limit : 75);
+    snprintf(query, sizeof(query), "tags=%s&page=%s&limit=%d", encoded_tags, page_param, limit > 0 ? limit : 75);
     free(encoded_tags);
 
     cJSON *json = NULL;
@@ -297,6 +299,27 @@ e621_result_t e621_search_posts(e621_client_t *client, const char *tags, int pag
     result = e621_parse_post_array(posts_array, out_posts);
     cJSON_Delete(json);
     return result;
+}
+
+e621_result_t e621_search_posts(e621_client_t *client, const char *tags, int page, int limit, e621_post_list_t *out_posts)
+{
+    char page_param[16];
+    snprintf(page_param, sizeof(page_param), "%d", page > 0 ? page : 1);
+    return search_posts_with_page_param(client, tags, page_param, limit, out_posts);
+}
+
+e621_result_t e621_search_posts_after(e621_client_t *client, const char *tags, int64_t after_post_id, int limit, e621_post_list_t *out_posts)
+{
+    char page_param[32];
+    snprintf(page_param, sizeof(page_param), "a%lld", (long long)after_post_id);
+    return search_posts_with_page_param(client, tags, page_param, limit, out_posts);
+}
+
+e621_result_t e621_search_posts_before(e621_client_t *client, const char *tags, int64_t before_post_id, int limit, e621_post_list_t *out_posts)
+{
+    char page_param[32];
+    snprintf(page_param, sizeof(page_param), "b%lld", (long long)before_post_id);
+    return search_posts_with_page_param(client, tags, page_param, limit, out_posts);
 }
 
 e621_result_t e621_get_post(e621_client_t *client, int64_t post_id, e621_post_t *out_post)
