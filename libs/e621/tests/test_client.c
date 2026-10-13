@@ -132,6 +132,50 @@ void test_search_posts_success(void)
     free(fixture);
 }
 
+void test_search_posts_after_uses_a_cursor(void)
+{
+    e621_client_t *client = make_test_client(false);
+    TEST_ASSERT_NOT_NULL(client);
+
+    char *fixture = read_fixture("posts_search.json");
+    TEST_ASSERT_NOT_NULL(fixture);
+    g_state.response_status = 200;
+    g_state.response_body = fixture;
+    g_state.response_body_len = strlen(fixture);
+
+    e621_post_list_t list;
+    e621_result_t result = e621_search_posts_after(client, "wolf", 42, 50, &list);
+
+    TEST_ASSERT_EQUAL(E621_OK, result);
+    TEST_ASSERT_NOT_NULL(strstr(g_state.last_url, "page=a42"));
+
+    e621_post_list_free(&list);
+    e621_client_destroy(client);
+    free(fixture);
+}
+
+void test_search_posts_before_uses_a_cursor(void)
+{
+    e621_client_t *client = make_test_client(false);
+    TEST_ASSERT_NOT_NULL(client);
+
+    char *fixture = read_fixture("posts_search.json");
+    TEST_ASSERT_NOT_NULL(fixture);
+    g_state.response_status = 200;
+    g_state.response_body = fixture;
+    g_state.response_body_len = strlen(fixture);
+
+    e621_post_list_t list;
+    e621_result_t result = e621_search_posts_before(client, "wolf", 42, 50, &list);
+
+    TEST_ASSERT_EQUAL(E621_OK, result);
+    TEST_ASSERT_NOT_NULL(strstr(g_state.last_url, "page=b42"));
+
+    e621_post_list_free(&list);
+    e621_client_destroy(client);
+    free(fixture);
+}
+
 void test_get_post_success(void)
 {
     e621_client_t *client = make_test_client(false);
@@ -325,6 +369,8 @@ int main(void)
 {
     UNITY_BEGIN();
     RUN_TEST(test_search_posts_success);
+    RUN_TEST(test_search_posts_after_uses_a_cursor);
+    RUN_TEST(test_search_posts_before_uses_a_cursor);
     RUN_TEST(test_get_post_success);
     RUN_TEST(test_get_post_not_found);
     RUN_TEST(test_search_posts_auth_error);

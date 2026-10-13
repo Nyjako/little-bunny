@@ -192,6 +192,34 @@ void test_search_touch_last_viewed(void)
     bunny_db_search_list_free(&list);
 }
 
+void test_search_update_sync_progress(void)
+{
+    int64_t id = 0;
+    bunny_db_search_create(g_db, BUNNY_DB_SITE_E621, "wolves", "wolf", 24, NULL, &id);
+
+    bunny_db_search_list_t list;
+    bunny_db_search_list(g_db, &list);
+    TEST_ASSERT_FALSE(list.items[0].initial_sync_done);
+    TEST_ASSERT_EQUAL(0, (int)list.items[0].highest_synced_external_id);
+    bunny_db_search_list_free(&list);
+
+    bunny_db_result_t result = bunny_db_search_update_sync_progress(g_db, id, 42);
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, result);
+
+    bunny_db_search_list(g_db, &list);
+    TEST_ASSERT_TRUE(list.items[0].initial_sync_done);
+    TEST_ASSERT_EQUAL(42, (int)list.items[0].highest_synced_external_id);
+    bunny_db_search_list_free(&list);
+
+    /* Idempotent -- a later incremental sync calls this again with a higher id. */
+    result = bunny_db_search_update_sync_progress(g_db, id, 100);
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, result);
+    bunny_db_search_list(g_db, &list);
+    TEST_ASSERT_TRUE(list.items[0].initial_sync_done);
+    TEST_ASSERT_EQUAL(100, (int)list.items[0].highest_synced_external_id);
+    bunny_db_search_list_free(&list);
+}
+
 void test_account_set_and_get(void)
 {
     bunny_db_result_t result = bunny_db_account_set(g_db, BUNNY_DB_SITE_E621, "someuser", "someapikey");
@@ -273,6 +301,28 @@ static void make_test_post(bunny_db_post_upsert_t *post, int64_t external_id, in
     post->width = 1920;
     post->height = 1080;
     post->created_at_site = "2026-01-01T00:00:00Z";
+}
+
+void test_search_has_result(void)
+{
+    int64_t search_id = 0;
+    bunny_db_search_create(g_db, BUNNY_DB_SITE_E621, "wolves", "wolf", 24, NULL, &search_id);
+
+    bunny_db_post_upsert_t post;
+    make_test_post(&post, 1, 1);
+    int64_t post_id = 0;
+    bunny_db_post_upsert(g_db, &post, &post_id);
+
+    bool has_result = true;
+    bunny_db_result_t result = bunny_db_search_has_result(g_db, search_id, post_id, &has_result);
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, result);
+    TEST_ASSERT_FALSE(has_result);
+
+    bunny_db_search_add_result(g_db, search_id, post_id);
+
+    result = bunny_db_search_has_result(g_db, search_id, post_id, &has_result);
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, result);
+    TEST_ASSERT_TRUE(has_result);
 }
 
 void test_search_list_unseen_count(void)
@@ -1451,6 +1501,8 @@ int main(void)
     RUN_TEST(test_search_delete);
     RUN_TEST(test_search_touch_last_run);
     RUN_TEST(test_search_touch_last_viewed);
+    RUN_TEST(test_search_update_sync_progress);
+    RUN_TEST(test_search_has_result);
     RUN_TEST(test_post_upsert_and_get);
     RUN_TEST(test_post_upsert_updates_existing_row);
     RUN_TEST(test_post_get_not_found);
