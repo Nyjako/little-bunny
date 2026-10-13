@@ -8,6 +8,7 @@ import '../l10n/app_localizations.dart';
 import '../repository/bunny_models.dart';
 import '../repository/bunny_repository.dart';
 import '../repository/bunny_repository_factory.dart';
+import '../repository/http_bunny_repository.dart';
 import '../services/search_backup_service.dart';
 import '../settings/app_lock_service.dart';
 import '../settings/display_settings_store.dart';
@@ -16,6 +17,7 @@ import '../settings/repository_settings_store.dart';
 import '../settings/sync_settings_store.dart';
 import '../settings/theme_settings_store.dart';
 import 'lock_setup_screen.dart';
+import 'server_logs_screen.dart';
 import 'setup_screen.dart';
 
 /// One place for cross-cutting app preferences -- reachable from
@@ -261,6 +263,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final themeMode = _themeMode;
     final previewQuality = _previewQuality;
     final repositoryConfig = _repositoryConfig;
+    final httpRepository = widget.repository;
+    final showServerLogs = repositoryConfig is NetworkedConfig && httpRepository is HttpBunnyRepository;
 
     return Scaffold(
       appBar: AppBar(title: Text(l10n.settingsScreenTitle)),
@@ -280,6 +284,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
             trailing: const Icon(Icons.chevron_right),
             onTap: _switchConnectionMode,
           ),
+          if (showServerLogs)
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              title: Text(l10n.settingsServerLogsEntry),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => ServerLogsScreen(repository: httpRepository))),
+            ),
           const SizedBox(height: 24),
           Text(l10n.settingsAppearanceSection, style: Theme.of(context).textTheme.titleMedium),
           const SizedBox(height: 8),

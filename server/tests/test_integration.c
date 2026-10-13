@@ -722,6 +722,24 @@ void test_scheduler_backs_up_database_automatically(void)
     TEST_ASSERT_TRUE(found > 0);
 }
 
+void test_get_logs_returns_json_array_with_access_log_line(void)
+{
+    response_buffer_t response = {0};
+
+    /* Unauthenticated, but still goes through civetweb's log_access
+     * callback -- generates an access-log line we can look for below. */
+    long status = do_request("GET", "/health", NULL, &response, false, NULL);
+    TEST_ASSERT_EQUAL(200, status);
+    free(response.data);
+    memset(&response, 0, sizeof(response));
+
+    status = do_request("GET", "/logs", NULL, &response, true, NULL);
+    TEST_ASSERT_EQUAL(200, status);
+    TEST_ASSERT_EQUAL('[', response.data[0]);
+    TEST_ASSERT_NOT_NULL(strstr(response.data, "/health"));
+    free(response.data);
+}
+
 int main(void)
 {
     curl_global_init(CURL_GLOBAL_DEFAULT);
@@ -739,6 +757,7 @@ int main(void)
     RUN_TEST(test_my_inkbunny_favorites_searches_and_caches_with_favorite_marked);
     RUN_TEST(test_scheduler_syncs_search_automatically);
     RUN_TEST(test_scheduler_backs_up_database_automatically);
+    RUN_TEST(test_get_logs_returns_json_array_with_access_log_line);
     int result = UNITY_END();
     curl_global_cleanup();
     return result;

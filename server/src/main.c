@@ -9,6 +9,7 @@
 
 #include "app.h"
 #include "config.h"
+#include "log.h"
 
 static volatile sig_atomic_t g_shutdown_requested = 0;
 
@@ -46,7 +47,7 @@ int main(void)
         return 1;
     }
 
-    fprintf(stdout, "bunny_server listening on https://0.0.0.0:%d\n", config->port);
+    server_log("INFO", "bunny_server listening on https://0.0.0.0:%d", config->port);
 
     signal(SIGINT, handle_shutdown_signal);
     signal(SIGTERM, handle_shutdown_signal);
@@ -54,7 +55,7 @@ int main(void)
         sleep(1);
     }
 
-    fprintf(stdout, "shutting down...\n");
+    server_log("INFO", "shutting down...");
     server_app_stop(app);
     server_config_free(config);
     return 0;

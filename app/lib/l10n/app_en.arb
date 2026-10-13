@@ -208,6 +208,10 @@
   "@settingsConnectionNetworked": {
     "placeholders": {"serverUrl": {"type": "String"}}
   },
+  "settingsServerLogsEntry": "Server logs",
+  "serverLogsScreenTitle": "Server logs",
+  "serverLogsEmptyState": "No log lines yet.",
+  "serverLogsRefreshTooltip": "Refresh",
   "settingsAppearanceSection": "Appearance",
   "settingsThemeLight": "Light",
   "settingsThemeDark": "Dark",

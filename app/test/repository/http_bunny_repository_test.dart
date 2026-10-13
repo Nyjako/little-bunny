@@ -637,6 +637,15 @@ void main() {
       expect(stats.actionsFailed, 1);
     });
 
+    test('getServerLogs maps the JSON array of strings', () async {
+      respond = (_) => http.Response(jsonEncode(['line one', 'line two']), 200);
+
+      final lines = await buildRepository().getServerLogs();
+
+      expect(capturedUri.path, '/logs');
+      expect(lines, ['line one', 'line two']);
+    });
+
     test('a JSON error body surfaces its message in BunnyRepositoryException', () async {
       respond = (_) => http.Response(jsonEncode({'error': 'missing or invalid bearer token'}), 401);
 
