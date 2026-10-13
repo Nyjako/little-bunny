@@ -13,6 +13,8 @@
 #include <time.h>
 #include <unistd.h>
 
+#include "log.h"
+
 #define BUNNY_BACKUP_INTERVAL_SEC (24 * 60 * 60)
 #define BUNNY_BACKUP_KEEP_COUNT 5
 #define BUNNY_BACKUP_PREFIX "bunny_"
@@ -63,7 +65,7 @@ static size_t list_backup_files(const char *backups_dir, char **out_names, size_
 static void backup_due_and_prune(server_context_t *ctx, const char *backups_dir)
 {
     if (mkdir(backups_dir, 0700) != 0 && errno != EEXIST) {
-        fprintf(stderr, "scheduler: couldn't create backups dir %s\n", backups_dir);
+        server_log("ERROR", "scheduler: couldn't create backups dir %s", backups_dir);
         return;
     }
 
@@ -83,9 +85,9 @@ static void backup_due_and_prune(server_context_t *ctx, const char *backups_dir)
         bunny_core_result_t result = bunny_core_backup_database(ctx->core, backups_dir);
         pthread_mutex_unlock(&ctx->core_mutex);
         if (result == BUNNY_CORE_OK) {
-            fprintf(stdout, "scheduler: backed up database to %s\n", backups_dir);
+            server_log("INFO", "scheduler: backed up database to %s", backups_dir);
         } else {
-            fprintf(stderr, "scheduler: database backup failed\n");
+            server_log("ERROR", "scheduler: database backup failed");
         }
 
         for (size_t i = 0; i < count; i++) {
@@ -122,6 +124,8 @@ static void *scheduler_loop(void *arg)
             break;
         }
 
+        server_log("INFO", "scheduler: tick started, checking due searches");
+
         bunny_core_sync_stats_t sync_stats;
         bunny_core_queue_stats_t queue_stats;
         pthread_mutex_lock(&scheduler->ctx->core_mutex);
@@ -129,7 +133,7 @@ static void *scheduler_loop(void *arg)
         bunny_core_process_queue(scheduler->ctx->core, &queue_stats);
         pthread_mutex_unlock(&scheduler->ctx->core_mutex);
 
-        fprintf(stdout, "scheduler: synced %d/%d due searches (%d posts upserted), processed %d queued actions (%d succeeded, %d failed)\n", sync_stats.searches_synced, sync_stats.searches_checked, sync_stats.posts_upserted, queue_stats.actions_processed, queue_stats.actions_succeeded, queue_stats.actions_failed);
+        server_log("INFO", "scheduler: synced %d/%d due searches (%d posts upserted), processed %d queued actions (%d succeeded, %d failed)", sync_stats.searches_synced, sync_stats.searches_checked, sync_stats.posts_upserted, queue_stats.actions_processed, queue_stats.actions_succeeded, queue_stats.actions_failed);
 
         if (scheduler->backups_dir) {
             backup_due_and_prune(scheduler->ctx, scheduler->backups_dir);

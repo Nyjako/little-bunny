@@ -2380,6 +2380,67 @@ directory:
   `$(shell id -g)` at `Makefile` parse time, since `id -u` evaluated *inside* the container
   would just report root).
 
+## M17 -- Server observability (logging + in-app log viewer)
+
+"Server sometimes feels stuck, nothing displayed, checked logs there is nothing" -- before
+this, the server logged almost nothing (a handful of one-off `fprintf` calls in `main.c`/
+`auth.c`/`tls.c`/`scheduler.c`, no per-request logging, civetweb's own access/error logging
+never wired up), and `scheduler_loop` (`scheduler.c`) only printed a summary *after* a full
+sync+queue-processing pass finished -- a slow pass (several due searches, each bounded by
+curl's existing 30s `CURLOPT_TIMEOUT` in `libs/common/src/http.c`, but a tick can still take
+minutes end-to-end with several searches) produced no log line at all until it finished,
+which looks exactly like silence from `journalctl -u bunny-server -f`. Scoped deliberately to
+*observability only* for this round -- the Flutter HTTP client's own lack of a request
+timeout (`HttpBunnyRepository`'s `IOClient`, found during this investigation) is a related,
+real gap, but was explicitly deferred until there's actual log evidence to root-cause
+against; a QR-code-based server setup flow was also discussed but likewise deferred to a
+separate round.
+
+- **`server/src/log.h`/`log.c`**: a process-wide singleton, not threaded through
+  `server_context_t` -- there's only ever one server process per instance to log for, so a
+  module-level static ring buffer (200 lines, capacity chosen arbitrarily generous for a
+  `journalctl`-style tail) guarded by its own `pthread_mutex_t` (separate from `core_mutex` --
+  same "one mutex per shared resource" convention the rest of the server already uses) is
+  simpler than adding a field everywhere. `server_log(level, fmt, ...)` formats
+  `[<ISO8601 UTC>] [<LEVEL>] <message>`, writes it to stdout (so `journalctl` keeps working
+  unchanged) and pushes a `goblin_copy_cstr`'d copy into the buffer, overwriting the oldest
+  entry once full. `server_log_snapshot(char ***out_lines)` returns a fully-duplicated copy
+  (every string and the array itself) so the HTTP route handler never holds the log mutex
+  while serializing JSON, matching the server's existing small-mutex-sections pattern.
+  `server_log_reset()` exists only for test isolation between Unity test cases -- a real
+  server process never calls it, since it just exits instead.
+- **civetweb logging wired up for free**: `app.c`'s `mg_start()` call previously passed
+  `NULL` for callbacks. It now passes a `struct mg_callbacks` with `log_message`/`log_access`
+  set to two static functions forwarding into `server_log(...)`. Confirmed via civetweb's own
+  vendored source (`civetweb.c`'s access-logging path) that `log_access` fires for *every*
+  request civetweb handles regardless of whether `access_log_file` is configured in
+  `options[]` -- civetweb builds a full Apache-combined-style line (method, path, status,
+  bytes sent, ...) internally before invoking the callback, so this is per-request access
+  logging with zero changes to any of the ~8 individual route-group handler files.
+- **`GET /logs`** (new `server/src/routes_logs.c`/`.h`, same dispatcher/auth-check/JSON-array
+  shape as every other route file, e.g. `routes_searches.c`): returns
+  `server_log_snapshot()`'s contents as a JSON array of strings, oldest-first (matches how
+  `journalctl -f` reads, and how a client naturally wants to append incoming lines).
+- **Scheduler tick visibility**: `scheduler_loop` now logs `"scheduler: tick started,
+  checking due searches"` *before* calling `bunny_core_sync_due_searches`/
+  `bunny_core_process_queue`, not just the pre-existing post-completion summary line -- so a
+  slow tick shows as "started... (apparently still running)" in the log tail instead of
+  nothing at all. All pre-existing `fprintf` calls in `main.c` (startup/shutdown only -- the
+  two earlier fatal pre-logger errors, config load and db-path-build failure, stay as plain
+  `fprintf` since nothing meaningful can log them yet), `auth.c`, `tls.c`, and `scheduler.c`
+  converted to `server_log(...)` for consistency and so they land in the ring buffer too.
+- **Flutter**: `HttpBunnyRepository.getServerLogs()` is *not* added to the abstract
+  `BunnyRepository` interface -- same reasoning `checkServerConnection`
+  (`app/lib/settings/server_connection_check.dart`) already documents: a log viewer isn't
+  meaningful for standalone/FFI mode, which has no server process. `SettingsScreen`'s
+  Connection section gained a "Server logs" entry, shown only when the active mode is
+  `NetworkedConfig` *and* the active repository is actually an `HttpBunnyRepository`,
+  opening a new `ServerLogsScreen`: fetches once in `initState`, shows a monospace scrollable
+  list (empty/error states handled directly in the `FutureBuilder`), with an explicit
+  app-bar refresh action rather than auto-polling -- matches the rest of the app's "explicit
+  refresh" convention (e.g. `SearchesScreen`'s check-for-updates button) rather than
+  introducing a new polling pattern just for this screen.
+
 ## Inkbunny API constraints (found in M2)
 
 Verified against the live API and the official docs while building `libinkbunny`:

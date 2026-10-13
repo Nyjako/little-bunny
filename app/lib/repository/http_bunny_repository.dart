@@ -521,4 +521,17 @@ class HttpBunnyRepository implements BunnyRepository {
     }
     return _queueStatsFromJson(_decodeObject(response));
   }
+
+  /// Recent server log lines (oldest-first), for diagnosing a stuck/slow
+  /// server without SSH access to the box -- see `server/src/log.c`. Not a
+  /// [BunnyRepository] interface method, same reasoning as
+  /// [checkServerConnection]'s doc comment: standalone/FFI mode has no
+  /// server process to have logs from.
+  Future<List<String>> getServerLogs() async {
+    final response = await _client.get(_uri('/logs'), headers: _headers);
+    if (response.statusCode != 200) {
+      _throwError(response);
+    }
+    return (jsonDecode(response.body) as List).cast<String>();
+  }
 }

@@ -1456,6 +1456,32 @@ this file is the single source of truth for "what's done" across sessions.
   producing a binary whose glibc/OpenSSL symbol requirements are old enough to run on
   essentially any currently-supported Ubuntu/Debian release.
 
+- [x] **M17 — Server observability (logging + in-app log viewer)**
+  "Server sometimes feels stuck, nothing displayed, checked logs there is nothing" -- the
+  server barely logged anything before this (`main.c`/`scheduler.c`/`auth.c`/`tls.c` had a
+  handful of one-off `fprintf` calls, no per-request logging, civetweb's own access/error
+  logging was never wired up), and the scheduler only printed a summary *after* a full
+  sync+queue pass completed, so a slow pass looked exactly like silence. New
+  `server/src/log.h`/`log.c`: a module-level 200-line ring buffer (`server_log(level, fmt,
+  ...)`, `server_log_snapshot()`, `server_log_reset()` for test isolation), guarded by its
+  own mutex, written to stdout (so `journalctl -u bunny-server` is unchanged) and kept in
+  memory for the new authenticated `GET /logs` route (`routes_logs.c`/`.h`, same
+  dispatcher/JSON-array shape as every other route group) to hand back. `app.c`'s
+  `mg_start()` now passes a `struct mg_callbacks` with `log_message`/`log_access` wired to
+  `server_log(...)` -- civetweb builds a full access-log line (method/path/status/bytes)
+  per request internally regardless of whether `access_log_file` is configured, so this
+  gives per-request logging for free with no changes to any route-group handler.
+  `scheduler_loop` gained a "tick started" log line *before* the sync/queue-processing
+  calls, not just the existing post-completion summary. All prior ad-hoc `fprintf` calls in
+  `main.c`/`auth.c`/`tls.c`/`scheduler.c` converted to `server_log(...)`. Flutter:
+  `HttpBunnyRepository.getServerLogs()` (not a `BunnyRepository` interface method -- same
+  "not meaningful for standalone" reasoning as `checkServerConnection`), a new "Server logs"
+  entry in `SettingsScreen`'s Connection section (networked mode only), and a new
+  `ServerLogsScreen` with a monospace scrollable list and an explicit refresh action (no
+  auto-polling, matching the app's existing "explicit refresh" pattern). A QR-code-based
+  server setup flow was discussed alongside this but deliberately deferred to a later,
+  separate round.
+
 - [ ] **M12 — Cross-platform polish**
   Responsive desktop/mobile layout, consistent theming pass, Windows app build, packaging.
   - [x] **M12.1 — Android client build.** `fvm flutter build apk` now succeeds end-to-end

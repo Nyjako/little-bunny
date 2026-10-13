@@ -6,14 +6,33 @@
 #include <sys/stat.h>
 
 #include "auth.h"
+#include "log.h"
 #include "routes_accounts.h"
 #include "routes_blacklist.h"
+#include "routes_logs.h"
 #include "routes_pools.h"
 #include "routes_queue.h"
 #include "routes_search.h"
 #include "routes_searches.h"
 #include "routes_tags.h"
 #include "tls.h"
+
+/* civetweb's own per-request/error logging -- wiring these in gives us
+ * access-log-style lines (method/path/status/bytes) for every request with
+ * no changes needed in any individual route handler. */
+static int civetweb_log_message(const struct mg_connection *conn, const char *message)
+{
+    (void)conn;
+    server_log("ERROR", "civetweb: %s", message);
+    return 1; /* non-zero: civetweb's own default stderr logging is skipped */
+}
+
+static int civetweb_log_access(const struct mg_connection *conn, const char *message)
+{
+    (void)conn;
+    server_log("INFO", "%s", message);
+    return 1; /* non-zero: civetweb's own default access logging is skipped */
+}
 
 static int health_handler(struct mg_connection *conn, void *cbdata)
 {
@@ -78,7 +97,12 @@ server_app_t *server_app_start(const bunny_core_config_t *core_config, const cha
         "listening_ports", port_option, "ssl_certificate", app->cert_path, "num_threads", "4", NULL,
     };
 
-    app->mg_ctx = mg_start(NULL, NULL, options);
+    struct mg_callbacks callbacks;
+    memset(&callbacks, 0, sizeof(callbacks));
+    callbacks.log_message = civetweb_log_message;
+    callbacks.log_access = civetweb_log_access;
+
+    app->mg_ctx = mg_start(&callbacks, NULL, options);
     if (!app->mg_ctx) {
         pthread_mutex_destroy(&app->ctx.core_mutex);
         bunny_core_close(app->core);
@@ -96,6 +120,7 @@ server_app_t *server_app_start(const bunny_core_config_t *core_config, const cha
     server_routes_register_pools(app->mg_ctx, &app->ctx);
     server_routes_register_search(app->mg_ctx, &app->ctx);
     server_routes_register_blacklist(app->mg_ctx, &app->ctx);
+    server_routes_register_logs(app->mg_ctx, &app->ctx);
 
     if (!server_scheduler_start(&app->scheduler, &app->ctx, data_dir, poll_interval_sec)) {
         mg_stop(app->mg_ctx);
