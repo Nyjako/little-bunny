@@ -53,6 +53,8 @@ typedef struct
     bool auto_upvote;        /* e621 only -- queue an upvote for every post this search finds during sync */
     bool pinned;             /* shown first in SearchesScreen, ahead of the normal sort order */
     char *last_viewed_at;    /* NULL if this search/pool has never been opened */
+    bool initial_sync_done;             /* has the (capped) first full scan completed -- see sync.c */
+    int64_t highest_synced_external_id; /* highest post id seen by any sync so far; 0 = none yet */
 } bunny_db_search_t;
 
 typedef struct
