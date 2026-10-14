@@ -27,9 +27,7 @@ static int handle_post_accounts(struct mg_connection *conn, server_context_t *ct
         return server_json_respond_error(conn, BUNNY_CORE_ERR_INVALID_ARG);
     }
 
-    pthread_mutex_lock(&ctx->core_mutex);
     bunny_core_result_t result = bunny_core_account_set(ctx->core, site, username, secret);
-    pthread_mutex_unlock(&ctx->core_mutex);
     cJSON_Delete(body);
 
     if (result != BUNNY_CORE_OK) {
@@ -51,9 +49,7 @@ static int handle_get_account(struct mg_connection *conn, server_context_t *ctx,
     }
 
     bunny_db_account_t account;
-    pthread_mutex_lock(&ctx->core_mutex);
     bunny_core_result_t result = bunny_core_account_get(ctx->core, site, &account);
-    pthread_mutex_unlock(&ctx->core_mutex);
 
     if (result != BUNNY_CORE_OK) {
         return server_json_respond_error(conn, result);
@@ -88,9 +84,7 @@ static int handle_post_verify(struct mg_connection *conn, server_context_t *ctx)
         return server_json_respond_error(conn, BUNNY_CORE_ERR_INVALID_ARG);
     }
 
-    pthread_mutex_lock(&ctx->core_mutex);
     bunny_core_result_t result = bunny_core_account_verify(ctx->core, site, username, secret);
-    pthread_mutex_unlock(&ctx->core_mutex);
     cJSON_Delete(body);
 
     if (result != BUNNY_CORE_OK) {
@@ -111,9 +105,7 @@ static int handle_delete_account(struct mg_connection *conn, server_context_t *c
         return server_json_respond_error(conn, BUNNY_CORE_ERR_INVALID_ARG);
     }
 
-    pthread_mutex_lock(&ctx->core_mutex);
     bunny_core_result_t result = bunny_core_account_delete(ctx->core, site);
-    pthread_mutex_unlock(&ctx->core_mutex);
 
     if (result != BUNNY_CORE_OK) {
         return server_json_respond_error(conn, result);

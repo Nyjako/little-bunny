@@ -19,4 +19,7 @@ add_test(NAME bunny_server_test_log COMMAND bunny_server_test_log)
 # driving civetweb's request/response handling end to end.
 add_executable(bunny_server_test_integration test_integration.c)
 target_link_libraries(bunny_server_test_integration PRIVATE bunny_server_lib CURL::libcurl unity::framework)
+if(NOT ANDROID AND NOT WIN32)
+  target_link_libraries(bunny_server_test_integration PRIVATE pthread)
+endif()
 add_test(NAME bunny_server_test_integration COMMAND bunny_server_test_integration)

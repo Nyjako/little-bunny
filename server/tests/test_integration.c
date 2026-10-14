@@ -4,10 +4,12 @@
 #include <curl/curl.h>
 
 #include <dirent.h>
+#include <pthread.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 #include <unistd.h>
 
 #include "app.h"
@@ -69,6 +71,16 @@ static bunny_http_result_t fake_inkbunny_send(void *user_data, const bunny_http_
     out_response->body = strdup(body);
     out_response->body_len = strlen(body);
     return BUNNY_HTTP_OK;
+}
+
+/* Sleeps ~1s before returning the normal fixture -- the "slow sync" this
+ * test's concurrency check needs. Only ever installed by
+ * test_concurrent_request_is_not_blocked_by_a_slow_sync below; every other
+ * test's setUp() resets g_e621_transport.send back to fake_e621_send. */
+static bunny_http_result_t slow_fake_e621_send(void *user_data, const bunny_http_request_t *request, bunny_http_response_t *out_response)
+{
+    usleep(1000000);
+    return fake_e621_send(user_data, request, out_response);
 }
 
 static bunny_http_transport_t g_e621_transport;
@@ -740,6 +752,63 @@ void test_get_logs_returns_json_array_with_access_log_line(void)
     free(response.data);
 }
 
+static void *run_slow_sync_request(void *arg)
+{
+    (void)arg;
+    response_buffer_t response = {0};
+    do_request("POST", "/searches/1/sync", NULL, &response, true, NULL);
+    free(response.data);
+    return NULL;
+}
+
+static double elapsed_ms(struct timespec start)
+{
+    struct timespec now;
+    clock_gettime(CLOCK_MONOTONIC, &now);
+    return (now.tv_sec - start.tv_sec) * 1000.0 + (now.tv_nsec - start.tv_nsec) / 1e6;
+}
+
+/* Regression test for the real production bug: a slow sync used to hold the
+ * server's single core_mutex for its entire duration (including network
+ * I/O), freezing every other request on the server. That mutex
+ * (server_context_t.core_mutex) is gone now -- bunny_core protects itself
+ * internally and never holds its own lock across network I/O (see
+ * libs/core/tests/test_concurrency.c for that half of the fix) -- so a
+ * concurrent request against the real running server, hitting civetweb's
+ * actual worker-thread pool, must stay fast while a slow sync is in flight
+ * elsewhere. This is the test that WOULD have failed against the original
+ * bug. */
+void test_concurrent_request_is_not_blocked_by_a_slow_sync(void)
+{
+    response_buffer_t response = {0};
+    long status = do_request("POST", "/searches", "{\"site\":\"e621\",\"label\":\"wolves\",\"query\":\"wolf\",\"interval_hours\":24}", &response, true, NULL);
+    TEST_ASSERT_EQUAL(201, status);
+    free(response.data);
+
+    g_e621_transport.send = slow_fake_e621_send;
+
+    pthread_t sync_thread;
+    struct timespec start;
+    clock_gettime(CLOCK_MONOTONIC, &start);
+    TEST_ASSERT_EQUAL(0, pthread_create(&sync_thread, NULL, run_slow_sync_request, NULL));
+
+    /* Give the sync request time to actually be inside civetweb's handler
+     * (and the ~1s slow network call) before racing the fast one against it. */
+    usleep(100000); /* 100ms */
+
+    response_buffer_t fast_response = {0};
+    status = do_request("GET", "/searches", NULL, &fast_response, true, NULL);
+    double fast_elapsed = elapsed_ms(start);
+    TEST_ASSERT_EQUAL(200, status);
+    free(fast_response.data);
+
+    /* The slow sync's fake transport sleeps ~1s -- the fast GET must return
+     * in well under that if it wasn't serialized behind it. */
+    TEST_ASSERT_TRUE_MESSAGE(fast_elapsed < 500.0, "a concurrent request was blocked by the in-flight slow sync");
+
+    pthread_join(sync_thread, NULL);
+}
+
 int main(void)
 {
     curl_global_init(CURL_GLOBAL_DEFAULT);
@@ -758,6 +827,7 @@ int main(void)
     RUN_TEST(test_scheduler_syncs_search_automatically);
     RUN_TEST(test_scheduler_backs_up_database_automatically);
     RUN_TEST(test_get_logs_returns_json_array_with_access_log_line);
+    RUN_TEST(test_concurrent_request_is_not_blocked_by_a_slow_sync);
     int result = UNITY_END();
     curl_global_cleanup();
     return result;

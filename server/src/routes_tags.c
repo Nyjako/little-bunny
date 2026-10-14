@@ -30,9 +30,7 @@ static int handle_get_tags_autocomplete(struct mg_connection *conn, server_conte
     }
 
     bunny_db_tag_stat_list_t list;
-    pthread_mutex_lock(&ctx->core_mutex);
     bunny_core_result_t result = bunny_core_tag_autocomplete(ctx->core, site, prefix_value, limit, &list);
-    pthread_mutex_unlock(&ctx->core_mutex);
 
     if (result != BUNNY_CORE_OK) {
         return server_json_respond_error(conn, result);
@@ -69,9 +67,7 @@ static int handle_get_top_favorited_tags(struct mg_connection *conn, server_cont
     }
 
     bunny_db_tag_stat_list_t list;
-    pthread_mutex_lock(&ctx->core_mutex);
     bunny_core_result_t result = bunny_core_top_favorited_tags(ctx->core, site, limit, &list);
-    pthread_mutex_unlock(&ctx->core_mutex);
 
     if (result != BUNNY_CORE_OK) {
         return server_json_respond_error(conn, result);
@@ -108,9 +104,7 @@ static int handle_get_top_used_tags(struct mg_connection *conn, server_context_t
     }
 
     bunny_db_tag_stat_list_t list;
-    pthread_mutex_lock(&ctx->core_mutex);
     bunny_core_result_t result = bunny_core_top_used_tags(ctx->core, site, limit, &list);
-    pthread_mutex_unlock(&ctx->core_mutex);
 
     if (result != BUNNY_CORE_OK) {
         return server_json_respond_error(conn, result);

@@ -13,9 +13,7 @@
 static int handle_get_pool(struct mg_connection *conn, server_context_t *ctx, int64_t pool_id)
 {
     bunny_core_pool_info_t info;
-    pthread_mutex_lock(&ctx->core_mutex);
     bunny_core_result_t result = bunny_core_fetch_pool(ctx->core, pool_id, &info);
-    pthread_mutex_unlock(&ctx->core_mutex);
 
     if (result != BUNNY_CORE_OK) {
         return server_json_respond_error(conn, result);

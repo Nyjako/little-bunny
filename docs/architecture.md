@@ -2520,6 +2520,83 @@ it stays correct by id regardless of a search's own sort order).
   forwarding into `server_log()`) on a local copy of the config passed to `bunny_core_open`,
   so `main.c` and the FFI plugin stay unaware of server-only logging concerns.
 
+## M19 -- Fix server freezing entirely during a slow sync
+
+Real production logs (surfaced by M18's follow-up per-search logging) proved a severe
+pre-existing bug: a request logged as *received* at `14:20:40` didn't get its response (and
+therefore its access-log line, which civetweb prints on completion, not arrival) until
+`14:34:07` -- the entire server was frozen for 13+ minutes behind a single search's sync.
+Root cause: `server_context_t` (`server/src/context.h`) had one `pthread_mutex_t
+core_mutex` that *every* route handler and the scheduler locked around the *entire*
+`bunny_core_*` call. 8 of the ~30 `bunny_core_*` functions make real, potentially many,
+sequential network calls to e621/Inkbunny internally (`sync_e621_search`/
+`sync_inkbunny_search`, `bunny_core_process_queue`, `bunny_core_account_verify`,
+`bunny_core_fetch_and_cache_post`, `bunny_core_fetch_pool`, `bunny_core_preview_search`,
+`bunny_core_list_my_inkbunny_favorites`, `bunny_core_list_comments`) -- while any one of
+these ran, the shared lock blocked every other request and the scheduler's own next tick,
+civetweb's 4 worker threads notwithstanding. M18 made this measurably worse by removing the
+old 20-page cap that used to bound how long a single sync could hold the lock.
+
+Investigated and confirmed safe to fix without avoiding concurrent db access entirely:
+SQLite here is opened with plain `sqlite3_open()` (no special threading flags), so it runs
+in its default build-time threadsafe mode -- safe for multiple threads to call into the same
+`sqlite3*` handle without external locks, from a memory-safety standpoint. `bunny_db_t`
+itself has zero locking of its own. The actual problem was never "concurrent db access is
+unsafe" -- it was "a lock meant to protect db access was held across unrelated network
+I/O."
+
+- **A single `pthread_mutex_t db_mutex` now lives inside `struct bunny_core`**
+  (`libs/core/src/internal.h`), not in `server_context_t`. Two inline helpers,
+  `bunny_core_db_lock`/`unlock`, are used by *every* `bunny_core_*` function that touches
+  `core->db` -- not just the 8 network-touching ones, but all of them, including the ~22
+  previously-pure-db ones that used to rely entirely on the server's external lock.
+  Deliberately **one lock, not two** (e.g. "keep the server's coarse lock for pure-db
+  routes, add a second internal lock just for the 8 network functions" was considered and
+  rejected): two mutexes both guarding `core->db` from different call sites is an
+  ambiguous-ownership trap -- a future route calling one of the 8 functions without
+  external locking (plausible once it looks redundant) and another calling a pure-db
+  function *with* external locking would be using two unrelated primitives to protect the
+  same resource, with no single source of truth, and no compiler or test to catch it if a
+  function's "pure-db" classification ever changes (M18 already proved that classification
+  can change). The rule applied throughout: lock immediately before each `bunny_db_*` call
+  (or tight group that must be atomic together, e.g. a check-then-act `bunny_db_search_has_
+  result` + `bunny_db_search_add_result` pair in `sync_inkbunny_search`), unlock
+  immediately after; *never* call `e621_*`/`inkbunny_*`/curl while holding the lock.
+  `upsert_e621_search_page`/`bunny_core_preview_search`/`bunny_core_list_my_inkbunny_
+  favorites` lock *per item* inside their loops (not once per page/batch) to keep each
+  critical section short even when processing hundreds of posts at once.
+  `bunny_core_build_e621_client`/`build_inkbunny_client` (`libs/core/src/site_clients.c`)
+  lock only around their leading `bunny_db_account_get` read; client creation and (for
+  Inkbunny) the real `inkbunny_login` network call run unlocked afterward.
+  `bunny_core_account_verify` (`verify.c`) needed no change at all -- confirmed it never
+  touches `core->db`, only immutable-after-open fields, so it was already safe for
+  concurrent callers.
+- **The server's `core_mutex` is gone entirely.** `bunny_core` is self-contained and
+  thread-safe on its own; every route handler (`routes_accounts.c`, `routes_blacklist.c`,
+  `routes_pools.c`, `routes_queue.c`, `routes_search.c`, `routes_searches.c`,
+  `routes_tags.c`) and `scheduler.c` just call straight into `bunny_core_*` with zero
+  locking of their own now.
+- **Verification**: new `libs/core/tests/test_concurrency.c` proves the *post-fix*
+  invariant directly against `bunny_core` (one thread runs a sync against a fake transport
+  that sleeps 300ms, a second thread's concurrent pure-db call returns in well under that) --
+  explicitly documented in the test's own header comment as NOT a regression test for the
+  original bug, since that lived entirely in the server's now-deleted lock and this test has
+  no server layer at all. The actual regression test is a new multi-threaded test in
+  `server/tests/test_integration.c`: it starts the real server, spawns a thread issuing a
+  real libcurl request that hits a fake transport sleeping ~1s, and from the main thread
+  issues a second real libcurl request shortly after, asserting it returns in well under 1s
+  -- this one *does* exercise civetweb's actual worker-thread pool and would have failed
+  against the original bug.
+- **Known, accepted gap**: two concurrent syncs of the *same* search (e.g. a scheduler tick
+  racing a user's manual "check for updates" for that exact search) can still interleave --
+  each takes its own independent snapshot of the search's sync state, so every individual
+  write stays serialized and safe (upserts are idempotent), but it's possible for both
+  passes to redundantly fetch the same new posts, or for the incremental-sync high-water-mark
+  to transiently regress if the pass with the lower `max_id_seen` happens to write last (self-
+  heals on the next sync). No same-search mutual-exclusion guard was added -- that's a
+  separate concern from the server-wide freeze this milestone fixes, and would need its own
+  mechanism (a per-search in-progress flag) if ever addressed.
+
 ## Inkbunny API constraints (found in M2)
 
 Verified against the live API and the official docs while building `libinkbunny`:

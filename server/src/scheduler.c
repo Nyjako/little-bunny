@@ -81,9 +81,7 @@ static void backup_due_and_prune(server_context_t *ctx, const char *backups_dir)
     }
 
     if (due) {
-        pthread_mutex_lock(&ctx->core_mutex);
         bunny_core_result_t result = bunny_core_backup_database(ctx->core, backups_dir);
-        pthread_mutex_unlock(&ctx->core_mutex);
         if (result == BUNNY_CORE_OK) {
             server_log("INFO", "scheduler: backed up database to %s", backups_dir);
         } else {
@@ -128,10 +126,8 @@ static void *scheduler_loop(void *arg)
 
         bunny_core_sync_stats_t sync_stats;
         bunny_core_queue_stats_t queue_stats;
-        pthread_mutex_lock(&scheduler->ctx->core_mutex);
         bunny_core_sync_due_searches(scheduler->ctx->core, &sync_stats);
         bunny_core_process_queue(scheduler->ctx->core, &queue_stats);
-        pthread_mutex_unlock(&scheduler->ctx->core_mutex);
 
         server_log("INFO", "scheduler: synced %d/%d due searches (%d posts upserted), processed %d queued actions (%d succeeded, %d failed)", sync_stats.searches_synced, sync_stats.searches_checked, sync_stats.posts_upserted, queue_stats.actions_processed, queue_stats.actions_succeeded, queue_stats.actions_failed);
 

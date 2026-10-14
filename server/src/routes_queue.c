@@ -26,9 +26,7 @@ static int handle_favorite_add(struct mg_connection *conn, server_context_t *ctx
     int stars = bunny_json_get_int_or(body, "stars", -1);
     cJSON_Delete(body);
 
-    pthread_mutex_lock(&ctx->core_mutex);
     bunny_core_result_t result = bunny_core_queue_favorite_add(ctx->core, post_id, stars);
-    pthread_mutex_unlock(&ctx->core_mutex);
 
     if (result != BUNNY_CORE_OK) {
         return server_json_respond_error(conn, result);
@@ -38,9 +36,7 @@ static int handle_favorite_add(struct mg_connection *conn, server_context_t *ctx
 
 static int handle_favorite_remove(struct mg_connection *conn, server_context_t *ctx, int64_t post_id)
 {
-    pthread_mutex_lock(&ctx->core_mutex);
     bunny_core_result_t result = bunny_core_queue_favorite_remove(ctx->core, post_id);
-    pthread_mutex_unlock(&ctx->core_mutex);
 
     if (result != BUNNY_CORE_OK) {
         return server_json_respond_error(conn, result);
@@ -60,9 +56,7 @@ static int handle_vote(struct mg_connection *conn, server_context_t *ctx, int64_
     }
     cJSON_Delete(body);
 
-    pthread_mutex_lock(&ctx->core_mutex);
     bunny_core_result_t result = bunny_core_queue_vote(ctx->core, post_id, score, no_unvote);
-    pthread_mutex_unlock(&ctx->core_mutex);
 
     if (result != BUNNY_CORE_OK) {
         return server_json_respond_error(conn, result);
@@ -81,9 +75,7 @@ static int handle_comment(struct mg_connection *conn, server_context_t *ctx, int
         return server_json_respond_error(conn, BUNNY_CORE_ERR_INVALID_ARG);
     }
 
-    pthread_mutex_lock(&ctx->core_mutex);
     bunny_core_result_t result = bunny_core_queue_comment(ctx->core, post_id, comment_body, anonymous);
-    pthread_mutex_unlock(&ctx->core_mutex);
     cJSON_Delete(body);
 
     if (result != BUNNY_CORE_OK) {
@@ -122,9 +114,7 @@ static cJSON *comment_to_json(const bunny_core_comment_t *comment)
 static int handle_list_comments(struct mg_connection *conn, server_context_t *ctx, int64_t post_id)
 {
     bunny_core_comment_list_t list;
-    pthread_mutex_lock(&ctx->core_mutex);
     bunny_core_result_t result = bunny_core_list_comments(ctx->core, post_id, &list);
-    pthread_mutex_unlock(&ctx->core_mutex);
 
     if (result != BUNNY_CORE_OK) {
         return server_json_respond_error(conn, result);
@@ -166,9 +156,7 @@ static int handle_record_download(struct mg_connection *conn, server_context_t *
     bool verified = bunny_json_get_bool_or(body, "verified", false);
 
     int64_t download_id = 0;
-    pthread_mutex_lock(&ctx->core_mutex);
     bunny_core_result_t result = bunny_core_record_download(ctx->core, post_id, file_path, checksum_md5, verified, &download_id);
-    pthread_mutex_unlock(&ctx->core_mutex);
     cJSON_Delete(body);
 
     if (result != BUNNY_CORE_OK) {
@@ -185,9 +173,7 @@ static int handle_record_download(struct mg_connection *conn, server_context_t *
 static int handle_list_downloads(struct mg_connection *conn, server_context_t *ctx, int64_t post_id)
 {
     bunny_db_download_list_t list;
-    pthread_mutex_lock(&ctx->core_mutex);
     bunny_core_result_t result = bunny_core_list_downloads_for_post(ctx->core, post_id, &list);
-    pthread_mutex_unlock(&ctx->core_mutex);
 
     if (result != BUNNY_CORE_OK) {
         return server_json_respond_error(conn, result);
@@ -207,9 +193,7 @@ static int handle_list_downloads(struct mg_connection *conn, server_context_t *c
 static int handle_get_post_tags(struct mg_connection *conn, server_context_t *ctx, int64_t post_id)
 {
     bunny_db_post_tag_list_t list;
-    pthread_mutex_lock(&ctx->core_mutex);
     bunny_core_result_t result = bunny_core_post_get_tags_by_category(ctx->core, post_id, &list);
-    pthread_mutex_unlock(&ctx->core_mutex);
 
     if (result != BUNNY_CORE_OK) {
         return server_json_respond_error(conn, result);
@@ -229,9 +213,7 @@ static int handle_get_post_tags(struct mg_connection *conn, server_context_t *ct
 static int handle_get_post_sources(struct mg_connection *conn, server_context_t *ctx, int64_t post_id)
 {
     bunny_db_string_list_t list;
-    pthread_mutex_lock(&ctx->core_mutex);
     bunny_core_result_t result = bunny_core_post_get_sources(ctx->core, post_id, &list);
-    pthread_mutex_unlock(&ctx->core_mutex);
 
     if (result != BUNNY_CORE_OK) {
         return server_json_respond_error(conn, result);
@@ -251,9 +233,7 @@ static int handle_get_post_sources(struct mg_connection *conn, server_context_t 
 static int handle_get_post_relationships(struct mg_connection *conn, server_context_t *ctx, int64_t post_id)
 {
     bunny_db_post_relationships_t relationships;
-    pthread_mutex_lock(&ctx->core_mutex);
     bunny_core_result_t result = bunny_core_post_get_relationships(ctx->core, post_id, &relationships);
-    pthread_mutex_unlock(&ctx->core_mutex);
 
     if (result != BUNNY_CORE_OK) {
         return server_json_respond_error(conn, result);
@@ -282,9 +262,7 @@ static int handle_get_post_relationships(struct mg_connection *conn, server_cont
 static int handle_get_post_pools(struct mg_connection *conn, server_context_t *ctx, int64_t post_id)
 {
     bunny_db_int64_list_t list;
-    pthread_mutex_lock(&ctx->core_mutex);
     bunny_core_result_t result = bunny_core_post_get_pool_ids(ctx->core, post_id, &list);
-    pthread_mutex_unlock(&ctx->core_mutex);
 
     if (result != BUNNY_CORE_OK) {
         return server_json_respond_error(conn, result);
@@ -315,9 +293,7 @@ static int handle_fetch_post(struct mg_connection *conn, server_context_t *ctx, 
     }
 
     int64_t post_id = 0;
-    pthread_mutex_lock(&ctx->core_mutex);
     bunny_core_result_t result = bunny_core_fetch_and_cache_post(ctx->core, site, external_id, &post_id);
-    pthread_mutex_unlock(&ctx->core_mutex);
 
     if (result != BUNNY_CORE_OK) {
         return server_json_respond_error(conn, result);
@@ -363,9 +339,7 @@ static cJSON *post_to_json(const bunny_db_post_t *post)
 static int handle_get_post_by_id(struct mg_connection *conn, server_context_t *ctx, int64_t post_id)
 {
     bunny_db_post_t post;
-    pthread_mutex_lock(&ctx->core_mutex);
     bunny_core_result_t result = bunny_core_post_get_by_id(ctx->core, post_id, &post);
-    pthread_mutex_unlock(&ctx->core_mutex);
 
     if (result != BUNNY_CORE_OK) {
         return server_json_respond_error(conn, result);
@@ -381,9 +355,7 @@ static int handle_get_post_by_id(struct mg_connection *conn, server_context_t *c
 
 static int handle_mark_seen(struct mg_connection *conn, server_context_t *ctx, int64_t post_id)
 {
-    pthread_mutex_lock(&ctx->core_mutex);
     bunny_core_result_t result = bunny_core_post_mark_seen(ctx->core, post_id);
-    pthread_mutex_unlock(&ctx->core_mutex);
 
     if (result != BUNNY_CORE_OK) {
         return server_json_respond_error(conn, result);
@@ -460,9 +432,7 @@ static int posts_handler(struct mg_connection *conn, void *cbdata)
 static int handle_sync(struct mg_connection *conn, server_context_t *ctx)
 {
     bunny_core_sync_stats_t stats;
-    pthread_mutex_lock(&ctx->core_mutex);
     bunny_core_result_t result = bunny_core_sync_due_searches(ctx->core, &stats);
-    pthread_mutex_unlock(&ctx->core_mutex);
 
     if (result != BUNNY_CORE_OK) {
         return server_json_respond_error(conn, result);
@@ -493,9 +463,7 @@ static int sync_handler(struct mg_connection *conn, void *cbdata)
 static int handle_queue_process(struct mg_connection *conn, server_context_t *ctx)
 {
     bunny_core_queue_stats_t stats;
-    pthread_mutex_lock(&ctx->core_mutex);
     bunny_core_result_t result = bunny_core_process_queue(ctx->core, &stats);
-    pthread_mutex_unlock(&ctx->core_mutex);
 
     if (result != BUNNY_CORE_OK) {
         return server_json_respond_error(conn, result);
