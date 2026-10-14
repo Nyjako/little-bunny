@@ -2597,6 +2597,38 @@ I/O."
   separate concern from the server-wide freeze this milestone fixes, and would need its own
   mechanism (a per-search in-progress flag) if ever addressed.
 
+### M19 follow-up -- serialize site-facing syncs against each other
+
+After M19 shipped, production logs showed the scheduler kicking off syncs of two
+*different* searches within the same second, plus a large (~20k-post) search leaving the
+server quiet for 15+ minutes in the logs with no way to tell whether that was genuine
+first-scan slowness or contention between the two concurrent syncs.
+
+- **A second, independent `pthread_mutex_t sync_mutex` was added to `struct bunny_core`**
+  (`libs/core/src/internal.h`), separate from `db_mutex` on purpose: it's held across the
+  *entire* body of a site-facing sync -- network I/O included -- which is the opposite of
+  `db_mutex`'s "never across a network call" rule. Two inline helpers,
+  `bunny_core_sync_lock`/`unlock`, wrap the full body of `sync_e621_search`/
+  `sync_inkbunny_search` (`sync.c`) and `bunny_core_process_queue` (`queue.c`), from before
+  their opening log line/pending-action fetch to every return path. This guarantees the
+  server never has more than one of these three kinds of operation talking to e621/Inkbunny
+  at once, regardless of whether it was triggered by the scheduler, a manual "check for
+  updates" request, or queue processing -- they all now queue up behind the same mutex.
+- **Interactive one-off calls deliberately do not take `sync_mutex`**: `preview_search`,
+  `fetch_pool`, `account_verify`, `list_comments`, `fetch_and_cache_post`, etc. stay
+  unaffected, so browsing the app remains responsive even while a long sync is in progress
+  elsewhere.
+- **This closes M19's own known-gap note above** as a side effect: two syncs of the *same*
+  search can no longer interleave either, since they now contend for the same mutex like
+  any other pair of syncs -- not a targeted fix for that specific race, but it happens to
+  remove it.
+- **Verification**: new `test_two_concurrent_syncs_are_serialized` in
+  `libs/core/tests/test_concurrency.c` -- one thread runs a sync of one search against a
+  fake transport that sleeps 300ms before returning an empty page; a second, concurrently
+  started sync of a *different* search is asserted to take meaningfully longer than its own
+  head start would allow if it ran in parallel, proving the two syncs actually queued up
+  behind `sync_mutex` rather than running side by side.
+
 ## Inkbunny API constraints (found in M2)
 
 Verified against the live API and the official docs while building `libinkbunny`:
