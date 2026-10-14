@@ -4,6 +4,9 @@
 #include <e621/client.h>
 #include <inkbunny/client.h>
 
+#include <stdarg.h>
+#include <stdio.h>
+
 #include "bunny_core/core.h"
 #include "bunny_core/error.h"
 #include "bunny_db/db.h"
@@ -15,7 +18,28 @@ struct bunny_core
     const bunny_http_transport_t *e621_transport;
     const bunny_http_transport_t *inkbunny_transport;
     double min_request_interval_sec;
+    bunny_core_log_fn log_callback;
+    void *log_user_data;
 };
+
+/* printf-style wrapper around core->log_callback -- no-op if none is set
+ * (standalone/FFI mode). Used by sync.c to report per-search sync progress. */
+#if defined(__GNUC__) || defined(__clang__)
+__attribute__((format(printf, 3, 4)))
+#endif
+static inline void
+bunny_core_log(bunny_core_t *core, const char *level, const char *fmt, ...)
+{
+    if (!core->log_callback) {
+        return;
+    }
+    char message[512];
+    va_list args;
+    va_start(args, fmt);
+    vsnprintf(message, sizeof(message), fmt, args);
+    va_end(args);
+    core->log_callback(core->log_user_data, level, message);
+}
 
 static inline bunny_core_result_t bunny_core_map_db_result(bunny_db_result_t result)
 {
