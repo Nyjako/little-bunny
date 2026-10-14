@@ -22,9 +22,7 @@ static int handle_get_blacklist(struct mg_connection *conn, server_context_t *ct
     }
 
     bunny_db_string_list_t list;
-    pthread_mutex_lock(&ctx->core_mutex);
     bunny_core_result_t result = bunny_core_blacklist_list(ctx->core, site, &list);
-    pthread_mutex_unlock(&ctx->core_mutex);
 
     if (result != BUNNY_CORE_OK) {
         return server_json_respond_error(conn, result);
@@ -57,9 +55,7 @@ static int handle_post_blacklist(struct mg_connection *conn, server_context_t *c
         return server_json_respond_error(conn, BUNNY_CORE_ERR_INVALID_ARG);
     }
 
-    pthread_mutex_lock(&ctx->core_mutex);
     bunny_core_result_t result = bunny_core_blacklist_add(ctx->core, site, tag);
-    pthread_mutex_unlock(&ctx->core_mutex);
     cJSON_Delete(body);
 
     if (result != BUNNY_CORE_OK) {
@@ -85,9 +81,7 @@ static int handle_delete_blacklist(struct mg_connection *conn, server_context_t 
         return server_json_respond_error(conn, BUNNY_CORE_ERR_INVALID_ARG);
     }
 
-    pthread_mutex_lock(&ctx->core_mutex);
     bunny_core_result_t result = bunny_core_blacklist_remove(ctx->core, site, tag_value);
-    pthread_mutex_unlock(&ctx->core_mutex);
 
     if (result != BUNNY_CORE_OK) {
         return server_json_respond_error(conn, result);

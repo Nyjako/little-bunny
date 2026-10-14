@@ -23,6 +23,12 @@ bunny_core_result_t bunny_core_open(const bunny_core_config_t *config, bunny_cor
         return bunny_core_map_db_result(result);
     }
 
+    if (pthread_mutex_init(&core->db_mutex, NULL) != 0) {
+        bunny_db_close(core->db);
+        free(core);
+        return BUNNY_CORE_ERR_UNKNOWN;
+    }
+
     core->user_agent = goblin_copy_cstr(config->user_agent);
     core->e621_transport = config->e621_transport;
     core->inkbunny_transport = config->inkbunny_transport;
@@ -39,6 +45,7 @@ void bunny_core_close(bunny_core_t *core)
     if (!core) {
         return;
     }
+    pthread_mutex_destroy(&core->db_mutex);
     bunny_db_close(core->db);
     free(core->user_agent);
     free(core);

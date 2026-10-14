@@ -273,9 +273,17 @@ static void upsert_e621_search_page(bunny_core_t *core, const bunny_db_search_t 
 {
     for (size_t i = 0; i < posts->count; i++) {
         int64_t post_id = 0;
-        if (upsert_e621_post(core->db, &posts->items[i], &post_id) == BUNNY_CORE_OK) {
-            bool was_new = false;
+        bunny_core_db_lock(core);
+        bool upserted_ok = upsert_e621_post(core->db, &posts->items[i], &post_id) == BUNNY_CORE_OK;
+        bool was_new = false;
+        if (upserted_ok) {
             bunny_db_search_add_result(core->db, search->id, post_id, &was_new);
+        }
+        bunny_core_db_unlock(core);
+        if (upserted_ok) {
+            /* bunny_core_queue_favorite_add/queue_vote lock internally for
+             * their own single write -- called outside this critical
+             * section since bunny_core_db_lock/unlock isn't re-entrant. */
             if (search->auto_favorite) {
                 bunny_core_queue_favorite_add(core, post_id, search->auto_favorite_stars);
             }
@@ -389,7 +397,9 @@ static bunny_core_result_t sync_e621_search(bunny_core_t *core, const bunny_db_s
         }
     }
 
+    bunny_core_db_lock(core);
     bunny_db_search_update_sync_progress(core->db, search->id, max_id_seen);
+    bunny_core_db_unlock(core);
     e621_client_destroy(client);
     bunny_core_log(core, "INFO", "Scanned \"%s\" -- found %d post(s), %d new", search->label, found_count, new_count);
     return BUNNY_CORE_OK;
@@ -443,20 +453,33 @@ static bunny_core_result_t sync_inkbunny_search(bunny_core_t *core, const bunny_
         bool reached_already_synced = false;
         for (size_t i = 0; i < submissions.count; i++) {
             int64_t post_id = 0;
-            if (upsert_inkbunny_submission(core->db, &submissions.items[i], &post_id) != BUNNY_CORE_OK) {
+            bunny_core_db_lock(core);
+            bool upserted_ok = upsert_inkbunny_submission(core->db, &submissions.items[i], &post_id) == BUNNY_CORE_OK;
+            bool already_linked = false;
+            if (upserted_ok) {
+                /* has_result (check) + add_result (act) must stay in the
+                 * same critical section -- see "Remaining risk" in
+                 * docs/architecture.md's M18 section for what this does and
+                 * doesn't guarantee under concurrent syncs of the same search. */
+                bunny_db_search_has_result(core->db, search->id, post_id, &already_linked);
+                if (!already_linked) {
+                    bunny_db_search_add_result(core->db, search->id, post_id, NULL);
+                }
+            }
+            bunny_core_db_unlock(core);
+
+            if (!upserted_ok) {
                 continue;
             }
             found_count++;
-
-            bool already_linked = false;
-            bunny_db_search_has_result(core->db, search->id, post_id, &already_linked);
             if (already_linked) {
                 reached_already_synced = true;
                 break;
             }
 
-            bunny_db_search_add_result(core->db, search->id, post_id, NULL);
             new_count++;
+            /* bunny_core_queue_favorite_add locks internally -- called
+             * outside this iteration's own critical section above. */
             if (search->auto_favorite) {
                 bunny_core_queue_favorite_add(core, post_id, -1);
             }
@@ -495,7 +518,9 @@ bunny_core_result_t bunny_core_fetch_and_cache_post(bunny_core_t *core, bunny_db
             return BUNNY_CORE_ERR_SITE;
         }
 
+        bunny_core_db_lock(core);
         bunny_core_result_t result = upsert_e621_post(core->db, &post, out_post_id);
+        bunny_core_db_unlock(core);
         e621_post_free(&post);
         e621_client_destroy(client);
         return result;
@@ -514,7 +539,9 @@ bunny_core_result_t bunny_core_fetch_and_cache_post(bunny_core_t *core, bunny_db
         return BUNNY_CORE_ERR_SITE;
     }
 
+    bunny_core_db_lock(core);
     bunny_core_result_t result = upsert_inkbunny_submission(core->db, &submission, out_post_id);
+    bunny_core_db_unlock(core);
     inkbunny_submission_free(&submission);
     inkbunny_client_destroy(client);
     return result;
@@ -547,7 +574,10 @@ bunny_core_result_t bunny_core_preview_search(bunny_core_t *core, bunny_db_site_
             int64_t post_id = 0;
             bunny_db_post_t item;
             memset(&item, 0, sizeof(item));
-            if (upsert_e621_post(core->db, &posts.items[i], &post_id) == BUNNY_CORE_OK && bunny_db_post_get_by_id(core->db, post_id, &item) == BUNNY_DB_OK) {
+            bunny_core_db_lock(core);
+            bool ok = upsert_e621_post(core->db, &posts.items[i], &post_id) == BUNNY_CORE_OK && bunny_db_post_get_by_id(core->db, post_id, &item) == BUNNY_DB_OK;
+            bunny_core_db_unlock(core);
+            if (ok) {
                 bunny_core_post_array_push(&arr, item);
             }
         }
@@ -575,7 +605,10 @@ bunny_core_result_t bunny_core_preview_search(bunny_core_t *core, bunny_db_site_
             int64_t post_id = 0;
             bunny_db_post_t item;
             memset(&item, 0, sizeof(item));
-            if (upsert_inkbunny_submission(core->db, &submissions.items[i], &post_id) == BUNNY_CORE_OK && bunny_db_post_get_by_id(core->db, post_id, &item) == BUNNY_DB_OK) {
+            bunny_core_db_lock(core);
+            bool ok = upsert_inkbunny_submission(core->db, &submissions.items[i], &post_id) == BUNNY_CORE_OK && bunny_db_post_get_by_id(core->db, post_id, &item) == BUNNY_DB_OK;
+            bunny_core_db_unlock(core);
+            if (ok) {
                 bunny_core_post_array_push(&arr, item);
             }
         }
@@ -621,7 +654,10 @@ bunny_core_result_t bunny_core_list_my_inkbunny_favorites(bunny_core_t *core, in
         int64_t post_id = 0;
         bunny_db_post_t item;
         memset(&item, 0, sizeof(item));
-        if (upsert_inkbunny_submission(core->db, &submissions.items[i], &post_id) == BUNNY_CORE_OK && bunny_db_post_get_by_id(core->db, post_id, &item) == BUNNY_DB_OK) {
+        bunny_core_db_lock(core);
+        bool ok = upsert_inkbunny_submission(core->db, &submissions.items[i], &post_id) == BUNNY_CORE_OK && bunny_db_post_get_by_id(core->db, post_id, &item) == BUNNY_DB_OK;
+        bunny_core_db_unlock(core);
+        if (ok) {
             bunny_core_post_array_push(&arr, item);
         }
     }
@@ -692,7 +728,10 @@ bunny_core_result_t bunny_core_list_comments(bunny_core_t *core, int64_t post_id
 
     bunny_db_post_t post;
     memset(&post, 0, sizeof(post));
-    bunny_core_result_t lookup_result = bunny_core_map_db_result(bunny_db_post_get_by_id(core->db, post_id, &post));
+    bunny_core_db_lock(core);
+    bunny_db_result_t post_result = bunny_db_post_get_by_id(core->db, post_id, &post);
+    bunny_core_db_unlock(core);
+    bunny_core_result_t lookup_result = bunny_core_map_db_result(post_result);
     if (lookup_result != BUNNY_CORE_OK) {
         return lookup_result;
     }
@@ -743,13 +782,15 @@ bunny_core_result_t bunny_core_sync_due_searches(bunny_core_t *core, bunny_core_
     memset(&stats, 0, sizeof(stats));
 
     bunny_db_search_list_t searches;
+    bunny_core_db_lock(core);
     bunny_db_result_t list_result = bunny_db_search_list(core->db, &searches);
+    bunny_core_db_unlock(core);
     if (list_result != BUNNY_DB_OK) {
         return bunny_core_map_db_result(list_result);
     }
 
     for (size_t i = 0; i < searches.count; i++) {
-        const bunny_db_search_t *search = &searches.items[i];
+        const bunny_db_search_t *search = &searches.items[i]; /* searches is this call's own heap snapshot, safe to read lock-free across the sync call below */
         stats.searches_checked++;
         if (!search_is_due(search)) {
             continue;
@@ -759,7 +800,9 @@ bunny_core_result_t bunny_core_sync_due_searches(bunny_core_t *core, bunny_core_
 
         if (sync_result == BUNNY_CORE_OK) {
             stats.searches_synced++;
+            bunny_core_db_lock(core);
             bunny_db_search_touch_last_run(core->db, search->id);
+            bunny_core_db_unlock(core);
         }
     }
 
@@ -777,7 +820,9 @@ bunny_core_result_t bunny_core_sync_search(bunny_core_t *core, int64_t search_id
     }
 
     bunny_db_search_list_t searches;
+    bunny_core_db_lock(core);
     bunny_db_result_t list_result = bunny_db_search_list(core->db, &searches);
+    bunny_core_db_unlock(core);
     if (list_result != BUNNY_DB_OK) {
         return bunny_core_map_db_result(list_result);
     }
@@ -801,7 +846,9 @@ bunny_core_result_t bunny_core_sync_search(bunny_core_t *core, int64_t search_id
     bunny_core_result_t sync_result = search->site == BUNNY_DB_SITE_E621 ? sync_e621_search(core, search, &stats, 0, 0) : sync_inkbunny_search(core, search, &stats, 0, 0);
     if (sync_result == BUNNY_CORE_OK) {
         stats.searches_synced = 1;
+        bunny_core_db_lock(core);
         bunny_db_search_touch_last_run(core->db, search_id);
+        bunny_core_db_unlock(core);
     }
 
     bunny_db_search_list_free(&searches);

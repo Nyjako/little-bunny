@@ -69,9 +69,7 @@ static int handle_preview_search(struct mg_connection *conn, server_context_t *c
     }
 
     bunny_db_post_list_t posts;
-    pthread_mutex_lock(&ctx->core_mutex);
     bunny_core_result_t result = bunny_core_preview_search(ctx->core, site, query_value, (int)page, &posts);
-    pthread_mutex_unlock(&ctx->core_mutex);
 
     if (result != BUNNY_CORE_OK) {
         return server_json_respond_error(conn, result);
@@ -97,9 +95,7 @@ static int handle_my_inkbunny_favorites(struct mg_connection *conn, server_conte
     }
 
     bunny_db_post_list_t posts;
-    pthread_mutex_lock(&ctx->core_mutex);
     bunny_core_result_t result = bunny_core_list_my_inkbunny_favorites(ctx->core, (int)page, &posts);
-    pthread_mutex_unlock(&ctx->core_mutex);
 
     if (result != BUNNY_CORE_OK) {
         return server_json_respond_error(conn, result);
