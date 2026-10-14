@@ -27,6 +27,8 @@ bunny_core_result_t bunny_core_open(const bunny_core_config_t *config, bunny_cor
     core->e621_transport = config->e621_transport;
     core->inkbunny_transport = config->inkbunny_transport;
     core->min_request_interval_sec = config->min_request_interval_sec;
+    core->log_callback = config->log_callback;
+    core->log_user_data = config->log_user_data;
 
     *out_core = core;
     return BUNNY_CORE_OK;

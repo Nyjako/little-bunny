@@ -700,6 +700,62 @@ void test_sync_e621_search_stops_after_a_single_short_page(void)
     free(fixture);
 }
 
+static char g_captured_log_lines[8][256];
+static int g_captured_log_count;
+
+static void capturing_log_callback(void *user_data, const char *level, const char *message)
+{
+    (void)user_data;
+    if (g_captured_log_count < 8) {
+        snprintf(g_captured_log_lines[g_captured_log_count], sizeof(g_captured_log_lines[0]), "[%s] %s", level, message);
+        g_captured_log_count++;
+    }
+}
+
+static bool any_captured_log_line_contains(const char *needle)
+{
+    for (int i = 0; i < g_captured_log_count; i++) {
+        if (strstr(g_captured_log_lines[i], needle)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+void test_sync_logs_progress_lines_via_the_configured_callback(void)
+{
+    g_captured_log_count = 0;
+
+    bunny_core_config_t config;
+    memset(&config, 0, sizeof(config));
+    config.db_path = ":memory:";
+    config.user_agent = "bunny-tests/1.0 (unit tests)";
+    config.e621_transport = &g_e621_transport;
+    config.min_request_interval_sec = 0.001;
+    config.log_callback = capturing_log_callback;
+
+    bunny_core_t *core = NULL;
+    bunny_core_result_t result = bunny_core_open(&config, &core);
+    TEST_ASSERT_EQUAL(BUNNY_CORE_OK, result);
+
+    char *fixture = read_fixture("e621_posts_search.json");
+    TEST_ASSERT_NOT_NULL(fixture);
+    g_e621_state.bodies[0] = fixture;
+    g_e621_state.body_count = 1;
+
+    int64_t search_id = 0;
+    bunny_core_search_create(core, BUNNY_DB_SITE_E621, "wolves", "wolf", 24, NULL, &search_id);
+
+    bunny_core_sync_stats_t stats;
+    bunny_core_sync_due_searches(core, &stats);
+
+    TEST_ASSERT_TRUE(any_captured_log_line_contains("Starting full scan for \"wolves\" (1/1)"));
+    TEST_ASSERT_TRUE(any_captured_log_line_contains("Scanned \"wolves\" -- found 1 post(s), 1 new"));
+
+    free(fixture);
+    bunny_core_close(core);
+}
+
 void test_sync_e621_search_second_sync_uses_cursor_and_only_upserts_new_posts(void)
 {
     g_e621_transport.send = capturing_fake_send;
@@ -1155,6 +1211,7 @@ int main(void)
     RUN_TEST(test_e621_requests_include_the_configured_username_in_the_user_agent);
     RUN_TEST(test_sync_e621_search_fetches_a_second_page_when_the_first_is_full);
     RUN_TEST(test_sync_e621_search_stops_after_a_single_short_page);
+    RUN_TEST(test_sync_logs_progress_lines_via_the_configured_callback);
     RUN_TEST(test_sync_e621_search_second_sync_uses_cursor_and_only_upserts_new_posts);
     RUN_TEST(test_sync_e621_search_with_zero_matches_still_flips_to_incremental_mode);
     RUN_TEST(test_tag_autocomplete_finds_tags_from_synced_posts);

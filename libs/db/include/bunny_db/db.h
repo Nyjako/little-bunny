@@ -124,8 +124,11 @@ bunny_db_result_t bunny_db_post_get(bunny_db_t *db, bunny_db_site_t site, int64_
 bunny_db_result_t bunny_db_post_get_by_id(bunny_db_t *db, int64_t post_id, bunny_db_post_t *out_post);
 
 /* Associates a cached post with a search's result set (e.g. after running that
- * search against the site). Idempotent: re-adding the same pair is a no-op. */
-bunny_db_result_t bunny_db_search_add_result(bunny_db_t *db, int64_t search_id, int64_t post_id);
+ * search against the site). Idempotent: re-adding the same pair is a no-op.
+ * out_was_new (nullable) reports whether this call actually created the link
+ * (false if it was already linked) -- used by sync.c to log how many of a
+ * sync's upserted posts were genuinely new to the search. */
+bunny_db_result_t bunny_db_search_add_result(bunny_db_t *db, int64_t search_id, int64_t post_id, bool *out_was_new);
 
 /* Whether `post_id` is already linked to `search_id` from a previous sync --
  * used by the Inkbunny incremental-sync early-stop (libs/core/src/sync.c):

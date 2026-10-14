@@ -12,6 +12,16 @@ extern "C" {
 
 typedef struct bunny_core bunny_core_t;
 
+/* Optional sink for human-readable progress/summary lines emitted during
+ * bunny_core_sync_due_searches/bunny_core_sync_search (e.g. "Starting full
+ * scan for ... (12/700)", "Scanned ... -- found 8 posts, 3 new"). NULL (the
+ * default, e.g. standalone/FFI mode) means these lines are simply dropped --
+ * there's no log viewer for standalone mode anyway. The server installs one
+ * that forwards into its own ring-buffer logger (see server/src/app.c,
+ * server/src/log.h). `level` is a short tag like "INFO"; neither pointer is
+ * owned by bunny_core. */
+typedef void (*bunny_core_log_fn)(void *user_data, const char *level, const char *message);
+
 typedef struct
 {
     const char *db_path;    /* required; a filesystem path, or ":memory:" for tests */
@@ -28,6 +38,9 @@ typedef struct
      * rate limiting). Tests set a negligible value so a sync pass that
      * touches both sites doesn't take the better part of a second. */
     double min_request_interval_sec;
+
+    bunny_core_log_fn log_callback; /* see bunny_core_log_fn above; NULL = no-op */
+    void *log_user_data;
 } bunny_core_config_t;
 
 /* Opens (creating if needed) the underlying bunny_db database and applies its

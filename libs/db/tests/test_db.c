@@ -318,7 +318,7 @@ void test_search_has_result(void)
     TEST_ASSERT_EQUAL(BUNNY_DB_OK, result);
     TEST_ASSERT_FALSE(has_result);
 
-    bunny_db_search_add_result(g_db, search_id, post_id);
+    bunny_db_search_add_result(g_db, search_id, post_id, NULL);
 
     result = bunny_db_search_has_result(g_db, search_id, post_id, &has_result);
     TEST_ASSERT_EQUAL(BUNNY_DB_OK, result);
@@ -347,9 +347,9 @@ void test_search_list_unseen_count(void)
 
     /* search1: two posts, one seen -> 1 unseen. search2: one post, untouched
      * -> 1 unseen. Each search's count must only reflect its own posts. */
-    bunny_db_search_add_result(g_db, search1_id, post1_id);
-    bunny_db_search_add_result(g_db, search1_id, post2_id);
-    bunny_db_search_add_result(g_db, search2_id, post3_id);
+    bunny_db_search_add_result(g_db, search1_id, post1_id, NULL);
+    bunny_db_search_add_result(g_db, search1_id, post2_id, NULL);
+    bunny_db_search_add_result(g_db, search2_id, post3_id, NULL);
     bunny_db_post_mark_seen(g_db, post1_id);
 
     bunny_db_search_list_t list;
@@ -386,9 +386,9 @@ void test_search_list_total_count(void)
 
     /* search1: two posts (seen or not doesn't matter for total_count).
      * search2: one post. Marking post1 seen must not change either count. */
-    bunny_db_search_add_result(g_db, search1_id, post1_id);
-    bunny_db_search_add_result(g_db, search1_id, post2_id);
-    bunny_db_search_add_result(g_db, search2_id, post3_id);
+    bunny_db_search_add_result(g_db, search1_id, post1_id, NULL);
+    bunny_db_search_add_result(g_db, search1_id, post2_id, NULL);
+    bunny_db_search_add_result(g_db, search2_id, post3_id, NULL);
     bunny_db_post_mark_seen(g_db, post1_id);
 
     bunny_db_search_list_t list;
@@ -640,8 +640,8 @@ void test_search_list_posts_excludes_blacklisted_tags(void)
     int64_t id2 = 0;
     bunny_db_post_upsert(g_db, &post1, &id1);
     bunny_db_post_upsert(g_db, &post2, &id2);
-    bunny_db_search_add_result(g_db, search_id, id1);
-    bunny_db_search_add_result(g_db, search_id, id2);
+    bunny_db_search_add_result(g_db, search_id, id1, NULL);
+    bunny_db_search_add_result(g_db, search_id, id2, NULL);
 
     bunny_db_post_list_t before;
     bunny_db_search_list_posts(g_db, search_id, false, &before);
@@ -679,10 +679,10 @@ void test_search_results_and_list_posts(void)
     bunny_db_post_upsert(g_db, &post1, &id1);
     bunny_db_post_upsert(g_db, &post2, &id2);
 
-    bunny_db_search_add_result(g_db, search_id, id1);
-    bunny_db_search_add_result(g_db, search_id, id2);
+    bunny_db_search_add_result(g_db, search_id, id1, NULL);
+    bunny_db_search_add_result(g_db, search_id, id2, NULL);
     /* re-adding the same pair should be a no-op, not an error */
-    bunny_db_result_t result = bunny_db_search_add_result(g_db, search_id, id1);
+    bunny_db_result_t result = bunny_db_search_add_result(g_db, search_id, id1, NULL);
     TEST_ASSERT_EQUAL(BUNNY_DB_OK, result);
 
     bunny_db_post_list_t all_results;
@@ -720,9 +720,9 @@ void test_search_list_posts_orders_newest_first_by_site_date(void)
     int64_t older_id = 0;
     int64_t newer_id = 0;
     bunny_db_post_upsert(g_db, &older_post, &older_id);
-    bunny_db_search_add_result(g_db, search_id, older_id);
+    bunny_db_search_add_result(g_db, search_id, older_id, NULL);
     bunny_db_post_upsert(g_db, &newer_post, &newer_id);
-    bunny_db_search_add_result(g_db, search_id, newer_id);
+    bunny_db_search_add_result(g_db, search_id, newer_id, NULL);
 
     bunny_db_post_list_t results;
     bunny_db_result_t result = bunny_db_search_list_posts(g_db, search_id, false, &results);
@@ -753,9 +753,9 @@ void test_search_mark_all_seen_only_affects_that_searchs_posts(void)
     bunny_db_post_upsert(g_db, &post2, &post2_id);
     bunny_db_post_upsert(g_db, &post3, &post3_id);
 
-    bunny_db_search_add_result(g_db, search1_id, post1_id);
-    bunny_db_search_add_result(g_db, search1_id, post2_id);
-    bunny_db_search_add_result(g_db, search2_id, post3_id);
+    bunny_db_search_add_result(g_db, search1_id, post1_id, NULL);
+    bunny_db_search_add_result(g_db, search1_id, post2_id, NULL);
+    bunny_db_search_add_result(g_db, search2_id, post3_id, NULL);
 
     bunny_db_result_t result = bunny_db_search_mark_all_seen(g_db, search1_id);
     TEST_ASSERT_EQUAL(BUNNY_DB_OK, result);
