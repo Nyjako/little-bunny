@@ -34,6 +34,16 @@ static int civetweb_log_access(const struct mg_connection *conn, const char *mes
     return 1; /* non-zero: civetweb's own default access logging is skipped */
 }
 
+/* Forwards bunny_core's own progress/summary log lines (sync.c's per-search
+ * "Starting full scan"/"Scanned ... found N posts" lines) into the server's
+ * ring buffer -- standalone/FFI mode leaves bunny_core_config_t.log_callback
+ * NULL instead, since it has no log viewer to forward to. */
+static void core_log_callback(void *user_data, const char *level, const char *message)
+{
+    (void)user_data;
+    server_log(level, "%s", message);
+}
+
 static int health_handler(struct mg_connection *conn, void *cbdata)
 {
     (void)cbdata;
@@ -68,7 +78,10 @@ server_app_t *server_app_start(const bunny_core_config_t *core_config, const cha
         return NULL;
     }
 
-    bunny_core_result_t open_result = bunny_core_open(core_config, &app->core);
+    bunny_core_config_t core_config_with_log = *core_config;
+    core_config_with_log.log_callback = core_log_callback;
+
+    bunny_core_result_t open_result = bunny_core_open(&core_config_with_log, &app->core);
     /* accounts.secret is stored plain (see M4.1) -- restrict the DB file the
      * same way as the auth token and TLS key. No-op for ":memory:". */
     if (core_config->db_path && strcmp(core_config->db_path, ":memory:") != 0) {

@@ -1503,6 +1503,26 @@ this file is the single source of truth for "what's done" across sessions.
   (still a full walk, now just via a safer pagination method with no artificial cap), but
   every subsequent sync only fetches genuinely new posts instead of re-walking from
   scratch.
+  **Follow-up (per-search progress logging)**: the first full scan of many searches is
+  still inherently slow (unavoidable -- it's a real one-time walk), and the only progress
+  indicator that existed was the Flutter app's own "check for updates" button
+  (`SearchesScreen._checkForUpdates`), which is purely client-side, ephemeral widget state
+  lost on app restart or when viewed from another device. Rather than rebuild that as a
+  persisted/resumable UI, the simpler fix requested was per-search log lines, which the
+  server already has a viewer for (M17's `GET /logs`/Server Logs screen) -- server-side
+  logs persist in the ring buffer and are visible from any device, independent of which app
+  instance triggered the sync. New `bunny_core_config_t.log_callback`/`log_user_data` (a
+  generic printf-style sink, NULL by default so standalone/FFI mode -- which has no log
+  viewer -- stays silent): `sync_e621_search`/`sync_inkbunny_search` now log
+  `Starting full scan for "<label>" (i/N)` or `Checking "<label>" for updates (i/N)`
+  (distinguished by whether `search->last_run_at` is still NULL) before syncing, and
+  `Scanned "<label>" -- found <N> post(s), <N> new` after -- "new" meaning posts newly
+  linked to *this* search, tracked via a new `out_was_new` param on
+  `bunny_db_search_add_result` (reads `sqlite3_changes()` after the `INSERT OR IGNORE`).
+  `server/src/app.c` installs a callback forwarding into `server_log()` when building the
+  core; the `(i/N)` position is only known by `bunny_core_sync_due_searches`'s batch loop,
+  so it's threaded through as optional `position`/`total` params (0 means "omit, e.g. a
+  single forced sync via `bunny_core_sync_search` has no batch to report a position in").
 
 - [ ] **M12 — Cross-platform polish**
   Responsive desktop/mobile layout, consistent theming pass, Windows app build, packaging.

@@ -2492,6 +2492,33 @@ it stays correct by id regardless of a search's own sort order).
   and old result sets overlap unpredictably. Flagged with a comment at the call site rather
   than engineered around, since query edits are rare and the failure mode is "sync looks a
   little stale until the next full resync," not data loss.
+- **Follow-up: per-search progress logging**. The first full scan is still unavoidably slow
+  for a large batch of searches, and the only progress indicator that existed
+  (`SearchesScreen._checkForUpdates`'s `_syncAllProgress`, a plain Dart widget field) is
+  purely client-side and ephemeral -- lost on app restart, invisible from another device.
+  Rather than build a persisted/resumable progress UI, the request was for simple log lines,
+  which the server already has a durable, device-independent viewer for (M17's `GET
+  /logs`/Server Logs screen). New `bunny_core_config_t.log_callback`/`log_user_data`
+  (`libs/core/include/bunny_core/core.h`): a generic `void (*)(void *user_data, const char
+  *level, const char *message)` sink, NULL by default. `libs/core/src/internal.h` adds a
+  `bunny_core_log(core, level, fmt, ...)` printf-style wrapper around it (no-op if
+  `log_callback` is unset) so standalone/FFI mode -- which has no log viewer to forward
+  to -- needs zero changes; it simply never sets the callback. `sync_e621_search`/
+  `sync_inkbunny_search` now log `Starting full scan for "<label>" (i/N)` or `Checking
+  "<label>" for updates (i/N)` before syncing (the distinction keyed off whether
+  `search->last_run_at` is still NULL -- a pre-existing field, deliberately not the newer
+  e621-only `initial_sync_done` column, so the wording is correct for Inkbunny too) and
+  `Scanned "<label>" -- found <N> post(s), <N> new` after. "New" means posts newly linked to
+  *this* search (not merely newly cached overall) -- `bunny_db_search_add_result` gained an
+  `out_was_new` out-param (nullable) reading `sqlite3_changes()` after its `INSERT OR
+  IGNORE` to report this without an extra query. The `(i/N)` position is only meaningful
+  inside `bunny_core_sync_due_searches`'s batch loop (which knows the full due-search list
+  and the current index) -- threaded through as optional `position`/`total` params on both
+  sync functions, with `0` meaning "omit the suffix" for `bunny_core_sync_search`'s
+  single-search path (used by the app's per-search force-sync button), which has no batch
+  to report a position in. `server/src/app.c` installs the callback (a small trampoline
+  forwarding into `server_log()`) on a local copy of the config passed to `bunny_core_open`,
+  so `main.c` and the FFI plugin stay unaware of server-only logging concerns.
 
 ## Inkbunny API constraints (found in M2)
 
