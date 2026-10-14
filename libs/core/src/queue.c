@@ -230,11 +230,17 @@ static void apply_vote_mirror(bunny_db_t *db, const bunny_db_action_t *action)
     bunny_db_vote_set(db, action->post_id, score);
 }
 
+/* sync_mutex is held for this entire function -- see the note on
+ * sync_e621_search in sync.c. Keeps queue processing from ever running
+ * concurrently with a site-facing sync (or another concurrent call to this
+ * function), whether triggered by the scheduler or a manual request. */
 bunny_core_result_t bunny_core_process_queue(bunny_core_t *core, bunny_core_queue_stats_t *out_stats)
 {
     if (!core) {
         return BUNNY_CORE_ERR_INVALID_ARG;
     }
+
+    bunny_core_sync_lock(core);
 
     bunny_core_queue_stats_t stats;
     memset(&stats, 0, sizeof(stats));
@@ -244,6 +250,7 @@ bunny_core_result_t bunny_core_process_queue(bunny_core_t *core, bunny_core_queu
     bunny_db_result_t list_result = bunny_db_action_queue_list_pending(core->db, &actions);
     bunny_core_db_unlock(core);
     if (list_result != BUNNY_DB_OK) {
+        bunny_core_sync_unlock(core);
         return bunny_core_map_db_result(list_result);
     }
 
@@ -306,5 +313,6 @@ bunny_core_result_t bunny_core_process_queue(bunny_core_t *core, bunny_core_queu
     if (out_stats) {
         *out_stats = stats;
     }
+    bunny_core_sync_unlock(core);
     return BUNNY_CORE_OK;
 }
