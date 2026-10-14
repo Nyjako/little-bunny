@@ -23,6 +23,20 @@ struct bunny_core
                                * pattern every bunny_core_* function follows.
                                * verify.c is the one exception: it never
                                * touches core->db at all, so it needs no lock. */
+    pthread_mutex_t sync_mutex; /* serializes the site-facing sync operations
+                                 * against EACH OTHER (sync_e621_search/
+                                 * sync_inkbunny_search, bunny_core_process_
+                                 * queue -- see sync.c/queue.c) so the server
+                                 * never has more than one of these talking to
+                                 * e621/Inkbunny at once, whether triggered by
+                                 * the scheduler or a manual request. This is
+                                 * separate from db_mutex on purpose: it's
+                                 * held across network I/O deliberately (that
+                                 * IS the point), while db_mutex never is.
+                                 * Interactive one-off calls (preview_search,
+                                 * fetch_pool, account_verify, ...) do NOT take
+                                 * this lock, so browsing stays responsive
+                                 * even while a long sync is in progress. */
     char *user_agent;
     const bunny_http_transport_t *e621_transport;
     const bunny_http_transport_t *inkbunny_transport;
@@ -39,6 +53,12 @@ struct bunny_core
  * thread deadlocks against itself. */
 static inline void bunny_core_db_lock(bunny_core_t *core) { pthread_mutex_lock(&core->db_mutex); }
 static inline void bunny_core_db_unlock(bunny_core_t *core) { pthread_mutex_unlock(&core->db_mutex); }
+
+/* See sync_mutex above -- held around the entire body of a site-syncing
+ * function (network calls included), never nested with another call that
+ * also takes it. */
+static inline void bunny_core_sync_lock(bunny_core_t *core) { pthread_mutex_lock(&core->sync_mutex); }
+static inline void bunny_core_sync_unlock(bunny_core_t *core) { pthread_mutex_unlock(&core->sync_mutex); }
 
 /* printf-style wrapper around core->log_callback -- no-op if none is set
  * (standalone/FFI mode). Used by sync.c to report per-search sync progress. */

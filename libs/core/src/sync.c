@@ -312,8 +312,16 @@ static void upsert_e621_search_page(bunny_core_t *core, const bunny_db_search_t 
  * deliberately no page-count cap either: both loops below terminate purely
  * on the site returning a short/empty page. `position`/`total` are only for
  * the progress log line -- see format_position_suffix above. */
+/* sync_mutex is held for this entire function (acquired before the opening
+ * "Starting/Checking" log line, released after the closing "Scanned" line)
+ * -- see internal.h. This is what keeps the server from ever running more
+ * than one site-facing sync at a time, whether triggered by the scheduler
+ * or a manual request, and as a side effect makes two concurrent syncs of
+ * the SAME search impossible rather than merely safe-but-redundant. */
 static bunny_core_result_t sync_e621_search(bunny_core_t *core, const bunny_db_search_t *search, bunny_core_sync_stats_t *stats, int position, int total)
 {
+    bunny_core_sync_lock(core);
+
     char position_suffix[32];
     format_position_suffix(position_suffix, sizeof(position_suffix), position, total);
 
@@ -323,6 +331,7 @@ static bunny_core_result_t sync_e621_search(bunny_core_t *core, const bunny_db_s
     e621_client_t *client = bunny_core_build_e621_client(core);
     if (!client) {
         bunny_core_log(core, "ERROR", "Failed to build e621 client for \"%s\"", search->label);
+        bunny_core_sync_unlock(core);
         return BUNNY_CORE_ERR_SITE;
     }
 
@@ -344,6 +353,7 @@ static bunny_core_result_t sync_e621_search(bunny_core_t *core, const bunny_db_s
             if (search_result != E621_OK) {
                 bunny_core_log(core, "ERROR", "Scan of \"%s\" failed (e621 request error)", search->label);
                 e621_client_destroy(client);
+                bunny_core_sync_unlock(core);
                 return BUNNY_CORE_ERR_SITE;
             }
 
@@ -375,6 +385,7 @@ static bunny_core_result_t sync_e621_search(bunny_core_t *core, const bunny_db_s
             if (search_result != E621_OK) {
                 bunny_core_log(core, "ERROR", "Scan of \"%s\" failed (e621 request error)", search->label);
                 e621_client_destroy(client);
+                bunny_core_sync_unlock(core);
                 return BUNNY_CORE_ERR_SITE;
             }
 
@@ -402,11 +413,16 @@ static bunny_core_result_t sync_e621_search(bunny_core_t *core, const bunny_db_s
     bunny_core_db_unlock(core);
     e621_client_destroy(client);
     bunny_core_log(core, "INFO", "Scanned \"%s\" -- found %d post(s), %d new", search->label, found_count, new_count);
+    bunny_core_sync_unlock(core);
     return BUNNY_CORE_OK;
 }
 
+/* sync_mutex is held for this entire function -- see the identical note on
+ * sync_e621_search above. */
 static bunny_core_result_t sync_inkbunny_search(bunny_core_t *core, const bunny_db_search_t *search, bunny_core_sync_stats_t *stats, int position, int total)
 {
+    bunny_core_sync_lock(core);
+
     char position_suffix[32];
     format_position_suffix(position_suffix, sizeof(position_suffix), position, total);
 
@@ -416,6 +432,7 @@ static bunny_core_result_t sync_inkbunny_search(bunny_core_t *core, const bunny_
     inkbunny_client_t *client = bunny_core_build_inkbunny_client(core);
     if (!client) {
         bunny_core_log(core, "ERROR", "Failed to build Inkbunny client for \"%s\"", search->label);
+        bunny_core_sync_unlock(core);
         return BUNNY_CORE_ERR_SITE;
     }
 
@@ -442,6 +459,7 @@ static bunny_core_result_t sync_inkbunny_search(bunny_core_t *core, const bunny_
         if (search_result != INKBUNNY_OK) {
             bunny_core_log(core, "ERROR", "Scan of \"%s\" failed (Inkbunny request error)", search->label);
             inkbunny_client_destroy(client);
+            bunny_core_sync_unlock(core);
             return BUNNY_CORE_ERR_SITE;
         }
 
@@ -495,6 +513,7 @@ static bunny_core_result_t sync_inkbunny_search(bunny_core_t *core, const bunny_
 
     inkbunny_client_destroy(client);
     bunny_core_log(core, "INFO", "Scanned \"%s\" -- found %d post(s), %d new", search->label, found_count, new_count);
+    bunny_core_sync_unlock(core);
     return BUNNY_CORE_OK;
 }
 
