@@ -1551,6 +1551,23 @@ this file is the single source of truth for "what's done" across sessions.
   redundant work or transiently regress the incremental-sync cursor; no same-search
   mutual-exclusion guard was added, since that's a separate concern from the freeze this
   milestone fixes.
+  **Follow-up (serialize site-facing syncs)**: after M19 shipped, production logs showed
+  the scheduler starting syncs of two different searches within the same second, and a
+  20k-post search left the server quiet for 15+ minutes with no way to tell whether that
+  was genuine first-scan slowness or contention from the concurrent sync. A second,
+  independent `pthread_mutex_t sync_mutex` was added to `struct bunny_core`
+  (`libs/core/src/internal.h`) -- deliberately the opposite of `db_mutex`: held across the
+  entire body of `sync_e621_search`/`sync_inkbunny_search`/`bunny_core_process_queue`,
+  network I/O included, so the server never has more than one of these talking to
+  e621/Inkbunny at once, whether triggered by the scheduler, a manual "check for updates",
+  or queue processing. Interactive one-off calls (`preview_search`, `fetch_pool`,
+  `account_verify`, `list_comments`, ...) deliberately do not take this lock, so browsing
+  stays responsive even while a long sync is in progress. This also closes M19's
+  known-gap note above: two syncs of the *same* search can no longer race, since they now
+  queue up behind the same mutex like any other pair of syncs. New
+  `test_two_concurrent_syncs_are_serialized` in `libs/core/tests/test_concurrency.c` proves
+  this directly -- a sync of one search holding a slow fake network call forces a
+  concurrently-started sync of a *different* search to wait for it.
 
 - [ ] **M12 — Cross-platform polish**
   Responsive desktop/mobile layout, consistent theming pass, Windows app build, packaging.
