@@ -20,5 +20,8 @@ bunny_core_result_t bunny_core_backup_database(bunny_core_t *core, const char *b
         return BUNNY_CORE_ERR_UNKNOWN;
     }
 
-    return bunny_core_map_db_result(bunny_db_backup(core->db, path));
+    bunny_core_db_lock(core);
+    bunny_db_result_t result = bunny_db_backup(core->db, path);
+    bunny_core_db_unlock(core);
+    return bunny_core_map_db_result(result);
 }

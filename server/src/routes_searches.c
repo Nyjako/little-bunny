@@ -93,9 +93,7 @@ static int handle_post_searches(struct mg_connection *conn, server_context_t *ct
     }
 
     int64_t search_id = 0;
-    pthread_mutex_lock(&ctx->core_mutex);
     bunny_core_result_t result = bunny_core_search_create(ctx->core, site, label, query, interval_hours, &options, &search_id);
-    pthread_mutex_unlock(&ctx->core_mutex);
     cJSON_Delete(body);
 
     if (result != BUNNY_CORE_OK) {
@@ -112,9 +110,7 @@ static int handle_post_searches(struct mg_connection *conn, server_context_t *ct
 static int handle_get_searches(struct mg_connection *conn, server_context_t *ctx)
 {
     bunny_db_search_list_t list;
-    pthread_mutex_lock(&ctx->core_mutex);
     bunny_core_result_t result = bunny_core_search_list(ctx->core, &list);
-    pthread_mutex_unlock(&ctx->core_mutex);
 
     if (result != BUNNY_CORE_OK) {
         return server_json_respond_error(conn, result);
@@ -133,9 +129,7 @@ static int handle_get_searches(struct mg_connection *conn, server_context_t *ctx
 
 static int handle_delete_search(struct mg_connection *conn, server_context_t *ctx, int64_t search_id)
 {
-    pthread_mutex_lock(&ctx->core_mutex);
     bunny_core_result_t result = bunny_core_search_delete(ctx->core, search_id);
-    pthread_mutex_unlock(&ctx->core_mutex);
 
     if (result != BUNNY_CORE_OK) {
         return server_json_respond_error(conn, result);
@@ -159,9 +153,7 @@ static int handle_get_search_posts(struct mg_connection *conn, server_context_t 
     }
 
     bunny_db_post_list_t list;
-    pthread_mutex_lock(&ctx->core_mutex);
     bunny_core_result_t result = bunny_core_search_list_posts(ctx->core, search_id, unseen_only, &list);
-    pthread_mutex_unlock(&ctx->core_mutex);
 
     if (result != BUNNY_CORE_OK) {
         return server_json_respond_error(conn, result);
@@ -180,9 +172,7 @@ static int handle_get_search_posts(struct mg_connection *conn, server_context_t 
 
 static int handle_mark_all_seen(struct mg_connection *conn, server_context_t *ctx, int64_t search_id)
 {
-    pthread_mutex_lock(&ctx->core_mutex);
     bunny_core_result_t result = bunny_core_search_mark_all_seen(ctx->core, search_id);
-    pthread_mutex_unlock(&ctx->core_mutex);
 
     if (result != BUNNY_CORE_OK) {
         return server_json_respond_error(conn, result);
@@ -197,9 +187,7 @@ static int handle_mark_all_seen(struct mg_connection *conn, server_context_t *ct
 
 static int handle_touch_search_viewed(struct mg_connection *conn, server_context_t *ctx, int64_t search_id)
 {
-    pthread_mutex_lock(&ctx->core_mutex);
     bunny_core_result_t result = bunny_core_search_touch_last_viewed(ctx->core, search_id);
-    pthread_mutex_unlock(&ctx->core_mutex);
 
     if (result != BUNNY_CORE_OK) {
         return server_json_respond_error(conn, result);
@@ -215,9 +203,7 @@ static int handle_touch_search_viewed(struct mg_connection *conn, server_context
 static int handle_sync_search(struct mg_connection *conn, server_context_t *ctx, int64_t search_id)
 {
     bunny_core_sync_stats_t stats;
-    pthread_mutex_lock(&ctx->core_mutex);
     bunny_core_result_t result = bunny_core_sync_search(ctx->core, search_id, &stats);
-    pthread_mutex_unlock(&ctx->core_mutex);
 
     if (result != BUNNY_CORE_OK) {
         return server_json_respond_error(conn, result);
@@ -242,9 +228,7 @@ static int handle_pin_search(struct mg_connection *conn, server_context_t *ctx, 
     bool pinned = bunny_json_get_bool_or(body, "pinned", false);
     cJSON_Delete(body);
 
-    pthread_mutex_lock(&ctx->core_mutex);
     bunny_core_result_t result = bunny_core_search_set_pinned(ctx->core, search_id, pinned);
-    pthread_mutex_unlock(&ctx->core_mutex);
 
     if (result != BUNNY_CORE_OK) {
         return server_json_respond_error(conn, result);
@@ -277,9 +261,7 @@ static int handle_put_search(struct mg_connection *conn, server_context_t *ctx, 
         return server_json_respond_error(conn, BUNNY_CORE_ERR_INVALID_ARG);
     }
 
-    pthread_mutex_lock(&ctx->core_mutex);
     bunny_core_result_t result = bunny_core_search_update(ctx->core, search_id, label, query, interval_hours, &options);
-    pthread_mutex_unlock(&ctx->core_mutex);
     cJSON_Delete(body);
 
     if (result != BUNNY_CORE_OK) {

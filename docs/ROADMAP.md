@@ -1524,6 +1524,34 @@ this file is the single source of truth for "what's done" across sessions.
   so it's threaded through as optional `position`/`total` params (0 means "omit, e.g. a
   single forced sync via `bunny_core_sync_search` has no batch to report a position in").
 
+- [x] **M19 — Fix server freezing entirely during a slow sync**
+  The new per-search logging (M18's follow-up above) turned up direct proof of a severe
+  pre-existing bug: a request logged as *received* at `14:20:40` didn't get its response (and
+  therefore its access-log line, printed on completion) until `14:34:07` -- the whole server
+  was frozen for 13+ minutes behind a single search's sync. Root cause: `server_context_t`
+  had one `pthread_mutex_t core_mutex` that every route handler and the scheduler locked
+  around the *entire* `bunny_core_*` call, including however many sequential network round
+  trips to e621/Inkbunny that call made internally -- civetweb's 4 worker threads
+  notwithstanding, only one request could ever be "inside" `bunny_core` at a time, for as
+  long as the slowest one took. M18 made this worse by removing the old 20-page cap that
+  used to bound a single sync's worst-case duration. Fix: a `pthread_mutex_t db_mutex` now
+  lives inside `struct bunny_core` itself (`libs/core/src/internal.h`) -- every
+  `bunny_core_*` function locks/unlocks around its own `core->db` operations only, *never*
+  across a network call (verified safe: SQLite here runs in its default threadsafe mode, so
+  concurrent callers into the same handle were never the actual risk). The server's
+  `core_mutex` is gone entirely -- `bunny_core` is self-contained and thread-safe on its own,
+  so every route handler and the scheduler just call straight into it with no locking of
+  their own. New `libs/core/tests/test_concurrency.c` proves the post-fix invariant (a fast
+  pure-db call isn't blocked by a concurrent slow-network sync against the same
+  `bunny_core_t`); a new multi-threaded test in `server/tests/test_integration.c` is the one
+  that actually exercises civetweb's real worker-thread pool and would have failed against
+  the original bug. Known, accepted gap: two concurrent syncs of the *same* search (e.g. a
+  scheduler tick racing a user's manual "check for updates") can still interleave --
+  individually safe (every write stays serialized, upserts are idempotent) but could do
+  redundant work or transiently regress the incremental-sync cursor; no same-search
+  mutual-exclusion guard was added, since that's a separate concern from the freeze this
+  milestone fixes.
+
 - [ ] **M12 — Cross-platform polish**
   Responsive desktop/mobile layout, consistent theming pass, Windows app build, packaging.
   - [x] **M12.1 — Android client build.** `fvm flutter build apk` now succeeds end-to-end

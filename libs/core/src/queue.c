@@ -51,7 +51,9 @@ bunny_core_result_t bunny_core_queue_favorite_add(bunny_core_t *core, int64_t po
         return BUNNY_CORE_ERR_INVALID_ARG;
     }
     char *payload = build_favorite_payload(stars);
+    bunny_core_db_lock(core);
     bunny_db_result_t result = bunny_db_action_queue_add(core->db, post_id, BUNNY_DB_ACTION_FAVORITE_ADD, payload, NULL);
+    bunny_core_db_unlock(core);
     free(payload);
     return bunny_core_map_db_result(result);
 }
@@ -61,7 +63,10 @@ bunny_core_result_t bunny_core_queue_favorite_remove(bunny_core_t *core, int64_t
     if (!core) {
         return BUNNY_CORE_ERR_INVALID_ARG;
     }
-    return bunny_core_map_db_result(bunny_db_action_queue_add(core->db, post_id, BUNNY_DB_ACTION_FAVORITE_REMOVE, NULL, NULL));
+    bunny_core_db_lock(core);
+    bunny_db_result_t result = bunny_db_action_queue_add(core->db, post_id, BUNNY_DB_ACTION_FAVORITE_REMOVE, NULL, NULL);
+    bunny_core_db_unlock(core);
+    return bunny_core_map_db_result(result);
 }
 
 bunny_core_result_t bunny_core_queue_vote(bunny_core_t *core, int64_t post_id, int score, bool no_unvote)
@@ -70,7 +75,9 @@ bunny_core_result_t bunny_core_queue_vote(bunny_core_t *core, int64_t post_id, i
         return BUNNY_CORE_ERR_INVALID_ARG;
     }
     char *payload = build_vote_payload(score, no_unvote);
+    bunny_core_db_lock(core);
     bunny_db_result_t result = bunny_db_action_queue_add(core->db, post_id, BUNNY_DB_ACTION_VOTE, payload, NULL);
+    bunny_core_db_unlock(core);
     free(payload);
     return bunny_core_map_db_result(result);
 }
@@ -81,7 +88,9 @@ bunny_core_result_t bunny_core_queue_comment(bunny_core_t *core, int64_t post_id
         return BUNNY_CORE_ERR_INVALID_ARG;
     }
     char *payload = build_comment_payload(body, anonymous);
+    bunny_core_db_lock(core);
     bunny_db_result_t result = bunny_db_action_queue_add(core->db, post_id, BUNNY_DB_ACTION_COMMENT, payload, NULL);
+    bunny_core_db_unlock(core);
     free(payload);
     return bunny_core_map_db_result(result);
 }
@@ -142,11 +151,18 @@ static bunny_core_result_t process_inkbunny_action(bunny_core_t *core, const bun
 
     bunny_db_account_t account;
     memset(&account, 0, sizeof(account));
-    if (bunny_db_account_get(core->db, BUNNY_DB_SITE_INKBUNNY, &account) != BUNNY_DB_OK) {
+    bunny_core_db_lock(core);
+    bunny_db_result_t account_result = bunny_db_account_get(core->db, BUNNY_DB_SITE_INKBUNNY, &account);
+    bunny_core_db_unlock(core);
+    if (account_result != BUNNY_DB_OK) {
         *out_error = goblin_copy_cstr("no Inkbunny account configured -- favoriting needs a real login, not guest");
         return BUNNY_CORE_ERR_INVALID_ARG;
     }
 
+    /* Everything below is network-only (client create + login + the
+     * favorite/unfavorite call itself) -- no lock held. account.username/
+     * .secret are independently-owned copies (bunny_db_column_text_dup),
+     * safe to read after unlocking. */
     inkbunny_config_t config;
     memset(&config, 0, sizeof(config));
     config.transport = core->inkbunny_transport;
@@ -224,7 +240,9 @@ bunny_core_result_t bunny_core_process_queue(bunny_core_t *core, bunny_core_queu
     memset(&stats, 0, sizeof(stats));
 
     bunny_db_action_list_t actions;
+    bunny_core_db_lock(core);
     bunny_db_result_t list_result = bunny_db_action_queue_list_pending(core->db, &actions);
+    bunny_core_db_unlock(core);
     if (list_result != BUNNY_DB_OK) {
         return bunny_core_map_db_result(list_result);
     }
@@ -236,8 +254,13 @@ bunny_core_result_t bunny_core_process_queue(bunny_core_t *core, bunny_core_queu
         stats.actions_processed++;
 
         bunny_db_post_t post;
-        if (bunny_db_post_get_by_id(core->db, action->post_id, &post) != BUNNY_DB_OK) {
+        bunny_core_db_lock(core);
+        bunny_db_result_t post_result = bunny_db_post_get_by_id(core->db, action->post_id, &post);
+        bunny_core_db_unlock(core);
+        if (post_result != BUNNY_DB_OK) {
+            bunny_core_db_lock(core);
             bunny_db_action_queue_mark_failed(core->db, action->id, "post not found");
+            bunny_core_db_unlock(core);
             stats.actions_failed++;
             continue;
         }
@@ -246,26 +269,30 @@ bunny_core_result_t bunny_core_process_queue(bunny_core_t *core, bunny_core_queu
         bunny_core_result_t action_result;
         if (post.site == BUNNY_DB_SITE_E621) {
             if (!e621_client) {
-                e621_client = bunny_core_build_e621_client(core);
+                e621_client = bunny_core_build_e621_client(core); /* locks internally for its own db read only */
             }
             if (!e621_client) {
                 error = goblin_copy_cstr("failed to create e621 client");
                 action_result = BUNNY_CORE_ERR_SITE;
             } else {
-                action_result = process_e621_action(e621_client, action, post.external_id, &error);
+                action_result = process_e621_action(e621_client, action, post.external_id, &error); /* network call, no lock held */
             }
         } else {
-            action_result = process_inkbunny_action(core, action, post.external_id, &error);
+            action_result = process_inkbunny_action(core, action, post.external_id, &error); /* db read + network, split internally */
         }
         bunny_db_post_free(&post);
 
         if (action_result == BUNNY_CORE_OK) {
+            bunny_core_db_lock(core);
             apply_favorite_mirror(core->db, action);
             apply_vote_mirror(core->db, action);
             bunny_db_action_queue_mark_done(core->db, action->id);
+            bunny_core_db_unlock(core);
             stats.actions_succeeded++;
         } else {
+            bunny_core_db_lock(core);
             bunny_db_action_queue_mark_failed(core->db, action->id, error);
+            bunny_core_db_unlock(core);
             stats.actions_failed++;
         }
         free(error);
