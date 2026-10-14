@@ -4,6 +4,7 @@
 #include <e621/client.h>
 #include <inkbunny/client.h>
 
+#include <pthread.h>
 #include <stdarg.h>
 #include <stdio.h>
 
@@ -14,6 +15,14 @@
 struct bunny_core
 {
     bunny_db_t *db;
+    pthread_mutex_t db_mutex; /* serializes every core->db access; NEVER held
+                               * across a network call (e621_/inkbunny_
+                               * functions or curl) -- see sync.c/queue.c/site_clients.c/
+                               * backup.c/accounts.c/searches.c/blacklist.c/
+                               * downloads.c for the lock-only-around-db-ops
+                               * pattern every bunny_core_* function follows.
+                               * verify.c is the one exception: it never
+                               * touches core->db at all, so it needs no lock. */
     char *user_agent;
     const bunny_http_transport_t *e621_transport;
     const bunny_http_transport_t *inkbunny_transport;
@@ -21,6 +30,15 @@ struct bunny_core
     bunny_core_log_fn log_callback;
     void *log_user_data;
 };
+
+/* Every bunny_core_* function that touches core->db locks/unlocks through
+ * these -- never pthread_mutex_lock/unlock(&core->db_mutex) directly -- so
+ * the intent is explicit and grep-able at every call site. Not re-entrant:
+ * never call a function that takes this lock itself (e.g.
+ * bunny_core_queue_favorite_add) while already holding it, or the calling
+ * thread deadlocks against itself. */
+static inline void bunny_core_db_lock(bunny_core_t *core) { pthread_mutex_lock(&core->db_mutex); }
+static inline void bunny_core_db_unlock(bunny_core_t *core) { pthread_mutex_unlock(&core->db_mutex); }
 
 /* printf-style wrapper around core->log_callback -- no-op if none is set
  * (standalone/FFI mode). Used by sync.c to report per-search sync progress. */

@@ -96,13 +96,6 @@ server_app_t *server_app_start(const bunny_core_config_t *core_config, const cha
 
     app->ctx.core = app->core;
     app->ctx.auth = app->auth;
-    if (pthread_mutex_init(&app->ctx.core_mutex, NULL) != 0) {
-        bunny_core_close(app->core);
-        free(app->cert_path);
-        server_auth_free(app->auth);
-        free(app);
-        return NULL;
-    }
 
     char port_option[32];
     snprintf(port_option, sizeof(port_option), "%ds", port);
@@ -117,7 +110,6 @@ server_app_t *server_app_start(const bunny_core_config_t *core_config, const cha
 
     app->mg_ctx = mg_start(&callbacks, NULL, options);
     if (!app->mg_ctx) {
-        pthread_mutex_destroy(&app->ctx.core_mutex);
         bunny_core_close(app->core);
         free(app->cert_path);
         server_auth_free(app->auth);
@@ -137,7 +129,6 @@ server_app_t *server_app_start(const bunny_core_config_t *core_config, const cha
 
     if (!server_scheduler_start(&app->scheduler, &app->ctx, data_dir, poll_interval_sec)) {
         mg_stop(app->mg_ctx);
-        pthread_mutex_destroy(&app->ctx.core_mutex);
         bunny_core_close(app->core);
         free(app->cert_path);
         server_auth_free(app->auth);
@@ -162,7 +153,6 @@ void server_app_stop(server_app_t *app)
      * before civetweb's workers and the core itself get torn down. */
     server_scheduler_stop(&app->scheduler);
     mg_stop(app->mg_ctx);
-    pthread_mutex_destroy(&app->ctx.core_mutex);
     bunny_core_close(app->core);
     free(app->cert_path);
     server_auth_free(app->auth);
