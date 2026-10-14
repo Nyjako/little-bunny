@@ -406,7 +406,7 @@ bunny_db_result_t bunny_db_post_get_by_id(bunny_db_t *db, int64_t post_id, bunny
     return BUNNY_DB_OK;
 }
 
-bunny_db_result_t bunny_db_search_add_result(bunny_db_t *db, int64_t search_id, int64_t post_id)
+bunny_db_result_t bunny_db_search_add_result(bunny_db_t *db, int64_t search_id, int64_t post_id, bool *out_was_new)
 {
     if (!db) {
         return BUNNY_DB_ERR_INVALID_ARG;
@@ -420,6 +420,9 @@ bunny_db_result_t bunny_db_search_add_result(bunny_db_t *db, int64_t search_id, 
     sqlite3_bind_int64(stmt, 2, post_id);
     int rc = sqlite3_step(stmt);
     sqlite3_finalize(stmt);
+    if (out_was_new) {
+        *out_was_new = sqlite3_changes(db->handle) > 0;
+    }
     return rc == SQLITE_DONE ? BUNNY_DB_OK : bunny_db_sqlite_rc_to_result(rc);
 }
 

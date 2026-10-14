@@ -253,15 +253,29 @@ static bunny_core_result_t upsert_inkbunny_submission(bunny_db_t *db, const inkb
     return bunny_core_map_db_result(result);
 }
 
-/* Upserts every post in `posts` and links it to `search`, bumping `stats`
- * and queuing auto-favorite/upvote as needed -- shared by the first-scan and
- * incremental branches of sync_e621_search below. */
-static void upsert_e621_search_page(bunny_core_t *core, const bunny_db_search_t *search, const e621_post_list_t *posts, bunny_core_sync_stats_t *stats)
+/* Builds the "(i/N)" suffix used by the progress log lines below --
+ * `position` is 1-based; 0 means "not applicable" (e.g. a single forced
+ * sync via bunny_core_sync_search has no batch to report a position in). */
+static void format_position_suffix(char *out, size_t out_size, int position, int total)
+{
+    if (position > 0) {
+        snprintf(out, out_size, " (%d/%d)", position, total);
+    } else {
+        out[0] = '\0';
+    }
+}
+
+/* Upserts every post in `posts` and links it to `search`, bumping `stats`,
+ * `found_count`, and `new_count` (posts not already linked to this search
+ * before this call) and queuing auto-favorite/upvote as needed -- shared by
+ * the first-scan and incremental branches of sync_e621_search below. */
+static void upsert_e621_search_page(bunny_core_t *core, const bunny_db_search_t *search, const e621_post_list_t *posts, bunny_core_sync_stats_t *stats, int *found_count, int *new_count)
 {
     for (size_t i = 0; i < posts->count; i++) {
         int64_t post_id = 0;
         if (upsert_e621_post(core->db, &posts->items[i], &post_id) == BUNNY_CORE_OK) {
-            bunny_db_search_add_result(core->db, search->id, post_id);
+            bool was_new = false;
+            bunny_db_search_add_result(core->db, search->id, post_id, &was_new);
             if (search->auto_favorite) {
                 bunny_core_queue_favorite_add(core, post_id, search->auto_favorite_stars);
             }
@@ -270,6 +284,10 @@ static void upsert_e621_search_page(bunny_core_t *core, const bunny_db_search_t 
             }
             if (stats) {
                 stats->posts_upserted++;
+            }
+            (*found_count)++;
+            if (was_new) {
+                (*new_count)++;
             }
         }
     }
@@ -284,15 +302,25 @@ static void upsert_e621_search_page(bunny_core_t *core, const bunny_db_search_t 
  * first full scan and every later incremental sync use it exclusively --
  * there is no numeric-page pagination left in this function at all, and
  * deliberately no page-count cap either: both loops below terminate purely
- * on the site returning a short/empty page. */
-static bunny_core_result_t sync_e621_search(bunny_core_t *core, const bunny_db_search_t *search, bunny_core_sync_stats_t *stats)
+ * on the site returning a short/empty page. `position`/`total` are only for
+ * the progress log line -- see format_position_suffix above. */
+static bunny_core_result_t sync_e621_search(bunny_core_t *core, const bunny_db_search_t *search, bunny_core_sync_stats_t *stats, int position, int total)
 {
+    char position_suffix[32];
+    format_position_suffix(position_suffix, sizeof(position_suffix), position, total);
+
+    bool is_first_sync = !search->last_run_at;
+    bunny_core_log(core, "INFO", is_first_sync ? "Starting full scan for \"%s\"%s" : "Checking \"%s\" for updates%s", search->label, position_suffix);
+
     e621_client_t *client = bunny_core_build_e621_client(core);
     if (!client) {
+        bunny_core_log(core, "ERROR", "Failed to build e621 client for \"%s\"", search->label);
         return BUNNY_CORE_ERR_SITE;
     }
 
     int64_t max_id_seen = search->highest_synced_external_id;
+    int found_count = 0;
+    int new_count = 0;
 
     if (!search->initial_sync_done) {
         /* First scan: bare request (no page param -- newest first), then
@@ -306,11 +334,12 @@ static bunny_core_result_t sync_e621_search(bunny_core_t *core, const bunny_db_s
                                                           : e621_search_posts_before(client, search->query, cursor, BUNNY_CORE_SYNC_E621_PAGE_LIMIT, &posts);
             first_request = false;
             if (search_result != E621_OK) {
+                bunny_core_log(core, "ERROR", "Scan of \"%s\" failed (e621 request error)", search->label);
                 e621_client_destroy(client);
                 return BUNNY_CORE_ERR_SITE;
             }
 
-            upsert_e621_search_page(core, search, &posts, stats);
+            upsert_e621_search_page(core, search, &posts, stats, &found_count, &new_count);
             for (size_t i = 0; i < posts.count; i++) {
                 int64_t id = posts.items[i].id;
                 if (id > max_id_seen) {
@@ -336,11 +365,12 @@ static bunny_core_result_t sync_e621_search(bunny_core_t *core, const bunny_db_s
             e621_post_list_t posts;
             e621_result_t search_result = e621_search_posts_after(client, search->query, cursor, BUNNY_CORE_SYNC_E621_PAGE_LIMIT, &posts);
             if (search_result != E621_OK) {
+                bunny_core_log(core, "ERROR", "Scan of \"%s\" failed (e621 request error)", search->label);
                 e621_client_destroy(client);
                 return BUNNY_CORE_ERR_SITE;
             }
 
-            upsert_e621_search_page(core, search, &posts, stats);
+            upsert_e621_search_page(core, search, &posts, stats, &found_count, &new_count);
             for (size_t i = 0; i < posts.count; i++) {
                 int64_t id = posts.items[i].id;
                 if (id > max_id_seen) {
@@ -361,15 +391,26 @@ static bunny_core_result_t sync_e621_search(bunny_core_t *core, const bunny_db_s
 
     bunny_db_search_update_sync_progress(core->db, search->id, max_id_seen);
     e621_client_destroy(client);
+    bunny_core_log(core, "INFO", "Scanned \"%s\" -- found %d post(s), %d new", search->label, found_count, new_count);
     return BUNNY_CORE_OK;
 }
 
-static bunny_core_result_t sync_inkbunny_search(bunny_core_t *core, const bunny_db_search_t *search, bunny_core_sync_stats_t *stats)
+static bunny_core_result_t sync_inkbunny_search(bunny_core_t *core, const bunny_db_search_t *search, bunny_core_sync_stats_t *stats, int position, int total)
 {
+    char position_suffix[32];
+    format_position_suffix(position_suffix, sizeof(position_suffix), position, total);
+
+    bool is_first_sync = !search->last_run_at;
+    bunny_core_log(core, "INFO", is_first_sync ? "Starting full scan for \"%s\"%s" : "Checking \"%s\" for updates%s", search->label, position_suffix);
+
     inkbunny_client_t *client = bunny_core_build_inkbunny_client(core);
     if (!client) {
+        bunny_core_log(core, "ERROR", "Failed to build Inkbunny client for \"%s\"", search->label);
         return BUNNY_CORE_ERR_SITE;
     }
+
+    int found_count = 0;
+    int new_count = 0;
 
     /* Inkbunny has no confirmed id-cursor pagination like e621's a<ID>/b<ID>,
      * so this still walks plain numeric pages (newest first, since nothing
@@ -389,6 +430,7 @@ static bunny_core_result_t sync_inkbunny_search(bunny_core_t *core, const bunny_
         inkbunny_submission_list_t submissions;
         inkbunny_result_t search_result = inkbunny_search(client, &params, &submissions);
         if (search_result != INKBUNNY_OK) {
+            bunny_core_log(core, "ERROR", "Scan of \"%s\" failed (Inkbunny request error)", search->label);
             inkbunny_client_destroy(client);
             return BUNNY_CORE_ERR_SITE;
         }
@@ -404,6 +446,7 @@ static bunny_core_result_t sync_inkbunny_search(bunny_core_t *core, const bunny_
             if (upsert_inkbunny_submission(core->db, &submissions.items[i], &post_id) != BUNNY_CORE_OK) {
                 continue;
             }
+            found_count++;
 
             bool already_linked = false;
             bunny_db_search_has_result(core->db, search->id, post_id, &already_linked);
@@ -412,7 +455,8 @@ static bunny_core_result_t sync_inkbunny_search(bunny_core_t *core, const bunny_
                 break;
             }
 
-            bunny_db_search_add_result(core->db, search->id, post_id);
+            bunny_db_search_add_result(core->db, search->id, post_id, NULL);
+            new_count++;
             if (search->auto_favorite) {
                 bunny_core_queue_favorite_add(core, post_id, -1);
             }
@@ -427,6 +471,7 @@ static bunny_core_result_t sync_inkbunny_search(bunny_core_t *core, const bunny_
     }
 
     inkbunny_client_destroy(client);
+    bunny_core_log(core, "INFO", "Scanned \"%s\" -- found %d post(s), %d new", search->label, found_count, new_count);
     return BUNNY_CORE_OK;
 }
 
@@ -710,7 +755,7 @@ bunny_core_result_t bunny_core_sync_due_searches(bunny_core_t *core, bunny_core_
             continue;
         }
 
-        bunny_core_result_t sync_result = search->site == BUNNY_DB_SITE_E621 ? sync_e621_search(core, search, &stats) : sync_inkbunny_search(core, search, &stats);
+        bunny_core_result_t sync_result = search->site == BUNNY_DB_SITE_E621 ? sync_e621_search(core, search, &stats, (int)(i + 1), (int)searches.count) : sync_inkbunny_search(core, search, &stats, (int)(i + 1), (int)searches.count);
 
         if (sync_result == BUNNY_CORE_OK) {
             stats.searches_synced++;
@@ -753,7 +798,7 @@ bunny_core_result_t bunny_core_sync_search(bunny_core_t *core, int64_t search_id
     memset(&stats, 0, sizeof(stats));
     stats.searches_checked = 1;
 
-    bunny_core_result_t sync_result = search->site == BUNNY_DB_SITE_E621 ? sync_e621_search(core, search, &stats) : sync_inkbunny_search(core, search, &stats);
+    bunny_core_result_t sync_result = search->site == BUNNY_DB_SITE_E621 ? sync_e621_search(core, search, &stats, 0, 0) : sync_inkbunny_search(core, search, &stats, 0, 0);
     if (sync_result == BUNNY_CORE_OK) {
         stats.searches_synced = 1;
         bunny_db_search_touch_last_run(core->db, search_id);
