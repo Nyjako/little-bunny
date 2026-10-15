@@ -14,7 +14,6 @@ import '../settings/app_lock_service.dart';
 import '../settings/display_settings_store.dart';
 import '../settings/download_settings_store.dart';
 import '../settings/repository_settings_store.dart';
-import '../settings/sync_settings_store.dart';
 import '../settings/theme_settings_store.dart';
 import 'lock_setup_screen.dart';
 import 'server_logs_screen.dart';
@@ -29,7 +28,6 @@ class SettingsScreen extends StatefulWidget {
   final BunnyRepository repository;
   final ThemeSettingsStore themeSettingsStore;
   final AppLockService lockService;
-  final SyncSettingsStore syncSettingsStore;
   final DisplaySettingsStore displaySettingsStore;
   final DownloadSettingsStore downloadSettingsStore;
   final RepositorySettingsStore settingsStore;
@@ -41,7 +39,6 @@ class SettingsScreen extends StatefulWidget {
     required this.repository,
     required this.themeSettingsStore,
     required this.lockService,
-    required this.syncSettingsStore,
     required this.displaySettingsStore,
     required this.downloadSettingsStore,
     required this.settingsStore,
@@ -92,7 +89,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Future<void> _load() async {
     final repositoryConfig = await widget.settingsStore.load();
     final mode = await widget.themeSettingsStore.load();
-    final intervalHours = await widget.syncSettingsStore.loadDefaultIntervalHours();
+    final intervalHours = await widget.repository.getDefaultSyncIntervalHours();
     final previewQuality = await widget.displaySettingsStore.loadPreviewQuality();
     final gridColumns = await widget.displaySettingsStore.loadGridColumns();
     final downloadFolder = await widget.downloadSettingsStore.loadDestinationFolder();
@@ -124,7 +121,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     if (hours == null || hours <= 0) {
       return;
     }
-    await widget.syncSettingsStore.saveDefaultIntervalHours(hours);
+    await widget.repository.setDefaultSyncIntervalHours(hours);
   }
 
   Future<void> _setPreviewQuality(PreviewQuality quality) async {
@@ -207,7 +204,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       return;
     }
     final contents = utf8.decode(await file.readAsBytes());
-    final defaultIntervalHours = await widget.syncSettingsStore.loadDefaultIntervalHours();
+    final defaultIntervalHours = await widget.repository.getDefaultSyncIntervalHours();
     final parsed = _backupService.parseImportFile(contents, defaultIntervalHours: defaultIntervalHours);
     if (!mounted) {
       return;

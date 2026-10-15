@@ -7,10 +7,9 @@ import 'package:little_bunny/repository/bunny_repository.dart';
 /// remove and search/post browsing -- fakes the dependency, not the business
 /// logic, same philosophy as every C library's own tests. Queue methods are
 /// unimplemented since nothing under test (through M8) calls them -- that's
-/// M9's scope. [syncDueSearches] is a no-op returning zeroed stats (M8.3's
-/// [PostGridScreen] calls it as a manual "refresh" action, but nothing under
-/// test needs it to actually add posts -- tests seed `postsBySearchId`
-/// directly instead).
+/// M9's scope. [syncDueSearches] just counts calls (M8.3's [PostGridScreen]
+/// calls it as a manual "refresh" action, but nothing under test needs it to
+/// actually add posts -- tests seed `postsBySearchId` directly instead).
 class FakeBunnyRepository implements BunnyRepository {
   final Map<BunnySite, BunnyAccount> accounts = {};
   final List<BunnySearch> searches = [];
@@ -89,7 +88,16 @@ class FakeBunnyRepository implements BunnyRepository {
   Future<void> deleteAccount(BunnySite site) async => accounts.remove(site);
 
   @override
-  Future<int> createSearch(BunnySite site, String label, String query, {int intervalHours = 24, bool autoFavorite = false, int autoFavoriteStars = 1, bool autoUpvote = false}) async {
+  Future<int> createSearch(
+    BunnySite site,
+    String label,
+    String query, {
+    int intervalHours = 24,
+    bool autoFavorite = false,
+    int autoFavoriteStars = 1,
+    bool autoUpvote = false,
+    bool usesDefaultInterval = false,
+  }) async {
     final id = _nextSearchId++;
     searches.add(
       BunnySearch(
@@ -102,6 +110,7 @@ class FakeBunnyRepository implements BunnyRepository {
         autoFavorite: autoFavorite,
         autoFavoriteStars: autoFavoriteStars,
         autoUpvote: autoUpvote,
+        usesDefaultInterval: usesDefaultInterval,
       ),
     );
     return id;
@@ -125,6 +134,7 @@ class FakeBunnyRepository implements BunnyRepository {
           autoUpvote: search.autoUpvote,
           pinned: search.pinned,
           lastViewedAt: search.lastViewedAt,
+          usesDefaultInterval: search.usesDefaultInterval,
         ),
       )
       .toList();
@@ -157,11 +167,21 @@ class FakeBunnyRepository implements BunnyRepository {
       autoUpvote: search.autoUpvote,
       pinned: pinned,
       lastViewedAt: search.lastViewedAt,
+      usesDefaultInterval: search.usesDefaultInterval,
     );
   }
 
   @override
-  Future<void> updateSearch(int searchId, String label, String query, {int intervalHours = 24, bool autoFavorite = false, int autoFavoriteStars = 1, bool autoUpvote = false}) async {
+  Future<void> updateSearch(
+    int searchId,
+    String label,
+    String query, {
+    int intervalHours = 24,
+    bool autoFavorite = false,
+    int autoFavoriteStars = 1,
+    bool autoUpvote = false,
+    bool usesDefaultInterval = false,
+  }) async {
     final index = searches.indexWhere((search) => search.id == searchId);
     if (index == -1) {
       return;
@@ -181,6 +201,7 @@ class FakeBunnyRepository implements BunnyRepository {
       autoFavoriteStars: autoFavoriteStars,
       autoUpvote: autoUpvote,
       pinned: search.pinned,
+      usesDefaultInterval: usesDefaultInterval,
     );
   }
 
@@ -342,9 +363,8 @@ class FakeBunnyRepository implements BunnyRepository {
   Future<List<BunnyDownload>> listDownloadsForPost(int postId) async => List.of(downloadsByPostId[postId] ?? const []);
 
   @override
-  Future<BunnySyncStats> syncDueSearches() async {
+  Future<void> syncDueSearches() async {
     syncCallCount++;
-    return const BunnySyncStats(searchesChecked: 0, searchesSynced: 0, postsUpserted: 0);
   }
 
   /// Each entry is the `searchId` passed to [syncSearch] (M13.2).
@@ -367,7 +387,7 @@ class FakeBunnyRepository implements BunnyRepository {
   final Map<int, List<BunnyPost>> syncSearchNewPosts = {};
 
   @override
-  Future<BunnySyncStats> syncSearch(int searchId) async {
+  Future<void> syncSearch(int searchId) async {
     syncSearchCalls.add(searchId);
     final gate = syncSearchGates[searchId];
     if (gate != null) {
@@ -381,8 +401,48 @@ class FakeBunnyRepository implements BunnyRepository {
     if (newPosts != null) {
       postsBySearchId.putIfAbsent(searchId, () => []).addAll(newPosts);
     }
-    return BunnySyncStats(searchesChecked: 1, searchesSynced: 1, postsUpserted: newPosts?.length ?? 0);
   }
+
+  /// Simulates the server-side "sync all searches now, regardless of due
+  /// status" job (M20): loops over [searches] calling [syncSearch] for
+  /// each, same as the real FfiBunnyRepository/the server's sync_worker --
+  /// so existing per-search test hooks ([syncSearchGates],
+  /// [syncSearchFailures], [syncSearchNewPosts]) keep working unchanged
+  /// when triggered through this entry point instead of individual
+  /// [syncSearch] calls. Failures on one search don't stop the rest, same
+  /// as the real implementations.
+  BunnySyncStatus syncStatus = BunnySyncStatus.inactive;
+  int syncAllSearchesCallCount = 0;
+
+  @override
+  Future<void> syncAllSearches() async {
+    syncAllSearchesCallCount++;
+    final snapshot = List.of(searches);
+    syncStatus = BunnySyncStatus(active: true, source: 'manual', position: 0, total: snapshot.length);
+    try {
+      for (var i = 0; i < snapshot.length; i++) {
+        syncStatus = BunnySyncStatus(active: true, source: 'manual', searchLabel: snapshot[i].label, position: i + 1, total: snapshot.length);
+        try {
+          await syncSearch(snapshot[i].id);
+        } catch (_) {
+          // Same "keep going" behavior as the real implementations.
+        }
+      }
+    } finally {
+      syncStatus = BunnySyncStatus.inactive;
+    }
+  }
+
+  @override
+  Future<BunnySyncStatus> getSyncStatus() async => syncStatus;
+
+  int defaultSyncIntervalHours = 24;
+
+  @override
+  Future<int> getDefaultSyncIntervalHours() async => defaultSyncIntervalHours;
+
+  @override
+  Future<void> setDefaultSyncIntervalHours(int hours) async => defaultSyncIntervalHours = hours;
 
   /// Each entry is the `postId` passed to [queueFavoriteAdd].
   final List<int> favoriteAddCalls = [];
@@ -451,6 +511,7 @@ class FakeBunnyRepository implements BunnyRepository {
       autoUpvote: search.autoUpvote,
       pinned: search.pinned,
       lastViewedAt: DateTime.now().toUtc().toIso8601String(),
+      usesDefaultInterval: search.usesDefaultInterval,
     );
   }
 

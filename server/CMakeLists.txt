@@ -8,6 +8,8 @@ add_library(bunny_server_lib STATIC
     src/tls.c
     src/log.c
     src/scheduler.c
+    src/sync_status.c
+    src/sync_worker.c
     src/route_utils.c
     src/json_helpers.c
     src/routes_accounts.c
@@ -18,6 +20,8 @@ add_library(bunny_server_lib STATIC
     src/routes_search.c
     src/routes_blacklist.c
     src/routes_logs.c
+    src/routes_sync.c
+    src/routes_settings.c
 )
 
 target_include_directories(bunny_server_lib

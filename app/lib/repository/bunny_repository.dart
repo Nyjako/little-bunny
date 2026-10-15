@@ -52,6 +52,7 @@ abstract interface class BunnyRepository {
     bool autoFavorite = false,
     int autoFavoriteStars = 1,
     bool autoUpvote = false,
+    bool usesDefaultInterval = false,
   });
 
   Future<List<BunnySearch>> listSearches();
@@ -78,7 +79,16 @@ abstract interface class BunnyRepository {
     bool autoFavorite = false,
     int autoFavoriteStars = 1,
     bool autoUpvote = false,
+    bool usesDefaultInterval = false,
   });
+
+  /// The server-wide default interval (hours) a search follows when its own
+  /// `usesDefaultInterval` is set. Standalone (FFI) mode has no "other
+  /// devices" to share this with, but still persists it the same way, so
+  /// the UI and behavior stay identical across both modes.
+  Future<int> getDefaultSyncIntervalHours();
+
+  Future<void> setDefaultSyncIntervalHours(int hours);
 
   Future<List<BunnyPost>> listSearchPosts(
     int searchId, {
@@ -197,13 +207,28 @@ abstract interface class BunnyRepository {
 
   /// Manually triggers a sync pass (runs every due search). The server also
   /// does this on its own schedule (M5.3); this is for an explicit
-  /// "refresh now" action.
-  Future<BunnySyncStats> syncDueSearches();
+  /// "refresh now" action. Runs in the background (server mode: enqueued
+  /// onto the sync worker, M20) -- poll [getSyncStatus] for progress rather
+  /// than waiting on this call, which returns as soon as the request is
+  /// accepted, not when the sync finishes.
+  Future<void> syncDueSearches();
 
   /// Syncs exactly one search right now, ignoring its own due-interval
-  /// (M13.2) -- used by a "check for updates" action that wants per-search
-  /// progress, which a single [syncDueSearches] call can't give mid-flight.
-  Future<BunnySyncStats> syncSearch(int searchId);
+  /// (M13.2). Same fire-and-forget shape as [syncDueSearches].
+  Future<void> syncSearch(int searchId);
+
+  /// Forces a sync of every search right now, regardless of due status --
+  /// the server-side replacement for a client-driven "check for updates"
+  /// loop (M20): one call starts the whole pass, and every device (not just
+  /// the one that triggered it) sees the same live progress via
+  /// [getSyncStatus] instead of tracking it locally. Same fire-and-forget
+  /// shape as [syncDueSearches].
+  Future<void> syncAllSearches();
+
+  /// What the background sync worker is doing right now (M20) -- see
+  /// [BunnySyncStatus]. Meant to be polled periodically while a sync might
+  /// be running, from any device, not just the one that started it.
+  Future<BunnySyncStatus> getSyncStatus();
 
   /// Enqueues a favorite-add action; it isn't sent to the site until
   /// [processQueue] runs. `stars` is Inkbunny's 1-3 rating, or omitted for

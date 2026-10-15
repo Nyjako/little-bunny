@@ -150,6 +150,31 @@ static long do_request(const char *method, const char *path, const char *body, r
     return status;
 }
 
+/* POST /searches/{id}/sync, POST /sync, and POST /sync/all all just enqueue
+ * onto the background sync worker and return 202 immediately (see
+ * sync_worker.h) -- the work itself finishes asynchronously, often within
+ * microseconds against these tests' instant fake transports, but with no
+ * guaranteed ordering relative to when this function's response arrives.
+ * (POST /queue/process stays synchronous -- see handle_queue_process's own
+ * comment in routes_queue.c for why -- so it doesn't need this.) Tests that
+ * need to observe the result poll for it here instead of relying on a
+ * synchronous response body. 2s timeout is generous for a fake, in-memory-db
+ * transport with no real network latency. */
+static bool poll_until_response_contains(const char *method, const char *path, const char *needle)
+{
+    for (int attempt = 0; attempt < 100; attempt++) {
+        response_buffer_t response = {0};
+        long status = do_request(method, path, NULL, &response, true, NULL);
+        bool found = status == 200 && response.data && strstr(response.data, needle) != NULL;
+        free(response.data);
+        if (found) {
+            return true;
+        }
+        usleep(20000); /* 20ms */
+    }
+    return false;
+}
+
 void setUp(void)
 {
     g_e621_transport.send = fake_e621_send;
@@ -288,12 +313,15 @@ void test_full_account_search_sync_favorite_flow(void)
     free(response.data);
     memset(&response, 0, sizeof(response));
 
-    /* Fake e621 transport (set up in setUp) means this hits no real network. */
+    /* Fake e621 transport (set up in setUp) means this hits no real network.
+     * /sync just enqueues onto the background sync worker and returns
+     * immediately (202) -- see poll_until_response_contains's doc comment. */
     status = do_request("POST", "/sync", NULL, &response, true, NULL);
-    TEST_ASSERT_EQUAL(200, status);
-    TEST_ASSERT_NOT_NULL(strstr(response.data, "\"posts_upserted\":1"));
+    TEST_ASSERT_EQUAL(202, status);
     free(response.data);
     memset(&response, 0, sizeof(response));
+
+    TEST_ASSERT_TRUE(poll_until_response_contains("GET", "/searches/1/posts", "\"external_id\":1"));
 
     status = do_request("GET", "/searches/1/posts", NULL, &response, true, NULL);
     TEST_ASSERT_EQUAL(200, status);
@@ -423,7 +451,10 @@ void test_full_account_search_sync_favorite_flow(void)
     status = do_request("POST", "/queue/process", NULL, &response, true, NULL);
     TEST_ASSERT_EQUAL(200, status);
     /* No e621 account credentials matter here -- favorite_add/vote just need
-     * status 200, which the fake transport always returns. */
+     * status 200, which the fake transport always returns. Unlike /sync and
+     * /searches/{id}/sync, this stays synchronous (see handle_queue_process's
+     * own comment in routes_queue.c for why) -- the real stats are available
+     * immediately. */
     TEST_ASSERT_NOT_NULL(strstr(response.data, "\"actions_succeeded\":2"));
     free(response.data);
     memset(&response, 0, sizeof(response));
@@ -473,6 +504,18 @@ void test_full_account_search_sync_favorite_flow(void)
     free(response.data);
 }
 
+/* The underlying "a forced single-search sync ignores the due check, unlike
+ * the batch /sync endpoint" invariant (M13.2) is proven directly against
+ * bunny_core_sync_search in libs/core/tests/test_sync.c
+ * (test_sync_search_forces_a_non_due_search_to_sync) -- the sync_worker job
+ * this route enqueues always calls bunny_core_sync_search, never the
+ * due-checking bunny_core_sync_due_searches, so that guarantee holds by
+ * construction here too. This test instead covers what's specific to the
+ * route: a known search id is accepted and actually gets synced
+ * (asynchronously -- see poll_until_response_contains), a repeat call is
+ * also accepted, and an unknown id still gets an immediate 404 (checked
+ * synchronously before enqueueing, since the worker has no way to report
+ * NOT_FOUND after an 202 response has already gone out). */
 void test_sync_single_search_forces_even_when_not_due(void)
 {
     response_buffer_t response = {0};
@@ -483,18 +526,16 @@ void test_sync_single_search_forces_even_when_not_due(void)
     memset(&response, 0, sizeof(response));
 
     status = do_request("POST", "/searches/1/sync", NULL, &response, true, NULL);
-    TEST_ASSERT_EQUAL(200, status);
-    TEST_ASSERT_NOT_NULL(strstr(response.data, "\"searches_checked\":1"));
-    TEST_ASSERT_NOT_NULL(strstr(response.data, "\"searches_synced\":1"));
-    TEST_ASSERT_NOT_NULL(strstr(response.data, "\"posts_upserted\":1"));
+    TEST_ASSERT_EQUAL(202, status);
     free(response.data);
     memset(&response, 0, sizeof(response));
 
-    /* The batch POST /sync would skip this (just touched, 24h interval) --
-     * the per-search route must force it anyway (M13.2). */
+    TEST_ASSERT_TRUE(poll_until_response_contains("GET", "/searches/1/posts", "\"external_id\":1"));
+
+    /* Repeat call -- must still be accepted, not rejected just because the
+     * search was already synced moments ago. */
     status = do_request("POST", "/searches/1/sync", NULL, &response, true, NULL);
-    TEST_ASSERT_EQUAL(200, status);
-    TEST_ASSERT_NOT_NULL(strstr(response.data, "\"searches_synced\":1"));
+    TEST_ASSERT_EQUAL(202, status);
     free(response.data);
     memset(&response, 0, sizeof(response));
 
@@ -752,11 +793,15 @@ void test_get_logs_returns_json_array_with_access_log_line(void)
     free(response.data);
 }
 
+/* TEST_ASSERT must never run on this thread -- Unity's assertion macros
+ * longjmp back into the test runner, which is only safe from the thread
+ * that called RUN_TEST. The status is stashed in *out_status and checked on
+ * the main thread instead, after pthread_join below. */
 static void *run_slow_sync_request(void *arg)
 {
-    (void)arg;
+    long *out_status = (long *)arg;
     response_buffer_t response = {0};
-    do_request("POST", "/searches/1/sync", NULL, &response, true, NULL);
+    *out_status = do_request("POST", "/searches/1/sync", NULL, &response, true, NULL);
     free(response.data);
     return NULL;
 }
@@ -773,11 +818,18 @@ static double elapsed_ms(struct timespec start)
  * I/O), freezing every other request on the server. That mutex
  * (server_context_t.core_mutex) is gone now -- bunny_core protects itself
  * internally and never holds its own lock across network I/O (see
- * libs/core/tests/test_concurrency.c for that half of the fix) -- so a
- * concurrent request against the real running server, hitting civetweb's
- * actual worker-thread pool, must stay fast while a slow sync is in flight
- * elsewhere. This is the test that WOULD have failed against the original
- * bug. */
+ * libs/core/tests/test_concurrency.c for that half of the fix) -- and on top
+ * of that, POST /searches/{id}/sync no longer even calls bunny_core_sync_
+ * search from this request's own thread at all: it just enqueues onto
+ * sync_worker and returns 202 immediately, so the slow network call now
+ * happens entirely on sync_worker's own dedicated thread, never occupying
+ * one of civetweb's worker threads for its duration (see sync_worker.h).
+ * Both assertions below would have failed against the pre-M19 bug; the
+ * first one (the sync POST itself returning fast) would ALSO have failed
+ * against a version of this server that still called bunny_core_sync_search
+ * synchronously from the route even with M19's fix applied, since that
+ * alone doesn't stop a slow sync from parking a civetweb worker thread for
+ * its whole duration. */
 void test_concurrent_request_is_not_blocked_by_a_slow_sync(void)
 {
     response_buffer_t response = {0};
@@ -788,12 +840,13 @@ void test_concurrent_request_is_not_blocked_by_a_slow_sync(void)
     g_e621_transport.send = slow_fake_e621_send;
 
     pthread_t sync_thread;
+    long sync_request_status = 0;
     struct timespec start;
     clock_gettime(CLOCK_MONOTONIC, &start);
-    TEST_ASSERT_EQUAL(0, pthread_create(&sync_thread, NULL, run_slow_sync_request, NULL));
+    TEST_ASSERT_EQUAL(0, pthread_create(&sync_thread, NULL, run_slow_sync_request, &sync_request_status));
 
-    /* Give the sync request time to actually be inside civetweb's handler
-     * (and the ~1s slow network call) before racing the fast one against it. */
+    /* Give the sync request a moment to actually be enqueued before racing
+     * the fast one against it. */
     usleep(100000); /* 100ms */
 
     response_buffer_t fast_response = {0};
@@ -802,11 +855,88 @@ void test_concurrent_request_is_not_blocked_by_a_slow_sync(void)
     TEST_ASSERT_EQUAL(200, status);
     free(fast_response.data);
 
-    /* The slow sync's fake transport sleeps ~1s -- the fast GET must return
-     * in well under that if it wasn't serialized behind it. */
+    /* The slow sync's fake transport sleeps ~1s -- both the sync POST
+     * itself (now fire-and-forget) and the unrelated GET must return in
+     * well under that. */
     TEST_ASSERT_TRUE_MESSAGE(fast_elapsed < 500.0, "a concurrent request was blocked by the in-flight slow sync");
 
     pthread_join(sync_thread, NULL);
+    TEST_ASSERT_EQUAL(202, sync_request_status);
+}
+
+void test_settings_get_and_put_default_sync_interval_hours(void)
+{
+    response_buffer_t response = {0};
+    long status = do_request("GET", "/settings", NULL, &response, true, NULL);
+    TEST_ASSERT_EQUAL(200, status);
+    TEST_ASSERT_NOT_NULL(strstr(response.data, "\"default_sync_interval_hours\":24"));
+    free(response.data);
+    memset(&response, 0, sizeof(response));
+
+    status = do_request("PUT", "/settings", "{\"default_sync_interval_hours\":6}", &response, true, NULL);
+    TEST_ASSERT_EQUAL(200, status);
+    free(response.data);
+    memset(&response, 0, sizeof(response));
+
+    status = do_request("GET", "/settings", NULL, &response, true, NULL);
+    TEST_ASSERT_EQUAL(200, status);
+    TEST_ASSERT_NOT_NULL(strstr(response.data, "\"default_sync_interval_hours\":6"));
+    free(response.data);
+    memset(&response, 0, sizeof(response));
+
+    status = do_request("PUT", "/settings", "{\"default_sync_interval_hours\":0}", &response, true, NULL);
+    TEST_ASSERT_EQUAL(400, status);
+    free(response.data);
+}
+
+void test_sync_status_is_inactive_when_nothing_is_running(void)
+{
+    response_buffer_t response = {0};
+    long status = do_request("GET", "/sync/status", NULL, &response, true, NULL);
+    TEST_ASSERT_EQUAL(200, status);
+    TEST_ASSERT_NOT_NULL(strstr(response.data, "\"active\":false"));
+    TEST_ASSERT_NOT_NULL(strstr(response.data, "\"started_at\":null"));
+    free(response.data);
+}
+
+/* Exercises the full /sync/all lifecycle against the slow fake transport:
+ * status reports the search by name while the forced sync is still running
+ * (any device polling GET /sync/status should see this, not just the one
+ * that triggered it), a duplicate /sync/all while one is already in flight
+ * is rejected (409) rather than piling up a second full pass, and status
+ * goes back to inactive once the background worker finishes. */
+void test_sync_all_reports_progress_and_rejects_duplicate_while_running(void)
+{
+    response_buffer_t response = {0};
+    long status = do_request("POST", "/searches", "{\"site\":\"e621\",\"label\":\"wolves\",\"query\":\"wolf\",\"interval_hours\":24}", &response, true, NULL);
+    TEST_ASSERT_EQUAL(201, status);
+    free(response.data);
+    memset(&response, 0, sizeof(response));
+
+    g_e621_transport.send = slow_fake_e621_send;
+
+    status = do_request("POST", "/sync/all", NULL, &response, true, NULL);
+    TEST_ASSERT_EQUAL(202, status);
+    free(response.data);
+    memset(&response, 0, sizeof(response));
+
+    usleep(200000); /* 200ms -- give the worker time to pick the job up */
+
+    status = do_request("GET", "/sync/status", NULL, &response, true, NULL);
+    TEST_ASSERT_EQUAL(200, status);
+    TEST_ASSERT_NOT_NULL(strstr(response.data, "\"active\":true"));
+    TEST_ASSERT_NOT_NULL(strstr(response.data, "\"search_label\":\"wolves\""));
+    TEST_ASSERT_NOT_NULL(strstr(response.data, "\"position\":1"));
+    TEST_ASSERT_NOT_NULL(strstr(response.data, "\"total\":1"));
+    free(response.data);
+    memset(&response, 0, sizeof(response));
+
+    status = do_request("POST", "/sync/all", NULL, &response, true, NULL);
+    TEST_ASSERT_EQUAL(409, status);
+    free(response.data);
+    memset(&response, 0, sizeof(response));
+
+    TEST_ASSERT_TRUE(poll_until_response_contains("GET", "/sync/status", "\"active\":false"));
 }
 
 int main(void)
@@ -828,6 +958,9 @@ int main(void)
     RUN_TEST(test_scheduler_backs_up_database_automatically);
     RUN_TEST(test_get_logs_returns_json_array_with_access_log_line);
     RUN_TEST(test_concurrent_request_is_not_blocked_by_a_slow_sync);
+    RUN_TEST(test_settings_get_and_put_default_sync_interval_hours);
+    RUN_TEST(test_sync_status_is_inactive_when_nothing_is_running);
+    RUN_TEST(test_sync_all_reports_progress_and_rejects_duplicate_while_running);
     int result = UNITY_END();
     curl_global_cleanup();
     return result;

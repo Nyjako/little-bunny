@@ -114,7 +114,16 @@ void main() {
 
       expect(capturedMethod, 'POST');
       expect(capturedUri.path, '/searches');
-      expect(jsonDecode(capturedBody), {'site': 'e621', 'label': 'my search', 'query': 'rating:safe', 'interval_hours': 12, 'auto_favorite': false, 'auto_favorite_stars': 1, 'auto_upvote': false});
+      expect(jsonDecode(capturedBody), {
+        'site': 'e621',
+        'label': 'my search',
+        'query': 'rating:safe',
+        'interval_hours': 12,
+        'auto_favorite': false,
+        'auto_favorite_stars': 1,
+        'auto_upvote': false,
+        'uses_default_interval': false,
+      });
       expect(id, 42);
     });
 
@@ -144,6 +153,7 @@ void main() {
             'auto_favorite_stars': 2,
             'auto_upvote': true,
             'pinned': true,
+            'uses_default_interval': false,
           },
         ]),
         200,
@@ -179,7 +189,15 @@ void main() {
 
       expect(capturedMethod, 'PUT');
       expect(capturedUri.path, '/searches/7');
-      expect(jsonDecode(capturedBody), {'label': 'renamed', 'query': 'fox', 'interval_hours': 6, 'auto_favorite': true, 'auto_favorite_stars': 3, 'auto_upvote': true});
+      expect(jsonDecode(capturedBody), {
+        'label': 'renamed',
+        'query': 'fox',
+        'interval_hours': 6,
+        'auto_favorite': true,
+        'auto_favorite_stars': 3,
+        'auto_upvote': true,
+        'uses_default_interval': false,
+      });
     });
 
     test('listSearchPosts sends unseen_only as a query parameter', () async {
@@ -557,28 +575,45 @@ void main() {
       expect(capturedUri.path, '/searches/7/mark_all_seen');
     });
 
-    test('syncDueSearches maps the stats response', () async {
-      respond = (_) => http.Response(jsonEncode({'searches_checked': 3, 'searches_synced': 2, 'posts_upserted': 10}), 200);
+    test('syncDueSearches posts to /sync and accepts a 202 (M20 -- enqueued, not run synchronously)', () async {
+      respond = (_) => http.Response(jsonEncode({'enqueued': true}), 202);
 
-      final stats = await buildRepository().syncDueSearches();
+      await buildRepository().syncDueSearches();
 
       expect(capturedMethod, 'POST');
       expect(capturedUri.path, '/sync');
-      expect(stats.searchesChecked, 3);
-      expect(stats.searchesSynced, 2);
-      expect(stats.postsUpserted, 10);
     });
 
-    test('syncSearch posts to /searches/{id}/sync and maps the stats response (M13.2)', () async {
-      respond = (_) => http.Response(jsonEncode({'searches_checked': 1, 'searches_synced': 1, 'posts_upserted': 4}), 200);
+    test('syncSearch posts to /searches/{id}/sync and accepts a 202 (M13.2, M20)', () async {
+      respond = (_) => http.Response(jsonEncode({'enqueued': true}), 202);
 
-      final stats = await buildRepository().syncSearch(7);
+      await buildRepository().syncSearch(7);
 
       expect(capturedMethod, 'POST');
       expect(capturedUri.path, '/searches/7/sync');
-      expect(stats.searchesChecked, 1);
-      expect(stats.searchesSynced, 1);
-      expect(stats.postsUpserted, 4);
+    });
+
+    test('syncAllSearches posts to /sync/all and accepts a 202 (M20)', () async {
+      respond = (_) => http.Response(jsonEncode({'enqueued': true}), 202);
+
+      await buildRepository().syncAllSearches();
+
+      expect(capturedMethod, 'POST');
+      expect(capturedUri.path, '/sync/all');
+    });
+
+    test('getSyncStatus maps the status response (M20)', () async {
+      respond = (_) => http.Response(jsonEncode({'active': true, 'source': 'manual', 'search_label': 'wolves', 'position': 2, 'total': 5}), 200);
+
+      final status = await buildRepository().getSyncStatus();
+
+      expect(capturedMethod, 'GET');
+      expect(capturedUri.path, '/sync/status');
+      expect(status.active, isTrue);
+      expect(status.source, 'manual');
+      expect(status.searchLabel, 'wolves');
+      expect(status.position, 2);
+      expect(status.total, 5);
     });
 
     test('queueFavoriteAdd omits the body when stars is null', () async {

@@ -82,7 +82,7 @@ void test_search_create_and_list(void)
 void test_search_create_with_auto_favorite(void)
 {
     int64_t id = 0;
-    bunny_db_search_options_t options = {true, 2, false};
+    bunny_db_search_options_t options = {true, 2, false, false};
     bunny_db_result_t result = bunny_db_search_create(g_db, BUNNY_DB_SITE_E621, "wolves", "wolf", 24, &options, &id);
     TEST_ASSERT_EQUAL(BUNNY_DB_OK, result);
 
@@ -106,12 +106,54 @@ void test_search_create_defaults_auto_favorite_stars_to_one(void)
     bunny_db_search_list_free(&list);
 }
 
+void test_search_create_defaults_uses_default_interval_to_false(void)
+{
+    int64_t id = 0;
+    bunny_db_result_t result = bunny_db_search_create(g_db, BUNNY_DB_SITE_E621, "wolves", "wolf", 24, NULL, &id);
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, result);
+
+    bunny_db_search_list_t list;
+    bunny_db_search_list(g_db, &list);
+    TEST_ASSERT_FALSE(list.items[0].uses_default_interval);
+    bunny_db_search_list_free(&list);
+}
+
+void test_search_update_toggles_uses_default_interval(void)
+{
+    int64_t id = 0;
+    bunny_db_search_create(g_db, BUNNY_DB_SITE_E621, "wolves", "wolf", 24, NULL, &id);
+
+    bunny_db_search_options_t options = {false, 1, false, true};
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, bunny_db_search_update(g_db, id, "wolves", "wolf", 24, &options));
+
+    bunny_db_search_list_t list;
+    bunny_db_search_list(g_db, &list);
+    TEST_ASSERT_TRUE(list.items[0].uses_default_interval);
+    bunny_db_search_list_free(&list);
+}
+
+void test_settings_get_default_interval_hours_is_seeded_to_24(void)
+{
+    int hours = 0;
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, bunny_db_settings_get_default_interval_hours(g_db, &hours));
+    TEST_ASSERT_EQUAL(24, hours);
+}
+
+void test_settings_set_default_interval_hours_round_trips(void)
+{
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, bunny_db_settings_set_default_interval_hours(g_db, 6));
+
+    int hours = 0;
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, bunny_db_settings_get_default_interval_hours(g_db, &hours));
+    TEST_ASSERT_EQUAL(6, hours);
+}
+
 void test_search_update_modifies_label_query_interval_and_options(void)
 {
     int64_t id = 0;
     bunny_db_search_create(g_db, BUNNY_DB_SITE_E621, "wolves", "wolf", 24, NULL, &id);
 
-    bunny_db_search_options_t options = {true, 3, true};
+    bunny_db_search_options_t options = {true, 3, true, false};
     bunny_db_result_t result = bunny_db_search_update(g_db, id, "renamed", "fox", 12, &options);
     TEST_ASSERT_EQUAL(BUNNY_DB_OK, result);
 
@@ -125,7 +167,7 @@ void test_search_update_modifies_label_query_interval_and_options(void)
     TEST_ASSERT_TRUE(list.items[0].auto_upvote);
     bunny_db_search_list_free(&list);
 
-    bunny_db_search_options_t cleared = {false, 1, false};
+    bunny_db_search_options_t cleared = {false, 1, false, false};
     result = bunny_db_search_update(g_db, id, "renamed", "fox", 12, &cleared);
     TEST_ASSERT_EQUAL(BUNNY_DB_OK, result);
     bunny_db_search_list(g_db, &list);
@@ -1530,6 +1572,10 @@ int main(void)
     RUN_TEST(test_tag_autocomplete_is_per_site);
     RUN_TEST(test_tag_autocomplete_escapes_literal_underscore);
     RUN_TEST(test_migrations_apply_cleanly_and_are_idempotent_on_reopen);
+    RUN_TEST(test_search_create_defaults_uses_default_interval_to_false);
+    RUN_TEST(test_search_update_toggles_uses_default_interval);
+    RUN_TEST(test_settings_get_default_interval_hours_is_seeded_to_24);
+    RUN_TEST(test_settings_set_default_interval_hours_round_trips);
     RUN_TEST(test_post_get_tags_by_category);
     RUN_TEST(test_post_get_tags_by_category_uncategorized_when_no_category_given);
     RUN_TEST(test_post_get_tags_by_category_tag_category_is_shared_across_posts);

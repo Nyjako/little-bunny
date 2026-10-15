@@ -14,6 +14,8 @@ typedef struct
     server_auth_t *auth;
     char *cert_path;
     bunny_core_t *core;
+    server_sync_status_t *sync_status;
+    sync_worker_t *sync_worker;
     server_scheduler_t scheduler;
 } server_app_t;
 

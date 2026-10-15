@@ -157,6 +157,15 @@ static const char *const BUNNY_DB_SCHEMA_SQL = "PRAGMA foreign_keys = ON;"
                                                "    tag TEXT NOT NULL,"
                                                "    UNIQUE (site, tag)"
                                                ");"
+                                               /* Single-row table (id is always 1) for server-wide settings that
+                                                * aren't tied to any one search or account. The INSERT OR IGNORE
+                                                * seeds the one row on first open; every open after that is a no-op,
+                                                * same idempotency as the CREATE TABLE above it. */
+                                               "CREATE TABLE IF NOT EXISTS server_settings ("
+                                               "    id INTEGER PRIMARY KEY CHECK (id = 1),"
+                                               "    default_sync_interval_hours INTEGER NOT NULL DEFAULT 24"
+                                               ");"
+                                               "INSERT OR IGNORE INTO server_settings (id, default_sync_interval_hours) VALUES (1, 24);"
                                                "CREATE INDEX IF NOT EXISTS idx_post_tags_tag_id ON post_tags(tag_id);"
                                                "CREATE INDEX IF NOT EXISTS idx_search_results_search_id ON search_results(search_id);"
                                                "CREATE INDEX IF NOT EXISTS idx_downloads_post_id ON downloads(post_id);"

@@ -36,6 +36,7 @@ class _EditSearchScreenState extends State<EditSearchScreen> {
   late bool _autoFavorite = widget.search.autoFavorite;
   late bool _autoUpvote = widget.search.autoUpvote;
   late int _autoFavoriteStars = widget.search.autoFavoriteStars;
+  late bool _usesDefaultInterval = widget.search.usesDefaultInterval;
 
   @override
   void initState() {
@@ -95,6 +96,7 @@ class _EditSearchScreenState extends State<EditSearchScreen> {
       autoFavorite: _autoFavorite,
       autoFavoriteStars: _autoFavoriteStars,
       autoUpvote: widget.search.site == BunnySite.e621 && _autoUpvote,
+      usesDefaultInterval: _usesDefaultInterval,
     );
 
     if (!mounted) {
@@ -149,10 +151,16 @@ class _EditSearchScreenState extends State<EditSearchScreen> {
                 Wrap(spacing: 8, children: _suggestions.map((stat) => ActionChip(label: Text('${stat.name} (${stat.count})'), onPressed: () => _applySuggestion(stat.name))).toList()),
               TextFormField(
                 controller: _intervalController,
-                enabled: !_submitting,
+                enabled: !_submitting && !_usesDefaultInterval,
                 keyboardType: TextInputType.number,
                 decoration: InputDecoration(labelText: l10n.createSearchIntervalLabel),
-                validator: (value) => (int.tryParse(value ?? '') == null) ? l10n.commonRequired : null,
+                validator: (value) => _usesDefaultInterval ? null : (int.tryParse(value ?? '') == null) ? l10n.commonRequired : null,
+              ),
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                title: Text(l10n.createSearchUsesDefaultIntervalLabel),
+                value: _usesDefaultInterval,
+                onChanged: _submitting ? null : (value) => setState(() => _usesDefaultInterval = value),
               ),
               SwitchListTile(
                 contentPadding: EdgeInsets.zero,
