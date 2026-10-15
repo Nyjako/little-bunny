@@ -1102,6 +1102,35 @@ void test_sync_skips_search_not_due_yet(void)
     free(fixture);
 }
 
+void test_default_sync_interval_hours_round_trips(void)
+{
+    int hours = 0;
+    TEST_ASSERT_EQUAL(BUNNY_CORE_OK, bunny_core_get_default_sync_interval_hours(g_core, &hours));
+    TEST_ASSERT_EQUAL(24, hours);
+
+    TEST_ASSERT_EQUAL(BUNNY_CORE_OK, bunny_core_set_default_sync_interval_hours(g_core, 6));
+    TEST_ASSERT_EQUAL(BUNNY_CORE_OK, bunny_core_get_default_sync_interval_hours(g_core, &hours));
+    TEST_ASSERT_EQUAL(6, hours);
+}
+
+void test_search_create_and_update_round_trip_uses_default_interval(void)
+{
+    bunny_db_search_options_t options = {false, 1, false, true};
+    int64_t search_id = 0;
+    TEST_ASSERT_EQUAL(BUNNY_CORE_OK, bunny_core_search_create(g_core, BUNNY_DB_SITE_E621, "wolves", "wolf", 24, &options, &search_id));
+
+    bunny_db_search_list_t list;
+    TEST_ASSERT_EQUAL(BUNNY_CORE_OK, bunny_core_search_list(g_core, &list));
+    TEST_ASSERT_TRUE(list.items[0].uses_default_interval);
+    bunny_db_search_list_free(&list);
+
+    bunny_db_search_options_t cleared = {false, 1, false, false};
+    TEST_ASSERT_EQUAL(BUNNY_CORE_OK, bunny_core_search_update(g_core, search_id, "wolves", "wolf", 24, &cleared));
+    TEST_ASSERT_EQUAL(BUNNY_CORE_OK, bunny_core_search_list(g_core, &list));
+    TEST_ASSERT_FALSE(list.items[0].uses_default_interval);
+    bunny_db_search_list_free(&list);
+}
+
 void test_sync_search_forces_a_non_due_search_to_sync(void)
 {
     char *fixture = read_fixture("e621_posts_search.json");
@@ -1223,6 +1252,8 @@ int main(void)
     RUN_TEST(test_sync_inkbunny_search_second_sync_stops_at_already_synced_submission);
     RUN_TEST(test_sync_inkbunny_search_second_sync_upserts_only_the_new_submission);
     RUN_TEST(test_sync_skips_search_not_due_yet);
+    RUN_TEST(test_default_sync_interval_hours_round_trips);
+    RUN_TEST(test_search_create_and_update_round_trip_uses_default_interval);
     RUN_TEST(test_sync_search_forces_a_non_due_search_to_sync);
     RUN_TEST(test_sync_search_returns_not_found_for_unknown_id);
     RUN_TEST(test_verify_e621_accepts_valid_credentials);

@@ -37,6 +37,15 @@ bunny_db_result_t bunny_db_account_set(bunny_db_t *db, bunny_db_site_t site, con
 bunny_db_result_t bunny_db_account_get(bunny_db_t *db, bunny_db_site_t site, bunny_db_account_t *out_account);
 bunny_db_result_t bunny_db_account_delete(bunny_db_t *db, bunny_db_site_t site);
 
+/* --- Server settings --------------------------------------------------------
+ * Single-row table (server_settings, id = 1) for server-wide config that
+ * isn't tied to any one search or account. Seeded to 24 on first open
+ * (schema.h); these are plain getters/setters over that one row, no create
+ * step needed. */
+
+bunny_db_result_t bunny_db_settings_get_default_interval_hours(bunny_db_t *db, int *out_hours);
+bunny_db_result_t bunny_db_settings_set_default_interval_hours(bunny_db_t *db, int hours);
+
 /* --- Searches ------------------------------------------------------------ */
 
 bunny_db_result_t bunny_db_search_create(bunny_db_t *db, bunny_db_site_t site, const char *label, const char *query, int interval_hours, const bunny_db_search_options_t *options, int64_t *out_id);

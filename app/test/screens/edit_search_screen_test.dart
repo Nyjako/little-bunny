@@ -104,4 +104,23 @@ void main() {
 
     expect(repository.searches.single.autoFavoriteStars, 3);
   });
+
+  testWidgets('enabling "use default interval" disables the interval field and persists on save (M20)', (WidgetTester tester) async {
+    final repository = FakeBunnyRepository();
+    final search = await _seedSearch(repository);
+    expect(search.usesDefaultInterval, isFalse);
+
+    await tester.pumpWidget(wrapWithLocalization(EditSearchScreen(repository: repository, search: search)));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.widgetWithText(SwitchListTile, 'Use default interval'));
+    await tester.pumpAndSettle();
+
+    expect(tester.widget<TextFormField>(find.widgetWithText(TextFormField, 'Sync interval (hours)')).enabled, isFalse);
+
+    await tester.tap(find.text('Save'));
+    await tester.pumpAndSettle();
+
+    expect(repository.searches.single.usesDefaultInterval, isTrue);
+  });
 }

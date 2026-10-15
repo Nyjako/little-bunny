@@ -137,12 +137,8 @@ void main() {
     expect(updated.single.autoUpvote, isTrue);
   });
 
-  test('syncDueSearches returns a BunnySyncStats', () async {
-    final stats = await repository.syncDueSearches();
-
-    expect(stats.searchesChecked, 0);
-    expect(stats.searchesSynced, 0);
-    expect(stats.postsUpserted, 0);
+  test('syncDueSearches completes with nothing to sync', () async {
+    await expectLater(repository.syncDueSearches(), completes);
   });
 
   test('syncSearch throws for a nonexistent search id (M13.2)', () async {

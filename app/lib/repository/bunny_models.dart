@@ -65,6 +65,12 @@ class BunnySearch {
   /// order -- null if it's never been opened (M15).
   final String? lastViewedAt;
 
+  /// When true, [intervalHours] is ignored for scheduling -- the search
+  /// follows whatever the server-wide default currently is (see
+  /// [BunnyRepository.getDefaultSyncIntervalHours]), re-resolved on every
+  /// due-check rather than frozen at creation/edit time.
+  final bool usesDefaultInterval;
+
   const BunnySearch({
     required this.id,
     required this.site,
@@ -80,6 +86,7 @@ class BunnySearch {
     this.autoUpvote = false,
     this.pinned = false,
     this.lastViewedAt,
+    this.usesDefaultInterval = false,
   });
 }
 
@@ -226,6 +233,39 @@ class BunnySyncStats {
     required this.searchesSynced,
     required this.postsUpserted,
   });
+}
+
+/// What the background sync worker is doing right now, if anything -- see
+/// `GET /sync/status` (server mode) / the equivalent locally-tracked state
+/// (standalone mode). Any device polling this sees the same state, whether
+/// the sync was triggered by this device, another one, or the scheduler.
+class BunnySyncStatus {
+  final bool active;
+
+  /// "scheduler", "manual", or "queue" -- null when [active] is false.
+  final String? source;
+
+  /// The search currently being synced, if this update is granular enough
+  /// to know one (e.g. a forced "sync all" pass) -- null otherwise, even
+  /// while [active] is true (e.g. a coarse scheduler/queue pass).
+  final String? searchLabel;
+
+  /// 1-indexed position within a batch ("sync all") pass; 0 when not
+  /// applicable.
+  final int position;
+
+  /// Total searches in the current batch pass; 0 when not applicable.
+  final int total;
+
+  const BunnySyncStatus({
+    required this.active,
+    this.source,
+    this.searchLabel,
+    this.position = 0,
+    this.total = 0,
+  });
+
+  static const BunnySyncStatus inactive = BunnySyncStatus(active: false);
 }
 
 /// Mirrors `bunny_core_queue_stats_t`.

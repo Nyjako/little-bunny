@@ -5,7 +5,6 @@ import 'package:little_bunny/screens/tag_browse_screen.dart';
 import 'package:little_bunny/screens/tag_stats_screen.dart';
 import 'package:little_bunny/settings/display_settings_store.dart';
 import 'package:little_bunny/settings/download_settings_store.dart';
-import 'package:little_bunny/settings/sync_settings_store.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../fakes/fake_bunny_repository.dart';
@@ -17,7 +16,7 @@ void main() {
   });
 
   Widget wrap(FakeBunnyRepository repository) => wrapWithLocalization(
-    TagStatsScreen(repository: repository, displaySettingsStore: const DisplaySettingsStore(), syncSettingsStore: const SyncSettingsStore(), downloadSettingsStore: const DownloadSettingsStore()),
+    TagStatsScreen(repository: repository, displaySettingsStore: const DisplaySettingsStore(), downloadSettingsStore: const DownloadSettingsStore()),
   );
 
   testWidgets('shows the empty state when nothing is favorited', (WidgetTester tester) async {

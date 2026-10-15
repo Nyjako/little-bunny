@@ -31,6 +31,7 @@ BunnySearch _searchFromJson(Map<String, Object?> j) => BunnySearch(
   autoUpvote: j['auto_upvote'] as bool,
   pinned: j['pinned'] as bool,
   lastViewedAt: j['last_viewed_at'] as String?,
+  usesDefaultInterval: j['uses_default_interval'] as bool,
 );
 
 BunnyPost _postFromJson(Map<String, Object?> j) => BunnyPost(
@@ -83,12 +84,6 @@ BunnyDownload _downloadFromJson(Map<String, Object?> j) => BunnyDownload(
   checksumMd5: j['checksum_md5'] as String?,
   checksumVerified: j['checksum_verified'] as bool,
   downloadedAt: j['downloaded_at'] as String?,
-);
-
-BunnySyncStats _syncStatsFromJson(Map<String, Object?> j) => BunnySyncStats(
-  searchesChecked: (j['searches_checked'] as num).toInt(),
-  searchesSynced: (j['searches_synced'] as num).toInt(),
-  postsUpserted: (j['posts_upserted'] as num).toInt(),
 );
 
 BunnyQueueStats _queueStatsFromJson(Map<String, Object?> j) => BunnyQueueStats(
@@ -206,7 +201,16 @@ class HttpBunnyRepository implements BunnyRepository {
   }
 
   @override
-  Future<int> createSearch(BunnySite site, String label, String query, {int intervalHours = 24, bool autoFavorite = false, int autoFavoriteStars = 1, bool autoUpvote = false}) async {
+  Future<int> createSearch(
+    BunnySite site,
+    String label,
+    String query, {
+    int intervalHours = 24,
+    bool autoFavorite = false,
+    int autoFavoriteStars = 1,
+    bool autoUpvote = false,
+    bool usesDefaultInterval = false,
+  }) async {
     final response = await _client.post(
       _uri('/searches'),
       headers: _headers,
@@ -218,6 +222,7 @@ class HttpBunnyRepository implements BunnyRepository {
         'auto_favorite': autoFavorite,
         'auto_favorite_stars': autoFavoriteStars,
         'auto_upvote': autoUpvote,
+        'uses_default_interval': usesDefaultInterval,
       }),
     );
     if (response.statusCode != 201) {
@@ -260,7 +265,16 @@ class HttpBunnyRepository implements BunnyRepository {
   }
 
   @override
-  Future<void> updateSearch(int searchId, String label, String query, {int intervalHours = 24, bool autoFavorite = false, int autoFavoriteStars = 1, bool autoUpvote = false}) async {
+  Future<void> updateSearch(
+    int searchId,
+    String label,
+    String query, {
+    int intervalHours = 24,
+    bool autoFavorite = false,
+    int autoFavoriteStars = 1,
+    bool autoUpvote = false,
+    bool usesDefaultInterval = false,
+  }) async {
     final response = await _client.put(
       _uri('/searches/$searchId'),
       headers: _headers,
@@ -271,8 +285,26 @@ class HttpBunnyRepository implements BunnyRepository {
         'auto_favorite': autoFavorite,
         'auto_favorite_stars': autoFavoriteStars,
         'auto_upvote': autoUpvote,
+        'uses_default_interval': usesDefaultInterval,
       }),
     );
+    if (response.statusCode != 200) {
+      _throwError(response);
+    }
+  }
+
+  @override
+  Future<int> getDefaultSyncIntervalHours() async {
+    final response = await _client.get(_uri('/settings'), headers: _headers);
+    if (response.statusCode != 200) {
+      _throwError(response);
+    }
+    return (_decodeObject(response)['default_sync_interval_hours'] as num).toInt();
+  }
+
+  @override
+  Future<void> setDefaultSyncIntervalHours(int hours) async {
+    final response = await _client.put(_uri('/settings'), headers: _headers, body: jsonEncode({'default_sync_interval_hours': hours}));
     if (response.statusCode != 200) {
       _throwError(response);
     }
@@ -464,21 +496,43 @@ class HttpBunnyRepository implements BunnyRepository {
   }
 
   @override
-  Future<BunnySyncStats> syncDueSearches() async {
+  Future<void> syncDueSearches() async {
     final response = await _client.post(_uri('/sync'), headers: _headers);
-    if (response.statusCode != 200) {
+    if (response.statusCode != 202) {
       _throwError(response);
     }
-    return _syncStatsFromJson(_decodeObject(response));
   }
 
   @override
-  Future<BunnySyncStats> syncSearch(int searchId) async {
+  Future<void> syncSearch(int searchId) async {
     final response = await _client.post(_uri('/searches/$searchId/sync'), headers: _headers);
+    if (response.statusCode != 202) {
+      _throwError(response);
+    }
+  }
+
+  @override
+  Future<void> syncAllSearches() async {
+    final response = await _client.post(_uri('/sync/all'), headers: _headers);
+    if (response.statusCode != 202) {
+      _throwError(response);
+    }
+  }
+
+  @override
+  Future<BunnySyncStatus> getSyncStatus() async {
+    final response = await _client.get(_uri('/sync/status'), headers: _headers);
     if (response.statusCode != 200) {
       _throwError(response);
     }
-    return _syncStatsFromJson(_decodeObject(response));
+    final j = _decodeObject(response);
+    return BunnySyncStatus(
+      active: j['active'] as bool,
+      source: j['source'] as String?,
+      searchLabel: j['search_label'] as String?,
+      position: (j['position'] as num).toInt(),
+      total: (j['total'] as num).toInt(),
+    );
   }
 
   @override

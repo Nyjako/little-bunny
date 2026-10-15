@@ -85,6 +85,7 @@
       "total": {"type": "int"}
     }
   },
+  "searchesSyncInProgress": "Syncing…",
 
   "tagStatsScreenTitle": "Tag stats",
   "tagStatsEmptyState": "No favorited posts yet -- favorite some to see their tags here.",
@@ -96,6 +97,7 @@
   "createSearchLabelField": "Label",
   "createSearchQueryField": "Query",
   "createSearchIntervalLabel": "Sync interval (hours)",
+  "createSearchUsesDefaultIntervalLabel": "Use default interval",
   "createSearchAutoFavoriteLabel": "Auto-favorite new posts",
   "createSearchAutoUpvoteLabel": "Auto-upvote new posts",
   "createSearchSubmit": "Create",

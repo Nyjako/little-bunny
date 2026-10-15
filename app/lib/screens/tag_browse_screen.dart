@@ -5,7 +5,6 @@ import '../repository/bunny_models.dart';
 import '../repository/bunny_repository.dart';
 import '../settings/display_settings_store.dart';
 import '../settings/download_settings_store.dart';
-import '../settings/sync_settings_store.dart';
 import '../util/responsive.dart';
 import '../widgets/post_grid_tile.dart';
 import 'create_search_screen.dart';
@@ -24,7 +23,6 @@ class TagBrowseScreen extends StatefulWidget {
   final String query;
   final BunnyRepository repository;
   final DisplaySettingsStore displaySettingsStore;
-  final SyncSettingsStore syncSettingsStore;
   final DownloadSettingsStore downloadSettingsStore;
 
   /// Pre-fills the label field when the user chooses to save this browse as
@@ -50,7 +48,6 @@ class TagBrowseScreen extends StatefulWidget {
     required this.query,
     required this.repository,
     required this.displaySettingsStore,
-    required this.syncSettingsStore,
     required this.downloadSettingsStore,
     this.initialLabel,
     this.customFetch,
@@ -174,7 +171,6 @@ class _TagBrowseScreenState extends State<TagBrowseScreen> {
           post: post,
           repository: widget.repository,
           displaySettingsStore: widget.displaySettingsStore,
-          syncSettingsStore: widget.syncSettingsStore,
           downloadSettingsStore: widget.downloadSettingsStore,
           siblingPosts: posts,
         ),
@@ -187,7 +183,7 @@ class _TagBrowseScreenState extends State<TagBrowseScreen> {
       context,
       MaterialPageRoute(
         builder: (context) =>
-            CreateSearchScreen(repository: widget.repository, syncSettingsStore: widget.syncSettingsStore, initialSite: widget.site, initialQuery: widget.query, initialLabel: widget.initialLabel),
+            CreateSearchScreen(repository: widget.repository, initialSite: widget.site, initialQuery: widget.query, initialLabel: widget.initialLabel),
       ),
     );
     if (created == true && mounted) {

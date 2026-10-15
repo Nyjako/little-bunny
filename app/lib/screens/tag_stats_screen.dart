@@ -5,7 +5,6 @@ import '../repository/bunny_models.dart';
 import '../repository/bunny_repository.dart';
 import '../settings/display_settings_store.dart';
 import '../settings/download_settings_store.dart';
-import '../settings/sync_settings_store.dart';
 import 'tag_browse_screen.dart';
 
 /// Shows the most-favorited tags per site (M10.2), reusing [BunnyTagStat]
@@ -19,14 +18,12 @@ import 'tag_browse_screen.dart';
 class TagStatsScreen extends StatefulWidget {
   final BunnyRepository repository;
   final DisplaySettingsStore displaySettingsStore;
-  final SyncSettingsStore syncSettingsStore;
   final DownloadSettingsStore downloadSettingsStore;
 
   const TagStatsScreen({
     super.key,
     required this.repository,
     required this.displaySettingsStore,
-    required this.syncSettingsStore,
     required this.downloadSettingsStore,
   });
 
@@ -61,7 +58,6 @@ class _TagStatsScreenState extends State<TagStatsScreen> {
           query: stat.name,
           repository: widget.repository,
           displaySettingsStore: widget.displaySettingsStore,
-          syncSettingsStore: widget.syncSettingsStore,
           downloadSettingsStore: widget.downloadSettingsStore,
         ),
       ),
