@@ -19,6 +19,16 @@ static const char *const BUNNY_DB_SCHEMA_SQL = "PRAGMA foreign_keys = ON;"
                                                "    secret TEXT NOT NULL," /* e621 API key, or Inkbunny password -- stored plain, see M4 in architecture.md */
                                                "    created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))"
                                                ");"
+                                               /* A folder-like way to organize saved searches in the UI (M21) -- flat,
+                                                * not nested. A search's membership lives on searches.group_id
+                                                * (added via migration, since it's a column on an existing table),
+                                                * not here. */
+                                               "CREATE TABLE IF NOT EXISTS search_groups ("
+                                               "    id INTEGER PRIMARY KEY,"
+                                               "    name TEXT NOT NULL,"
+                                               "    pinned INTEGER NOT NULL DEFAULT 0,"
+                                               "    created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))"
+                                               ");"
                                                "CREATE TABLE IF NOT EXISTS searches ("
                                                "    id INTEGER PRIMARY KEY,"
                                                "    site TEXT NOT NULL CHECK (site IN ('e621', 'inkbunny')),"

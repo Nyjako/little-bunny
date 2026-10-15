@@ -52,6 +52,61 @@ bunny_core_result_t bunny_core_set_default_sync_interval_hours(bunny_core_t *cor
     return bunny_core_map_db_result(result);
 }
 
+bunny_core_result_t bunny_core_search_set_group(bunny_core_t *core, int64_t search_id, int64_t group_id)
+{
+    if (!core) {
+        return BUNNY_CORE_ERR_INVALID_ARG;
+    }
+    bunny_core_db_lock(core);
+    bunny_db_result_t result = bunny_db_search_set_group(core->db, search_id, group_id);
+    bunny_core_db_unlock(core);
+    return bunny_core_map_db_result(result);
+}
+
+bunny_core_result_t bunny_core_group_create(bunny_core_t *core, const char *name, bool pinned, int64_t *out_id)
+{
+    if (!core) {
+        return BUNNY_CORE_ERR_INVALID_ARG;
+    }
+    bunny_core_db_lock(core);
+    bunny_db_result_t result = bunny_db_group_create(core->db, name, pinned, out_id);
+    bunny_core_db_unlock(core);
+    return bunny_core_map_db_result(result);
+}
+
+bunny_core_result_t bunny_core_group_list(bunny_core_t *core, bunny_db_group_list_t *out_list)
+{
+    if (!core) {
+        return BUNNY_CORE_ERR_INVALID_ARG;
+    }
+    bunny_core_db_lock(core);
+    bunny_db_result_t result = bunny_db_group_list(core->db, out_list);
+    bunny_core_db_unlock(core);
+    return bunny_core_map_db_result(result);
+}
+
+bunny_core_result_t bunny_core_group_update(bunny_core_t *core, int64_t group_id, const char *name, bool pinned)
+{
+    if (!core) {
+        return BUNNY_CORE_ERR_INVALID_ARG;
+    }
+    bunny_core_db_lock(core);
+    bunny_db_result_t result = bunny_db_group_update(core->db, group_id, name, pinned);
+    bunny_core_db_unlock(core);
+    return bunny_core_map_db_result(result);
+}
+
+bunny_core_result_t bunny_core_group_delete(bunny_core_t *core, int64_t group_id)
+{
+    if (!core) {
+        return BUNNY_CORE_ERR_INVALID_ARG;
+    }
+    bunny_core_db_lock(core);
+    bunny_db_result_t result = bunny_db_group_delete(core->db, group_id);
+    bunny_core_db_unlock(core);
+    return bunny_core_map_db_result(result);
+}
+
 bunny_core_result_t bunny_core_search_set_pinned(bunny_core_t *core, int64_t search_id, bool pinned)
 {
     if (!core) {

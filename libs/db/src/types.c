@@ -52,6 +52,29 @@ void bunny_db_search_list_free(bunny_db_search_list_t *list)
     list->count = 0;
 }
 
+void bunny_db_group_free(bunny_db_group_t *group)
+{
+    if (!group) {
+        return;
+    }
+    free(group->name);
+    free(group->created_at);
+    memset(group, 0, sizeof(*group));
+}
+
+void bunny_db_group_list_free(bunny_db_group_list_t *list)
+{
+    if (!list) {
+        return;
+    }
+    for (size_t i = 0; i < list->count; i++) {
+        bunny_db_group_free(&list->items[i]);
+    }
+    free(list->items);
+    list->items = NULL;
+    list->count = 0;
+}
+
 void bunny_db_post_free(bunny_db_post_t *post)
 {
     if (!post) {

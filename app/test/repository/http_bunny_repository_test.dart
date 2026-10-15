@@ -154,6 +154,7 @@ void main() {
             'auto_upvote': true,
             'pinned': true,
             'uses_default_interval': false,
+            'group_id': 9,
           },
         ]),
         200,
@@ -171,6 +172,63 @@ void main() {
       expect(searches.single.autoFavoriteStars, 2);
       expect(searches.single.autoUpvote, isTrue);
       expect(searches.single.pinned, isTrue);
+      expect(searches.single.groupId, 9);
+    });
+
+    test('setSearchGroup posts group_id to /searches/{id}/group', () async {
+      respond = (_) => http.Response(jsonEncode({'ok': true}), 200);
+
+      await buildRepository().setSearchGroup(7, 3);
+
+      expect(capturedMethod, 'POST');
+      expect(capturedUri.path, '/searches/7/group');
+      expect(jsonDecode(capturedBody), {'group_id': 3});
+    });
+
+    test('createGroup sends name/pinned and returns the new id', () async {
+      respond = (_) => http.Response(jsonEncode({'id': 9}), 201);
+
+      final id = await buildRepository().createGroup('Wolves', true);
+
+      expect(capturedMethod, 'POST');
+      expect(capturedUri.path, '/groups');
+      expect(jsonDecode(capturedBody), {'name': 'Wolves', 'pinned': true});
+      expect(id, 9);
+    });
+
+    test('listGroups maps a JSON array into BunnyGroup objects', () async {
+      respond = (_) => http.Response(
+        jsonEncode([
+          {'id': 9, 'name': 'Wolves', 'pinned': true, 'created_at': '2026-01-01T00:00:00Z'},
+        ]),
+        200,
+      );
+
+      final groups = await buildRepository().listGroups();
+
+      expect(groups, hasLength(1));
+      expect(groups.single.id, 9);
+      expect(groups.single.name, 'Wolves');
+      expect(groups.single.pinned, isTrue);
+    });
+
+    test('updateGroup sends PUT with the new name/pinned', () async {
+      respond = (_) => http.Response(jsonEncode({'ok': true}), 200);
+
+      await buildRepository().updateGroup(9, 'Canines', false);
+
+      expect(capturedMethod, 'PUT');
+      expect(capturedUri.path, '/groups/9');
+      expect(jsonDecode(capturedBody), {'name': 'Canines', 'pinned': false});
+    });
+
+    test('deleteGroup sends DELETE to the right path', () async {
+      respond = (_) => http.Response(jsonEncode({'ok': true}), 200);
+
+      await buildRepository().deleteGroup(9);
+
+      expect(capturedMethod, 'DELETE');
+      expect(capturedUri.path, '/groups/9');
     });
 
     test('deleteSearch sends DELETE to the right path', () async {

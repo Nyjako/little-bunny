@@ -38,6 +38,7 @@ static cJSON *search_to_json(const bunny_db_search_t *search)
     cJSON_AddBoolToObject(json, "pinned", search->pinned);
     add_optional_string(json, "last_viewed_at", search->last_viewed_at);
     cJSON_AddBoolToObject(json, "uses_default_interval", search->uses_default_interval);
+    cJSON_AddNumberToObject(json, "group_id", (double)search->group_id);
     return json;
 }
 
@@ -266,6 +267,30 @@ static int handle_pin_search(struct mg_connection *conn, server_context_t *ctx, 
     return status;
 }
 
+/* group_id <= 0 ungroups the search -- see bunny_db_search_set_group. */
+static int handle_set_search_group(struct mg_connection *conn, server_context_t *ctx, int64_t search_id)
+{
+    cJSON *body = server_json_read_request_body(conn);
+    if (!body) {
+        return server_json_respond_error(conn, BUNNY_CORE_ERR_INVALID_ARG);
+    }
+
+    int64_t group_id = (int64_t)bunny_json_get_int_or(body, "group_id", 0);
+    cJSON_Delete(body);
+
+    bunny_core_result_t result = bunny_core_search_set_group(ctx->core, search_id, group_id);
+
+    if (result != BUNNY_CORE_OK) {
+        return server_json_respond_error(conn, result);
+    }
+
+    cJSON *response = cJSON_CreateObject();
+    cJSON_AddBoolToObject(response, "ok", true);
+    int status = server_json_respond(conn, 200, response);
+    cJSON_Delete(response);
+    return status;
+}
+
 static int handle_put_search(struct mg_connection *conn, server_context_t *ctx, int64_t search_id)
 {
     cJSON *body = server_json_read_request_body(conn);
@@ -332,6 +357,9 @@ static int searches_handler(struct mg_connection *conn, void *cbdata)
         }
         if (strcmp(method, "POST") == 0 && server_route_parse_id_with_suffix(sub_path, "pin", &search_id)) {
             return handle_pin_search(conn, ctx, search_id);
+        }
+        if (strcmp(method, "POST") == 0 && server_route_parse_id_with_suffix(sub_path, "group", &search_id)) {
+            return handle_set_search_group(conn, ctx, search_id);
         }
         if (strcmp(method, "POST") == 0 && server_route_parse_id_with_suffix(sub_path, "viewed", &search_id)) {
             return handle_touch_search_viewed(conn, ctx, search_id);

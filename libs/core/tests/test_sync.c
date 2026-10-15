@@ -1131,6 +1131,49 @@ void test_search_create_and_update_round_trip_uses_default_interval(void)
     bunny_db_search_list_free(&list);
 }
 
+void test_group_create_list_update_delete_round_trip(void)
+{
+    int64_t group_id = 0;
+    TEST_ASSERT_EQUAL(BUNNY_CORE_OK, bunny_core_group_create(g_core, "Canines", false, &group_id));
+
+    bunny_db_group_list_t list;
+    TEST_ASSERT_EQUAL(BUNNY_CORE_OK, bunny_core_group_list(g_core, &list));
+    TEST_ASSERT_EQUAL(1, list.count);
+    TEST_ASSERT_EQUAL_STRING("Canines", list.items[0].name);
+    TEST_ASSERT_FALSE(list.items[0].pinned);
+    bunny_db_group_list_free(&list);
+
+    TEST_ASSERT_EQUAL(BUNNY_CORE_OK, bunny_core_group_update(g_core, group_id, "Foxes and wolves", true));
+    TEST_ASSERT_EQUAL(BUNNY_CORE_OK, bunny_core_group_list(g_core, &list));
+    TEST_ASSERT_EQUAL_STRING("Foxes and wolves", list.items[0].name);
+    TEST_ASSERT_TRUE(list.items[0].pinned);
+    bunny_db_group_list_free(&list);
+
+    TEST_ASSERT_EQUAL(BUNNY_CORE_OK, bunny_core_group_delete(g_core, group_id));
+    TEST_ASSERT_EQUAL(BUNNY_CORE_OK, bunny_core_group_list(g_core, &list));
+    TEST_ASSERT_EQUAL(0, list.count);
+    bunny_db_group_list_free(&list);
+}
+
+void test_search_set_group_round_trips_and_ungroups(void)
+{
+    int64_t search_id = 0;
+    TEST_ASSERT_EQUAL(BUNNY_CORE_OK, bunny_core_search_create(g_core, BUNNY_DB_SITE_E621, "wolves", "wolf", 24, NULL, &search_id));
+    int64_t group_id = 0;
+    TEST_ASSERT_EQUAL(BUNNY_CORE_OK, bunny_core_group_create(g_core, "Canines", false, &group_id));
+
+    TEST_ASSERT_EQUAL(BUNNY_CORE_OK, bunny_core_search_set_group(g_core, search_id, group_id));
+    bunny_db_search_list_t list;
+    TEST_ASSERT_EQUAL(BUNNY_CORE_OK, bunny_core_search_list(g_core, &list));
+    TEST_ASSERT_EQUAL(group_id, list.items[0].group_id);
+    bunny_db_search_list_free(&list);
+
+    TEST_ASSERT_EQUAL(BUNNY_CORE_OK, bunny_core_search_set_group(g_core, search_id, 0));
+    TEST_ASSERT_EQUAL(BUNNY_CORE_OK, bunny_core_search_list(g_core, &list));
+    TEST_ASSERT_EQUAL(0, list.items[0].group_id);
+    bunny_db_search_list_free(&list);
+}
+
 void test_sync_search_forces_a_non_due_search_to_sync(void)
 {
     char *fixture = read_fixture("e621_posts_search.json");
@@ -1254,6 +1297,8 @@ int main(void)
     RUN_TEST(test_sync_skips_search_not_due_yet);
     RUN_TEST(test_default_sync_interval_hours_round_trips);
     RUN_TEST(test_search_create_and_update_round_trip_uses_default_interval);
+    RUN_TEST(test_group_create_list_update_delete_round_trip);
+    RUN_TEST(test_search_set_group_round_trips_and_ungroups);
     RUN_TEST(test_sync_search_forces_a_non_due_search_to_sync);
     RUN_TEST(test_sync_search_returns_not_found_for_unknown_id);
     RUN_TEST(test_verify_e621_accepts_valid_credentials);

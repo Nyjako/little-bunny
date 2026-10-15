@@ -185,7 +185,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   Future<void> _exportSearches(AppLocalizations l10n) async {
     final searches = await widget.repository.listSearches();
-    final json = jsonEncode(_backupService.exportSearches(searches));
+    final groups = await widget.repository.listGroups();
+    final json = jsonEncode(_backupService.exportSearches(searches, groups));
     final saved = await FilePicker.saveFile(fileName: 'little_bunny_searches.json', bytes: Uint8List.fromList(utf8.encode(json)));
     if (!mounted || saved == null) {
       return;
@@ -215,6 +216,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
 
     final existing = (await widget.repository.listSearches()).map((search) => (search.site, search.query)).toSet();
+    // Resolved/created on demand and cached by name so re-importing the same
+    // file (or a file with multiple searches sharing a group) doesn't create
+    // duplicate groups (M21) -- group ids aren't portable across installs,
+    // so matching is by name against this install's existing groups.
+    final groupIdsByName = {for (final group in await widget.repository.listGroups()) group.name: group.id};
     var imported = 0;
     var duplicates = 0;
     setState(() => _importProgress = (0, parsed.entries.length));
@@ -223,7 +229,16 @@ class _SettingsScreenState extends State<SettingsScreen> {
       if (existing.contains(key)) {
         duplicates++;
       } else {
-        await widget.repository.createSearch(entry.site, entry.label, entry.query, intervalHours: entry.intervalHours, autoFavorite: entry.autoFavorite, autoFavoriteStars: entry.autoFavoriteStars, autoUpvote: entry.autoUpvote);
+        final id = await widget.repository.createSearch(entry.site, entry.label, entry.query, intervalHours: entry.intervalHours, autoFavorite: entry.autoFavorite, autoFavoriteStars: entry.autoFavoriteStars, autoUpvote: entry.autoUpvote);
+        if (entry.pinned) {
+          await widget.repository.setSearchPinned(id, true);
+        }
+        final groupName = entry.groupName;
+        if (groupName != null) {
+          final groupId = groupIdsByName[groupName] ?? await widget.repository.createGroup(groupName, entry.groupPinned);
+          groupIdsByName[groupName] = groupId;
+          await widget.repository.setSearchGroup(id, groupId);
+        }
         existing.add(key); // catches duplicates within the same file too, not just against what was already saved
         imported++;
       }

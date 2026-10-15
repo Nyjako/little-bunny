@@ -22,6 +22,7 @@ add_library(bunny_server_lib STATIC
     src/routes_logs.c
     src/routes_sync.c
     src/routes_settings.c
+    src/routes_groups.c
 )
 
 target_include_directories(bunny_server_lib

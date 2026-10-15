@@ -26,7 +26,10 @@ BunnySearch _searchFromMap(Map<String, Object?> m) => BunnySearch(
   pinned: m['pinned'] as bool,
   lastViewedAt: m['lastViewedAt'] as String?,
   usesDefaultInterval: m['usesDefaultInterval'] as bool,
+  groupId: m['groupId'] as int,
 );
+
+BunnyGroup _groupFromMap(Map<String, Object?> m) => BunnyGroup(id: m['id'] as int, name: m['name'] as String, pinned: m['pinned'] as bool, createdAt: m['createdAt'] as String);
 
 BunnyPost _postFromMap(Map<String, Object?> m) => BunnyPost(
   id: m['id'] as int,
@@ -174,6 +177,24 @@ class FfiBunnyRepository implements BunnyRepository {
 
   @override
   Future<void> touchSearchViewed(int searchId) => _wrapped(() => _native.touchSearchViewed(searchId));
+
+  @override
+  Future<void> setSearchGroup(int searchId, int groupId) => _wrapped(() => _native.setSearchGroup(searchId, groupId));
+
+  @override
+  Future<int> createGroup(String name, bool pinned) => _wrapped(() => _native.createGroup(name, pinned));
+
+  @override
+  Future<List<BunnyGroup>> listGroups() async {
+    final items = await _wrapped(() => _native.listGroups());
+    return items.map(_groupFromMap).toList();
+  }
+
+  @override
+  Future<void> updateGroup(int groupId, String name, bool pinned) => _wrapped(() => _native.updateGroup(groupId, name, pinned));
+
+  @override
+  Future<void> deleteGroup(int groupId) => _wrapped(() => _native.deleteGroup(groupId));
 
   @override
   Future<void> updateSearch(
