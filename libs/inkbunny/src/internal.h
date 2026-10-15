@@ -3,6 +3,7 @@
 
 #include <bunny_common/http.h>
 #include <bunny_common/json.h>
+#include <bunny_common/rate_limit.h>
 #include <goblin/cstr.h>
 
 #include <ctype.h>
@@ -11,7 +12,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <time.h>
 
 #include "inkbunny/error.h"
 #include "inkbunny/types.h"
@@ -24,10 +24,8 @@ struct inkbunny_client
     char *base_url;
     char *sid;
     int64_t user_id;
-    double min_request_interval_sec;
     bunny_http_transport_t transport;
-    struct timespec last_request_time;
-    bool has_last_request_time;
+    bunny_rate_limiter_t rate_limiter;
 
     /* NULL until inkbunny_website_login() succeeds. Kept alive for the
      * client's lifetime so its cookie jar persists across favorite/unfavorite
