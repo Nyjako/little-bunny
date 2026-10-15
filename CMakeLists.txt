@@ -126,6 +126,12 @@ CPMAddPackage(
     "BUILD_CURL_EXE OFF"
     "BUILD_SHARED_LIBS OFF"
     "BUILD_TESTING OFF"
+    # BUILD_EXAMPLES is a separate option from BUILD_TESTING (defaults ON) --
+    # left on, curl's own docs/examples/ built ~100 example executables on
+    # every build. Harmless on a normal machine, but fatal on Android's
+    # multi-ABI NDK build in CI: 4 ABIs x that many extra binaries exhausted
+    # the runner's disk ("No space left on device").
+    "BUILD_EXAMPLES OFF"
     "CURL_USE_OPENSSL ${BUNNY_CURL_USE_OPENSSL}"
     "CURL_USE_MBEDTLS ${BUNNY_CURL_USE_MBEDTLS}"
     "CURL_USE_LIBPSL OFF"
