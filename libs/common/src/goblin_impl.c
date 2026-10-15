@@ -9,3 +9,6 @@
 
 #define GOBLIN_APPDIR_IMPLEMENTATION
 #include <goblin/appdirs.h>
+
+#define GOBLIN_HIGH_RES_TIMER_IMPLEMENTATION
+#include <goblin/high_res_timer.h>
