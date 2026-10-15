@@ -418,6 +418,72 @@ abstract class AppLocalizations {
   /// **'Syncing…'**
   String get searchesSyncInProgress;
 
+  /// No description provided for @searchesNewGroupTooltip.
+  ///
+  /// In en, this message translates to:
+  /// **'New group'**
+  String get searchesNewGroupTooltip;
+
+  /// No description provided for @searchesGroupNameLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Name'**
+  String get searchesGroupNameLabel;
+
+  /// No description provided for @searchesCreateGroupDialogTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'New group'**
+  String get searchesCreateGroupDialogTitle;
+
+  /// No description provided for @searchesCreateGroupSubmit.
+  ///
+  /// In en, this message translates to:
+  /// **'Create'**
+  String get searchesCreateGroupSubmit;
+
+  /// No description provided for @searchesRenameGroupDialogTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Rename group'**
+  String get searchesRenameGroupDialogTitle;
+
+  /// No description provided for @searchesRenameGroupSubmit.
+  ///
+  /// In en, this message translates to:
+  /// **'Save'**
+  String get searchesRenameGroupSubmit;
+
+  /// No description provided for @searchesRenameGroupMenuItem.
+  ///
+  /// In en, this message translates to:
+  /// **'Rename'**
+  String get searchesRenameGroupMenuItem;
+
+  /// No description provided for @searchesDeleteGroupMenuItem.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete group'**
+  String get searchesDeleteGroupMenuItem;
+
+  /// No description provided for @searchesDeleteGroupDialogTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete group?'**
+  String get searchesDeleteGroupDialogTitle;
+
+  /// No description provided for @searchesDeleteGroupDialogContent.
+  ///
+  /// In en, this message translates to:
+  /// **'Searches in \"{name}\" will be ungrouped, not deleted.'**
+  String searchesDeleteGroupDialogContent(String name);
+
+  /// No description provided for @searchesGroupSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'{total} posts'**
+  String searchesGroupSubtitle(int total);
+
   /// No description provided for @tagStatsScreenTitle.
   ///
   /// In en, this message translates to:
@@ -477,6 +543,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Use default interval'**
   String get createSearchUsesDefaultIntervalLabel;
+
+  /// No description provided for @createSearchGroupLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Group'**
+  String get createSearchGroupLabel;
+
+  /// No description provided for @createSearchGroupNone.
+  ///
+  /// In en, this message translates to:
+  /// **'No group'**
+  String get createSearchGroupNone;
 
   /// No description provided for @createSearchAutoFavoriteLabel.
   ///

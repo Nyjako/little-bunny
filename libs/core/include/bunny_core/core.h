@@ -106,6 +106,22 @@ bunny_core_result_t bunny_core_search_update(bunny_core_t *core, int64_t search_
 bunny_core_result_t bunny_core_get_default_sync_interval_hours(bunny_core_t *core, int *out_hours);
 bunny_core_result_t bunny_core_set_default_sync_interval_hours(bunny_core_t *core, int hours);
 
+/* --- Search groups (M21) ---------------------------------------------------
+ * A flat, non-nested way to organize saved searches into folder-like groups
+ * in SearchesScreen's tree view -- see bunny_db_group_t. */
+
+/* Moves a search into group_id's group, or ungroups it when group_id is 0 --
+ * see bunny_db_search_set_group. */
+bunny_core_result_t bunny_core_search_set_group(bunny_core_t *core, int64_t search_id, int64_t group_id);
+
+bunny_core_result_t bunny_core_group_create(bunny_core_t *core, const char *name, bool pinned, int64_t *out_id);
+bunny_core_result_t bunny_core_group_list(bunny_core_t *core, bunny_db_group_list_t *out_list);
+bunny_core_result_t bunny_core_group_update(bunny_core_t *core, int64_t group_id, const char *name, bool pinned);
+
+/* Deletes the group; member searches are ungrouped, not deleted (enforced
+ * by the DB's own ON DELETE SET NULL foreign key -- see bunny_db_group_delete). */
+bunny_core_result_t bunny_core_group_delete(bunny_core_t *core, int64_t group_id);
+
 /* Fetches a single cached post by its local id -- a thin pass-through to
  * bunny_db, used when a post detail view needs to open a *different* post
  * it doesn't already have a BunnyPost for (e.g. after bunny_core_fetch_and_

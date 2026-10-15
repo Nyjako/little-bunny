@@ -64,7 +64,10 @@ Map<String, Object?> _searchToMap(bunny_db_search_t search) => {
   'pinned': search.pinned,
   'lastViewedAt': _readNullableString(search.last_viewed_at),
   'usesDefaultInterval': search.uses_default_interval,
+  'groupId': search.group_id,
 };
+
+Map<String, Object?> _groupToMap(bunny_db_group_t group) => {'id': group.id, 'name': _readNullableString(group.name), 'pinned': group.pinned, 'createdAt': _readNullableString(group.created_at)};
 
 Map<String, Object?> _postToMap(bunny_db_post_t post) => {
   'id': post.id,
@@ -211,6 +214,38 @@ class _TouchSearchViewedRequest extends _Request {
   final int searchId;
 
   const _TouchSearchViewedRequest(this.searchId);
+}
+
+class _SetSearchGroupRequest extends _Request {
+  final int searchId;
+  final int groupId;
+
+  const _SetSearchGroupRequest(this.searchId, this.groupId);
+}
+
+class _CreateGroupRequest extends _Request {
+  final String name;
+  final bool pinned;
+
+  const _CreateGroupRequest(this.name, this.pinned);
+}
+
+class _ListGroupsRequest extends _Request {
+  const _ListGroupsRequest();
+}
+
+class _UpdateGroupRequest extends _Request {
+  final int groupId;
+  final String name;
+  final bool pinned;
+
+  const _UpdateGroupRequest(this.groupId, this.name, this.pinned);
+}
+
+class _DeleteGroupRequest extends _Request {
+  final int groupId;
+
+  const _DeleteGroupRequest(this.groupId);
 }
 
 class _ListSearchPostsRequest extends _Request {
@@ -448,6 +483,19 @@ List<Map<String, Object?>> _handleListSearches(Pointer<bunny_core_t> core) {
       items.add(_searchToMap(out.ref.items[i]));
     }
     _bindings.bunny_db_search_list_free(out);
+    return items;
+  });
+}
+
+List<Map<String, Object?>> _handleListGroups(Pointer<bunny_core_t> core) {
+  return using((arena) {
+    final out = arena<bunny_db_group_list_t>();
+    _check(_bindings.bunny_core_group_list(core, out));
+    final items = <Map<String, Object?>>[];
+    for (var i = 0; i < out.ref.count; i++) {
+      items.add(_groupToMap(out.ref.items[i]));
+    }
+    _bindings.bunny_db_group_list_free(out);
     return items;
   });
 }
@@ -721,6 +769,21 @@ Object? _dispatch(Pointer<bunny_core_t>? core, _Request request, void Function(P
       case _TouchSearchViewedRequest r:
         _check(_bindings.bunny_core_search_touch_last_viewed(c, r.searchId));
         return null;
+      case _SetSearchGroupRequest r:
+        _check(_bindings.bunny_core_search_set_group(c, r.searchId, r.groupId));
+        return null;
+      case _CreateGroupRequest r:
+        final outId = arena<Int64>();
+        _check(_bindings.bunny_core_group_create(c, r.name.toNativeUtf8(allocator: arena).cast(), r.pinned, outId));
+        return outId.value;
+      case _ListGroupsRequest():
+        return _handleListGroups(c);
+      case _UpdateGroupRequest r:
+        _check(_bindings.bunny_core_group_update(c, r.groupId, r.name.toNativeUtf8(allocator: arena).cast(), r.pinned));
+        return null;
+      case _DeleteGroupRequest r:
+        _check(_bindings.bunny_core_group_delete(c, r.groupId));
+        return null;
       case _UpdateSearchRequest r:
         final options = arena<bunny_db_search_options_t>();
         options.ref.auto_favorite = r.autoFavorite;
@@ -904,6 +967,16 @@ class BunnyCoreNative {
   Future<void> setSearchPinned(int searchId, bool pinned) => _send<void>(_SetSearchPinnedRequest(searchId, pinned));
 
   Future<void> touchSearchViewed(int searchId) => _send<void>(_TouchSearchViewedRequest(searchId));
+
+  Future<void> setSearchGroup(int searchId, int groupId) => _send<void>(_SetSearchGroupRequest(searchId, groupId));
+
+  Future<int> createGroup(String name, bool pinned) => _send<int>(_CreateGroupRequest(name, pinned));
+
+  Future<List<Map<String, Object?>>> listGroups() => _send<List<Map<String, Object?>>>(const _ListGroupsRequest());
+
+  Future<void> updateGroup(int groupId, String name, bool pinned) => _send<void>(_UpdateGroupRequest(groupId, name, pinned));
+
+  Future<void> deleteGroup(int groupId) => _send<void>(_DeleteGroupRequest(groupId));
 
   Future<void> updateSearch(int searchId, String label, String query, int intervalHours, {bool autoFavorite = false, int autoFavoriteStars = 1, bool autoUpvote = false, bool usesDefaultInterval = false}) =>
       _send<void>(_UpdateSearchRequest(searchId, label, query, intervalHours, autoFavorite, autoFavoriteStars, autoUpvote, usesDefaultInterval));

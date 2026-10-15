@@ -49,6 +49,33 @@ void main() {
     expect(searches.single['intervalHours'], 24);
   });
 
+  test('createGroup then listGroups round-trips, and setSearchGroup/deleteGroup ungroups', () async {
+    final groupId = await native.createGroup('Wolves', true);
+    var groups = await native.listGroups();
+    expect(groups, hasLength(1));
+    expect(groups.single['id'], groupId);
+    expect(groups.single['name'], 'Wolves');
+    expect(groups.single['pinned'], isTrue);
+
+    await native.updateGroup(groupId, 'Canines', false);
+    groups = await native.listGroups();
+    expect(groups.single['name'], 'Canines');
+    expect(groups.single['pinned'], isFalse);
+
+    final searchId = await native.createSearch('e621', 'my search', 'rating:safe', 24);
+    var searches = await native.listSearches();
+    expect(searches.single['groupId'], 0);
+
+    await native.setSearchGroup(searchId, groupId);
+    searches = await native.listSearches();
+    expect(searches.single['groupId'], groupId);
+
+    await native.deleteGroup(groupId);
+    expect(await native.listGroups(), isEmpty);
+    searches = await native.listSearches();
+    expect(searches.single['groupId'], 0);
+  });
+
   test('deleteSearch removes it', () async {
     final id = await native.createSearch('e621', 'my search', 'rating:safe', 24);
     await native.deleteSearch(id);

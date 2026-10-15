@@ -67,6 +67,20 @@ abstract interface class BunnyRepository {
   /// order (M15).
   Future<void> touchSearchViewed(int searchId);
 
+  /// Moves a search into [groupId]'s group, or ungroups it when [groupId] is
+  /// 0 (M21).
+  Future<void> setSearchGroup(int searchId, int groupId);
+
+  /// Returns the new group's id (M21).
+  Future<int> createGroup(String name, bool pinned);
+
+  Future<List<BunnyGroup>> listGroups();
+
+  Future<void> updateGroup(int groupId, String name, bool pinned);
+
+  /// Deletes the group; member searches are ungrouped, not deleted.
+  Future<void> deleteGroup(int groupId);
+
   /// Updates a search's editable fields in place (M9.7.2) -- replaces the
   /// narrower setSearchAutoFavorite (M9.6.8), so a search's label/query/
   /// interval/auto-favorite/auto-upvote settings can all be changed from one

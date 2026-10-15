@@ -63,7 +63,25 @@ typedef struct
     bool initial_sync_done;             /* has the (capped) first full scan completed -- see sync.c */
     int64_t highest_synced_external_id; /* highest post id seen by any sync so far; 0 = none yet */
     bool uses_default_interval;         /* see bunny_db_search_options_t above */
+    int64_t group_id;                   /* the search_groups row this search belongs to; 0 = ungrouped (M21) */
 } bunny_db_search_t;
+
+/* A folder-like way to organize saved searches in SearchesScreen's tree view
+ * (M21) -- flat, not nested. Mirrors bunny_db_search_t.pinned's "shown first"
+ * meaning, just at the group level instead of per-search. */
+typedef struct
+{
+    int64_t id;
+    char *name;
+    bool pinned;
+    char *created_at;
+} bunny_db_group_t;
+
+typedef struct
+{
+    bunny_db_group_t *items;
+    size_t count;
+} bunny_db_group_list_t;
 
 typedef struct
 {
@@ -218,6 +236,8 @@ typedef struct
 void bunny_db_account_free(bunny_db_account_t *account);
 void bunny_db_search_free(bunny_db_search_t *search);
 void bunny_db_search_list_free(bunny_db_search_list_t *list);
+void bunny_db_group_free(bunny_db_group_t *group);
+void bunny_db_group_list_free(bunny_db_group_list_t *list);
 void bunny_db_post_free(bunny_db_post_t *post);
 void bunny_db_post_list_free(bunny_db_post_list_t *list);
 void bunny_db_tag_stat_free(bunny_db_tag_stat_t *stat);

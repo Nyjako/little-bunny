@@ -622,6 +622,79 @@ void test_search_pin_and_unpin(void)
     free(response.data);
 }
 
+void test_group_crud_and_assign_search(void)
+{
+    response_buffer_t response = {0};
+
+    long status = do_request("POST", "/groups", "{\"name\":\"Wolves\",\"pinned\":true}", &response, true, NULL);
+    TEST_ASSERT_EQUAL(201, status);
+    TEST_ASSERT_NOT_NULL(strstr(response.data, "\"id\":1"));
+    free(response.data);
+    memset(&response, 0, sizeof(response));
+
+    status = do_request("GET", "/groups", NULL, &response, true, NULL);
+    TEST_ASSERT_EQUAL(200, status);
+    TEST_ASSERT_NOT_NULL(strstr(response.data, "\"name\":\"Wolves\""));
+    TEST_ASSERT_NOT_NULL(strstr(response.data, "\"pinned\":true"));
+    free(response.data);
+    memset(&response, 0, sizeof(response));
+
+    status = do_request("PUT", "/groups/1", "{\"name\":\"Canines\",\"pinned\":false}", &response, true, NULL);
+    TEST_ASSERT_EQUAL(200, status);
+    TEST_ASSERT_NOT_NULL(strstr(response.data, "\"ok\":true"));
+    free(response.data);
+    memset(&response, 0, sizeof(response));
+
+    status = do_request("GET", "/groups", NULL, &response, true, NULL);
+    TEST_ASSERT_EQUAL(200, status);
+    TEST_ASSERT_NOT_NULL(strstr(response.data, "\"name\":\"Canines\""));
+    TEST_ASSERT_NOT_NULL(strstr(response.data, "\"pinned\":false"));
+    free(response.data);
+    memset(&response, 0, sizeof(response));
+
+    status = do_request("POST", "/searches", "{\"site\":\"e621\",\"label\":\"wolves\",\"query\":\"wolf\",\"interval_hours\":24}", &response, true, NULL);
+    TEST_ASSERT_EQUAL(201, status);
+    free(response.data);
+    memset(&response, 0, sizeof(response));
+
+    status = do_request("GET", "/searches", NULL, &response, true, NULL);
+    TEST_ASSERT_EQUAL(200, status);
+    TEST_ASSERT_NOT_NULL(strstr(response.data, "\"group_id\":0"));
+    free(response.data);
+    memset(&response, 0, sizeof(response));
+
+    status = do_request("POST", "/searches/1/group", "{\"group_id\":1}", &response, true, NULL);
+    TEST_ASSERT_EQUAL(200, status);
+    TEST_ASSERT_NOT_NULL(strstr(response.data, "\"ok\":true"));
+    free(response.data);
+    memset(&response, 0, sizeof(response));
+
+    status = do_request("GET", "/searches", NULL, &response, true, NULL);
+    TEST_ASSERT_EQUAL(200, status);
+    TEST_ASSERT_NOT_NULL(strstr(response.data, "\"group_id\":1"));
+    free(response.data);
+    memset(&response, 0, sizeof(response));
+
+    /* Deleting a group ungroups its member searches instead of deleting
+     * them (confirmed design decision -- see bunny_db_group_delete). */
+    status = do_request("DELETE", "/groups/1", NULL, &response, true, NULL);
+    TEST_ASSERT_EQUAL(200, status);
+    TEST_ASSERT_NOT_NULL(strstr(response.data, "\"ok\":true"));
+    free(response.data);
+    memset(&response, 0, sizeof(response));
+
+    status = do_request("GET", "/groups", NULL, &response, true, NULL);
+    TEST_ASSERT_EQUAL(200, status);
+    TEST_ASSERT_EQUAL_STRING("[]", response.data);
+    free(response.data);
+    memset(&response, 0, sizeof(response));
+
+    status = do_request("GET", "/searches", NULL, &response, true, NULL);
+    TEST_ASSERT_EQUAL(200, status);
+    TEST_ASSERT_NOT_NULL(strstr(response.data, "\"group_id\":0"));
+    free(response.data);
+}
+
 void test_search_touch_viewed(void)
 {
     response_buffer_t response = {0};
@@ -951,6 +1024,7 @@ int main(void)
     RUN_TEST(test_sync_single_search_forces_even_when_not_due);
     RUN_TEST(test_blacklist_add_list_remove);
     RUN_TEST(test_search_pin_and_unpin);
+    RUN_TEST(test_group_crud_and_assign_search);
     RUN_TEST(test_search_touch_viewed);
     RUN_TEST(test_search_auto_favorite_create_and_update);
     RUN_TEST(test_my_inkbunny_favorites_searches_and_caches_with_favorite_marked);

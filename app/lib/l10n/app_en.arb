@@ -86,6 +86,23 @@
     }
   },
   "searchesSyncInProgress": "Syncing…",
+  "searchesNewGroupTooltip": "New group",
+  "searchesGroupNameLabel": "Name",
+  "searchesCreateGroupDialogTitle": "New group",
+  "searchesCreateGroupSubmit": "Create",
+  "searchesRenameGroupDialogTitle": "Rename group",
+  "searchesRenameGroupSubmit": "Save",
+  "searchesRenameGroupMenuItem": "Rename",
+  "searchesDeleteGroupMenuItem": "Delete group",
+  "searchesDeleteGroupDialogTitle": "Delete group?",
+  "searchesDeleteGroupDialogContent": "Searches in \"{name}\" will be ungrouped, not deleted.",
+  "@searchesDeleteGroupDialogContent": {
+    "placeholders": {"name": {"type": "String"}}
+  },
+  "searchesGroupSubtitle": "{total} posts",
+  "@searchesGroupSubtitle": {
+    "placeholders": {"total": {"type": "int"}}
+  },
 
   "tagStatsScreenTitle": "Tag stats",
   "tagStatsEmptyState": "No favorited posts yet -- favorite some to see their tags here.",
@@ -98,6 +115,8 @@
   "createSearchQueryField": "Query",
   "createSearchIntervalLabel": "Sync interval (hours)",
   "createSearchUsesDefaultIntervalLabel": "Use default interval",
+  "createSearchGroupLabel": "Group",
+  "createSearchGroupNone": "No group",
   "createSearchAutoFavoriteLabel": "Auto-favorite new posts",
   "createSearchAutoUpvoteLabel": "Auto-upvote new posts",
   "createSearchSubmit": "Create",
