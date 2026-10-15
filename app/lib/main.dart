@@ -14,7 +14,6 @@ import 'settings/display_settings_store.dart';
 import 'settings/download_settings_store.dart';
 import 'settings/repository_settings_store.dart';
 import 'settings/secret_store.dart';
-import 'settings/sync_settings_store.dart';
 import 'settings/theme_settings_store.dart';
 
 Future<void> main() async {
@@ -29,7 +28,6 @@ Future<void> main() async {
       settingsStore: RepositorySettingsStore(secretStore),
       lockService: AppLockService(secretStore),
       themeSettingsStore: const ThemeSettingsStore(),
-      syncSettingsStore: const SyncSettingsStore(),
       displaySettingsStore: const DisplaySettingsStore(),
       downloadSettingsStore: const DownloadSettingsStore(),
     ),
@@ -48,7 +46,6 @@ class LittleBunnyApp extends StatefulWidget {
   final RepositorySettingsStore settingsStore;
   final AppLockService lockService;
   final ThemeSettingsStore themeSettingsStore;
-  final SyncSettingsStore syncSettingsStore;
   final DisplaySettingsStore displaySettingsStore;
   final DownloadSettingsStore downloadSettingsStore;
 
@@ -57,7 +54,6 @@ class LittleBunnyApp extends StatefulWidget {
     required this.settingsStore,
     required this.lockService,
     required this.themeSettingsStore,
-    required this.syncSettingsStore,
     required this.displaySettingsStore,
     required this.downloadSettingsStore,
   });
@@ -145,7 +141,6 @@ class _LittleBunnyAppState extends State<LittleBunnyApp> {
         child: SearchesScreen(
           lockService: widget.lockService,
           themeSettingsStore: widget.themeSettingsStore,
-          syncSettingsStore: widget.syncSettingsStore,
           displaySettingsStore: widget.displaySettingsStore,
           downloadSettingsStore: widget.downloadSettingsStore,
           settingsStore: widget.settingsStore,

@@ -124,10 +124,18 @@ static void *scheduler_loop(void *arg)
 
         server_log("INFO", "scheduler: tick started, checking due searches");
 
+        if (scheduler->status) {
+            server_sync_status_set_active(scheduler->status, "scheduler", NULL, 0, 0);
+        }
+
         bunny_core_sync_stats_t sync_stats;
         bunny_core_queue_stats_t queue_stats;
         bunny_core_sync_due_searches(scheduler->ctx->core, &sync_stats);
         bunny_core_process_queue(scheduler->ctx->core, &queue_stats);
+
+        if (scheduler->status) {
+            server_sync_status_clear(scheduler->status);
+        }
 
         server_log("INFO", "scheduler: synced %d/%d due searches (%d posts upserted), processed %d queued actions (%d succeeded, %d failed)", sync_stats.searches_synced, sync_stats.searches_checked, sync_stats.posts_upserted, queue_stats.actions_processed, queue_stats.actions_succeeded, queue_stats.actions_failed);
 
@@ -138,9 +146,10 @@ static void *scheduler_loop(void *arg)
     return NULL;
 }
 
-bool server_scheduler_start(server_scheduler_t *scheduler, server_context_t *ctx, const char *data_dir, int poll_interval_sec)
+bool server_scheduler_start(server_scheduler_t *scheduler, server_context_t *ctx, server_sync_status_t *status, const char *data_dir, int poll_interval_sec)
 {
     scheduler->ctx = ctx;
+    scheduler->status = status;
     scheduler->poll_interval_sec = poll_interval_sec;
     scheduler->backups_dir = data_dir ? goblin_appdir_join(data_dir, "backups") : NULL;
     scheduler->stop_requested = false;

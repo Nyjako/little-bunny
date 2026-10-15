@@ -28,6 +28,16 @@ static const bunny_db_migration_t BUNNY_DB_MIGRATIONS[] = {
     {7, "ALTER TABLE searches ADD COLUMN last_viewed_at TEXT;"},
     {8, "ALTER TABLE searches ADD COLUMN initial_sync_done INTEGER NOT NULL DEFAULT 0;"},
     {9, "ALTER TABLE searches ADD COLUMN highest_synced_external_id INTEGER NOT NULL DEFAULT 0;"},
+    /* uses_default_interval seeds to 1 for every search currently sitting at
+     * interval_hours = 24 -- that value was both this column's own DEFAULT
+     * and the app's hardcoded default before this migration, so a search at
+     * exactly 24 almost certainly got there via "default", never having had
+     * a real per-search override. Scheduling behavior for those rows is
+     * unchanged by this (server_settings.default_sync_interval_hours also
+     * seeds to 24) -- they just now track the live default going forward
+     * instead of a value frozen at creation time. */
+    {10, "ALTER TABLE searches ADD COLUMN uses_default_interval INTEGER NOT NULL DEFAULT 0;"
+         "UPDATE searches SET uses_default_interval = 1 WHERE interval_hours = 24;"},
 };
 // clang-format on
 

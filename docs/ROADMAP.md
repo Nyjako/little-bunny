@@ -1569,6 +1569,62 @@ this file is the single source of truth for "what's done" across sessions.
   this directly -- a sync of one search holding a slow fake network call forces a
   concurrently-started sync of a *different* search to wait for it.
 
+- [x] **M20 — Background sync worker, shared sync status, server-side default interval**
+  Even with M19's fix, a manual "check for updates" or a per-row sync (`POST /searches/
+  {id}/sync`, `POST /sync`) still called `bunny_core_sync_search`/`bunny_core_sync_due_
+  searches` directly from the route handler and blocked the HTTP response until the whole
+  sync finished -- fine for a quick search, but a slow one (confirmed in production: a
+  ~20k-post search) tied up one of civetweb's 4 worker threads for its entire duration.
+  With only 4 threads total, a handful of concurrent/queued sync requests (another device,
+  a retry, a scheduler tick landing mid-sync) could exhaust the whole pool, leaving *zero*
+  threads to answer even a plain `GET /searches` -- reproducing a milder version of the
+  original M19 symptom from a different mechanism (thread-pool exhaustion rather than a
+  shared mutex). Separately, the app's only "check for updates" progress indicator was a
+  client-local counter (`SearchesScreen`'s old `_syncAllProgress`), invisible to any other
+  device and wiped by an app restart; and the "default sync interval" a new search's
+  interval field pre-filled from lived only in the app's own `SharedPreferences`
+  (`SyncSettingsStore`), with no way for an existing search to track a *changed* default
+  later, since the scheduler only ever reads each search's own frozen `interval_hours`.
+  - **`sync_worker` (`server/src/sync_worker.c/.h`, new)**: a dedicated background thread
+    (same pattern as `scheduler.c`) owning a small FIFO job queue. `POST /searches/{id}/sync`
+    (existence-checked synchronously first, so an unknown id still gets an immediate 404),
+    `POST /sync` (due searches only), and the new `POST /sync/all` (forces every search,
+    replacing the old client-driven loop) all just enqueue a job and return 202 immediately
+    -- the real `bunny_core_sync_search`/`sync_due_searches` call happens entirely on the
+    worker's own thread, never occupying a civetweb worker thread for its duration.
+    `POST /queue/process` deliberately stays synchronous (see its own code comment):
+    `post_detail_screen.dart`'s favorite/vote actions drain it right after enqueueing
+    specifically for the real, immediate `actionsFailed` count, and a typical pass is 1-2
+    actions from one user action, not an unbounded search sync.
+  - **`sync_status` (`server/src/sync_status.c/.h`, new)**: a small mutex-guarded struct
+    (active/source/search label/position/total), updated by both `sync_worker` and the
+    scheduler (coarsely, for its own automatic runs) and read via the new `GET /sync/status`
+    -- any device polling this sees the exact same live progress, regardless of which
+    device (or the scheduler) triggered the sync.
+  - **Server-side default interval**: new `server_settings` table (single row, seeded to
+    24) plus `searches.uses_default_interval` (migration 10, auto-converting any existing
+    search currently at `interval_hours = 24` -- both the column's own DB-level default and
+    the app's old hardcoded default, so a search sitting at exactly 24 almost certainly got
+    there via "default"). `bunny_core_get/set_default_sync_interval_hours` and
+    `search_is_due()` resolving the live default for flagged searches replace the
+    client-only `SyncSettingsStore`, which is now deleted entirely -- `CreateSearchScreen`/
+    `EditSearchScreen` gained a "use default interval" toggle, and `SettingsScreen`'s
+    existing "default sync interval" field now calls the repository instead of
+    `shared_preferences`, so the setting is finally real and shared across devices.
+  - **Flutter**: `BunnyRepository.syncSearch`/`syncDueSearches` are now `Future<void>`
+    (fire-and-forget for the server; the standalone/FFI implementation still runs the whole
+    sync before resolving, since it has no civetweb thread pool to protect), plus new
+    `syncAllSearches()` and `getSyncStatus()`. `SearchesScreen` polls `getSyncStatus()` every
+    2s (and once right after triggering a sync) instead of driving the sync loop itself;
+    the per-row "sync now" spinner polls the same status until it goes inactive, since the
+    fire-and-forget POST now returns almost instantly on its own.
+  - **Known limitation**: `GET /sync/status` is global, not scoped to a specific search --
+    a single-row "sync now" spinner waiting for "nothing is active" is a reasonable but
+    imperfect proxy for "my enqueued sync specifically finished" if something unrelated is
+    also mid-sync at the same moment (harmless either way, since `bunny_core`'s own
+    `sync_mutex` still serializes the real work; the spinner just might clear a touch early
+    or late).
+
 - [ ] **M12 — Cross-platform polish**
   Responsive desktop/mobile layout, consistent theming pass, Windows app build, packaging.
   - [x] **M12.1 — Android client build.** `fvm flutter build apk` now succeeds end-to-end

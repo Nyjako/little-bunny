@@ -43,7 +43,11 @@ typedef struct
  * link collision with libs/db's own identically-shaped bunny_db_post_array). */
 GOBLIN_DYN_ARRAY_DECL(bunny_core_post, bunny_db_post_t)
 
-static bool search_is_due(const bunny_db_search_t *search)
+/* default_interval_hours is only consulted when search->uses_default_interval
+ * is set -- resolved once per bunny_core_sync_due_searches call (not once per
+ * search) and passed down, since it's the same single row read regardless of
+ * how many searches are being checked. */
+static bool search_is_due(const bunny_db_search_t *search, int default_interval_hours)
 {
     if (!search->last_run_at) {
         return true;
@@ -57,7 +61,8 @@ static bool search_is_due(const bunny_db_search_t *search)
 
     time_t last_run = timegm(&tm_last);
     double hours_elapsed = difftime(time(NULL), last_run) / 3600.0;
-    return hours_elapsed >= search->interval_hours;
+    int effective_interval_hours = search->uses_default_interval ? default_interval_hours : search->interval_hours;
+    return hours_elapsed >= effective_interval_hours;
 }
 
 static char *join_string_list(const e621_string_list_t *list)
@@ -803,6 +808,8 @@ bunny_core_result_t bunny_core_sync_due_searches(bunny_core_t *core, bunny_core_
     bunny_db_search_list_t searches;
     bunny_core_db_lock(core);
     bunny_db_result_t list_result = bunny_db_search_list(core->db, &searches);
+    int default_interval_hours = 24;
+    bunny_db_settings_get_default_interval_hours(core->db, &default_interval_hours);
     bunny_core_db_unlock(core);
     if (list_result != BUNNY_DB_OK) {
         return bunny_core_map_db_result(list_result);
@@ -811,7 +818,7 @@ bunny_core_result_t bunny_core_sync_due_searches(bunny_core_t *core, bunny_core_
     for (size_t i = 0; i < searches.count; i++) {
         const bunny_db_search_t *search = &searches.items[i]; /* searches is this call's own heap snapshot, safe to read lock-free across the sync call below */
         stats.searches_checked++;
-        if (!search_is_due(search)) {
+        if (!search_is_due(search, default_interval_hours)) {
             continue;
         }
 

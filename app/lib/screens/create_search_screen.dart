@@ -5,7 +5,6 @@ import 'package:flutter/material.dart';
 import '../l10n/app_localizations.dart';
 import '../repository/bunny_models.dart';
 import '../repository/bunny_repository.dart';
-import '../settings/sync_settings_store.dart';
 import '../util/tag_query.dart';
 
 /// Creates a new saved search. The query field's tag-autocomplete
@@ -16,12 +15,13 @@ import '../util/tag_query.dart';
 /// stripping/reattaching a leading `-`/`~`/`(` so negated or grouped tags
 /// still autocomplete correctly. The label field mirrors the query until the
 /// user types into it directly (classic slug-follows-title UX), and the
-/// interval field pre-fills from [syncSettingsStore]'s stored default rather
-/// than a hardcoded value. Pops `true` on success so [SearchesScreen] knows
-/// to refresh.
+/// interval field pre-fills from the server-wide default (M20 --
+/// `repository.getDefaultSyncIntervalHours`) rather than a hardcoded value;
+/// "use default interval" (also M20) keeps it tracking that default live
+/// instead of freezing it at creation time. Pops `true` on success so
+/// [SearchesScreen] knows to refresh.
 class CreateSearchScreen extends StatefulWidget {
   final BunnyRepository repository;
-  final SyncSettingsStore syncSettingsStore;
 
   /// Pre-fills the site/query fields -- used by [TagBrowseScreen]'s "add to
   /// searches" action (M8.5.10). `null` (the default) preserves the blank
@@ -35,7 +35,7 @@ class CreateSearchScreen extends StatefulWidget {
   /// behavior below never overwrites it.
   final String? initialLabel;
 
-  const CreateSearchScreen({super.key, required this.repository, required this.syncSettingsStore, this.initialSite, this.initialQuery, this.initialLabel});
+  const CreateSearchScreen({super.key, required this.repository, this.initialSite, this.initialQuery, this.initialLabel});
 
   @override
   State<CreateSearchScreen> createState() => _CreateSearchScreenState();
@@ -55,6 +55,7 @@ class _CreateSearchScreenState extends State<CreateSearchScreen> {
   bool _mirroringLabel = false;
   bool _autoFavorite = false;
   bool _autoUpvote = false;
+  bool _usesDefaultInterval = false;
 
   @override
   void initState() {
@@ -76,7 +77,7 @@ class _CreateSearchScreenState extends State<CreateSearchScreen> {
   }
 
   Future<void> _loadDefaultInterval() async {
-    final hours = await widget.syncSettingsStore.loadDefaultIntervalHours();
+    final hours = await widget.repository.getDefaultSyncIntervalHours();
     if (mounted) {
       _intervalController.text = '$hours';
     }
@@ -190,6 +191,7 @@ class _CreateSearchScreenState extends State<CreateSearchScreen> {
       intervalHours: int.parse(_intervalController.text),
       autoFavorite: _autoFavorite,
       autoUpvote: _site == BunnySite.e621 && _autoUpvote,
+      usesDefaultInterval: _usesDefaultInterval,
     );
 
     if (!mounted) {
@@ -221,10 +223,16 @@ class _CreateSearchScreenState extends State<CreateSearchScreen> {
                 Wrap(spacing: 8, children: _suggestions.map((stat) => ActionChip(label: Text('${stat.name} (${stat.count})'), onPressed: () => _applySuggestion(stat.name))).toList()),
               TextFormField(
                 controller: _intervalController,
-                enabled: !_submitting,
+                enabled: !_submitting && !_usesDefaultInterval,
                 keyboardType: TextInputType.number,
                 decoration: InputDecoration(labelText: l10n.createSearchIntervalLabel),
-                validator: (value) => (int.tryParse(value ?? '') == null) ? l10n.commonRequired : null,
+                validator: (value) => _usesDefaultInterval ? null : (int.tryParse(value ?? '') == null) ? l10n.commonRequired : null,
+              ),
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                title: Text(l10n.createSearchUsesDefaultIntervalLabel),
+                value: _usesDefaultInterval,
+                onChanged: _submitting ? null : (value) => setState(() => _usesDefaultInterval = value),
               ),
               SwitchListTile(
                 contentPadding: EdgeInsets.zero,

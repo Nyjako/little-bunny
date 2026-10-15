@@ -5,7 +5,6 @@ import 'package:little_bunny/screens/post_detail_screen.dart';
 import 'package:little_bunny/screens/tag_browse_screen.dart';
 import 'package:little_bunny/settings/display_settings_store.dart';
 import 'package:little_bunny/settings/download_settings_store.dart';
-import 'package:little_bunny/settings/sync_settings_store.dart';
 import 'package:little_bunny/widgets/post_grid_tile.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -38,8 +37,7 @@ void main() {
       site: BunnySite.e621,
       query: 'someartist',
       repository: repository,
-      displaySettingsStore: const DisplaySettingsStore(),
-      syncSettingsStore: const SyncSettingsStore(), downloadSettingsStore: const DownloadSettingsStore(),
+      displaySettingsStore: const DisplaySettingsStore(), downloadSettingsStore: const DownloadSettingsStore(),
     ),
   );
 
@@ -151,7 +149,6 @@ void main() {
         query: '',
         repository: repository,
         displaySettingsStore: const DisplaySettingsStore(),
-        syncSettingsStore: const SyncSettingsStore(),
         downloadSettingsStore: const DownloadSettingsStore(),
         customFetch: customFetch,
         title: title,

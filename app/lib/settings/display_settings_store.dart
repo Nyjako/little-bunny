@@ -14,7 +14,7 @@ enum SearchSortOrder { mostUnseen, label, recentlyCreated, lastViewed }
 
 /// Persists the grid's preview image quality and column count, and the
 /// searches list's sort order (`shared_preferences`, same shape as
-/// [ThemeSettingsStore]/[SyncSettingsStore] in this directory) -- defaults to
+/// [ThemeSettingsStore] in this directory) -- defaults to
 /// [PreviewQuality.thumbnail], 3 columns, and [SearchSortOrder.mostUnseen]
 /// when nothing has been chosen yet, matching [PostGridScreen]'s pre-M8.5.6
 /// hardcoded behavior.

@@ -10,7 +10,6 @@ import '../settings/app_lock_service.dart';
 import '../settings/display_settings_store.dart';
 import '../settings/download_settings_store.dart';
 import '../settings/repository_settings_store.dart';
-import '../settings/sync_settings_store.dart';
 import '../settings/theme_settings_store.dart';
 import '../util/responsive.dart';
 import 'accounts_screen.dart';
@@ -27,7 +26,6 @@ import 'tag_stats_screen.dart';
 class SearchesScreen extends StatefulWidget {
   final AppLockService lockService;
   final ThemeSettingsStore themeSettingsStore;
-  final SyncSettingsStore syncSettingsStore;
   final DisplaySettingsStore displaySettingsStore;
   final DownloadSettingsStore downloadSettingsStore;
   final RepositorySettingsStore settingsStore;
@@ -38,7 +36,6 @@ class SearchesScreen extends StatefulWidget {
     super.key,
     required this.lockService,
     required this.themeSettingsStore,
-    required this.syncSettingsStore,
     required this.displaySettingsStore,
     required this.downloadSettingsStore,
     required this.settingsStore,
@@ -67,6 +64,8 @@ class _SearchesScreenState extends State<SearchesScreen> with SingleTickerProvid
     super.initState();
     _tabController = TabController(length: 2, vsync: this)..addListener(() => setState(() {}));
     _loadSortOrder();
+    _pollSyncStatusOnce();
+    _syncStatusPollTimer = Timer.periodic(const Duration(seconds: 2), (_) => _pollSyncStatusOnce());
   }
 
   Future<void> _loadSortOrder() async {
@@ -113,6 +112,7 @@ class _SearchesScreenState extends State<SearchesScreen> with SingleTickerProvid
 
   @override
   void dispose() {
+    _syncStatusPollTimer?.cancel();
     _tabController.dispose();
     super.dispose();
   }
@@ -123,49 +123,62 @@ class _SearchesScreenState extends State<SearchesScreen> with SingleTickerProvid
     });
   }
 
-  /// Non-null only while [_checkForUpdates]'s loop is running -- same
-  /// `(done, total)` shape `PostGridScreen._massDownloadProgress` uses
-  /// (M9.5), swapped into the app bar title the same way that screen swaps
-  /// it into its own title.
-  (int, int)? _syncAllProgress;
+  /// Polled every 2s (and once immediately after [_checkForUpdates]
+  /// triggers a sync) so the app bar reflects live progress of whatever's
+  /// currently syncing server-side -- the scheduler, this device's own
+  /// "check for updates", a single-row sync, or another device's, all look
+  /// the same from here (M20). Replaces the old purely-local
+  /// `_syncAllProgress` counter, which was invisible to every device except
+  /// the one that started the sync and vanished on app restart.
+  BunnySyncStatus _syncStatus = BunnySyncStatus.inactive;
+  Timer? _syncStatusPollTimer;
 
-  /// Forces every saved search to sync right now (M13.2), ignoring each
-  /// search's own due-interval -- unlike the scheduled/manual batch sync
-  /// (`syncDueSearches`), this syncs one search at a time so progress can
-  /// be shown, and keeps going past a single search's failure (network
-  /// error, etc.) rather than aborting the whole run. Refreshes the list
-  /// after every search (not just once at the end) so unseen-count badges
-  /// update live and nothing is lost if the run is interrupted partway
-  /// through (M14.3).
-  Future<void> _checkForUpdates() async {
-    final searches = await _repository!.listSearches();
-    if (searches.isEmpty) {
+  Future<void> _pollSyncStatusOnce() async {
+    if (_repository == null) {
       return;
     }
-    setState(() => _syncAllProgress = (0, searches.length));
-    for (var i = 0; i < searches.length; i++) {
-      try {
-        await _repository!.syncSearch(searches[i].id);
-      } catch (_) {
-        // Leave it and move on -- same tolerance the scheduled sync already
-        // has for a single search failing.
-      }
+    try {
+      final status = await _repository!.getSyncStatus();
       if (!mounted) {
         return;
       }
+      final wasActive = _syncStatus.active;
       setState(() {
-        _syncAllProgress = (i + 1, searches.length);
-        _searchesFuture = _repository!.listSearches();
+        _syncStatus = status;
+        if (status.active) {
+          // Keep post/unseen counts climbing live while a sync runs,
+          // instead of only refreshing once at the very end.
+          _searchesFuture = _repository!.listSearches();
+        }
       });
+      if (wasActive && !status.active) {
+        _refresh();
+      }
+    } catch (_) {
+      // Transient network hiccup -- the next periodic tick will retry.
     }
-    if (!mounted) {
-      return;
+  }
+
+  /// Forces every saved search to sync right now (M13.2), ignoring each
+  /// search's own due-interval -- a single call to the server-side sync
+  /// worker (M20), which runs the whole batch in the background and keeps
+  /// going past a single search's failure, same tolerance as before.
+  /// Returns as soon as the server accepts the job (fire-and-forget for the
+  /// server implementation; the standalone/FFI implementation runs the
+  /// whole loop itself before resolving, since it has no server thread
+  /// pool to protect) -- [_syncStatusPollTimer] is what actually shows
+  /// progress.
+  Future<void> _checkForUpdates() async {
+    try {
+      await _repository!.syncAllSearches();
+    } catch (_) {
+      // Surfaced via the polled status / next list refresh.
     }
-    setState(() => _syncAllProgress = null);
+    await _pollSyncStatusOnce();
   }
 
   Future<void> _createSearch() async {
-    final created = await Navigator.push<bool>(context, MaterialPageRoute(builder: (context) => CreateSearchScreen(repository: _repository!, syncSettingsStore: widget.syncSettingsStore)));
+    final created = await Navigator.push<bool>(context, MaterialPageRoute(builder: (context) => CreateSearchScreen(repository: _repository!)));
     if (created == true) {
       _refresh();
     }
@@ -225,6 +238,7 @@ class _SearchesScreenState extends State<SearchesScreen> with SingleTickerProvid
     setState(() => _syncingSearchIds.add(search.id));
     try {
       await _repository!.syncSearch(search.id);
+      await _waitForSyncToFinish();
     } catch (_) {
       // Same tolerance as "check for updates" -- leave it, the user can
       // retry the single row.
@@ -236,6 +250,22 @@ class _SearchesScreenState extends State<SearchesScreen> with SingleTickerProvid
     _refresh();
   }
 
+  /// [syncSearch] returns as soon as the server *accepts* the job (M20), not
+  /// when it finishes -- without this, the row's spinner would vanish
+  /// almost instantly instead of for roughly the sync's real duration.
+  /// bunny_core serializes every site-facing sync against the others, so
+  /// "nothing is active" is a reasonable (if not perfectly scoped to just
+  /// this one row) stand-in for "whatever was just enqueued is done".
+  Future<void> _waitForSyncToFinish() async {
+    while (mounted) {
+      final status = await _repository!.getSyncStatus();
+      if (!status.active) {
+        return;
+      }
+      await Future.delayed(const Duration(milliseconds: 500));
+    }
+  }
+
   /// Records the open (fire-and-forget -- shouldn't delay navigation) for the
   /// "last viewed" sort order, then awaits the post grid so returning from it
   /// re-sorts the list and the reordering is actually visible (M15).
@@ -245,7 +275,7 @@ class _SearchesScreenState extends State<SearchesScreen> with SingleTickerProvid
       context,
       MaterialPageRoute(
         builder: (context) =>
-            PostGridScreen(search: search, repository: _repository!, displaySettingsStore: widget.displaySettingsStore, syncSettingsStore: widget.syncSettingsStore, downloadSettingsStore: widget.downloadSettingsStore),
+            PostGridScreen(search: search, repository: _repository!, displaySettingsStore: widget.displaySettingsStore, downloadSettingsStore: widget.downloadSettingsStore),
       ),
     );
     _refresh();
@@ -305,12 +335,18 @@ class _SearchesScreenState extends State<SearchesScreen> with SingleTickerProvid
     return Scaffold(
       appBar: AppBar(
         toolbarHeight: wide ? compactToolbarHeight : null,
-        title: Text(switch (_syncAllProgress) { (final done, final total) => l10n.searchesSyncAllProgress(done, total), null => l10n.searchesScreenTitle }),
+        title: Text(
+          !_syncStatus.active
+              ? l10n.searchesScreenTitle
+              : _syncStatus.total > 0
+              ? l10n.searchesSyncAllProgress(_syncStatus.position, _syncStatus.total)
+              : l10n.searchesSyncInProgress,
+        ),
         actions: [
           IconButton(
-            icon: _syncAllProgress != null ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.sync),
+            icon: _syncStatus.active ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.sync),
             tooltip: l10n.searchesCheckForUpdatesTooltip,
-            onPressed: _syncAllProgress != null ? null : _checkForUpdates,
+            onPressed: _syncStatus.active ? null : _checkForUpdates,
           ),
           IconButton(
             icon: const Icon(Icons.person_outline),
@@ -321,7 +357,6 @@ class _SearchesScreenState extends State<SearchesScreen> with SingleTickerProvid
                 builder: (context) => AccountsScreen(
                   repository: _repository!,
                   displaySettingsStore: widget.displaySettingsStore,
-                  syncSettingsStore: widget.syncSettingsStore,
                   downloadSettingsStore: widget.downloadSettingsStore,
                 ),
               ),
@@ -336,7 +371,6 @@ class _SearchesScreenState extends State<SearchesScreen> with SingleTickerProvid
                 builder: (context) => TagStatsScreen(
                   repository: _repository!,
                   displaySettingsStore: widget.displaySettingsStore,
-                  syncSettingsStore: widget.syncSettingsStore,
                   downloadSettingsStore: widget.downloadSettingsStore,
                 ),
               ),
@@ -353,7 +387,6 @@ class _SearchesScreenState extends State<SearchesScreen> with SingleTickerProvid
                     repository: _repository!,
                     themeSettingsStore: widget.themeSettingsStore,
                     lockService: widget.lockService,
-                    syncSettingsStore: widget.syncSettingsStore,
                     displaySettingsStore: widget.displaySettingsStore,
                     downloadSettingsStore: widget.downloadSettingsStore,
                     settingsStore: widget.settingsStore,

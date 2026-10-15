@@ -9,7 +9,6 @@ import 'package:little_bunny/settings/app_lock_service.dart';
 import 'package:little_bunny/settings/display_settings_store.dart';
 import 'package:little_bunny/settings/download_settings_store.dart';
 import 'package:little_bunny/settings/repository_settings_store.dart';
-import 'package:little_bunny/settings/sync_settings_store.dart';
 import 'package:little_bunny/settings/theme_settings_store.dart';
 import 'package:path_provider_platform_interface/path_provider_platform_interface.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -25,7 +24,6 @@ Widget _wrap(FakeBunnyRepository repository) => wrapWithLocalization(
     child: SearchesScreen(
       lockService: AppLockService(FakeSecretStore()),
       themeSettingsStore: const ThemeSettingsStore(),
-      syncSettingsStore: const SyncSettingsStore(),
       displaySettingsStore: const DisplaySettingsStore(),
       downloadSettingsStore: const DownloadSettingsStore(),
       settingsStore: RepositorySettingsStore(FakeSecretStore()),
@@ -344,7 +342,7 @@ void main() {
     expect(repository.syncSearchCalls, [id1, id2]);
   });
 
-  testWidgets('"check for updates" refreshes unseen badges after each search, not only at the end (M14.3)', (WidgetTester tester) async {
+  testWidgets('"check for updates" refreshes unseen badges from periodic status polling, not only at the end (M14.3, M20)', (WidgetTester tester) async {
     final repository = FakeBunnyRepository();
     final id1 = await repository.createSearch(BunnySite.e621, 'Foxes', 'fox');
     final id2 = await repository.createSearch(BunnySite.e621, 'Wolves', 'wolf');
@@ -369,12 +367,17 @@ void main() {
     expect(find.text('1'), findsNothing);
 
     gate1.complete();
-    await tester.pump();
+    // "check for updates" calls syncAllSearches() as a single call that
+    // doesn't resolve until the whole batch (gate1 AND gate2) finishes --
+    // progress is instead surfaced by SearchesScreen's independent 2s
+    // getSyncStatus() poll timer (M20), which runs concurrently and already
+    // sees postsBySearchId updated for Foxes even though syncAllSearches()
+    // itself is still blocked on gate2.
+    await tester.pump(const Duration(seconds: 2));
     await tester.pump();
 
     // Foxes' sync resolved and found a post -- its badge should already be
     // visible even though Wolves' sync (gated on gate2) hasn't resolved yet.
-    // With the old end-of-loop-only refresh this would still show nothing.
     expect(find.text('1'), findsOneWidget);
 
     gate2.complete();

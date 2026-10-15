@@ -429,20 +429,16 @@ static int posts_handler(struct mg_connection *conn, void *cbdata)
     return server_json_respond_error(conn, BUNNY_CORE_ERR_NOT_FOUND);
 }
 
+/* Enqueues onto ctx->sync_worker instead of calling bunny_core_sync_due_
+ * searches directly -- see the identical note on handle_sync_search in
+ * routes_searches.c. Progress/results are read via GET /sync/status. */
 static int handle_sync(struct mg_connection *conn, server_context_t *ctx)
 {
-    bunny_core_sync_stats_t stats;
-    bunny_core_result_t result = bunny_core_sync_due_searches(ctx->core, &stats);
-
-    if (result != BUNNY_CORE_OK) {
-        return server_json_respond_error(conn, result);
-    }
+    bool enqueued = sync_worker_enqueue_due(ctx->sync_worker);
 
     cJSON *response = cJSON_CreateObject();
-    cJSON_AddNumberToObject(response, "searches_checked", stats.searches_checked);
-    cJSON_AddNumberToObject(response, "searches_synced", stats.searches_synced);
-    cJSON_AddNumberToObject(response, "posts_upserted", stats.posts_upserted);
-    int status = server_json_respond(conn, 200, response);
+    cJSON_AddBoolToObject(response, "enqueued", enqueued);
+    int status = server_json_respond(conn, enqueued ? 202 : 409, response);
     cJSON_Delete(response);
     return status;
 }
@@ -460,6 +456,15 @@ static int sync_handler(struct mg_connection *conn, void *cbdata)
     return handle_sync(conn, ctx);
 }
 
+/* Deliberately NOT routed through sync_worker, unlike handle_sync/handle_
+ * sync_search above: post_detail_screen.dart's favorite/vote actions drain
+ * the queue synchronously right after enqueueing specifically to show
+ * immediate success/failure feedback from the real actionsFailed count, and
+ * breaking that contract would be a worse regression than the bounded
+ * worker-thread risk this carries -- a typical pass is 1-2 actions from a
+ * single user-driven favorite/vote, not an unbounded search sync. A mass-
+ * favorite/vote batch (M9.2) is the one case this could run long, but that
+ * was already true before this change and wasn't part of what was reported. */
 static int handle_queue_process(struct mg_connection *conn, server_context_t *ctx)
 {
     bunny_core_queue_stats_t stats;

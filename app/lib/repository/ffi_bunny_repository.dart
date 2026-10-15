@@ -25,6 +25,7 @@ BunnySearch _searchFromMap(Map<String, Object?> m) => BunnySearch(
   autoUpvote: m['autoUpvote'] as bool,
   pinned: m['pinned'] as bool,
   lastViewedAt: m['lastViewedAt'] as String?,
+  usesDefaultInterval: m['usesDefaultInterval'] as bool,
 );
 
 BunnyPost _postFromMap(Map<String, Object?> m) => BunnyPost(
@@ -78,12 +79,6 @@ BunnyDownload _downloadFromMap(Map<String, Object?> m) => BunnyDownload(
   downloadedAt: m['downloadedAt'] as String?,
 );
 
-BunnySyncStats _syncStatsFromMap(Map<String, Object?> m) => BunnySyncStats(
-  searchesChecked: m['searchesChecked'] as int,
-  searchesSynced: m['searchesSynced'] as int,
-  postsUpserted: m['postsUpserted'] as int,
-);
-
 BunnyQueueStats _queueStatsFromMap(Map<String, Object?> m) => BunnyQueueStats(
   actionsProcessed: m['actionsProcessed'] as int,
   actionsSucceeded: m['actionsSucceeded'] as int,
@@ -105,6 +100,13 @@ Future<T> _wrapped<T>(Future<T> Function() call) async {
 /// so callers must [close] it when done.
 class FfiBunnyRepository implements BunnyRepository {
   final BunnyCoreNative _native;
+
+  /// Standalone mode has no server/other devices to share sync progress
+  /// with, but [syncAllSearches] still runs as a loop someone might want to
+  /// watch -- tracked here purely in Dart so [getSyncStatus] can drive the
+  /// same generic progress UI as [HttpBunnyRepository] without special
+  /// casing (M20).
+  BunnySyncStatus _syncStatus = BunnySyncStatus.inactive;
 
   FfiBunnyRepository._(this._native);
 
@@ -136,8 +138,27 @@ class FfiBunnyRepository implements BunnyRepository {
   Future<void> deleteAccount(BunnySite site) => _wrapped(() => _native.deleteAccount(site.toWireString()));
 
   @override
-  Future<int> createSearch(BunnySite site, String label, String query, {int intervalHours = 24, bool autoFavorite = false, int autoFavoriteStars = 1, bool autoUpvote = false}) =>
-      _wrapped(() => _native.createSearch(site.toWireString(), label, query, intervalHours, autoFavorite: autoFavorite, autoFavoriteStars: autoFavoriteStars, autoUpvote: autoUpvote));
+  Future<int> createSearch(
+    BunnySite site,
+    String label,
+    String query, {
+    int intervalHours = 24,
+    bool autoFavorite = false,
+    int autoFavoriteStars = 1,
+    bool autoUpvote = false,
+    bool usesDefaultInterval = false,
+  }) => _wrapped(
+    () => _native.createSearch(
+      site.toWireString(),
+      label,
+      query,
+      intervalHours,
+      autoFavorite: autoFavorite,
+      autoFavoriteStars: autoFavoriteStars,
+      autoUpvote: autoUpvote,
+      usesDefaultInterval: usesDefaultInterval,
+    ),
+  );
 
   @override
   Future<List<BunnySearch>> listSearches() async {
@@ -155,8 +176,33 @@ class FfiBunnyRepository implements BunnyRepository {
   Future<void> touchSearchViewed(int searchId) => _wrapped(() => _native.touchSearchViewed(searchId));
 
   @override
-  Future<void> updateSearch(int searchId, String label, String query, {int intervalHours = 24, bool autoFavorite = false, int autoFavoriteStars = 1, bool autoUpvote = false}) =>
-      _wrapped(() => _native.updateSearch(searchId, label, query, intervalHours, autoFavorite: autoFavorite, autoFavoriteStars: autoFavoriteStars, autoUpvote: autoUpvote));
+  Future<void> updateSearch(
+    int searchId,
+    String label,
+    String query, {
+    int intervalHours = 24,
+    bool autoFavorite = false,
+    int autoFavoriteStars = 1,
+    bool autoUpvote = false,
+    bool usesDefaultInterval = false,
+  }) => _wrapped(
+    () => _native.updateSearch(
+      searchId,
+      label,
+      query,
+      intervalHours,
+      autoFavorite: autoFavorite,
+      autoFavoriteStars: autoFavoriteStars,
+      autoUpvote: autoUpvote,
+      usesDefaultInterval: usesDefaultInterval,
+    ),
+  );
+
+  @override
+  Future<int> getDefaultSyncIntervalHours() => _wrapped(() => _native.getDefaultSyncIntervalHours());
+
+  @override
+  Future<void> setDefaultSyncIntervalHours(int hours) => _wrapped(() => _native.setDefaultSyncIntervalHours(hours));
 
   @override
   Future<List<BunnyPost>> listSearchPosts(int searchId, {bool unseenOnly = false}) async {
@@ -258,16 +304,34 @@ class FfiBunnyRepository implements BunnyRepository {
   }
 
   @override
-  Future<BunnySyncStats> syncDueSearches() async {
-    final map = await _wrapped(() => _native.syncDueSearches());
-    return _syncStatsFromMap(map);
+  Future<void> syncDueSearches() => _wrapped(() => _native.syncDueSearches());
+
+  @override
+  Future<void> syncSearch(int searchId) => _wrapped(() => _native.syncSearch(searchId));
+
+  /// Unlike [HttpBunnyRepository] (which enqueues one job server-side and
+  /// returns immediately), this runs the loop itself and only resolves once
+  /// every search has been synced -- standalone mode already runs every
+  /// native call on its own isolate (see [BunnyCoreNative]'s doc comment),
+  /// so there's no UI-thread-blocking or worker-thread-starvation concern
+  /// here to avoid by deferring the work. [_syncStatus] is still updated
+  /// throughout so [getSyncStatus] can drive the same progress UI.
+  @override
+  Future<void> syncAllSearches() async {
+    final searches = await listSearches();
+    _syncStatus = BunnySyncStatus(active: true, source: 'manual', position: 0, total: searches.length);
+    try {
+      for (var i = 0; i < searches.length; i++) {
+        _syncStatus = BunnySyncStatus(active: true, source: 'manual', searchLabel: searches[i].label, position: i + 1, total: searches.length);
+        await syncSearch(searches[i].id);
+      }
+    } finally {
+      _syncStatus = BunnySyncStatus.inactive;
+    }
   }
 
   @override
-  Future<BunnySyncStats> syncSearch(int searchId) async {
-    final map = await _wrapped(() => _native.syncSearch(searchId));
-    return _syncStatsFromMap(map);
-  }
+  Future<BunnySyncStatus> getSyncStatus() async => _syncStatus;
 
   @override
   Future<void> queueFavoriteAdd(int postId, {int? stars}) => _wrapped(() => _native.queueFavoriteAdd(postId, stars ?? -1));
