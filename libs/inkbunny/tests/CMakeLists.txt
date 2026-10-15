@@ -1,6 +1,9 @@
 add_executable(bunny_inkbunny_test_types test_types.c)
 target_include_directories(bunny_inkbunny_test_types PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../src)
-target_link_libraries(bunny_inkbunny_test_types PRIVATE bunny_inkbunny unity::framework)
+# internal.h pulls in <curl/curl.h> directly -- bunny_inkbunny links CURL::
+# libcurl PRIVATE (correctly, since curl never appears in its public API),
+# so that include path doesn't propagate here and must be linked again.
+target_link_libraries(bunny_inkbunny_test_types PRIVATE bunny_inkbunny unity::framework CURL::libcurl)
 target_compile_definitions(bunny_inkbunny_test_types PRIVATE FIXTURES_DIR="${CMAKE_CURRENT_SOURCE_DIR}/fixtures")
 add_test(NAME bunny_inkbunny_test_types COMMAND bunny_inkbunny_test_types)
 
