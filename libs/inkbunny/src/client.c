@@ -4,33 +4,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <time.h>
 
 #include "internal.h"
-
-static void rate_limit_wait(inkbunny_client_t *client)
-{
-    if (client->min_request_interval_sec <= 0) {
-        return;
-    }
-
-    struct timespec now;
-    clock_gettime(CLOCK_MONOTONIC, &now);
-
-    if (client->has_last_request_time) {
-        double elapsed = (double)(now.tv_sec - client->last_request_time.tv_sec) + (double)(now.tv_nsec - client->last_request_time.tv_nsec) / 1e9;
-        double remaining = client->min_request_interval_sec - elapsed;
-        if (remaining > 0) {
-            struct timespec sleep_time;
-            sleep_time.tv_sec = (time_t)remaining;
-            sleep_time.tv_nsec = (long)((remaining - (double)sleep_time.tv_sec) * 1e9);
-            nanosleep(&sleep_time, NULL);
-        }
-    }
-
-    clock_gettime(CLOCK_MONOTONIC, &client->last_request_time);
-    client->has_last_request_time = true;
-}
 
 /* Inkbunny signals API-level errors with HTTP 200 + a JSON body containing
  * "error_code"/"error_message" (e.g. bad login, expired/invalid sid), not via
@@ -44,7 +19,7 @@ static inkbunny_result_t perform_request(inkbunny_client_t *client, const char *
         return INKBUNNY_ERR_INVALID_ARG;
     }
 
-    rate_limit_wait(client);
+    bunny_rate_limiter_wait(&client->rate_limiter);
 
     char url[2048];
     if (query_or_null) {
@@ -116,9 +91,8 @@ inkbunny_client_t *inkbunny_client_create(const inkbunny_config_t *config)
 
     const char *base_url = (config && config->base_url) ? config->base_url : "https://inkbunny.net";
     client->base_url = goblin_copy_cstr(base_url);
-    client->min_request_interval_sec = (config && config->min_request_interval_sec > 0) ? config->min_request_interval_sec : 0.5;
+    bunny_rate_limiter_init(&client->rate_limiter, (config && config->min_request_interval_sec > 0) ? config->min_request_interval_sec : 0.5);
     client->transport = (config && config->transport) ? *config->transport : bunny_http_curl_transport();
-    client->has_last_request_time = false;
 
     if (!client->base_url) {
         inkbunny_client_destroy(client);

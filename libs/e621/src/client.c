@@ -1,5 +1,6 @@
 #include "e621/client.h"
 
+#include <bunny_common/rate_limit.h>
 #include <goblin/cstr.h>
 
 #include <ctype.h>
@@ -7,7 +8,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <time.h>
 
 #include "internal.h"
 
@@ -17,10 +17,8 @@ struct e621_client
     char *user_agent;
     char *username;
     char *api_key;
-    double min_request_interval_sec;
     bunny_http_transport_t transport;
-    struct timespec last_request_time;
-    bool has_last_request_time;
+    bunny_rate_limiter_t rate_limiter;
 };
 
 static char *url_encode(const char *value)
@@ -104,30 +102,6 @@ static char *build_basic_auth_header(const char *username, const char *api_key)
     return header;
 }
 
-static void rate_limit_wait(e621_client_t *client)
-{
-    if (client->min_request_interval_sec <= 0) {
-        return;
-    }
-
-    struct timespec now;
-    clock_gettime(CLOCK_MONOTONIC, &now);
-
-    if (client->has_last_request_time) {
-        double elapsed = (double)(now.tv_sec - client->last_request_time.tv_sec) + (double)(now.tv_nsec - client->last_request_time.tv_nsec) / 1e9;
-        double remaining = client->min_request_interval_sec - elapsed;
-        if (remaining > 0) {
-            struct timespec sleep_time;
-            sleep_time.tv_sec = (time_t)remaining;
-            sleep_time.tv_nsec = (long)((remaining - (double)sleep_time.tv_sec) * 1e9);
-            nanosleep(&sleep_time, NULL);
-        }
-    }
-
-    clock_gettime(CLOCK_MONOTONIC, &client->last_request_time);
-    client->has_last_request_time = true;
-}
-
 static e621_result_t status_to_result(long status)
 {
     if (status >= 200 && status < 300) {
@@ -157,7 +131,7 @@ static e621_result_t perform_request(e621_client_t *client, bunny_http_method_t 
         return E621_ERR_INVALID_ARG;
     }
 
-    rate_limit_wait(client);
+    bunny_rate_limiter_wait(&client->rate_limiter);
 
     char url[2048];
     if (query_or_null) {
@@ -243,9 +217,8 @@ e621_client_t *e621_client_create(const e621_config_t *config)
     client->user_agent = goblin_copy_cstr(config->user_agent);
     client->username = config->username ? goblin_copy_cstr(config->username) : NULL;
     client->api_key = config->api_key ? goblin_copy_cstr(config->api_key) : NULL;
-    client->min_request_interval_sec = config->min_request_interval_sec > 0 ? config->min_request_interval_sec : 0.5;
+    bunny_rate_limiter_init(&client->rate_limiter, config->min_request_interval_sec > 0 ? config->min_request_interval_sec : 0.5);
     client->transport = config->transport ? *config->transport : bunny_http_curl_transport();
-    client->has_last_request_time = false;
 
     if (!client->base_url || !client->user_agent) {
         e621_client_destroy(client);
