@@ -4,9 +4,35 @@
 #include <e621/client.h>
 #include <inkbunny/client.h>
 
-#include <pthread.h>
 #include <stdarg.h>
 #include <stdio.h>
+
+/* pthread.h doesn't exist on MSVC (POSIX-only, no equivalent without a
+ * separate shim) -- this project has only ever built bunny_core with GCC/
+ * Clang locally and via dockcross/MinGW, never real MSVC, so this never
+ * surfaced until a native Windows CI build tried it. CRITICAL_SECTION is
+ * the native Win32 equivalent of a (non-recursive-by-default, same as a
+ * plain pthread_mutex_t) mutex; wrapped here so every db_mutex/sync_mutex
+ * call site below stays unchanged either way. */
+#ifdef _WIN32
+#include <windows.h>
+typedef CRITICAL_SECTION bunny_mutex_t;
+static inline int bunny_mutex_init(bunny_mutex_t *mutex)
+{
+    InitializeCriticalSection(mutex);
+    return 0;
+}
+static inline void bunny_mutex_destroy(bunny_mutex_t *mutex) { DeleteCriticalSection(mutex); }
+static inline void bunny_mutex_lock(bunny_mutex_t *mutex) { EnterCriticalSection(mutex); }
+static inline void bunny_mutex_unlock(bunny_mutex_t *mutex) { LeaveCriticalSection(mutex); }
+#else
+#include <pthread.h>
+typedef pthread_mutex_t bunny_mutex_t;
+static inline int bunny_mutex_init(bunny_mutex_t *mutex) { return pthread_mutex_init(mutex, NULL); }
+static inline void bunny_mutex_destroy(bunny_mutex_t *mutex) { pthread_mutex_destroy(mutex); }
+static inline void bunny_mutex_lock(bunny_mutex_t *mutex) { pthread_mutex_lock(mutex); }
+static inline void bunny_mutex_unlock(bunny_mutex_t *mutex) { pthread_mutex_unlock(mutex); }
+#endif
 
 #include "bunny_core/core.h"
 #include "bunny_core/error.h"
@@ -15,28 +41,28 @@
 struct bunny_core
 {
     bunny_db_t *db;
-    pthread_mutex_t db_mutex; /* serializes every core->db access; NEVER held
-                               * across a network call (e621_/inkbunny_
-                               * functions or curl) -- see sync.c/queue.c/site_clients.c/
-                               * backup.c/accounts.c/searches.c/blacklist.c/
-                               * downloads.c for the lock-only-around-db-ops
-                               * pattern every bunny_core_* function follows.
-                               * verify.c is the one exception: it never
-                               * touches core->db at all, so it needs no lock. */
-    pthread_mutex_t sync_mutex; /* serializes the site-facing sync operations
-                                 * against EACH OTHER (sync_e621_search/
-                                 * sync_inkbunny_search, bunny_core_process_
-                                 * queue -- see sync.c/queue.c) so the server
-                                 * never has more than one of these talking to
-                                 * e621/Inkbunny at once, whether triggered by
-                                 * the scheduler or a manual request. This is
-                                 * separate from db_mutex on purpose: it's
-                                 * held across network I/O deliberately (that
-                                 * IS the point), while db_mutex never is.
-                                 * Interactive one-off calls (preview_search,
-                                 * fetch_pool, account_verify, ...) do NOT take
-                                 * this lock, so browsing stays responsive
-                                 * even while a long sync is in progress. */
+    bunny_mutex_t db_mutex; /* serializes every core->db access; NEVER held
+                             * across a network call (e621_/inkbunny_
+                             * functions or curl) -- see sync.c/queue.c/site_clients.c/
+                             * backup.c/accounts.c/searches.c/blacklist.c/
+                             * downloads.c for the lock-only-around-db-ops
+                             * pattern every bunny_core_* function follows.
+                             * verify.c is the one exception: it never
+                             * touches core->db at all, so it needs no lock. */
+    bunny_mutex_t sync_mutex; /* serializes the site-facing sync operations
+                               * against EACH OTHER (sync_e621_search/
+                               * sync_inkbunny_search, bunny_core_process_
+                               * queue -- see sync.c/queue.c) so the server
+                               * never has more than one of these talking to
+                               * e621/Inkbunny at once, whether triggered by
+                               * the scheduler or a manual request. This is
+                               * separate from db_mutex on purpose: it's
+                               * held across network I/O deliberately (that
+                               * IS the point), while db_mutex never is.
+                               * Interactive one-off calls (preview_search,
+                               * fetch_pool, account_verify, ...) do NOT take
+                               * this lock, so browsing stays responsive
+                               * even while a long sync is in progress. */
     char *user_agent;
     const bunny_http_transport_t *e621_transport;
     const bunny_http_transport_t *inkbunny_transport;
@@ -46,19 +72,19 @@ struct bunny_core
 };
 
 /* Every bunny_core_* function that touches core->db locks/unlocks through
- * these -- never pthread_mutex_lock/unlock(&core->db_mutex) directly -- so
+ * these -- never bunny_mutex_lock/unlock(&core->db_mutex) directly -- so
  * the intent is explicit and grep-able at every call site. Not re-entrant:
  * never call a function that takes this lock itself (e.g.
  * bunny_core_queue_favorite_add) while already holding it, or the calling
  * thread deadlocks against itself. */
-static inline void bunny_core_db_lock(bunny_core_t *core) { pthread_mutex_lock(&core->db_mutex); }
-static inline void bunny_core_db_unlock(bunny_core_t *core) { pthread_mutex_unlock(&core->db_mutex); }
+static inline void bunny_core_db_lock(bunny_core_t *core) { bunny_mutex_lock(&core->db_mutex); }
+static inline void bunny_core_db_unlock(bunny_core_t *core) { bunny_mutex_unlock(&core->db_mutex); }
 
 /* See sync_mutex above -- held around the entire body of a site-syncing
  * function (network calls included), never nested with another call that
  * also takes it. */
-static inline void bunny_core_sync_lock(bunny_core_t *core) { pthread_mutex_lock(&core->sync_mutex); }
-static inline void bunny_core_sync_unlock(bunny_core_t *core) { pthread_mutex_unlock(&core->sync_mutex); }
+static inline void bunny_core_sync_lock(bunny_core_t *core) { bunny_mutex_lock(&core->sync_mutex); }
+static inline void bunny_core_sync_unlock(bunny_core_t *core) { bunny_mutex_unlock(&core->sync_mutex); }
 
 /* printf-style wrapper around core->log_callback -- no-op if none is set
  * (standalone/FFI mode). Used by sync.c to report per-search sync progress. */
