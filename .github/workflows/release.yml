@@ -1,0 +1,149 @@
+name: Release
+
+# Every push to master: run the full test suite, and if it passes, build the
+# server + app for every platform in scope and publish them as one GitHub
+# Release tagged by run number. The Windows server/app jobs are the least
+# proven of the bunch (this project has only ever built the server on Linux
+# -- see docs/ROADMAP.md's M12 notes on the Flutter/dockcross Windows
+# blockers) and may need iteration if a first run fails; nothing here has
+# been exercised by a real CI run yet.
+on:
+  push:
+    branches: [master]
+
+env:
+  FLUTTER_VERSION: "3.44.0" # keep in sync with app/.fvmrc
+
+permissions:
+  contents: write # needed to create the Release
+
+jobs:
+  test:
+    uses: ./.github/workflows/test.yml
+
+  build-server-linux:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: sudo apt-get update -qq && sudo apt-get install -y --no-install-recommends build-essential cmake libssl-dev
+      - run: make release
+      - run: tar -C build-release/server -czf bunny-server-linux-x64.tar.gz bunny_server
+      - uses: actions/upload-artifact@v4
+        with:
+          name: bunny-server-linux-x64
+          path: bunny-server-linux-x64.tar.gz
+
+  build-app-linux:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+      - run: sudo apt-get update -qq && sudo apt-get install -y --no-install-recommends ninja-build libgtk-3-dev pkg-config libsecret-1-dev
+      - working-directory: app
+        run: |
+          flutter pub get
+          flutter build linux --release
+      - working-directory: app/build/linux/x64/release
+        run: zip -r "${{ github.workspace }}/little-bunny-app-linux-x64.zip" bundle
+      - uses: actions/upload-artifact@v4
+        with:
+          name: little-bunny-app-linux-x64
+          path: little-bunny-app-linux-x64.zip
+
+  build-app-android:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+      - working-directory: app
+        run: |
+          flutter pub get
+          flutter build apk --release
+      - uses: actions/upload-artifact@v4
+        with:
+          name: little-bunny-app-android
+          path: app/build/app/outputs/flutter-apk/app-release.apk
+
+  # Untested: no CI run of this job has happened yet. The server has only
+  # ever been cross-compiled for Windows via dockcross locally, which is
+  # itself blocked on OpenSSL for that MinGW target (docs/ROADMAP.md, M1) --
+  # this instead does a *native* MSVC build using the vcpkg install that
+  # ships preinstalled on the windows-latest runner image, sidestepping that
+  # blocker entirely. The app build is native too, for the same reason
+  # Flutter's own docs say Windows apps can't be cross-compiled from Linux.
+  build-windows:
+    needs: test
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: vcpkg install openssl:x64-windows
+      - name: Build server
+        run: |
+          cmake -S . -B build-windows -DCMAKE_BUILD_TYPE=Release -DBUNNY_BUILD_TESTS=OFF -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake" -DVCPKG_TARGET_TRIPLET=x64-windows
+          cmake --build build-windows --config Release -j
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+      - name: Build app
+        working-directory: app
+        run: |
+          flutter pub get
+          flutter build windows --release
+      - name: Package
+        run: |
+          mkdir dist
+          Copy-Item build-windows\server\Release\bunny_server.exe dist\
+          Copy-Item -Recurse app\build\windows\x64\runner\Release dist\little-bunny-app
+          Compress-Archive -Path dist\* -DestinationPath little-bunny-windows-x64.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: little-bunny-windows-x64
+          path: little-bunny-windows-x64.zip
+
+  # Unsigned -- macOS Gatekeeper will warn on first launch until this is
+  # signed with an Apple Developer certificate (not set up for this
+  # project). Fine for personal/sideloaded use, same tradeoff noted for the
+  # Windows build above.
+  build-app-macos:
+    needs: test
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+      - working-directory: app
+        run: |
+          flutter pub get
+          flutter build macos --release
+      - working-directory: app/build/macos/Build/Products/Release
+        run: zip -r "${{ github.workspace }}/little-bunny-app-macos.zip" little_bunny.app
+      - uses: actions/upload-artifact@v4
+        with:
+          name: little-bunny-app-macos
+          path: little-bunny-app-macos.zip
+
+  release:
+    needs: [build-server-linux, build-app-linux, build-app-android, build-windows, build-app-macos]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: build-${{ github.run_number }}
+          name: "Build #${{ github.run_number }} (${{ github.sha }})"
+          files: artifacts/*
