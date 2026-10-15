@@ -132,6 +132,93 @@ void test_search_update_toggles_uses_default_interval(void)
     bunny_db_search_list_free(&list);
 }
 
+void test_search_create_defaults_group_id_to_zero(void)
+{
+    int64_t id = 0;
+    bunny_db_search_create(g_db, BUNNY_DB_SITE_E621, "wolves", "wolf", 24, NULL, &id);
+
+    bunny_db_search_list_t list;
+    bunny_db_search_list(g_db, &list);
+    TEST_ASSERT_EQUAL(0, list.items[0].group_id);
+    bunny_db_search_list_free(&list);
+}
+
+void test_search_set_group_round_trips_and_ungroups(void)
+{
+    int64_t search_id = 0;
+    bunny_db_search_create(g_db, BUNNY_DB_SITE_E621, "wolves", "wolf", 24, NULL, &search_id);
+    int64_t group_id = 0;
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, bunny_db_group_create(g_db, "Canines", false, &group_id));
+
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, bunny_db_search_set_group(g_db, search_id, group_id));
+    bunny_db_search_list_t list;
+    bunny_db_search_list(g_db, &list);
+    TEST_ASSERT_EQUAL(group_id, list.items[0].group_id);
+    bunny_db_search_list_free(&list);
+
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, bunny_db_search_set_group(g_db, search_id, 0));
+    bunny_db_search_list(g_db, &list);
+    TEST_ASSERT_EQUAL(0, list.items[0].group_id);
+    bunny_db_search_list_free(&list);
+}
+
+void test_group_create_and_list(void)
+{
+    int64_t id = 0;
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, bunny_db_group_create(g_db, "Canines", true, &id));
+
+    bunny_db_group_list_t list;
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, bunny_db_group_list(g_db, &list));
+    TEST_ASSERT_EQUAL(1, list.count);
+    TEST_ASSERT_EQUAL(id, list.items[0].id);
+    TEST_ASSERT_EQUAL_STRING("Canines", list.items[0].name);
+    TEST_ASSERT_TRUE(list.items[0].pinned);
+    TEST_ASSERT_NOT_NULL(list.items[0].created_at);
+    bunny_db_group_list_free(&list);
+}
+
+void test_group_create_rejects_an_empty_name(void)
+{
+    int64_t id = 0;
+    TEST_ASSERT_EQUAL(BUNNY_DB_ERR_INVALID_ARG, bunny_db_group_create(g_db, "", false, &id));
+}
+
+void test_group_update_renames_and_toggles_pinned(void)
+{
+    int64_t id = 0;
+    bunny_db_group_create(g_db, "Canines", false, &id);
+
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, bunny_db_group_update(g_db, id, "Foxes and wolves", true));
+
+    bunny_db_group_list_t list;
+    bunny_db_group_list(g_db, &list);
+    TEST_ASSERT_EQUAL_STRING("Foxes and wolves", list.items[0].name);
+    TEST_ASSERT_TRUE(list.items[0].pinned);
+    bunny_db_group_list_free(&list);
+}
+
+void test_group_delete_ungroups_member_searches_instead_of_deleting_them(void)
+{
+    int64_t group_id = 0;
+    bunny_db_group_create(g_db, "Canines", false, &group_id);
+    int64_t search_id = 0;
+    bunny_db_search_create(g_db, BUNNY_DB_SITE_E621, "wolves", "wolf", 24, NULL, &search_id);
+    bunny_db_search_set_group(g_db, search_id, group_id);
+
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, bunny_db_group_delete(g_db, group_id));
+
+    bunny_db_group_list_t groups;
+    bunny_db_group_list(g_db, &groups);
+    TEST_ASSERT_EQUAL(0, groups.count);
+    bunny_db_group_list_free(&groups);
+
+    bunny_db_search_list_t searches;
+    bunny_db_search_list(g_db, &searches);
+    TEST_ASSERT_EQUAL(1, searches.count);
+    TEST_ASSERT_EQUAL(0, searches.items[0].group_id);
+    bunny_db_search_list_free(&searches);
+}
+
 void test_settings_get_default_interval_hours_is_seeded_to_24(void)
 {
     int hours = 0;
@@ -1574,6 +1661,12 @@ int main(void)
     RUN_TEST(test_migrations_apply_cleanly_and_are_idempotent_on_reopen);
     RUN_TEST(test_search_create_defaults_uses_default_interval_to_false);
     RUN_TEST(test_search_update_toggles_uses_default_interval);
+    RUN_TEST(test_search_create_defaults_group_id_to_zero);
+    RUN_TEST(test_search_set_group_round_trips_and_ungroups);
+    RUN_TEST(test_group_create_and_list);
+    RUN_TEST(test_group_create_rejects_an_empty_name);
+    RUN_TEST(test_group_update_renames_and_toggles_pinned);
+    RUN_TEST(test_group_delete_ungroups_member_searches_instead_of_deleting_them);
     RUN_TEST(test_settings_get_default_interval_hours_is_seeded_to_24);
     RUN_TEST(test_settings_set_default_interval_hours_round_trips);
     RUN_TEST(test_post_get_tags_by_category);

@@ -5,6 +5,7 @@ add_library(bunny_db STATIC
     src/accounts.c
     src/settings.c
     src/searches.c
+    src/groups.c
     src/posts.c
     src/favorites.c
     src/votes.c

@@ -56,6 +56,8 @@ class _CreateSearchScreenState extends State<CreateSearchScreen> {
   bool _autoFavorite = false;
   bool _autoUpvote = false;
   bool _usesDefaultInterval = false;
+  List<BunnyGroup> _groups = [];
+  int _groupId = 0;
 
   @override
   void initState() {
@@ -67,6 +69,7 @@ class _CreateSearchScreenState extends State<CreateSearchScreen> {
     _queryController.addListener(_mirrorQueryIntoLabel);
     _labelController.addListener(_onLabelChanged);
     _loadDefaultInterval();
+    _loadGroups();
     if (widget.initialQuery != null) {
       _queryController.text = widget.initialQuery!;
     }
@@ -80,6 +83,13 @@ class _CreateSearchScreenState extends State<CreateSearchScreen> {
     final hours = await widget.repository.getDefaultSyncIntervalHours();
     if (mounted) {
       _intervalController.text = '$hours';
+    }
+  }
+
+  Future<void> _loadGroups() async {
+    final groups = await widget.repository.listGroups();
+    if (mounted) {
+      setState(() => _groups = groups);
     }
   }
 
@@ -184,7 +194,7 @@ class _CreateSearchScreenState extends State<CreateSearchScreen> {
     }
     setState(() => _submitting = true);
 
-    await widget.repository.createSearch(
+    final id = await widget.repository.createSearch(
       _site,
       _labelController.text.trim(),
       _queryController.text.trim(),
@@ -193,6 +203,9 @@ class _CreateSearchScreenState extends State<CreateSearchScreen> {
       autoUpvote: _site == BunnySite.e621 && _autoUpvote,
       usesDefaultInterval: _usesDefaultInterval,
     );
+    if (_groupId != 0) {
+      await widget.repository.setSearchGroup(id, _groupId);
+    }
 
     if (!mounted) {
       return;
@@ -234,6 +247,16 @@ class _CreateSearchScreenState extends State<CreateSearchScreen> {
                 value: _usesDefaultInterval,
                 onChanged: _submitting ? null : (value) => setState(() => _usesDefaultInterval = value),
               ),
+              DropdownButtonFormField<int>(
+                initialValue: _groupId,
+                decoration: InputDecoration(labelText: l10n.createSearchGroupLabel),
+                items: [
+                  DropdownMenuItem(value: 0, child: Text(l10n.createSearchGroupNone)),
+                  ..._groups.map((group) => DropdownMenuItem(value: group.id, child: Text(group.name))),
+                ],
+                onChanged: _submitting ? null : (value) => setState(() => _groupId = value ?? 0),
+              ),
+              const SizedBox(height: 16),
               SwitchListTile(
                 contentPadding: EdgeInsets.zero,
                 title: Text(l10n.createSearchAutoFavoriteLabel),

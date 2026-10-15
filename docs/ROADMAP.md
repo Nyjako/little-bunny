@@ -1625,6 +1625,53 @@ this file is the single source of truth for "what's done" across sessions.
     `sync_mutex` still serializes the real work; the spinner just might clear a touch early
     or late).
 
+- [x] **M21 — Search groups (tree view) + export/import fixes**
+  A flat, non-nested way to organize saved searches in the UI as a "directory"-style tree
+  view: a group shows its total/unseen post counts aggregated across its member searches,
+  and expands to reveal them. Also fixed a real, independently-flagged export gap: `pinned`
+  was never included in `SearchBackupService.exportSearches`'s output, so re-importing a
+  backup always unpinned every search.
+  - **DB**: new `search_groups` table (`id`/`name`/`pinned`/`created_at`) plus
+    `searches.group_id` (migration 11, a real `REFERENCES search_groups(id) ON DELETE SET
+    NULL` foreign key) -- confirmed via direct `sqlite3` CLI testing that SQLite supports
+    adding an FK column with cascading behavior via `ALTER TABLE ADD COLUMN`. Deleting a
+    group ungroups its member searches rather than deleting them (the user's explicit
+    choice over the alternative of cascading the delete). 0 is still the public "ungrouped"
+    sentinel at the C API level, same convention as every other "0 means none" column in
+    this codebase, but translates to real SQL `NULL` at `searches.c`'s bind/read boundary,
+    since a real FK can't accept 0 as a valid non-existent reference once `foreign_keys` is
+    on the way it already is for this whole database.
+  - **Core/Server**: `bunny_core_search_set_group`/`group_create`/`group_list`/
+    `group_update`/`group_delete`, thin wrappers over the DB layer with the same
+    `bunny_core_db_lock`/`unlock` pattern as every other `bunny_core_*` function. New
+    `server/src/routes_groups.c/.h` (`POST`/`GET /groups`, `PUT`/`DELETE /groups/{id}`) and
+    `POST /searches/{id}/group` on the existing `routes_searches.c`; `group_id` added to
+    `search_to_json`.
+  - **FFI**: `bunny_core_ffi`'s isolate wrapper gained the 5 new request/handler pairs plus
+    `groupId` on `_searchToMap`, regenerated via `ffigen`.
+  - **Flutter**: new `BunnyGroup` model; `BunnyRepository` gained `setSearchGroup`/
+    `createGroup`/`listGroups`/`updateGroup`/`deleteGroup`, implemented in `Http`/`Ffi`/the
+    test `Fake` repository. `SearchesScreen` builds a list of "tree entries" (a standalone
+    search, or a group plus its member searches) independently for each of the Searches/
+    Pools tabs -- a group only appears in a tab if it actually has member searches there --
+    and renders a group as an `ExpansionTile` (folder icon, aggregated unseen badge, its own
+    pin toggle, and a rename/delete popup menu) with its members nested as ordinary rows
+    inside. Pin-first sorting generalizes from "search-only" to "entry" (search or group),
+    using the group's own name/pinned/aggregated-unseen/newest-member-viewed-at in place of
+    a single search's fields. A new "create group" app bar action and a group picker
+    (`DropdownButtonFormField`) on `CreateSearchScreen`/`EditSearchScreen` round out
+    assignment -- the picker falls back to "No group" for one frame on `EditSearchScreen`
+    if the real group list hasn't loaded yet by first build, keyed to force a fresh
+    `initialValue` read the moment it does, rather than getting stuck showing the wrong
+    selection for a search that *is* actually grouped.
+  - **Export/import**: `SearchBackupService.exportSearches` now includes `pinned`, plus a
+    denormalized `groupName`/`groupPinned` per search row -- ids aren't portable across
+    installs, so group membership travels as a name instead. Import resolves-or-creates a
+    local group by that name (cached per import pass so multiple rows sharing a group don't
+    create duplicates) and applies both it and `pinned` via `setSearchGroup`/
+    `setSearchPinned` after `createSearch`, since creation itself has no `pinned`/`groupId`
+    parameters.
+
 - [ ] **M12 — Cross-platform polish**
   Responsive desktop/mobile layout, consistent theming pass, Windows app build, packaging.
   - [x] **M12.1 — Android client build.** `fvm flutter build apk` now succeeds end-to-end

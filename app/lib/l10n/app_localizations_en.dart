@@ -185,6 +185,43 @@ class AppLocalizationsEn extends AppLocalizations {
   String get searchesSyncInProgress => 'Syncing…';
 
   @override
+  String get searchesNewGroupTooltip => 'New group';
+
+  @override
+  String get searchesGroupNameLabel => 'Name';
+
+  @override
+  String get searchesCreateGroupDialogTitle => 'New group';
+
+  @override
+  String get searchesCreateGroupSubmit => 'Create';
+
+  @override
+  String get searchesRenameGroupDialogTitle => 'Rename group';
+
+  @override
+  String get searchesRenameGroupSubmit => 'Save';
+
+  @override
+  String get searchesRenameGroupMenuItem => 'Rename';
+
+  @override
+  String get searchesDeleteGroupMenuItem => 'Delete group';
+
+  @override
+  String get searchesDeleteGroupDialogTitle => 'Delete group?';
+
+  @override
+  String searchesDeleteGroupDialogContent(String name) {
+    return 'Searches in \"$name\" will be ungrouped, not deleted.';
+  }
+
+  @override
+  String searchesGroupSubtitle(int total) {
+    return '$total posts';
+  }
+
+  @override
   String get tagStatsScreenTitle => 'Tag stats';
 
   @override
@@ -215,6 +252,12 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get createSearchUsesDefaultIntervalLabel => 'Use default interval';
+
+  @override
+  String get createSearchGroupLabel => 'Group';
+
+  @override
+  String get createSearchGroupNone => 'No group';
 
   @override
   String get createSearchAutoFavoriteLabel => 'Auto-favorite new posts';

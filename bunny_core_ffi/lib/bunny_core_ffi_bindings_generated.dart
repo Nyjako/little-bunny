@@ -97,6 +97,30 @@ class BunnyCoreFfiBindings {
   late final _bunny_db_search_list_free = _bunny_db_search_list_freePtr
       .asFunction<void Function(ffi.Pointer<bunny_db_search_list_t>)>();
 
+  void bunny_db_group_free(ffi.Pointer<bunny_db_group_t> group) {
+    return _bunny_db_group_free(group);
+  }
+
+  late final _bunny_db_group_freePtr =
+      _lookup<
+        ffi.NativeFunction<ffi.Void Function(ffi.Pointer<bunny_db_group_t>)>
+      >('bunny_db_group_free');
+  late final _bunny_db_group_free = _bunny_db_group_freePtr
+      .asFunction<void Function(ffi.Pointer<bunny_db_group_t>)>();
+
+  void bunny_db_group_list_free(ffi.Pointer<bunny_db_group_list_t> list) {
+    return _bunny_db_group_list_free(list);
+  }
+
+  late final _bunny_db_group_list_freePtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.Void Function(ffi.Pointer<bunny_db_group_list_t>)
+        >
+      >('bunny_db_group_list_free');
+  late final _bunny_db_group_list_free = _bunny_db_group_list_freePtr
+      .asFunction<void Function(ffi.Pointer<bunny_db_group_list_t>)>();
+
   void bunny_db_post_free(ffi.Pointer<bunny_db_post_t> post) {
     return _bunny_db_post_free(post);
   }
@@ -697,6 +721,141 @@ class BunnyCoreFfiBindings {
   late final _bunny_core_set_default_sync_interval_hours =
       _bunny_core_set_default_sync_interval_hoursPtr
           .asFunction<int Function(ffi.Pointer<bunny_core_t>, int)>();
+
+  /// Moves a search into group_id's group, or ungroups it when group_id is 0 --
+  /// see bunny_db_search_set_group.
+  bunny_core_result_t bunny_core_search_set_group(
+    ffi.Pointer<bunny_core_t> core,
+    int search_id,
+    int group_id,
+  ) {
+    return bunny_core_result_t.fromValue(
+      _bunny_core_search_set_group(core, search_id, group_id),
+    );
+  }
+
+  late final _bunny_core_search_set_groupPtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.UnsignedInt Function(
+            ffi.Pointer<bunny_core_t>,
+            ffi.Int64,
+            ffi.Int64,
+          )
+        >
+      >('bunny_core_search_set_group');
+  late final _bunny_core_search_set_group = _bunny_core_search_set_groupPtr
+      .asFunction<int Function(ffi.Pointer<bunny_core_t>, int, int)>();
+
+  bunny_core_result_t bunny_core_group_create(
+    ffi.Pointer<bunny_core_t> core,
+    ffi.Pointer<ffi.Char> name,
+    bool pinned,
+    ffi.Pointer<ffi.Int64> out_id,
+  ) {
+    return bunny_core_result_t.fromValue(
+      _bunny_core_group_create(core, name, pinned, out_id),
+    );
+  }
+
+  late final _bunny_core_group_createPtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.UnsignedInt Function(
+            ffi.Pointer<bunny_core_t>,
+            ffi.Pointer<ffi.Char>,
+            ffi.Bool,
+            ffi.Pointer<ffi.Int64>,
+          )
+        >
+      >('bunny_core_group_create');
+  late final _bunny_core_group_create = _bunny_core_group_createPtr
+      .asFunction<
+        int Function(
+          ffi.Pointer<bunny_core_t>,
+          ffi.Pointer<ffi.Char>,
+          bool,
+          ffi.Pointer<ffi.Int64>,
+        )
+      >();
+
+  bunny_core_result_t bunny_core_group_list(
+    ffi.Pointer<bunny_core_t> core,
+    ffi.Pointer<bunny_db_group_list_t> out_list,
+  ) {
+    return bunny_core_result_t.fromValue(
+      _bunny_core_group_list(core, out_list),
+    );
+  }
+
+  late final _bunny_core_group_listPtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.UnsignedInt Function(
+            ffi.Pointer<bunny_core_t>,
+            ffi.Pointer<bunny_db_group_list_t>,
+          )
+        >
+      >('bunny_core_group_list');
+  late final _bunny_core_group_list = _bunny_core_group_listPtr
+      .asFunction<
+        int Function(
+          ffi.Pointer<bunny_core_t>,
+          ffi.Pointer<bunny_db_group_list_t>,
+        )
+      >();
+
+  bunny_core_result_t bunny_core_group_update(
+    ffi.Pointer<bunny_core_t> core,
+    int group_id,
+    ffi.Pointer<ffi.Char> name,
+    bool pinned,
+  ) {
+    return bunny_core_result_t.fromValue(
+      _bunny_core_group_update(core, group_id, name, pinned),
+    );
+  }
+
+  late final _bunny_core_group_updatePtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.UnsignedInt Function(
+            ffi.Pointer<bunny_core_t>,
+            ffi.Int64,
+            ffi.Pointer<ffi.Char>,
+            ffi.Bool,
+          )
+        >
+      >('bunny_core_group_update');
+  late final _bunny_core_group_update = _bunny_core_group_updatePtr
+      .asFunction<
+        int Function(
+          ffi.Pointer<bunny_core_t>,
+          int,
+          ffi.Pointer<ffi.Char>,
+          bool,
+        )
+      >();
+
+  /// Deletes the group; member searches are ungrouped, not deleted (enforced
+  /// by the DB's own ON DELETE SET NULL foreign key -- see bunny_db_group_delete).
+  bunny_core_result_t bunny_core_group_delete(
+    ffi.Pointer<bunny_core_t> core,
+    int group_id,
+  ) {
+    return bunny_core_result_t.fromValue(
+      _bunny_core_group_delete(core, group_id),
+    );
+  }
+
+  late final _bunny_core_group_deletePtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.UnsignedInt Function(ffi.Pointer<bunny_core_t>, ffi.Int64)
+        >
+      >('bunny_core_group_delete');
+  late final _bunny_core_group_delete = _bunny_core_group_deletePtr
+      .asFunction<int Function(ffi.Pointer<bunny_core_t>, int)>();
 
   /// Fetches a single cached post by its local id -- a thin pass-through to
   /// bunny_db, used when a post detail view needs to open a *different* post
@@ -1764,6 +1923,32 @@ final class bunny_db_search_t extends ffi.Struct {
   /// see bunny_db_search_options_t above
   @ffi.Bool()
   external bool uses_default_interval;
+
+  /// the search_groups row this search belongs to; 0 = ungrouped (M21)
+  @ffi.Int64()
+  external int group_id;
+}
+
+/// A folder-like way to organize saved searches in SearchesScreen's tree view
+/// (M21) -- flat, not nested. Mirrors bunny_db_search_t.pinned's "shown first"
+/// meaning, just at the group level instead of per-search.
+final class bunny_db_group_t extends ffi.Struct {
+  @ffi.Int64()
+  external int id;
+
+  external ffi.Pointer<ffi.Char> name;
+
+  @ffi.Bool()
+  external bool pinned;
+
+  external ffi.Pointer<ffi.Char> created_at;
+}
+
+final class bunny_db_group_list_t extends ffi.Struct {
+  external ffi.Pointer<bunny_db_group_t> items;
+
+  @ffi.Size()
+  external int count;
 }
 
 final class bunny_db_search_list_t extends ffi.Struct {
