@@ -14,6 +14,8 @@
 #include "routes_queue.h"
 #include "routes_search.h"
 #include "routes_searches.h"
+#include "routes_settings.h"
+#include "routes_sync.h"
 #include "routes_tags.h"
 #include "tls.h"
 
@@ -94,8 +96,29 @@ server_app_t *server_app_start(const bunny_core_config_t *core_config, const cha
         return NULL;
     }
 
+    app->sync_status = server_sync_status_create();
+    if (!app->sync_status) {
+        bunny_core_close(app->core);
+        free(app->cert_path);
+        server_auth_free(app->auth);
+        free(app);
+        return NULL;
+    }
+
+    app->sync_worker = sync_worker_start(app->core, app->sync_status);
+    if (!app->sync_worker) {
+        server_sync_status_destroy(app->sync_status);
+        bunny_core_close(app->core);
+        free(app->cert_path);
+        server_auth_free(app->auth);
+        free(app);
+        return NULL;
+    }
+
     app->ctx.core = app->core;
     app->ctx.auth = app->auth;
+    app->ctx.sync_worker = app->sync_worker;
+    app->ctx.sync_status = app->sync_status;
 
     char port_option[32];
     snprintf(port_option, sizeof(port_option), "%ds", port);
@@ -110,6 +133,8 @@ server_app_t *server_app_start(const bunny_core_config_t *core_config, const cha
 
     app->mg_ctx = mg_start(&callbacks, NULL, options);
     if (!app->mg_ctx) {
+        sync_worker_stop(app->sync_worker);
+        server_sync_status_destroy(app->sync_status);
         bunny_core_close(app->core);
         free(app->cert_path);
         server_auth_free(app->auth);
@@ -126,9 +151,13 @@ server_app_t *server_app_start(const bunny_core_config_t *core_config, const cha
     server_routes_register_search(app->mg_ctx, &app->ctx);
     server_routes_register_blacklist(app->mg_ctx, &app->ctx);
     server_routes_register_logs(app->mg_ctx, &app->ctx);
+    server_routes_register_sync(app->mg_ctx, &app->ctx);
+    server_routes_register_settings(app->mg_ctx, &app->ctx);
 
-    if (!server_scheduler_start(&app->scheduler, &app->ctx, data_dir, poll_interval_sec)) {
+    if (!server_scheduler_start(&app->scheduler, &app->ctx, app->sync_status, data_dir, poll_interval_sec)) {
         mg_stop(app->mg_ctx);
+        sync_worker_stop(app->sync_worker);
+        server_sync_status_destroy(app->sync_status);
         bunny_core_close(app->core);
         free(app->cert_path);
         server_auth_free(app->auth);
@@ -149,9 +178,12 @@ void server_app_stop(server_app_t *app)
     if (!app) {
         return;
     }
-    /* Stop the scheduler first so it's done issuing bunny_core_* calls
-     * before civetweb's workers and the core itself get torn down. */
+    /* Stop the scheduler and sync worker first so both are done issuing
+     * bunny_core_* calls before civetweb's workers and the core itself get
+     * torn down. */
     server_scheduler_stop(&app->scheduler);
+    sync_worker_stop(app->sync_worker);
+    server_sync_status_destroy(app->sync_status);
     mg_stop(app->mg_ctx);
     bunny_core_close(app->core);
     free(app->cert_path);

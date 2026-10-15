@@ -313,7 +313,7 @@ void test_sync_e621_search_with_auto_favorite_queues_a_favorite(void)
     g_e621_state.count = 1;
 
     int64_t search_id = 0;
-    bunny_db_search_options_t options = {true, 1, false};
+    bunny_db_search_options_t options = {true, 1, false, false};
     bunny_core_search_create(g_core, BUNNY_DB_SITE_E621, "wolves", "wolf", 24, &options, &search_id);
 
     bunny_core_sync_stats_t sync_stats;
@@ -349,7 +349,7 @@ void test_sync_e621_search_with_auto_upvote_queues_a_vote(void)
     g_e621_state.count = 1;
 
     int64_t search_id = 0;
-    bunny_db_search_options_t options = {false, 1, true};
+    bunny_db_search_options_t options = {false, 1, true, false};
     bunny_core_search_create(g_core, BUNNY_DB_SITE_E621, "wolves", "wolf", 24, &options, &search_id);
 
     bunny_core_sync_stats_t sync_stats;

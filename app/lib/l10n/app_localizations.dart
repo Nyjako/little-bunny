@@ -412,6 +412,12 @@ abstract class AppLocalizations {
   /// **'{done}/{total} checked'**
   String searchesSyncAllProgress(int done, int total);
 
+  /// No description provided for @searchesSyncInProgress.
+  ///
+  /// In en, this message translates to:
+  /// **'Syncing…'**
+  String get searchesSyncInProgress;
+
   /// No description provided for @tagStatsScreenTitle.
   ///
   /// In en, this message translates to:
@@ -465,6 +471,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Sync interval (hours)'**
   String get createSearchIntervalLabel;
+
+  /// No description provided for @createSearchUsesDefaultIntervalLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Use default interval'**
+  String get createSearchUsesDefaultIntervalLabel;
 
   /// No description provided for @createSearchAutoFavoriteLabel.
   ///

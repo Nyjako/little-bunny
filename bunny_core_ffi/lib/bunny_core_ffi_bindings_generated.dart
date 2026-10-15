@@ -650,6 +650,54 @@ class BunnyCoreFfiBindings {
         )
       >();
 
+  /// Server-wide default sync interval (hours) -- what a search with
+  /// uses_default_interval set actually follows for scheduling, re-resolved on
+  /// every due-check rather than frozen at creation time. See
+  /// bunny_db_search_options_t.uses_default_interval and search_is_due()
+  /// (sync.c). Seeded to 24 on first db open.
+  bunny_core_result_t bunny_core_get_default_sync_interval_hours(
+    ffi.Pointer<bunny_core_t> core,
+    ffi.Pointer<ffi.Int> out_hours,
+  ) {
+    return bunny_core_result_t.fromValue(
+      _bunny_core_get_default_sync_interval_hours(core, out_hours),
+    );
+  }
+
+  late final _bunny_core_get_default_sync_interval_hoursPtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.UnsignedInt Function(
+            ffi.Pointer<bunny_core_t>,
+            ffi.Pointer<ffi.Int>,
+          )
+        >
+      >('bunny_core_get_default_sync_interval_hours');
+  late final _bunny_core_get_default_sync_interval_hours =
+      _bunny_core_get_default_sync_interval_hoursPtr
+          .asFunction<
+            int Function(ffi.Pointer<bunny_core_t>, ffi.Pointer<ffi.Int>)
+          >();
+
+  bunny_core_result_t bunny_core_set_default_sync_interval_hours(
+    ffi.Pointer<bunny_core_t> core,
+    int hours,
+  ) {
+    return bunny_core_result_t.fromValue(
+      _bunny_core_set_default_sync_interval_hours(core, hours),
+    );
+  }
+
+  late final _bunny_core_set_default_sync_interval_hoursPtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.UnsignedInt Function(ffi.Pointer<bunny_core_t>, ffi.Int)
+        >
+      >('bunny_core_set_default_sync_interval_hours');
+  late final _bunny_core_set_default_sync_interval_hours =
+      _bunny_core_set_default_sync_interval_hoursPtr
+          .asFunction<int Function(ffi.Pointer<bunny_core_t>, int)>();
+
   /// Fetches a single cached post by its local id -- a thin pass-through to
   /// bunny_db, used when a post detail view needs to open a *different* post
   /// it doesn't already have a BunnyPost for (e.g. after bunny_core_fetch_and_
@@ -1646,6 +1694,15 @@ final class bunny_db_search_options_t extends ffi.Struct {
   /// e621 only -- queue an upvote for every post this search finds during sync
   @ffi.Bool()
   external bool auto_upvote;
+
+  /// When true, interval_hours is ignored for scheduling -- the effective
+  /// interval is whatever bunny_db_settings_get_default_interval_hours()
+  /// currently returns, re-resolved on every due-check rather than frozen
+  /// at creation/edit time. interval_hours itself is still stored (kept at
+  /// whatever it last was) so toggling this back off doesn't lose the
+  /// previous explicit value.
+  @ffi.Bool()
+  external bool uses_default_interval;
 }
 
 final class bunny_db_search_t extends ffi.Struct {
@@ -1695,6 +1752,18 @@ final class bunny_db_search_t extends ffi.Struct {
 
   /// NULL if this search/pool has never been opened
   external ffi.Pointer<ffi.Char> last_viewed_at;
+
+  /// has the (capped) first full scan completed -- see sync.c
+  @ffi.Bool()
+  external bool initial_sync_done;
+
+  /// highest post id seen by any sync so far; 0 = none yet
+  @ffi.Int64()
+  external int highest_synced_external_id;
+
+  /// see bunny_db_search_options_t above
+  @ffi.Bool()
+  external bool uses_default_interval;
 }
 
 final class bunny_db_search_list_t extends ffi.Struct {
@@ -1959,6 +2028,29 @@ final class bunny_db_action_list_t extends ffi.Struct {
 final class bunny_core extends ffi.Opaque {}
 
 typedef bunny_core_t = bunny_core;
+typedef bunny_core_log_fnFunction =
+    ffi.Void Function(
+      ffi.Pointer<ffi.Void> user_data,
+      ffi.Pointer<ffi.Char> level,
+      ffi.Pointer<ffi.Char> message,
+    );
+typedef Dartbunny_core_log_fnFunction =
+    void Function(
+      ffi.Pointer<ffi.Void> user_data,
+      ffi.Pointer<ffi.Char> level,
+      ffi.Pointer<ffi.Char> message,
+    );
+
+/// Optional sink for human-readable progress/summary lines emitted during
+/// bunny_core_sync_due_searches/bunny_core_sync_search (e.g. "Starting full
+/// scan for ... (12/700)", "Scanned ... -- found 8 posts, 3 new"). NULL (the
+/// default, e.g. standalone/FFI mode) means these lines are simply dropped --
+/// there's no log viewer for standalone mode anyway. The server installs one
+/// that forwards into its own ring-buffer logger (see server/src/app.c,
+/// server/src/log.h). `level` is a short tag like "INFO"; neither pointer is
+/// owned by bunny_core.
+typedef bunny_core_log_fn =
+    ffi.Pointer<ffi.NativeFunction<bunny_core_log_fnFunction>>;
 
 enum bunny_http_result_t {
   BUNNY_HTTP_OK(0),
@@ -2070,6 +2162,11 @@ final class bunny_core_config_t extends ffi.Struct {
   /// touches both sites doesn't take the better part of a second.
   @ffi.Double()
   external double min_request_interval_sec;
+
+  /// see bunny_core_log_fn above; NULL = no-op
+  external bunny_core_log_fn log_callback;
+
+  external ffi.Pointer<ffi.Void> log_user_data;
 }
 
 /// A pool's own metadata, fetched live (e621 only -- no persistence, no

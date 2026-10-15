@@ -5,7 +5,6 @@ import '../repository/bunny_models.dart';
 import '../repository/bunny_repository.dart';
 import '../settings/display_settings_store.dart';
 import '../settings/download_settings_store.dart';
-import '../settings/sync_settings_store.dart';
 import 'login_form_screen.dart';
 import 'tag_browse_screen.dart';
 
@@ -22,10 +21,9 @@ import 'tag_browse_screen.dart';
 class AccountsScreen extends StatefulWidget {
   final BunnyRepository repository;
   final DisplaySettingsStore displaySettingsStore;
-  final SyncSettingsStore syncSettingsStore;
   final DownloadSettingsStore downloadSettingsStore;
 
-  const AccountsScreen({super.key, required this.repository, required this.displaySettingsStore, required this.syncSettingsStore, required this.downloadSettingsStore});
+  const AccountsScreen({super.key, required this.repository, required this.displaySettingsStore, required this.downloadSettingsStore});
 
   @override
   State<AccountsScreen> createState() => _AccountsScreenState();
@@ -93,7 +91,6 @@ class _AccountsScreenState extends State<AccountsScreen> {
           title: l10n.accountsMyFavoritesTitle,
           repository: widget.repository,
           displaySettingsStore: widget.displaySettingsStore,
-          syncSettingsStore: widget.syncSettingsStore,
           downloadSettingsStore: widget.downloadSettingsStore,
         ),
       ),
@@ -117,7 +114,6 @@ class _AccountsScreenState extends State<AccountsScreen> {
           customFetch: (page) => widget.repository.myInkbunnyFavorites(page: page),
           repository: widget.repository,
           displaySettingsStore: widget.displaySettingsStore,
-          syncSettingsStore: widget.syncSettingsStore,
           downloadSettingsStore: widget.downloadSettingsStore,
         ),
       ),

@@ -30,6 +30,28 @@ bunny_core_result_t bunny_core_search_update(bunny_core_t *core, int64_t search_
     return bunny_core_map_db_result(result);
 }
 
+bunny_core_result_t bunny_core_get_default_sync_interval_hours(bunny_core_t *core, int *out_hours)
+{
+    if (!core) {
+        return BUNNY_CORE_ERR_INVALID_ARG;
+    }
+    bunny_core_db_lock(core);
+    bunny_db_result_t result = bunny_db_settings_get_default_interval_hours(core->db, out_hours);
+    bunny_core_db_unlock(core);
+    return bunny_core_map_db_result(result);
+}
+
+bunny_core_result_t bunny_core_set_default_sync_interval_hours(bunny_core_t *core, int hours)
+{
+    if (!core) {
+        return BUNNY_CORE_ERR_INVALID_ARG;
+    }
+    bunny_core_db_lock(core);
+    bunny_db_result_t result = bunny_db_settings_set_default_interval_hours(core->db, hours);
+    bunny_core_db_unlock(core);
+    return bunny_core_map_db_result(result);
+}
+
 bunny_core_result_t bunny_core_search_set_pinned(bunny_core_t *core, int64_t search_id, bool pinned)
 {
     if (!core) {

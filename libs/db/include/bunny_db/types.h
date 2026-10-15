@@ -35,6 +35,13 @@ typedef struct
     bool auto_favorite;      /* queue a favorite for every post this search finds during sync */
     int auto_favorite_stars; /* Inkbunny favorite level (1-3); ignored by e621, which has no stars concept */
     bool auto_upvote;        /* e621 only -- queue an upvote for every post this search finds during sync */
+    /* When true, interval_hours is ignored for scheduling -- the effective
+     * interval is whatever bunny_db_settings_get_default_interval_hours()
+     * currently returns, re-resolved on every due-check rather than frozen
+     * at creation/edit time. interval_hours itself is still stored (kept at
+     * whatever it last was) so toggling this back off doesn't lose the
+     * previous explicit value. */
+    bool uses_default_interval;
 } bunny_db_search_options_t;
 
 typedef struct
@@ -55,6 +62,7 @@ typedef struct
     char *last_viewed_at;    /* NULL if this search/pool has never been opened */
     bool initial_sync_done;             /* has the (capped) first full scan completed -- see sync.c */
     int64_t highest_synced_external_id; /* highest post id seen by any sync so far; 0 = none yet */
+    bool uses_default_interval;         /* see bunny_db_search_options_t above */
 } bunny_db_search_t;
 
 typedef struct

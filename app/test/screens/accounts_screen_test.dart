@@ -4,13 +4,12 @@ import 'package:little_bunny/repository/bunny_models.dart';
 import 'package:little_bunny/screens/accounts_screen.dart';
 import 'package:little_bunny/settings/display_settings_store.dart';
 import 'package:little_bunny/settings/download_settings_store.dart';
-import 'package:little_bunny/settings/sync_settings_store.dart';
 
 import '../fakes/fake_bunny_repository.dart';
 import '../fakes/test_app.dart';
 
 Widget _wrap(FakeBunnyRepository repository) => wrapWithLocalization(
-  AccountsScreen(repository: repository, displaySettingsStore: const DisplaySettingsStore(), syncSettingsStore: const SyncSettingsStore(), downloadSettingsStore: const DownloadSettingsStore()),
+  AccountsScreen(repository: repository, displaySettingsStore: const DisplaySettingsStore(), downloadSettingsStore: const DownloadSettingsStore()),
 );
 
 void main() {

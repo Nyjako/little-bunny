@@ -63,6 +63,7 @@ Map<String, Object?> _searchToMap(bunny_db_search_t search) => {
   'autoUpvote': search.auto_upvote,
   'pinned': search.pinned,
   'lastViewedAt': _readNullableString(search.last_viewed_at),
+  'usesDefaultInterval': search.uses_default_interval,
 };
 
 Map<String, Object?> _postToMap(bunny_db_post_t post) => {
@@ -161,8 +162,9 @@ class _CreateSearchRequest extends _Request {
   final bool autoFavorite;
   final int autoFavoriteStars;
   final bool autoUpvote;
+  final bool usesDefaultInterval;
 
-  const _CreateSearchRequest(this.site, this.label, this.query, this.intervalHours, this.autoFavorite, this.autoFavoriteStars, this.autoUpvote);
+  const _CreateSearchRequest(this.site, this.label, this.query, this.intervalHours, this.autoFavorite, this.autoFavoriteStars, this.autoUpvote, this.usesDefaultInterval);
 }
 
 class _UpdateSearchRequest extends _Request {
@@ -173,8 +175,19 @@ class _UpdateSearchRequest extends _Request {
   final bool autoFavorite;
   final int autoFavoriteStars;
   final bool autoUpvote;
+  final bool usesDefaultInterval;
 
-  const _UpdateSearchRequest(this.searchId, this.label, this.query, this.intervalHours, this.autoFavorite, this.autoFavoriteStars, this.autoUpvote);
+  const _UpdateSearchRequest(this.searchId, this.label, this.query, this.intervalHours, this.autoFavorite, this.autoFavoriteStars, this.autoUpvote, this.usesDefaultInterval);
+}
+
+class _GetDefaultSyncIntervalHoursRequest extends _Request {
+  const _GetDefaultSyncIntervalHoursRequest();
+}
+
+class _SetDefaultSyncIntervalHoursRequest extends _Request {
+  final int hours;
+
+  const _SetDefaultSyncIntervalHoursRequest(this.hours);
 }
 
 class _ListSearchesRequest extends _Request {
@@ -694,6 +707,7 @@ Object? _dispatch(Pointer<bunny_core_t>? core, _Request request, void Function(P
         options.ref.auto_favorite = r.autoFavorite;
         options.ref.auto_favorite_stars = r.autoFavoriteStars;
         options.ref.auto_upvote = r.autoUpvote;
+        options.ref.uses_default_interval = r.usesDefaultInterval;
         _check(_bindings.bunny_core_search_create(c, _siteFromWire(r.site), r.label.toNativeUtf8(allocator: arena).cast(), r.query.toNativeUtf8(allocator: arena).cast(), r.intervalHours, options, outId));
         return outId.value;
       case _ListSearchesRequest():
@@ -712,6 +726,7 @@ Object? _dispatch(Pointer<bunny_core_t>? core, _Request request, void Function(P
         options.ref.auto_favorite = r.autoFavorite;
         options.ref.auto_favorite_stars = r.autoFavoriteStars;
         options.ref.auto_upvote = r.autoUpvote;
+        options.ref.uses_default_interval = r.usesDefaultInterval;
         _check(_bindings.bunny_core_search_update(c, r.searchId, r.label.toNativeUtf8(allocator: arena).cast(), r.query.toNativeUtf8(allocator: arena).cast(), r.intervalHours, options));
         return null;
       case _ListSearchPostsRequest r:
@@ -784,6 +799,13 @@ Object? _dispatch(Pointer<bunny_core_t>? core, _Request request, void Function(P
         final outStats = arena<bunny_core_queue_stats_t>();
         _check(_bindings.bunny_core_process_queue(c, outStats));
         return _queueStatsToMap(outStats.ref);
+      case _GetDefaultSyncIntervalHoursRequest():
+        final outHours = arena<Int>();
+        _check(_bindings.bunny_core_get_default_sync_interval_hours(c, outHours));
+        return outHours.value;
+      case _SetDefaultSyncIntervalHoursRequest r:
+        _check(_bindings.bunny_core_set_default_sync_interval_hours(c, r.hours));
+        return null;
     }
   });
 }
@@ -872,8 +894,8 @@ class BunnyCoreNative {
 
   Future<void> verifyAccount(String site, String username, String secret) => _send<void>(_VerifyAccountRequest(site, username, secret));
 
-  Future<int> createSearch(String site, String label, String query, int intervalHours, {bool autoFavorite = false, int autoFavoriteStars = 1, bool autoUpvote = false}) =>
-      _send<int>(_CreateSearchRequest(site, label, query, intervalHours, autoFavorite, autoFavoriteStars, autoUpvote));
+  Future<int> createSearch(String site, String label, String query, int intervalHours, {bool autoFavorite = false, int autoFavoriteStars = 1, bool autoUpvote = false, bool usesDefaultInterval = false}) =>
+      _send<int>(_CreateSearchRequest(site, label, query, intervalHours, autoFavorite, autoFavoriteStars, autoUpvote, usesDefaultInterval));
 
   Future<List<Map<String, Object?>>> listSearches() => _send<List<Map<String, Object?>>>(const _ListSearchesRequest());
 
@@ -883,8 +905,12 @@ class BunnyCoreNative {
 
   Future<void> touchSearchViewed(int searchId) => _send<void>(_TouchSearchViewedRequest(searchId));
 
-  Future<void> updateSearch(int searchId, String label, String query, int intervalHours, {bool autoFavorite = false, int autoFavoriteStars = 1, bool autoUpvote = false}) =>
-      _send<void>(_UpdateSearchRequest(searchId, label, query, intervalHours, autoFavorite, autoFavoriteStars, autoUpvote));
+  Future<void> updateSearch(int searchId, String label, String query, int intervalHours, {bool autoFavorite = false, int autoFavoriteStars = 1, bool autoUpvote = false, bool usesDefaultInterval = false}) =>
+      _send<void>(_UpdateSearchRequest(searchId, label, query, intervalHours, autoFavorite, autoFavoriteStars, autoUpvote, usesDefaultInterval));
+
+  Future<int> getDefaultSyncIntervalHours() => _send<int>(const _GetDefaultSyncIntervalHoursRequest());
+
+  Future<void> setDefaultSyncIntervalHours(int hours) => _send<void>(_SetDefaultSyncIntervalHoursRequest(hours));
 
   Future<List<Map<String, Object?>>> listSearchPosts(int searchId, bool unseenOnly) => _send<List<Map<String, Object?>>>(_ListSearchPostsRequest(searchId, unseenOnly));
 

@@ -37,6 +37,7 @@ static cJSON *search_to_json(const bunny_db_search_t *search)
     cJSON_AddBoolToObject(json, "auto_upvote", search->auto_upvote);
     cJSON_AddBoolToObject(json, "pinned", search->pinned);
     add_optional_string(json, "last_viewed_at", search->last_viewed_at);
+    cJSON_AddBoolToObject(json, "uses_default_interval", search->uses_default_interval);
     return json;
 }
 
@@ -87,6 +88,7 @@ static int handle_post_searches(struct mg_connection *conn, server_context_t *ct
     options.auto_favorite = bunny_json_get_bool_or(body, "auto_favorite", false);
     options.auto_favorite_stars = bunny_json_get_int_or(body, "auto_favorite_stars", 1);
     options.auto_upvote = bunny_json_get_bool_or(body, "auto_upvote", false);
+    options.uses_default_interval = bunny_json_get_bool_or(body, "uses_default_interval", false);
     if (!valid) {
         cJSON_Delete(body);
         return server_json_respond_error(conn, BUNNY_CORE_ERR_INVALID_ARG);
@@ -200,20 +202,43 @@ static int handle_touch_search_viewed(struct mg_connection *conn, server_context
     return status;
 }
 
+static bool search_exists(server_context_t *ctx, int64_t search_id)
+{
+    bunny_db_search_list_t list;
+    if (bunny_core_search_list(ctx->core, &list) != BUNNY_CORE_OK) {
+        return false;
+    }
+    bool found = false;
+    for (size_t i = 0; i < list.count; i++) {
+        if (list.items[i].id == search_id) {
+            found = true;
+            break;
+        }
+    }
+    bunny_db_search_list_free(&list);
+    return found;
+}
+
+/* Enqueues onto ctx->sync_worker and returns immediately instead of calling
+ * bunny_core_sync_search directly -- a sync can run for minutes against a
+ * large search, and blocking the civetweb worker thread handling this
+ * request for that whole time risks starving the server's small (4) thread
+ * pool for everything else. See sync_worker.h. The existence check below is
+ * a cheap synchronous db read done up front specifically so an unknown id
+ * still gets an immediate 404 -- sync_worker_enqueue_search itself has no
+ * way to report a NOT_FOUND back once it's already returned 202. Actual
+ * sync progress/results are read via GET /sync/status, not this response. */
 static int handle_sync_search(struct mg_connection *conn, server_context_t *ctx, int64_t search_id)
 {
-    bunny_core_sync_stats_t stats;
-    bunny_core_result_t result = bunny_core_sync_search(ctx->core, search_id, &stats);
-
-    if (result != BUNNY_CORE_OK) {
-        return server_json_respond_error(conn, result);
+    if (!search_exists(ctx, search_id)) {
+        return server_json_respond_error(conn, BUNNY_CORE_ERR_NOT_FOUND);
     }
 
+    bool enqueued = sync_worker_enqueue_search(ctx->sync_worker, search_id);
+
     cJSON *response = cJSON_CreateObject();
-    cJSON_AddNumberToObject(response, "searches_checked", stats.searches_checked);
-    cJSON_AddNumberToObject(response, "searches_synced", stats.searches_synced);
-    cJSON_AddNumberToObject(response, "posts_upserted", stats.posts_upserted);
-    int status = server_json_respond(conn, 200, response);
+    cJSON_AddBoolToObject(response, "enqueued", enqueued);
+    int status = server_json_respond(conn, enqueued ? 202 : 409, response);
     cJSON_Delete(response);
     return status;
 }
@@ -256,6 +281,7 @@ static int handle_put_search(struct mg_connection *conn, server_context_t *ctx, 
     options.auto_favorite = bunny_json_get_bool_or(body, "auto_favorite", false);
     options.auto_favorite_stars = bunny_json_get_int_or(body, "auto_favorite_stars", 1);
     options.auto_upvote = bunny_json_get_bool_or(body, "auto_upvote", false);
+    options.uses_default_interval = bunny_json_get_bool_or(body, "uses_default_interval", false);
     if (!valid) {
         cJSON_Delete(body);
         return server_json_respond_error(conn, BUNNY_CORE_ERR_INVALID_ARG);

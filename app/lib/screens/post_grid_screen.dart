@@ -6,7 +6,6 @@ import '../repository/bunny_repository.dart';
 import '../services/download_manager.dart';
 import '../settings/display_settings_store.dart';
 import '../settings/download_settings_store.dart';
-import '../settings/sync_settings_store.dart';
 import '../util/responsive.dart';
 import '../widgets/post_grid_tile.dart';
 import 'post_detail_screen.dart';
@@ -19,7 +18,6 @@ class PostGridScreen extends StatefulWidget {
   final BunnySearch search;
   final BunnyRepository repository;
   final DisplaySettingsStore displaySettingsStore;
-  final SyncSettingsStore syncSettingsStore;
   final DownloadSettingsStore downloadSettingsStore;
 
   /// Pure logic, no required construction dependencies -- same reasoning as
@@ -32,7 +30,6 @@ class PostGridScreen extends StatefulWidget {
     required this.search,
     required this.repository,
     required this.displaySettingsStore,
-    required this.syncSettingsStore,
     required this.downloadSettingsStore,
     this.downloadManager = const DownloadManager(),
   });
@@ -141,7 +138,6 @@ class _PostGridScreenState extends State<PostGridScreen> {
           post: post,
           repository: widget.repository,
           displaySettingsStore: widget.displaySettingsStore,
-          syncSettingsStore: widget.syncSettingsStore,
           downloadSettingsStore: widget.downloadSettingsStore,
           siblingPosts: posts,
         ),

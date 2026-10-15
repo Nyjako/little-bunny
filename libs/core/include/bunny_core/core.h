@@ -98,6 +98,14 @@ bunny_core_result_t bunny_core_search_touch_last_viewed(bunny_core_t *core, int6
  * editable (not a param here). */
 bunny_core_result_t bunny_core_search_update(bunny_core_t *core, int64_t search_id, const char *label, const char *query, int interval_hours, const bunny_db_search_options_t *options);
 
+/* Server-wide default sync interval (hours) -- what a search with
+ * uses_default_interval set actually follows for scheduling, re-resolved on
+ * every due-check rather than frozen at creation time. See
+ * bunny_db_search_options_t.uses_default_interval and search_is_due()
+ * (sync.c). Seeded to 24 on first db open. */
+bunny_core_result_t bunny_core_get_default_sync_interval_hours(bunny_core_t *core, int *out_hours);
+bunny_core_result_t bunny_core_set_default_sync_interval_hours(bunny_core_t *core, int hours);
+
 /* Fetches a single cached post by its local id -- a thin pass-through to
  * bunny_db, used when a post detail view needs to open a *different* post
  * it doesn't already have a BunnyPost for (e.g. after bunny_core_fetch_and_

@@ -6,7 +6,6 @@ import 'package:little_bunny/settings/app_lock_service.dart';
 import 'package:little_bunny/settings/display_settings_store.dart';
 import 'package:little_bunny/settings/download_settings_store.dart';
 import 'package:little_bunny/settings/repository_settings_store.dart';
-import 'package:little_bunny/settings/sync_settings_store.dart';
 import 'package:little_bunny/settings/theme_settings_store.dart';
 import 'package:path_provider_platform_interface/path_provider_platform_interface.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -34,7 +33,6 @@ void main() {
           repository: FakeBunnyRepository(),
           themeSettingsStore: themeStore,
           lockService: AppLockService(FakeSecretStore()),
-          syncSettingsStore: const SyncSettingsStore(),
           downloadSettingsStore: const DownloadSettingsStore(),
           displaySettingsStore: const DisplaySettingsStore(),
           settingsStore: settingsStore(),
@@ -59,7 +57,6 @@ void main() {
           repository: FakeBunnyRepository(),
           themeSettingsStore: themeStore,
           lockService: AppLockService(FakeSecretStore()),
-          syncSettingsStore: const SyncSettingsStore(),
           downloadSettingsStore: const DownloadSettingsStore(),
           displaySettingsStore: const DisplaySettingsStore(),
           settingsStore: settingsStore(),
@@ -84,7 +81,6 @@ void main() {
           repository: FakeBunnyRepository(),
           themeSettingsStore: const ThemeSettingsStore(),
           lockService: AppLockService(FakeSecretStore()),
-          syncSettingsStore: const SyncSettingsStore(),
           downloadSettingsStore: const DownloadSettingsStore(),
           displaySettingsStore: const DisplaySettingsStore(),
           settingsStore: settingsStore(),
@@ -106,15 +102,14 @@ void main() {
   });
 
   testWidgets('shows the persisted default sync interval', (WidgetTester tester) async {
-    SharedPreferences.setMockInitialValues({'default_sync_interval_hours': 48});
+    final repository = FakeBunnyRepository()..defaultSyncIntervalHours = 48;
 
     await tester.pumpWidget(
       wrapWithLocalization(
         SettingsScreen(
-          repository: FakeBunnyRepository(),
+          repository: repository,
           themeSettingsStore: const ThemeSettingsStore(),
           lockService: AppLockService(FakeSecretStore()),
-          syncSettingsStore: const SyncSettingsStore(),
           downloadSettingsStore: const DownloadSettingsStore(),
           displaySettingsStore: const DisplaySettingsStore(),
           settingsStore: settingsStore(),
@@ -128,16 +123,15 @@ void main() {
     expect(tester.widget<TextField>(find.widgetWithText(TextField, 'Default sync interval (hours)')).controller!.text, '48');
   });
 
-  testWidgets('editing the default sync interval persists it', (WidgetTester tester) async {
-    const syncStore = SyncSettingsStore();
+  testWidgets('editing the default sync interval persists it (M20 -- server-side, not local-only)', (WidgetTester tester) async {
+    final repository = FakeBunnyRepository();
 
     await tester.pumpWidget(
       wrapWithLocalization(
         SettingsScreen(
-          repository: FakeBunnyRepository(),
+          repository: repository,
           themeSettingsStore: const ThemeSettingsStore(),
           lockService: AppLockService(FakeSecretStore()),
-          syncSettingsStore: syncStore,
           displaySettingsStore: const DisplaySettingsStore(),
           downloadSettingsStore: const DownloadSettingsStore(),
           settingsStore: settingsStore(),
@@ -151,7 +145,7 @@ void main() {
     await tester.enterText(find.widgetWithText(TextField, 'Default sync interval (hours)'), '12');
     await tester.pump();
 
-    expect(await syncStore.loadDefaultIntervalHours(), 12);
+    expect(await repository.getDefaultSyncIntervalHours(), 12);
   });
 
   testWidgets('shows the persisted preview quality and grid columns', (WidgetTester tester) async {
@@ -163,7 +157,6 @@ void main() {
           repository: FakeBunnyRepository(),
           themeSettingsStore: const ThemeSettingsStore(),
           lockService: AppLockService(FakeSecretStore()),
-          syncSettingsStore: const SyncSettingsStore(),
           downloadSettingsStore: const DownloadSettingsStore(),
           displaySettingsStore: const DisplaySettingsStore(),
           settingsStore: settingsStore(),
@@ -188,7 +181,6 @@ void main() {
           repository: FakeBunnyRepository(),
           themeSettingsStore: const ThemeSettingsStore(),
           lockService: AppLockService(FakeSecretStore()),
-          syncSettingsStore: const SyncSettingsStore(),
           downloadSettingsStore: downloadStore,
           displaySettingsStore: const DisplaySettingsStore(),
           settingsStore: settingsStore(),
@@ -223,7 +215,6 @@ void main() {
           repository: FakeBunnyRepository(),
           themeSettingsStore: const ThemeSettingsStore(),
           lockService: AppLockService(FakeSecretStore()),
-          syncSettingsStore: const SyncSettingsStore(),
           downloadSettingsStore: downloadStore,
           displaySettingsStore: const DisplaySettingsStore(),
           settingsStore: settingsStore(),
@@ -252,7 +243,6 @@ void main() {
           repository: FakeBunnyRepository(),
           themeSettingsStore: const ThemeSettingsStore(),
           lockService: AppLockService(FakeSecretStore()),
-          syncSettingsStore: const SyncSettingsStore(),
           downloadSettingsStore: const DownloadSettingsStore(),
           displaySettingsStore: displayStore,
           settingsStore: settingsStore(),
@@ -282,7 +272,6 @@ void main() {
           repository: repository,
           themeSettingsStore: const ThemeSettingsStore(),
           lockService: AppLockService(FakeSecretStore()),
-          syncSettingsStore: const SyncSettingsStore(),
           downloadSettingsStore: const DownloadSettingsStore(),
           displaySettingsStore: const DisplaySettingsStore(),
           settingsStore: settingsStore(),
@@ -330,7 +319,6 @@ void main() {
           repository: FakeBunnyRepository(),
           themeSettingsStore: const ThemeSettingsStore(),
           lockService: AppLockService(FakeSecretStore()),
-          syncSettingsStore: const SyncSettingsStore(),
           downloadSettingsStore: const DownloadSettingsStore(),
           displaySettingsStore: const DisplaySettingsStore(),
           settingsStore: store,
@@ -354,7 +342,6 @@ void main() {
           repository: FakeBunnyRepository(),
           themeSettingsStore: const ThemeSettingsStore(),
           lockService: AppLockService(FakeSecretStore()),
-          syncSettingsStore: const SyncSettingsStore(),
           downloadSettingsStore: const DownloadSettingsStore(),
           displaySettingsStore: const DisplaySettingsStore(),
           settingsStore: store,

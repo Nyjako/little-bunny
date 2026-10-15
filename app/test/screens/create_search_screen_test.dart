@@ -2,13 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:little_bunny/repository/bunny_models.dart';
 import 'package:little_bunny/screens/create_search_screen.dart';
-import 'package:little_bunny/settings/sync_settings_store.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../fakes/fake_bunny_repository.dart';
 import '../fakes/test_app.dart';
 
-Widget _wrap(FakeBunnyRepository repository) => wrapWithLocalization(CreateSearchScreen(repository: repository, syncSettingsStore: const SyncSettingsStore()));
+Widget _wrap(FakeBunnyRepository repository) => wrapWithLocalization(CreateSearchScreen(repository: repository));
 
 void main() {
   setUp(() {
@@ -177,9 +176,8 @@ void main() {
     expect(tester.widget<TextFormField>(find.widgetWithText(TextFormField, 'Label')).controller!.text, 'My custom label');
   });
 
-  testWidgets('interval field pre-fills from the stored default', (WidgetTester tester) async {
-    SharedPreferences.setMockInitialValues({'default_sync_interval_hours': 12});
-    final repository = FakeBunnyRepository();
+  testWidgets('interval field pre-fills from the server-side default (M20)', (WidgetTester tester) async {
+    final repository = FakeBunnyRepository()..defaultSyncIntervalHours = 12;
 
     await tester.pumpWidget(_wrap(repository));
     await tester.pumpAndSettle();
@@ -190,7 +188,7 @@ void main() {
   testWidgets('initialSite/initialQuery pre-fill the site and query (and mirror into the label)', (WidgetTester tester) async {
     final repository = FakeBunnyRepository();
 
-    await tester.pumpWidget(wrapWithLocalization(CreateSearchScreen(repository: repository, syncSettingsStore: const SyncSettingsStore(), initialSite: BunnySite.inkbunny, initialQuery: 'someartist')));
+    await tester.pumpWidget(wrapWithLocalization(CreateSearchScreen(repository: repository, initialSite: BunnySite.inkbunny, initialQuery: 'someartist')));
     await tester.pumpAndSettle();
 
     expect(tester.widget<TextFormField>(find.widgetWithText(TextFormField, 'Query')).controller!.text, 'someartist');
@@ -236,12 +234,31 @@ void main() {
     repository.poolInfoById[12345] = const BunnyPoolInfo(id: 12345, name: 'Some Comic', postCount: 10);
 
     await tester.pumpWidget(
-      wrapWithLocalization(CreateSearchScreen(repository: repository, syncSettingsStore: const SyncSettingsStore(), initialSite: BunnySite.e621, initialQuery: 'pool:12345', initialLabel: 'My Own Label')),
+      wrapWithLocalization(CreateSearchScreen(repository: repository, initialSite: BunnySite.e621, initialQuery: 'pool:12345', initialLabel: 'My Own Label')),
     );
     await tester.pumpAndSettle();
     await tester.pump(const Duration(milliseconds: 350));
     await tester.pumpAndSettle();
 
     expect(tester.widget<TextFormField>(find.widgetWithText(TextFormField, 'Label')).controller!.text, 'My Own Label');
+  });
+
+  testWidgets('enabling "use default interval" disables the interval field and submits it (M20)', (WidgetTester tester) async {
+    final repository = FakeBunnyRepository()..defaultSyncIntervalHours = 24;
+
+    await tester.pumpWidget(_wrap(repository));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.widgetWithText(SwitchListTile, 'Use default interval'));
+    await tester.pumpAndSettle();
+
+    expect(tester.widget<TextFormField>(find.widgetWithText(TextFormField, 'Sync interval (hours)')).enabled, isFalse);
+
+    await tester.enterText(find.widgetWithText(TextFormField, 'Label'), 'Foxes');
+    await tester.enterText(find.widgetWithText(TextFormField, 'Query'), 'fox');
+    await tester.tap(find.text('Create'));
+    await tester.pumpAndSettle();
+
+    expect(repository.searches.single.usesDefaultInterval, isTrue);
   });
 }

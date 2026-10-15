@@ -11,7 +11,6 @@ import '../repository/bunny_repository.dart';
 import '../services/download_manager.dart';
 import '../settings/display_settings_store.dart';
 import '../settings/download_settings_store.dart';
-import '../settings/sync_settings_store.dart';
 import '../util/image_headers.dart';
 import '../util/media_type.dart';
 import '../util/responsive.dart';
@@ -70,7 +69,6 @@ class PostDetailScreen extends StatefulWidget {
   final BunnyPost post;
   final BunnyRepository repository;
   final DisplaySettingsStore displaySettingsStore;
-  final SyncSettingsStore syncSettingsStore;
   final DownloadSettingsStore downloadSettingsStore;
 
   /// Pure logic, no required construction dependencies (unlike the settings
@@ -92,7 +90,6 @@ class PostDetailScreen extends StatefulWidget {
     required this.post,
     required this.repository,
     required this.displaySettingsStore,
-    required this.syncSettingsStore,
     required this.downloadSettingsStore,
     this.downloadManager = const DownloadManager(),
     this.siblingPosts,
@@ -424,7 +421,6 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
           query: query,
           repository: widget.repository,
           displaySettingsStore: widget.displaySettingsStore,
-          syncSettingsStore: widget.syncSettingsStore,
           downloadSettingsStore: widget.downloadSettingsStore,
         ),
       ),
@@ -540,7 +536,6 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
             post: post,
             repository: widget.repository,
             displaySettingsStore: widget.displaySettingsStore,
-            syncSettingsStore: widget.syncSettingsStore,
             downloadSettingsStore: widget.downloadSettingsStore,
           ),
         ),
@@ -615,7 +610,6 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
           query: 'pool:$poolId',
           repository: widget.repository,
           displaySettingsStore: widget.displaySettingsStore,
-          syncSettingsStore: widget.syncSettingsStore,
           downloadSettingsStore: widget.downloadSettingsStore,
           initialLabel: label,
         ),

@@ -182,6 +182,9 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String get searchesSyncInProgress => 'Syncing…';
+
+  @override
   String get tagStatsScreenTitle => 'Tag stats';
 
   @override
@@ -209,6 +212,9 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get createSearchIntervalLabel => 'Sync interval (hours)';
+
+  @override
+  String get createSearchUsesDefaultIntervalLabel => 'Use default interval';
 
   @override
   String get createSearchAutoFavoriteLabel => 'Auto-favorite new posts';
