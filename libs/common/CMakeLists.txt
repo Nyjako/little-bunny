@@ -1,6 +1,7 @@
 add_library(bunny_common STATIC
     src/http.c
     src/json.c
+    src/rate_limit.c
     src/goblin_impl.c
 )
 
