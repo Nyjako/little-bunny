@@ -71,6 +71,9 @@ class BunnySearch {
   /// due-check rather than frozen at creation/edit time.
   final bool usesDefaultInterval;
 
+  /// The [BunnyGroup] this search belongs to, or 0 if ungrouped (M21).
+  final int groupId;
+
   const BunnySearch({
     required this.id,
     required this.site,
@@ -87,7 +90,20 @@ class BunnySearch {
     this.pinned = false,
     this.lastViewedAt,
     this.usesDefaultInterval = false,
+    this.groupId = 0,
   });
+}
+
+/// A flat, non-nested way to organize saved searches in the UI's tree view
+/// (M21) -- mirrors `bunny_db_group_t`. A search's own membership lives on
+/// [BunnySearch.groupId], not here.
+class BunnyGroup {
+  final int id;
+  final String name;
+  final bool pinned;
+  final String createdAt;
+
+  const BunnyGroup({required this.id, required this.name, this.pinned = false, required this.createdAt});
 }
 
 /// Mirrors `bunny_db_post_t`.

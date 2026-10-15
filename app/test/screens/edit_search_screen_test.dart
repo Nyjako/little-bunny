@@ -11,6 +11,15 @@ Future<BunnySearch> _seedSearch(FakeBunnyRepository repository, {BunnySite site 
   return repository.searches.firstWhere((search) => search.id == id);
 }
 
+/// The group picker (M21) can push the Save button below the fold on the
+/// test surface's default height (e.g. once the Inkbunny star picker is
+/// also showing) -- scroll it into view first rather than tapping blind.
+Future<void> _tapSave(WidgetTester tester) async {
+  await tester.ensureVisible(find.text('Save'));
+  await tester.pumpAndSettle();
+  await tester.tap(find.text('Save'));
+}
+
 void main() {
   testWidgets('pre-fills every field from the given search', (WidgetTester tester) async {
     final repository = FakeBunnyRepository();
@@ -50,7 +59,7 @@ void main() {
 
     await tester.enterText(find.widgetWithText(TextFormField, 'Label'), 'Renamed');
     await tester.enterText(find.widgetWithText(TextFormField, 'Query'), 'wolf');
-    await tester.tap(find.text('Save'));
+    await _tapSave(tester);
     await tester.pumpAndSettle();
 
     final updated = repository.searches.single;
@@ -99,7 +108,7 @@ void main() {
 
     await tester.tap(find.text('3'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Save'));
+    await _tapSave(tester);
     await tester.pumpAndSettle();
 
     expect(repository.searches.single.autoFavoriteStars, 3);
@@ -118,7 +127,7 @@ void main() {
 
     expect(tester.widget<TextFormField>(find.widgetWithText(TextFormField, 'Sync interval (hours)')).enabled, isFalse);
 
-    await tester.tap(find.text('Save'));
+    await _tapSave(tester);
     await tester.pumpAndSettle();
 
     expect(repository.searches.single.usesDefaultInterval, isTrue);

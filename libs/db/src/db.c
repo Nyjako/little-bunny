@@ -38,6 +38,15 @@ static const bunny_db_migration_t BUNNY_DB_MIGRATIONS[] = {
      * instead of a value frozen at creation time. */
     {10, "ALTER TABLE searches ADD COLUMN uses_default_interval INTEGER NOT NULL DEFAULT 0;"
          "UPDATE searches SET uses_default_interval = 1 WHERE interval_hours = 24;"},
+    /* NULL (not 0) is "ungrouped" at the SQL level, since this is a real FK
+     * with ON DELETE SET NULL (deleting a group ungroups its searches
+     * rather than deleting them) -- SQLite would reject a non-NULL value
+     * that doesn't exist in search_groups once foreign_keys is on, so 0
+     * can't double as the sentinel here the way it does for e.g.
+     * highest_synced_external_id. searches.c translates application-level
+     * 0 <-> SQL NULL at the bind/read boundary, same public-API shape as
+     * every other "0 means none" column in this codebase. */
+    {11, "ALTER TABLE searches ADD COLUMN group_id INTEGER REFERENCES search_groups(id) ON DELETE SET NULL;"},
 };
 // clang-format on
 

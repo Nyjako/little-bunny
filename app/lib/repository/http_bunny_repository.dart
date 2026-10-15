@@ -32,7 +32,10 @@ BunnySearch _searchFromJson(Map<String, Object?> j) => BunnySearch(
   pinned: j['pinned'] as bool,
   lastViewedAt: j['last_viewed_at'] as String?,
   usesDefaultInterval: j['uses_default_interval'] as bool,
+  groupId: (j['group_id'] as num).toInt(),
 );
+
+BunnyGroup _groupFromJson(Map<String, Object?> j) => BunnyGroup(id: (j['id'] as num).toInt(), name: j['name'] as String, pinned: j['pinned'] as bool, createdAt: j['created_at'] as String);
 
 BunnyPost _postFromJson(Map<String, Object?> j) => BunnyPost(
   id: (j['id'] as num).toInt(),
@@ -259,6 +262,48 @@ class HttpBunnyRepository implements BunnyRepository {
   @override
   Future<void> touchSearchViewed(int searchId) async {
     final response = await _client.post(_uri('/searches/$searchId/viewed'), headers: _headers);
+    if (response.statusCode != 200) {
+      _throwError(response);
+    }
+  }
+
+  @override
+  Future<void> setSearchGroup(int searchId, int groupId) async {
+    final response = await _client.post(_uri('/searches/$searchId/group'), headers: _headers, body: jsonEncode({'group_id': groupId}));
+    if (response.statusCode != 200) {
+      _throwError(response);
+    }
+  }
+
+  @override
+  Future<int> createGroup(String name, bool pinned) async {
+    final response = await _client.post(_uri('/groups'), headers: _headers, body: jsonEncode({'name': name, 'pinned': pinned}));
+    if (response.statusCode != 201) {
+      _throwError(response);
+    }
+    return (_decodeObject(response)['id'] as num).toInt();
+  }
+
+  @override
+  Future<List<BunnyGroup>> listGroups() async {
+    final response = await _client.get(_uri('/groups'), headers: _headers);
+    if (response.statusCode != 200) {
+      _throwError(response);
+    }
+    return _decodeList(response).map(_groupFromJson).toList();
+  }
+
+  @override
+  Future<void> updateGroup(int groupId, String name, bool pinned) async {
+    final response = await _client.put(_uri('/groups/$groupId'), headers: _headers, body: jsonEncode({'name': name, 'pinned': pinned}));
+    if (response.statusCode != 200) {
+      _throwError(response);
+    }
+  }
+
+  @override
+  Future<void> deleteGroup(int groupId) async {
+    final response = await _client.delete(_uri('/groups/$groupId'), headers: _headers);
     if (response.statusCode != 200) {
       _throwError(response);
     }

@@ -18,25 +18,66 @@ const _wolfsStashFixture = '''
 ]
 ''';
 
-BunnySearch _search({int id = 1, BunnySite site = BunnySite.e621, String label = 'label', String query = 'query', int intervalHours = 24, bool autoFavorite = false, int autoFavoriteStars = 1, bool autoUpvote = false}) =>
-    BunnySearch(id: id, site: site, label: label, query: query, intervalHours: intervalHours, createdAt: '2026-01-01T00:00:00Z', autoFavorite: autoFavorite, autoFavoriteStars: autoFavoriteStars, autoUpvote: autoUpvote);
+BunnySearch _search({
+  int id = 1,
+  BunnySite site = BunnySite.e621,
+  String label = 'label',
+  String query = 'query',
+  int intervalHours = 24,
+  bool autoFavorite = false,
+  int autoFavoriteStars = 1,
+  bool autoUpvote = false,
+  bool pinned = false,
+  int groupId = 0,
+}) => BunnySearch(
+  id: id,
+  site: site,
+  label: label,
+  query: query,
+  intervalHours: intervalHours,
+  createdAt: '2026-01-01T00:00:00Z',
+  autoFavorite: autoFavorite,
+  autoFavoriteStars: autoFavoriteStars,
+  autoUpvote: autoUpvote,
+  pinned: pinned,
+  groupId: groupId,
+);
 
 void main() {
   const service = SearchBackupService();
 
   group('exportSearches', () {
     test('maps every round-trippable field, dropping local-only ones', () {
-      final json = service.exportSearches([_search(site: BunnySite.inkbunny, label: 'My label', query: 'fav:me', intervalHours: 12, autoFavorite: true, autoFavoriteStars: 3, autoUpvote: true)]);
+      final json = service.exportSearches([_search(site: BunnySite.inkbunny, label: 'My label', query: 'fav:me', intervalHours: 12, autoFavorite: true, autoFavoriteStars: 3, autoUpvote: true, pinned: true)], []);
 
       expect(json, [
-        {'site': 'inkbunny', 'label': 'My label', 'query': 'fav:me', 'intervalHours': 12, 'autoFavorite': true, 'autoFavoriteStars': 3, 'autoUpvote': true},
+        {'site': 'inkbunny', 'label': 'My label', 'query': 'fav:me', 'intervalHours': 12, 'autoFavorite': true, 'autoFavoriteStars': 3, 'autoUpvote': true, 'pinned': true},
       ]);
+    });
+
+    test('denormalizes the search\'s group name/pinned onto its row (M21)', () {
+      final json = service.exportSearches(
+        [_search(label: 'Wolves', query: 'wolf', groupId: 9)],
+        [const BunnyGroup(id: 9, name: 'Canines', pinned: true, createdAt: '2026-01-01T00:00:00Z')],
+      );
+
+      expect(json.single['groupName'], 'Canines');
+      expect(json.single['groupPinned'], true);
+    });
+
+    test('omits groupName/groupPinned for an ungrouped search', () {
+      final json = service.exportSearches([_search()], []);
+
+      expect(json.single.containsKey('groupName'), isFalse);
+      expect(json.single.containsKey('groupPinned'), isFalse);
     });
   });
 
   group('parseImportFile -- this app\'s own format', () {
     test('round-trips exportSearches output', () {
-      final exported = service.exportSearches([_search(site: BunnySite.e621, label: 'Wolves', query: 'wolf', intervalHours: 6, autoFavorite: true, autoFavoriteStars: 2, autoUpvote: true)]);
+      final exported = service.exportSearches([_search(site: BunnySite.e621, label: 'Wolves', query: 'wolf', intervalHours: 6, autoFavorite: true, autoFavoriteStars: 2, autoUpvote: true, pinned: true, groupId: 9)], [
+        const BunnyGroup(id: 9, name: 'Canines', pinned: true, createdAt: '2026-01-01T00:00:00Z'),
+      ]);
 
       final result = service.parseImportFile(jsonEncode(exported), defaultIntervalHours: 24);
 
@@ -51,6 +92,9 @@ void main() {
       expect(entry.autoFavorite, isTrue);
       expect(entry.autoFavoriteStars, 2);
       expect(entry.autoUpvote, isTrue);
+      expect(entry.pinned, isTrue);
+      expect(entry.groupName, 'Canines');
+      expect(entry.groupPinned, isTrue);
     });
 
     test('falls back to the default interval and the query as label when absent', () {
@@ -62,6 +106,8 @@ void main() {
       expect(entry.autoFavorite, isFalse);
       expect(entry.autoFavoriteStars, 1);
       expect(entry.autoUpvote, isFalse);
+      expect(entry.pinned, isFalse);
+      expect(entry.groupName, isNull);
     });
   });
 

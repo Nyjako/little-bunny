@@ -398,6 +398,9 @@ void main() {
 
     await tester.enterText(find.widgetWithText(TextFormField, 'Label'), 'Foxes');
     await tester.enterText(find.widgetWithText(TextFormField, 'Query'), 'fox');
+    // The group picker (M21) can push the Create button below the fold.
+    await tester.ensureVisible(find.text('Create'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Create'));
     await tester.pumpAndSettle();
 
@@ -478,5 +481,86 @@ void main() {
 
     expect(find.text('pool:5'), findsOneWidget);
     expect(repository.searches, hasLength(1));
+  });
+
+  testWidgets('assigning a search to a group nests it under an expandable group row (M21)', (WidgetTester tester) async {
+    final repository = FakeBunnyRepository();
+    await repository.createSearch(BunnySite.e621, 'Alpha', 'alpha');
+    await repository.createSearch(BunnySite.e621, 'Beta', 'beta');
+
+    await tester.pumpWidget(_wrap(repository));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byIcon(Icons.create_new_folder_outlined));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.widgetWithText(TextField, 'Name'), 'Canines');
+    await tester.tap(find.text('Create'));
+    await tester.pumpAndSettle();
+
+    expect(repository.groups, hasLength(1));
+    // No member searches yet in this tab, so the group itself isn't shown.
+    expect(find.text('Canines'), findsNothing);
+
+    await tester.longPress(find.widgetWithText(ListTile, 'Alpha'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byType(DropdownButtonFormField<int>));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Canines').last);
+    await tester.pumpAndSettle();
+
+    await tester.ensureVisible(find.text('Save'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Save'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Canines'), findsOneWidget);
+    expect(find.text('Beta'), findsOneWidget);
+
+    await tester.tap(find.text('Canines'));
+    await tester.pumpAndSettle();
+    expect(find.text('Alpha'), findsOneWidget);
+  });
+
+  testWidgets('pinning a group sorts it above unpinned searches (M21)', (WidgetTester tester) async {
+    final repository = FakeBunnyRepository();
+    final alphaId = await repository.createSearch(BunnySite.e621, 'Alpha', 'alpha');
+    await repository.createSearch(BunnySite.e621, 'Beta', 'beta');
+    final groupId = await repository.createGroup('Canines', false);
+    await repository.setSearchGroup(alphaId, groupId);
+
+    await tester.pumpWidget(_wrap(repository));
+    await tester.pumpAndSettle();
+
+    expect(tester.getTopLeft(find.text('Beta')).dy, lessThan(tester.getTopLeft(find.text('Canines')).dy));
+
+    final groupPinButton = find.descendant(of: find.widgetWithText(ExpansionTile, 'Canines'), matching: find.byIcon(Icons.push_pin_outlined));
+    await tester.tap(groupPinButton);
+    await tester.pumpAndSettle();
+
+    expect(tester.getTopLeft(find.text('Canines')).dy, lessThan(tester.getTopLeft(find.text('Beta')).dy));
+  });
+
+  testWidgets('deleting a group ungroups its member search instead of removing it (M21)', (WidgetTester tester) async {
+    final repository = FakeBunnyRepository();
+    final alphaId = await repository.createSearch(BunnySite.e621, 'Alpha', 'alpha');
+    final groupId = await repository.createGroup('Canines', false);
+    await repository.setSearchGroup(alphaId, groupId);
+
+    await tester.pumpWidget(_wrap(repository));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Canines'), findsOneWidget);
+
+    await tester.tap(find.descendant(of: find.widgetWithText(ExpansionTile, 'Canines'), matching: find.byType(PopupMenuButton<String>)));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Delete group'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Remove'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Canines'), findsNothing);
+    expect(repository.searches.single.groupId, 0);
+    expect(find.text('Alpha'), findsOneWidget);
   });
 }

@@ -77,6 +77,23 @@ bunny_db_result_t bunny_db_search_update(bunny_db_t *db, int64_t search_id, cons
  * single idempotent setter covers both. */
 bunny_db_result_t bunny_db_search_update_sync_progress(bunny_db_t *db, int64_t search_id, int64_t highest_external_id);
 
+/* Moves a search into group_id's group, or ungroups it entirely when
+ * group_id is 0 (M21) -- same dedicated-setter shape as
+ * bunny_db_search_set_pinned, not folded into bunny_db_search_options_t
+ * since it's a quick action from the searches list, not the full edit form. */
+bunny_db_result_t bunny_db_search_set_group(bunny_db_t *db, int64_t search_id, int64_t group_id);
+
+/* --- Search groups (M21) ---------------------------------------------------
+ * A flat, non-nested way to organize saved searches into folder-like groups
+ * in SearchesScreen's tree view. Deleting a group (bunny_db_group_delete)
+ * ungroups its member searches rather than deleting them -- enforced by the
+ * searches.group_id foreign key's ON DELETE SET NULL, not application code. */
+
+bunny_db_result_t bunny_db_group_create(bunny_db_t *db, const char *name, bool pinned, int64_t *out_id);
+bunny_db_result_t bunny_db_group_list(bunny_db_t *db, bunny_db_group_list_t *out_list);
+bunny_db_result_t bunny_db_group_update(bunny_db_t *db, int64_t group_id, const char *name, bool pinned);
+bunny_db_result_t bunny_db_group_delete(bunny_db_t *db, int64_t group_id);
+
 /* --- Posts cache ----------------------------------------------------------
  * Upserts are keyed on (site, external_id): calling this again for a post
  * already cached updates it in place rather than duplicating it. */

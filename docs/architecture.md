@@ -2716,6 +2716,113 @@ reads each search's own frozen `interval_hours` column.
   occasionally clear a little early or linger a little late relative to that one row's own
   sync.
 
+## M21 -- Search groups (tree view) + export/import fixes
+
+A flat (non-nested) way to organize saved searches into folder-like groups in the UI, plus a
+fix for an independently-flagged export gap (`pinned` was never included in
+`SearchBackupService.exportSearches`'s output).
+
+- **Schema (`libs/db/src/schema.h`, `libs/db/src/db.c`)** -- new `search_groups` table
+  (`id`/`name`/`pinned`/`created_at`) and `searches.group_id` (migration version 11): `ALTER
+  TABLE searches ADD COLUMN group_id INTEGER REFERENCES search_groups(id) ON DELETE SET
+  NULL;`. Verified directly via the `sqlite3` CLI before committing to this design that
+  SQLite's historical `ALTER TABLE ADD COLUMN` restrictions don't block a column carrying a
+  real foreign key with a cascading `ON DELETE` action, and that the cascade actually fires
+  (deleting a group sets every member search's `group_id` back to `NULL`, confirmed with
+  `PRAGMA foreign_keys = ON`, which this database already sets as the first statement in
+  `BUNNY_DB_SCHEMA_SQL`). Deleting a group therefore ungroups its searches rather than
+  deleting them -- a deliberate design choice (confirmed with the user over the alternative
+  of cascading the delete), enforced at the DB layer via this FK rather than in application
+  code, so there's no way for a future caller to get it wrong.
+  - **0-vs-NULL**: this codebase's usual "0 means none" convention for optional int64 columns
+    (e.g. `highest_synced_external_id`) can't be reused as-is for `group_id`, since a real FK
+    rejects a non-existent "group 0" once `foreign_keys` is on. `group_id` keeps 0 as the
+    public C-API sentinel, but `searches.c` translates it to/from actual SQL `NULL` at the
+    bind/read boundary: `fill_search_from_row` reads `sqlite3_column_type(stmt, 17) ==
+    SQLITE_NULL ? 0 : sqlite3_column_int64(stmt, 17)`; `bunny_db_search_set_group` binds
+    `NULL` when `group_id <= 0`.
+- **`libs/db/src/groups.c` (new)** -- `bunny_db_group_create`/`_list`/`_update`/`_delete`,
+  using `GOBLIN_DYN_ARRAY_DECL` for the list result same as `searches.c`'s own
+  `bunny_db_search_array`. `bunny_db_search_set_group` lives in `searches.c` instead, next to
+  `bunny_db_search_set_pinned`, since it mutates a `searches` row rather than a group one.
+- **`libs/core`** -- `bunny_core_search_set_group`/`group_create`/`group_list`/
+  `group_update`/`group_delete` in `searches.c`, each a thin `bunny_core_db_lock`/
+  `bunny_db_*`/`unlock`/`bunny_core_map_db_result` wrapper, the same shape as every other
+  pure-DB `bunny_core_*` function.
+- **Server** -- new `server/src/routes_groups.c/.h`: `POST`/`GET /groups`, `PUT`/
+  `DELETE /groups/{id}`, mirroring `routes_settings.c`'s handler shape exactly. Search-to-
+  group assignment is `POST /searches/{id}/group` on the existing `routes_searches.c`
+  instead (a search's own route, not a group one), taking `{"group_id": <int>}` where
+  `<= 0` ungroups. `search_to_json` gained a trailing `group_id` field. Both wired into
+  `server/CMakeLists.txt`'s `bunny_server_lib` sources and `app.c`'s route registration list.
+- **FFI (`bunny_core_ffi`)** -- `ffigen` regenerated against the 5 new `core.h` functions
+  and the new `bunny_db_group_t`/`bunny_db_group_list_t` structs; `bunny_core_isolate.dart`
+  gained matching `_Request` classes, `_handleListGroups`, switch cases, and public
+  `BunnyCoreNative` methods, plus `groupId` on `_searchToMap`.
+- **Flutter repository** -- new `BunnyGroup` model (`bunny_models.dart`); `BunnySearch`
+  gained `groupId` (default 0); `BunnyRepository` gained `setSearchGroup`/`createGroup`/
+  `listGroups`/`updateGroup`/`deleteGroup`, implemented in `HttpBunnyRepository` (plain REST
+  calls against the new routes), `FfiBunnyRepository` (thin `_wrapped(() => _native....)`
+  pass-throughs), and the test `FakeBunnyRepository` (an in-memory `groups` list plus
+  `_nextGroupId` counter, with `deleteGroup` looping over `searches` to call its own
+  `setSearchGroup(id, 0)` for every member -- same ungroup-not-delete semantics as the real
+  DB-level FK, just implemented explicitly since the fake has no cascading-FK equivalent).
+- **`SearchesScreen` tree view** -- a sealed `_TreeEntry` (`_SearchEntry`/`_GroupEntry`)
+  unifies a standalone search and a group-plus-its-members under one shape so the existing
+  pin-first/`SearchSortOrder` sort pass (`_sortedEntries`, generalized from the old
+  `_sorted(List<BunnySearch>)`) can treat them identically -- a `_GroupEntry`'s `label`/
+  `createdAt`/`lastViewedAt`/`unseenCount` are the group's own name/created-at/pinned, and
+  the aggregated max-member-lastViewedAt/sum-of-unseen/sum-of-total across its members,
+  respectively. `_buildEntries` groups a tab's filtered search list by `groupId`, dropping a
+  group entirely from that tab if it happens to have zero members there (a group can have
+  members split across the Searches/Pools tabs; each tab only shows its own slice). A group
+  renders as an `ExpansionTile` (folder icon leading, name + aggregated unseen badge in the
+  title row, its own pin toggle and a rename/delete `PopupMenuButton` in `trailing` --
+  deliberately not a per-row sync icon, which doesn't make sense for a whole group's worth of
+  searches at once) with members nested as ordinary `_searchTile` rows, extracted unchanged
+  from the pre-M21 inline `ListTile` builder so standalone-search rendering is identical
+  either way. A new app-bar "create group" `IconButton` opens a name-prompt dialog shared
+  (via `_promptForGroupName`) with the rename flow.
+  - **Combined data load**: `SearchesScreen._dataFuture` is now a single
+    `Future<({List<BunnySearch> searches, List<BunnyGroup> groups})>` (a Dart record)
+    instead of the old `Future<List<BunnySearch>>`, so one `FutureBuilder`/one refresh path
+    covers both lists -- every prior `_searchesFuture = ...` assignment (initial load,
+    manual refresh, and the mid-sync "keep counts climbing" poll in
+    `_pollSyncStatusOnce`) became `_dataFuture = _loadData()`.
+  - **Group picker race (`EditSearchScreen`)** -- `DropdownButtonFormField` only reads
+    `initialValue` on its very first build; naively setting it to `widget.search.groupId`
+    would permanently show "No group" for an already-grouped search if `listGroups()`
+    hadn't resolved yet by that first frame (the field has no way to know the "real" value
+    arrived later). Fixed with `key: ValueKey('groupField-${_groups.isNotEmpty}')` --
+    swapping `_groups` from empty to populated changes the key, forcing Flutter to discard
+    and rebuild the field with a fresh `initialValue` read against the now-complete group
+    list. `CreateSearchScreen`'s own picker doesn't need this, since its `_groupId` starts
+    at 0 ("No group"), which is always a valid selection regardless of whether the group
+    list has loaded yet.
+- **Export/import (`SearchBackupService`, `SettingsScreen`)** -- `exportSearches` now takes
+  a `List<BunnyGroup>` alongside the searches, resolving each search's `groupId` to a
+  `groupName`/`groupPinned` pair denormalized onto its own row (omitted entirely for an
+  ungrouped search) -- ids aren't portable across installs, so group membership travels as
+  a name instead, same reasoning that already applied to `site`/`label`/`query`. Also adds
+  the previously-missing `pinned` field (a real, independently-confirmed gap: every prior
+  export silently dropped it, so re-importing a file always unpinned everything). Import
+  (`_importSearches` in `settings_screen.dart`) resolves each row's `groupName` against a
+  `name -> id` map seeded from `listGroups()` and cached across the loop, creating a new
+  group (with `groupPinned`) only the first time a given name is seen -- then calls
+  `setSearchGroup`/`setSearchPinned` after `createSearch`, since neither `pinned` nor
+  `groupId` are creation-time parameters.
+- **Tests**: 6 new `libs/db/tests/test_db.c` cases (group create/list/update/delete,
+  ungrouping-not-deleting, `group_id` defaulting to 0 and round-tripping through
+  `bunny_db_search_set_group`); 2 new `libs/core/tests/test_sync.c` cases (the same
+  round-trip one level up); a new `test_group_crud_and_assign_search` in
+  `server/tests/test_integration.c` exercising every new route end-to-end including the
+  ungroup-on-delete behavior over real HTTP; a `createGroup`/`listGroups`/`setSearchGroup`/
+  `deleteGroup` round-trip added to `bunny_core_ffi/test/bunny_core_native_test.dart`; and on
+  the Flutter side, `search_backup_service_test.dart` gained export/import round-trip
+  coverage for `pinned`/`groupName`/`groupPinned`, while `searches_screen_test.dart` gained
+  three widget tests covering group creation + assignment + expand, pin-sorts-group-first,
+  and delete-ungroups-rather-than-removes.
+
 ## Inkbunny API constraints (found in M2)
 
 Verified against the live API and the official docs while building `libinkbunny`:

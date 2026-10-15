@@ -37,11 +37,21 @@ class _EditSearchScreenState extends State<EditSearchScreen> {
   late bool _autoUpvote = widget.search.autoUpvote;
   late int _autoFavoriteStars = widget.search.autoFavoriteStars;
   late bool _usesDefaultInterval = widget.search.usesDefaultInterval;
+  late int _groupId = widget.search.groupId;
+  List<BunnyGroup> _groups = [];
 
   @override
   void initState() {
     super.initState();
     _queryController.addListener(_onQueryChanged);
+    _loadGroups();
+  }
+
+  Future<void> _loadGroups() async {
+    final groups = await widget.repository.listGroups();
+    if (mounted) {
+      setState(() => _groups = groups);
+    }
   }
 
   @override
@@ -98,6 +108,9 @@ class _EditSearchScreenState extends State<EditSearchScreen> {
       autoUpvote: widget.search.site == BunnySite.e621 && _autoUpvote,
       usesDefaultInterval: _usesDefaultInterval,
     );
+    if (_groupId != widget.search.groupId) {
+      await widget.repository.setSearchGroup(widget.search.id, _groupId);
+    }
 
     if (!mounted) {
       return;
@@ -162,6 +175,24 @@ class _EditSearchScreenState extends State<EditSearchScreen> {
                 value: _usesDefaultInterval,
                 onChanged: _submitting ? null : (value) => setState(() => _usesDefaultInterval = value),
               ),
+              DropdownButtonFormField<int>(
+                // DropdownButtonFormField only reads initialValue once, on
+                // first build -- the key forces a fresh instance (and so a
+                // fresh initialValue read) the moment [_loadGroups] resolves,
+                // so a search that's actually in a group doesn't render as
+                // "No group" forever just because the list arrived a frame
+                // late. [_groupId] itself always holds the real value either
+                // way -- this only affects what's shown before any edit.
+                key: ValueKey('groupField-${_groups.isNotEmpty}'),
+                initialValue: _groups.any((group) => group.id == _groupId) ? _groupId : 0,
+                decoration: InputDecoration(labelText: l10n.createSearchGroupLabel),
+                items: [
+                  DropdownMenuItem(value: 0, child: Text(l10n.createSearchGroupNone)),
+                  ..._groups.map((group) => DropdownMenuItem(value: group.id, child: Text(group.name))),
+                ],
+                onChanged: _submitting ? null : (value) => setState(() => _groupId = value ?? 0),
+              ),
+              const SizedBox(height: 16),
               SwitchListTile(
                 contentPadding: EdgeInsets.zero,
                 title: Text(l10n.createSearchAutoFavoriteLabel),

@@ -9,6 +9,15 @@ import '../fakes/test_app.dart';
 
 Widget _wrap(FakeBunnyRepository repository) => wrapWithLocalization(CreateSearchScreen(repository: repository));
 
+/// The group picker (M21) pushed the Create button below the fold on the
+/// test surface's default height -- scroll it into view first rather than
+/// tapping blind, same fix needed at every call site below.
+Future<void> _tapCreate(WidgetTester tester) async {
+  await tester.ensureVisible(find.text('Create'));
+  await tester.pumpAndSettle();
+  await tester.tap(find.text('Create'));
+}
+
 void main() {
   setUp(() {
     SharedPreferences.setMockInitialValues({});
@@ -19,7 +28,7 @@ void main() {
     await tester.pumpWidget(_wrap(repository));
     await tester.pumpAndSettle();
 
-    await tester.tap(find.text('Create'));
+    await _tapCreate(tester);
     await tester.pumpAndSettle();
 
     expect(find.text('Required'), findsNWidgets(2));
@@ -33,7 +42,7 @@ void main() {
 
     await tester.enterText(find.widgetWithText(TextFormField, 'Label'), 'Foxes');
     await tester.enterText(find.widgetWithText(TextFormField, 'Query'), 'fox');
-    await tester.tap(find.text('Create'));
+    await _tapCreate(tester);
     await tester.pumpAndSettle();
 
     expect(repository.searches, hasLength(1));
@@ -53,7 +62,7 @@ void main() {
     await tester.enterText(find.widgetWithText(TextFormField, 'Query'), 'fox');
     await tester.tap(find.widgetWithText(SwitchListTile, 'Auto-favorite new posts'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Create'));
+    await _tapCreate(tester);
     await tester.pumpAndSettle();
 
     expect(repository.searches.single.autoFavorite, isTrue);
@@ -70,7 +79,7 @@ void main() {
     await tester.enterText(find.widgetWithText(TextFormField, 'Query'), 'fox');
     await tester.tap(find.widgetWithText(SwitchListTile, 'Auto-upvote new posts'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Create'));
+    await _tapCreate(tester);
     await tester.pumpAndSettle();
 
     expect(repository.searches.single.autoUpvote, isTrue);
@@ -148,7 +157,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.enterText(find.widgetWithText(TextFormField, 'Label'), 'Foxes');
     await tester.enterText(find.widgetWithText(TextFormField, 'Query'), 'fox');
-    await tester.tap(find.text('Create'));
+    await _tapCreate(tester);
     await tester.pumpAndSettle();
 
     expect(repository.searches.single.site, BunnySite.inkbunny);
@@ -194,7 +203,7 @@ void main() {
     expect(tester.widget<TextFormField>(find.widgetWithText(TextFormField, 'Query')).controller!.text, 'someartist');
     expect(tester.widget<TextFormField>(find.widgetWithText(TextFormField, 'Label')).controller!.text, 'someartist');
 
-    await tester.tap(find.text('Create'));
+    await _tapCreate(tester);
     await tester.pumpAndSettle();
 
     expect(repository.searches, hasLength(1));
@@ -256,7 +265,7 @@ void main() {
 
     await tester.enterText(find.widgetWithText(TextFormField, 'Label'), 'Foxes');
     await tester.enterText(find.widgetWithText(TextFormField, 'Query'), 'fox');
-    await tester.tap(find.text('Create'));
+    await _tapCreate(tester);
     await tester.pumpAndSettle();
 
     expect(repository.searches.single.usesDefaultInterval, isTrue);

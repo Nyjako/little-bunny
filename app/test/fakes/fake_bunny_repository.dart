@@ -62,6 +62,8 @@ class FakeBunnyRepository implements BunnyRepository {
   /// Each entry is the `page` passed to [myInkbunnyFavorites].
   final List<int> myInkbunnyFavoritesCalls = [];
   int _nextSearchId = 1;
+  final List<BunnyGroup> groups = [];
+  int _nextGroupId = 1;
   int syncCallCount = 0;
 
   /// Set a message here to make [verifyAccount] throw for that site instead
@@ -135,6 +137,7 @@ class FakeBunnyRepository implements BunnyRepository {
           pinned: search.pinned,
           lastViewedAt: search.lastViewedAt,
           usesDefaultInterval: search.usesDefaultInterval,
+          groupId: search.groupId,
         ),
       )
       .toList();
@@ -168,6 +171,7 @@ class FakeBunnyRepository implements BunnyRepository {
       pinned: pinned,
       lastViewedAt: search.lastViewedAt,
       usesDefaultInterval: search.usesDefaultInterval,
+      groupId: search.groupId,
     );
   }
 
@@ -202,6 +206,7 @@ class FakeBunnyRepository implements BunnyRepository {
       autoUpvote: autoUpvote,
       pinned: search.pinned,
       usesDefaultInterval: usesDefaultInterval,
+      groupId: search.groupId,
     );
   }
 
@@ -512,7 +517,64 @@ class FakeBunnyRepository implements BunnyRepository {
       pinned: search.pinned,
       lastViewedAt: DateTime.now().toUtc().toIso8601String(),
       usesDefaultInterval: search.usesDefaultInterval,
+      groupId: search.groupId,
     );
+  }
+
+  @override
+  Future<void> setSearchGroup(int searchId, int groupId) async {
+    final index = searches.indexWhere((search) => search.id == searchId);
+    if (index == -1) {
+      return;
+    }
+    final search = searches[index];
+    searches[index] = BunnySearch(
+      id: search.id,
+      site: search.site,
+      label: search.label,
+      query: search.query,
+      intervalHours: search.intervalHours,
+      createdAt: search.createdAt,
+      lastRunAt: search.lastRunAt,
+      unseenCount: search.unseenCount,
+      totalCount: search.totalCount,
+      autoFavorite: search.autoFavorite,
+      autoFavoriteStars: search.autoFavoriteStars,
+      autoUpvote: search.autoUpvote,
+      pinned: search.pinned,
+      lastViewedAt: search.lastViewedAt,
+      usesDefaultInterval: search.usesDefaultInterval,
+      groupId: groupId,
+    );
+  }
+
+  @override
+  Future<int> createGroup(String name, bool pinned) async {
+    final id = _nextGroupId++;
+    groups.add(BunnyGroup(id: id, name: name, pinned: pinned, createdAt: '2026-01-01T00:00:00Z'));
+    return id;
+  }
+
+  @override
+  Future<List<BunnyGroup>> listGroups() async => List.of(groups);
+
+  @override
+  Future<void> updateGroup(int groupId, String name, bool pinned) async {
+    final index = groups.indexWhere((group) => group.id == groupId);
+    if (index == -1) {
+      return;
+    }
+    groups[index] = BunnyGroup(id: groupId, name: name, pinned: pinned, createdAt: groups[index].createdAt);
+  }
+
+  @override
+  Future<void> deleteGroup(int groupId) async {
+    groups.removeWhere((group) => group.id == groupId);
+    for (var i = 0; i < searches.length; i++) {
+      if (searches[i].groupId == groupId) {
+        await setSearchGroup(searches[i].id, 0);
+      }
+    }
   }
 
   @override

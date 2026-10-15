@@ -15,6 +15,14 @@ class ImportSearchEntry {
   final bool autoFavorite;
   final int autoFavoriteStars;
   final bool autoUpvote;
+  final bool pinned;
+
+  /// The group this search belonged to in the exporting install, denormalized
+  /// to a name since group ids aren't portable across installs (M21) -- null
+  /// means ungrouped. The importer resolves this to a local group id,
+  /// creating one with [groupPinned] if no group with this name exists yet.
+  final String? groupName;
+  final bool groupPinned;
 
   const ImportSearchEntry({
     required this.site,
@@ -24,6 +32,9 @@ class ImportSearchEntry {
     this.autoFavorite = false,
     this.autoFavoriteStars = 1,
     this.autoUpvote = false,
+    this.pinned = false,
+    this.groupName,
+    this.groupPinned = false,
   });
 }
 
@@ -65,19 +76,28 @@ class ImportParseResult {
 class SearchBackupService {
   const SearchBackupService();
 
-  List<Map<String, dynamic>> exportSearches(List<BunnySearch> searches) => searches
-      .map(
-        (search) => {
-          'site': search.site.toWireString(),
-          'label': search.label,
-          'query': search.query,
-          'intervalHours': search.intervalHours,
-          'autoFavorite': search.autoFavorite,
-          'autoFavoriteStars': search.autoFavoriteStars,
-          'autoUpvote': search.autoUpvote,
-        },
-      )
-      .toList();
+  /// [groups] resolves each search's [BunnySearch.groupId] to the group's
+  /// name/pinned state for the export -- ids themselves aren't portable
+  /// across installs (M21), so the group is denormalized onto each of its
+  /// member search rows instead of exported as a separate list.
+  List<Map<String, dynamic>> exportSearches(List<BunnySearch> searches, List<BunnyGroup> groups) {
+    final groupsById = {for (final group in groups) group.id: group};
+    return searches.map((search) {
+      final group = groupsById[search.groupId];
+      return {
+        'site': search.site.toWireString(),
+        'label': search.label,
+        'query': search.query,
+        'intervalHours': search.intervalHours,
+        'autoFavorite': search.autoFavorite,
+        'autoFavoriteStars': search.autoFavoriteStars,
+        'autoUpvote': search.autoUpvote,
+        'pinned': search.pinned,
+        if (group != null) 'groupName': group.name,
+        if (group != null) 'groupPinned': group.pinned,
+      };
+    }).toList();
+  }
 
   ImportParseResult parseImportFile(String contents, {required int defaultIntervalHours}) {
     dynamic decoded;
@@ -108,6 +128,7 @@ class SearchBackupService {
         continue;
       }
       final label = row['label'] as String?;
+      final groupName = row['groupName'] as String?;
       entries.add(
         ImportSearchEntry(
           site: BunnySite.fromWireString(row['site'] as String),
@@ -117,6 +138,9 @@ class SearchBackupService {
           autoFavorite: (row['autoFavorite'] as bool?) ?? false,
           autoFavoriteStars: (row['autoFavoriteStars'] as int?) ?? 1,
           autoUpvote: (row['autoUpvote'] as bool?) ?? false,
+          pinned: (row['pinned'] as bool?) ?? false,
+          groupName: (groupName == null || groupName.isEmpty) ? null : groupName,
+          groupPinned: (row['groupPinned'] as bool?) ?? false,
         ),
       );
     }
