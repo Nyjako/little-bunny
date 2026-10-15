@@ -23,13 +23,13 @@ bunny_core_result_t bunny_core_open(const bunny_core_config_t *config, bunny_cor
         return bunny_core_map_db_result(result);
     }
 
-    if (pthread_mutex_init(&core->db_mutex, NULL) != 0) {
+    if (bunny_mutex_init(&core->db_mutex) != 0) {
         bunny_db_close(core->db);
         free(core);
         return BUNNY_CORE_ERR_UNKNOWN;
     }
-    if (pthread_mutex_init(&core->sync_mutex, NULL) != 0) {
-        pthread_mutex_destroy(&core->db_mutex);
+    if (bunny_mutex_init(&core->sync_mutex) != 0) {
+        bunny_mutex_destroy(&core->db_mutex);
         bunny_db_close(core->db);
         free(core);
         return BUNNY_CORE_ERR_UNKNOWN;
@@ -51,8 +51,8 @@ void bunny_core_close(bunny_core_t *core)
     if (!core) {
         return;
     }
-    pthread_mutex_destroy(&core->sync_mutex);
-    pthread_mutex_destroy(&core->db_mutex);
+    bunny_mutex_destroy(&core->sync_mutex);
+    bunny_mutex_destroy(&core->db_mutex);
     bunny_db_close(core->db);
     free(core->user_agent);
     free(core);
