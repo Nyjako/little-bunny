@@ -52,13 +52,20 @@ elseif(MSVC)
   # the target name itself, as the other two branches do) means CMake's
   # Visual Studio generator never records bunny_core/bunny_db as real
   # project dependencies of bunny_core_ffi -- MSBuild is then free to link
-  # bunny_core_ffi.vcxproj before bunny_core.vcxproj has produced its .lib,
-  # failing with LNK1104 ("cannot open file ...bunny_core.lib"). Spelling
-  # out the dependency explicitly forces the correct build order.
+  # bunny_core_ffi.vcxproj before bunny_core.vcxproj has produced its .lib.
+  # Spelling out the dependency explicitly forces the correct build order.
   add_dependencies(bunny_core_ffi bunny_core bunny_db)
+  # A leading "/" (as opposed to "-") makes CMake's Visual Studio generator
+  # think this whole argument looks like a path and rewrite its separators
+  # for the native platform -- including the leading "/" itself, turning
+  # "/WHOLEARCHIVE:..." into "\WHOLEARCHIVE:...". MSVC's linker no longer
+  # recognizes that as a switch and instead tries to open it as a literal
+  # (nonexistent) filename, failing with LNK1104. MSVC accepts "-" as an
+  # equivalent switch prefix and CMake leaves strings starting with "-"
+  # alone, so this sidesteps the mangling entirely.
   target_link_libraries(bunny_core_ffi PRIVATE
-    "/WHOLEARCHIVE:$<TARGET_FILE:bunny_core>"
-    "/WHOLEARCHIVE:$<TARGET_FILE:bunny_db>"
+    "-WHOLEARCHIVE:$<TARGET_FILE:bunny_core>"
+    "-WHOLEARCHIVE:$<TARGET_FILE:bunny_db>"
   )
 else()
   # GNU ld/lld (Linux, Android NDK, MinGW).
