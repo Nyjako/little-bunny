@@ -132,29 +132,6 @@ jobs:
           name: little-bunny-app-macos-arm64
           path: little-bunny-app-macos-arm64.zip
 
-  # macos-15-intel: GitHub's last surviving Intel macOS runner label
-  # (macos-13 fully retired Dec 2025; this one's available until ~Aug 2027).
-  # Native build on native hardware, identical steps to the arm64 job above.
-  build-app-macos-x64:
-    needs: test
-    runs-on: macos-15-intel
-    steps:
-      - uses: actions/checkout@v4
-      - uses: subosito/flutter-action@v2
-        with:
-          flutter-version: ${{ env.FLUTTER_VERSION }}
-          channel: stable
-      - working-directory: app
-        run: |
-          flutter pub get
-          flutter build macos --release
-      - working-directory: app/build/macos/Build/Products/Release
-        run: zip -r "${{ github.workspace }}/little-bunny-app-macos-x64.zip" little_bunny.app
-      - uses: actions/upload-artifact@v4
-        with:
-          name: little-bunny-app-macos-x64
-          path: little-bunny-app-macos-x64.zip
-
   release:
     needs:
       [
@@ -163,7 +140,6 @@ jobs:
         build-app-android,
         build-windows,
         build-app-macos-arm64,
-        build-app-macos-x64,
       ]
     runs-on: ubuntu-latest
     steps:
