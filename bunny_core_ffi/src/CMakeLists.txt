@@ -48,22 +48,29 @@ if(APPLE)
     -Wl,-force_load,$<TARGET_FILE:bunny_db>
   )
 elseif(MSVC)
-  # Passing "$<TARGET_FILE:bunny_core>" as a bare flag string (rather than
-  # the target name itself, as the other two branches do) means CMake's
-  # Visual Studio generator never records bunny_core/bunny_db as real
-  # project dependencies of bunny_core_ffi -- MSBuild is then free to link
-  # bunny_core_ffi.vcxproj before bunny_core.vcxproj has produced its .lib.
-  # Spelling out the dependency explicitly forces the correct build order.
-  add_dependencies(bunny_core_ffi bunny_core bunny_db)
+  # bunny_core/bunny_db are listed twice on purpose. As plain target names
+  # (not just inside the WHOLEARCHIVE flag strings below), CMake walks their
+  # transitive link requirements (sqlite3, cJSON, curl, bunny_common,
+  # bunny_e621, bunny_inkbunny) and appends them to the link line, and
+  # records a real project dependency so MSBuild builds them before linking
+  # bunny_core_ffi -- neither happens for a target referenced only inside a
+  # raw flag string. But a bare reference alone would only pull in whichever
+  # .obj members something else already calls, which is none of them (Dart
+  # looks every symbol up by name via dlopen at runtime) -- hence also the
+  # WHOLEARCHIVE flags, to force all of bunny_core's/bunny_db's own object
+  # code in regardless.
+  #
   # A leading "/" (as opposed to "-") makes CMake's Visual Studio generator
-  # think this whole argument looks like a path and rewrite its separators
-  # for the native platform -- including the leading "/" itself, turning
-  # "/WHOLEARCHIVE:..." into "\WHOLEARCHIVE:...". MSVC's linker no longer
-  # recognizes that as a switch and instead tries to open it as a literal
-  # (nonexistent) filename, failing with LNK1104. MSVC accepts "-" as an
-  # equivalent switch prefix and CMake leaves strings starting with "-"
-  # alone, so this sidesteps the mangling entirely.
+  # think the WHOLEARCHIVE argument looks like a path and rewrite its
+  # separators for the native platform -- including the leading "/" itself,
+  # turning "/WHOLEARCHIVE:..." into "\WHOLEARCHIVE:...". MSVC's linker no
+  # longer recognizes that as a switch and instead tries to open it as a
+  # literal (nonexistent) filename, failing with LNK1104. MSVC accepts "-"
+  # as an equivalent switch prefix and CMake leaves strings starting with
+  # "-" alone, so this sidesteps the mangling entirely.
   target_link_libraries(bunny_core_ffi PRIVATE
+    bunny_core
+    bunny_db
     "-WHOLEARCHIVE:$<TARGET_FILE:bunny_core>"
     "-WHOLEARCHIVE:$<TARGET_FILE:bunny_db>"
   )
