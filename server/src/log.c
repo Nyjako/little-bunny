@@ -1,9 +1,10 @@
 #include "log.h"
 
+#include <bunny_common/thread.h>
 #include <goblin/cstr.h>
 
-#include <pthread.h>
 #include <stdarg.h>
+#include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -14,14 +15,27 @@
 static char *g_lines[SERVER_LOG_CAPACITY];
 static size_t g_count = 0; /* valid entries, caps at SERVER_LOG_CAPACITY */
 static size_t g_next = 0;  /* next write index, wraps */
-static pthread_mutex_t g_log_mutex = PTHREAD_MUTEX_INITIALIZER;
+static bunny_mutex_t g_log_mutex;
+static bool g_log_mutex_initialized = false;
+
+void server_log_init(void)
+{
+    if (!g_log_mutex_initialized) {
+        bunny_mutex_init(&g_log_mutex);
+        g_log_mutex_initialized = true;
+    }
+}
 
 void server_log(const char *level, const char *fmt, ...)
 {
     char timestamp[32];
     time_t now = time(NULL);
     struct tm tm_utc;
+#ifdef _WIN32
+    gmtime_s(&tm_utc, &now);
+#else
     gmtime_r(&now, &tm_utc);
+#endif
     strftime(timestamp, sizeof(timestamp), "%Y-%m-%dT%H:%M:%SZ", &tm_utc);
 
     char message[1024];
@@ -36,25 +50,25 @@ void server_log(const char *level, const char *fmt, ...)
     fprintf(stdout, "%s\n", line);
     fflush(stdout);
 
-    pthread_mutex_lock(&g_log_mutex);
+    bunny_mutex_lock(&g_log_mutex);
     free(g_lines[g_next]);
     g_lines[g_next] = goblin_copy_cstr(line);
     g_next = (g_next + 1) % SERVER_LOG_CAPACITY;
     if (g_count < SERVER_LOG_CAPACITY) {
         g_count++;
     }
-    pthread_mutex_unlock(&g_log_mutex);
+    bunny_mutex_unlock(&g_log_mutex);
 }
 
 size_t server_log_snapshot(char ***out_lines)
 {
-    pthread_mutex_lock(&g_log_mutex);
+    bunny_mutex_lock(&g_log_mutex);
     size_t count = g_count;
     char **copy = NULL;
     if (count > 0) {
         copy = malloc(count * sizeof(char *));
         if (!copy) {
-            pthread_mutex_unlock(&g_log_mutex);
+            bunny_mutex_unlock(&g_log_mutex);
             *out_lines = NULL;
             return 0;
         }
@@ -66,7 +80,7 @@ size_t server_log_snapshot(char ***out_lines)
             copy[i] = goblin_copy_cstr(g_lines[(start + i) % SERVER_LOG_CAPACITY]);
         }
     }
-    pthread_mutex_unlock(&g_log_mutex);
+    bunny_mutex_unlock(&g_log_mutex);
 
     *out_lines = copy;
     return count;
@@ -74,12 +88,12 @@ size_t server_log_snapshot(char ***out_lines)
 
 void server_log_reset(void)
 {
-    pthread_mutex_lock(&g_log_mutex);
+    bunny_mutex_lock(&g_log_mutex);
     for (size_t i = 0; i < SERVER_LOG_CAPACITY; i++) {
         free(g_lines[i]);
         g_lines[i] = NULL;
     }
     g_count = 0;
     g_next = 0;
-    pthread_mutex_unlock(&g_log_mutex);
+    bunny_mutex_unlock(&g_log_mutex);
 }

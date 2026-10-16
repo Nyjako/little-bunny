@@ -10,6 +10,16 @@
  * recent lines in memory so the authenticated GET /logs route can hand them
  * to a client with no SSH access to the box. */
 
+/* Must be called exactly once, before any other server_log* call, and before
+ * any second thread could possibly be calling server_log* concurrently --
+ * server_app_start() does this as its very first statement, and the log
+ * test suite does it once in setUp(). Needed because CRITICAL_SECTION (this
+ * module's mutex on Windows, see bunny_common/thread.h) has no static-
+ * initializer equivalent to pthread_mutex_t's PTHREAD_MUTEX_INITIALIZER, so
+ * the old `static pthread_mutex_t m = PTHREAD_MUTEX_INITIALIZER;` approach
+ * doesn't port. Safe to call more than once (idempotent). */
+void server_log_init(void);
+
 /* printf-style; `level` is a short tag like "INFO"/"WARN"/"ERROR". */
 void server_log(const char *level, const char *fmt, ...)
 #if defined(__GNUC__) || defined(__clang__)

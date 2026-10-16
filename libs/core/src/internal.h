@@ -1,38 +1,12 @@
 #ifndef BUNNY_CORE_INTERNAL_H
 #define BUNNY_CORE_INTERNAL_H
 
+#include <bunny_common/thread.h>
 #include <e621/client.h>
 #include <inkbunny/client.h>
 
 #include <stdarg.h>
 #include <stdio.h>
-
-/* pthread.h doesn't exist on MSVC (POSIX-only, no equivalent without a
- * separate shim) -- this project has only ever built bunny_core with GCC/
- * Clang locally and via dockcross/MinGW, never real MSVC, so this never
- * surfaced until a native Windows CI build tried it. CRITICAL_SECTION is
- * the native Win32 equivalent of a (non-recursive-by-default, same as a
- * plain pthread_mutex_t) mutex; wrapped here so every db_mutex/sync_mutex
- * call site below stays unchanged either way. */
-#ifdef _WIN32
-#include <windows.h>
-typedef CRITICAL_SECTION bunny_mutex_t;
-static inline int bunny_mutex_init(bunny_mutex_t *mutex)
-{
-    InitializeCriticalSection(mutex);
-    return 0;
-}
-static inline void bunny_mutex_destroy(bunny_mutex_t *mutex) { DeleteCriticalSection(mutex); }
-static inline void bunny_mutex_lock(bunny_mutex_t *mutex) { EnterCriticalSection(mutex); }
-static inline void bunny_mutex_unlock(bunny_mutex_t *mutex) { LeaveCriticalSection(mutex); }
-#else
-#include <pthread.h>
-typedef pthread_mutex_t bunny_mutex_t;
-static inline int bunny_mutex_init(bunny_mutex_t *mutex) { return pthread_mutex_init(mutex, NULL); }
-static inline void bunny_mutex_destroy(bunny_mutex_t *mutex) { pthread_mutex_destroy(mutex); }
-static inline void bunny_mutex_lock(bunny_mutex_t *mutex) { pthread_mutex_lock(mutex); }
-static inline void bunny_mutex_unlock(bunny_mutex_t *mutex) { pthread_mutex_unlock(mutex); }
-#endif
 
 #include "bunny_core/core.h"
 #include "bunny_core/error.h"
