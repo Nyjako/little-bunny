@@ -1,9 +1,13 @@
-/* strptime/timegm aren't standard C11 -- glibc only declares them when a
- * sufficiently permissive feature-test macro is requested (timegm needs
- * _DEFAULT_SOURCE, not just _XOPEN_SOURCE). Must be defined before any
- * system header pulls in <features.h>. */
+/* timegm isn't standard C11 -- glibc only declares it when a sufficiently
+ * permissive feature-test macro is requested. Must be defined before any
+ * system header pulls in <features.h>. (strptime used to need _XOPEN_SOURCE
+ * too, but search_is_due() below parses last_run_at with sscanf instead now
+ * -- that format is always exactly "%Y-%m-%dT%H:%M:%S" (this app's own
+ * output), so there's no real parsing to delegate to strptime for, and
+ * sscanf is standard C with no glibc extension or feature-test-macro
+ * dependency to worry about on any platform, MSVC included -- MSVC has no
+ * strptime at all, with or without a feature-test macro.) */
 #define _DEFAULT_SOURCE
-#define _XOPEN_SOURCE 700
 
 #include "bunny_core/core.h"
 
@@ -13,6 +17,7 @@
 #include <inkbunny/client.h>
 
 #include <stdbool.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
@@ -43,6 +48,14 @@ typedef struct
  * link collision with libs/db's own identically-shaped bunny_db_post_array). */
 GOBLIN_DYN_ARRAY_DECL(bunny_core_post, bunny_db_post_t)
 
+/* timegm's Windows equivalent -- same signature/semantics (struct tm,
+ * interpreted as UTC, converted to time_t), just a different name. */
+#ifdef _WIN32
+#define bunny_timegm _mkgmtime
+#else
+#define bunny_timegm timegm
+#endif
+
 /* default_interval_hours is only consulted when search->uses_default_interval
  * is set -- resolved once per bunny_core_sync_due_searches call (not once per
  * search) and passed down, since it's the same single row read regardless of
@@ -53,13 +66,21 @@ static bool search_is_due(const bunny_db_search_t *search, int default_interval_
         return true;
     }
 
-    struct tm tm_last;
-    memset(&tm_last, 0, sizeof(tm_last));
-    if (!strptime(search->last_run_at, "%Y-%m-%dT%H:%M:%S", &tm_last)) {
+    int year, month, day, hour, min, sec;
+    if (sscanf(search->last_run_at, "%d-%d-%dT%d:%d:%d", &year, &month, &day, &hour, &min, &sec) != 6) {
         return true; /* unparseable timestamp -- treat as due rather than getting stuck */
     }
 
-    time_t last_run = timegm(&tm_last);
+    struct tm tm_last;
+    memset(&tm_last, 0, sizeof(tm_last));
+    tm_last.tm_year = year - 1900;
+    tm_last.tm_mon = month - 1;
+    tm_last.tm_mday = day;
+    tm_last.tm_hour = hour;
+    tm_last.tm_min = min;
+    tm_last.tm_sec = sec;
+
+    time_t last_run = bunny_timegm(&tm_last);
     double hours_elapsed = difftime(time(NULL), last_run) / 3600.0;
     int effective_interval_hours = search->uses_default_interval ? default_interval_hours : search->interval_hours;
     return hours_elapsed >= effective_interval_hours;

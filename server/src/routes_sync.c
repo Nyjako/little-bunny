@@ -31,7 +31,11 @@ static int handle_get_sync_status(struct mg_connection *conn, server_context_t *
     if (snapshot.active) {
         char started_at[32];
         struct tm tm_utc;
+#ifdef _WIN32
+        gmtime_s(&tm_utc, &snapshot.started_at);
+#else
         gmtime_r(&snapshot.started_at, &tm_utc);
+#endif
         strftime(started_at, sizeof(started_at), "%Y-%m-%dT%H:%M:%SZ", &tm_utc);
         cJSON_AddStringToObject(response, "started_at", started_at);
     } else {

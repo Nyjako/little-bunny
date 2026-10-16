@@ -8,6 +8,7 @@
 
 void setUp(void)
 {
+    server_log_init(); /* idempotent -- this module has no other entry point that calls it in a standalone test binary */
     server_log_reset();
 }
 

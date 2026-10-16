@@ -12,3 +12,6 @@
 
 #define GOBLIN_HIGH_RES_TIMER_IMPLEMENTATION
 #include <goblin/high_res_timer.h>
+
+#define GOBLIN_FILEIO_IMPLEMENTATION
+#include <goblin/fileio.h>
