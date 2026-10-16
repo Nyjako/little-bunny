@@ -1,3 +1,4 @@
+#include <bunny_common/thread.h>
 #include <bunny_core/core.h>
 #include <goblin/appdirs.h>
 
@@ -5,7 +6,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <unistd.h>
 
 #include "app.h"
 #include "config.h"
@@ -52,7 +52,7 @@ int main(void)
     signal(SIGINT, handle_shutdown_signal);
     signal(SIGTERM, handle_shutdown_signal);
     while (!g_shutdown_requested) {
-        sleep(1);
+        bunny_sleep_seconds(1);
     }
 
     server_log("INFO", "shutting down...");

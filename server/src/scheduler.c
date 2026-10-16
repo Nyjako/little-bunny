@@ -1,17 +1,22 @@
 #include "scheduler.h"
 
+#include <bunny_common/thread.h>
 #include <bunny_core/core.h>
 #include <goblin/appdirs.h>
 #include <goblin/cstr.h>
+#include <goblin/fileio.h>
 
-#include <dirent.h>
-#include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
 #include <time.h>
-#include <unistd.h>
+
+#ifdef _WIN32
+#include <windows.h>
+#else
+#include <dirent.h>
+#endif
 
 #include "log.h"
 
@@ -24,10 +29,54 @@ static bool is_backup_filename(const char *name)
     return strncmp(name, BUNNY_BACKUP_PREFIX, strlen(BUNNY_BACKUP_PREFIX)) == 0;
 }
 
+/* Insertion sort (the lists here are at most a few dozen entries, so O(n^2)
+ * is irrelevant) -- shared by both list_backup_files() implementations
+ * below. */
+static void sort_backup_names(char **names, size_t count)
+{
+    for (size_t i = 1; i < count; i++) {
+        char *key = names[i];
+        size_t j = i;
+        while (j > 0 && strcmp(names[j - 1], key) > 0) {
+            names[j] = names[j - 1];
+            j--;
+        }
+        names[j] = key;
+    }
+}
+
 /* Lists `backups_dir`'s own backup files (already-timestamped filenames
  * sort lexicographically the same as chronologically, so no separate mtime
  * bookkeeping is needed -- M14.5). Returns the count found and fills
  * `out_names` (caller-owned, each entry malloc'd) up to `max_names`. */
+#ifdef _WIN32
+static size_t list_backup_files(const char *backups_dir, char **out_names, size_t max_names)
+{
+    char pattern[1024];
+    snprintf(pattern, sizeof(pattern), "%s\\*", backups_dir);
+
+    WIN32_FIND_DATAA find_data;
+    HANDLE handle = FindFirstFileA(pattern, &find_data);
+    if (handle == INVALID_HANDLE_VALUE) {
+        return 0;
+    }
+
+    size_t count = 0;
+    do {
+        if (count >= max_names || !is_backup_filename(find_data.cFileName)) {
+            continue;
+        }
+        out_names[count] = goblin_copy_cstr(find_data.cFileName);
+        if (out_names[count]) {
+            count++;
+        }
+    } while (FindNextFileA(handle, &find_data));
+    FindClose(handle);
+
+    sort_backup_names(out_names, count);
+    return count;
+}
+#else
 static size_t list_backup_files(const char *backups_dir, char **out_names, size_t max_names)
 {
     DIR *dir = opendir(backups_dir);
@@ -48,23 +97,16 @@ static size_t list_backup_files(const char *backups_dir, char **out_names, size_
     }
     closedir(dir);
 
-    for (size_t i = 1; i < count; i++) {
-        char *key = out_names[i];
-        size_t j = i;
-        while (j > 0 && strcmp(out_names[j - 1], key) > 0) {
-            out_names[j] = out_names[j - 1];
-            j--;
-        }
-        out_names[j] = key;
-    }
+    sort_backup_names(out_names, count);
     return count;
 }
+#endif
 
 /* Backs up into `backups_dir` if the newest existing backup (if any) is at
  * least a day old, then prunes down to the BUNNY_BACKUP_KEEP_COUNT newest. */
 static void backup_due_and_prune(server_context_t *ctx, const char *backups_dir)
 {
-    if (mkdir(backups_dir, 0700) != 0 && errno != EEXIST) {
+    if (!goblin_mkdir(backups_dir)) {
         server_log("ERROR", "scheduler: couldn't create backups dir %s", backups_dir);
         return;
     }
@@ -116,7 +158,7 @@ static void *scheduler_loop(void *arg)
         /* Sleep in 1-second increments so a shutdown request is picked up
          * quickly instead of waiting out the full poll interval. */
         for (int i = 0; i < scheduler->poll_interval_sec && !scheduler->stop_requested; i++) {
-            sleep(1);
+            bunny_sleep_seconds(1);
         }
         if (scheduler->stop_requested) {
             break;
@@ -159,7 +201,7 @@ bool server_scheduler_start(server_scheduler_t *scheduler, server_context_t *ctx
         return true; /* disabled, not an error */
     }
 
-    if (pthread_create(&scheduler->thread, NULL, scheduler_loop, scheduler) != 0) {
+    if (bunny_thread_create(&scheduler->thread, scheduler_loop, scheduler) != 0) {
         return false;
     }
     scheduler->running = true;
@@ -170,7 +212,7 @@ void server_scheduler_stop(server_scheduler_t *scheduler)
 {
     if (scheduler->running) {
         scheduler->stop_requested = true;
-        pthread_join(scheduler->thread, NULL);
+        bunny_thread_join(scheduler->thread);
         scheduler->running = false;
     }
     free(scheduler->backups_dir);
