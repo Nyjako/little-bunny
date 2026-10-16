@@ -32,6 +32,15 @@ set(CMAKE_CXX_FLAGS_PROFILE "${CMAKE_CXX_FLAGS_RELEASE}")
 # Use Unicode for all projects.
 add_definitions(-DUNICODE -D_UNICODE)
 
+# local_auth_windows's own native code (a Dart/Flutter community plugin, not
+# ours to edit -- it lives in the pub cache) still uses the now-deprecated
+# <experimental/coroutine>, which newer MSVC/STL versions turn into a hard
+# compile error by default. This directory property is inherited by every
+# plugin subdirectory added below (via generated_plugins.cmake), since it's
+# set before that include -- the documented community workaround for this
+# exact plugin/toolchain combination.
+add_compile_definitions(_SILENCE_EXPERIMENTAL_COROUTINE_DEPRECATION_WARNINGS)
+
 # Compilation settings that should be applied to most targets.
 #
 # Be cautious about adding new options here, as plugins use this function by
