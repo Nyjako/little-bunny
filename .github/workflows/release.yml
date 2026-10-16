@@ -67,7 +67,14 @@ jobs:
       - working-directory: app
         run: |
           flutter pub get
-          flutter build apk --release
+          # --target-platform restricts the native (curl/sqlite3/cJSON/bunny_*)
+          # NDK/CMake build to the two ABIs real phones actually use, instead
+          # of also building (and bundling into the APK) x86/x86_64, which
+          # only exist for Android emulators. Building all 4 ABIs is what
+          # exhausts the runner's disk -- BUILD_EXAMPLES=OFF (see curl's CPM
+          # options in the top-level CMakeLists.txt) bought enough headroom to
+          # finish the build, but not enough to survive copying the final APK.
+          flutter build apk --release --target-platform android-arm,android-arm64
       - uses: actions/upload-artifact@v4
         with:
           name: little-bunny-app-android
