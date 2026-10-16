@@ -48,6 +48,14 @@ if(APPLE)
     -Wl,-force_load,$<TARGET_FILE:bunny_db>
   )
 elseif(MSVC)
+  # Passing "$<TARGET_FILE:bunny_core>" as a bare flag string (rather than
+  # the target name itself, as the other two branches do) means CMake's
+  # Visual Studio generator never records bunny_core/bunny_db as real
+  # project dependencies of bunny_core_ffi -- MSBuild is then free to link
+  # bunny_core_ffi.vcxproj before bunny_core.vcxproj has produced its .lib,
+  # failing with LNK1104 ("cannot open file ...bunny_core.lib"). Spelling
+  # out the dependency explicitly forces the correct build order.
+  add_dependencies(bunny_core_ffi bunny_core bunny_db)
   target_link_libraries(bunny_core_ffi PRIVATE
     "/WHOLEARCHIVE:$<TARGET_FILE:bunny_core>"
     "/WHOLEARCHIVE:$<TARGET_FILE:bunny_db>"
