@@ -1,7 +1,7 @@
 #ifndef BUNNY_SERVER_SCHEDULER_H
 #define BUNNY_SERVER_SCHEDULER_H
 
-#include <pthread.h>
+#include <bunny_common/thread.h>
 #include <stdbool.h>
 
 #include "context.h"
@@ -9,7 +9,7 @@
 
 typedef struct
 {
-    pthread_t thread;
+    bunny_thread_t thread;
     server_context_t *ctx;
     server_sync_status_t *status;
     int poll_interval_sec;
@@ -33,7 +33,7 @@ typedef struct
  * this still succeeds, it just doesn't spawn a thread (used by tests that
  * don't want a background pass racing their own explicit /sync or
  * /queue/process calls, and also skips the backup check). Returns false only
- * on an actual pthread_create failure. */
+ * on an actual thread-create failure. */
 bool server_scheduler_start(server_scheduler_t *scheduler, server_context_t *ctx, server_sync_status_t *status, const char *data_dir, int poll_interval_sec);
 
 /* Signals the loop to exit and joins the thread (within ~1s, not a full

@@ -3,7 +3,6 @@
 
 #include <bunny_core/core.h>
 
-#include <pthread.h>
 #include <stdbool.h>
 #include <stdint.h>
 

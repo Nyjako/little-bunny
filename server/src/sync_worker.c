@@ -1,5 +1,6 @@
 #include "sync_worker.h"
 
+#include <bunny_common/thread.h>
 #include <goblin/cstr.h>
 
 #include <stdlib.h>
@@ -24,12 +25,12 @@ typedef struct
 
 struct sync_worker
 {
-    pthread_t thread;
+    bunny_thread_t thread;
     bunny_core_t *core;
     server_sync_status_t *status;
 
-    pthread_mutex_t queue_mutex;
-    pthread_cond_t queue_cond;
+    bunny_mutex_t queue_mutex;
+    bunny_cond_t queue_cond;
     sync_worker_job_t queue[SYNC_WORKER_QUEUE_CAPACITY];
     size_t queue_head;
     size_t queue_count;
@@ -88,9 +89,9 @@ static void run_all_job(sync_worker_t *worker)
     }
     server_sync_status_clear(worker->status);
 
-    pthread_mutex_lock(&worker->queue_mutex);
+    bunny_mutex_lock(&worker->queue_mutex);
     worker->all_job_pending = false;
-    pthread_mutex_unlock(&worker->queue_mutex);
+    bunny_mutex_unlock(&worker->queue_mutex);
 }
 
 /* Coarse status reporting (no per-search label/position) -- deliberately
@@ -105,9 +106,9 @@ static void run_due_job(sync_worker_t *worker)
     server_log("INFO", "sync worker: synced %d/%d due searches (%d posts upserted)", stats.searches_synced, stats.searches_checked, stats.posts_upserted);
     server_sync_status_clear(worker->status);
 
-    pthread_mutex_lock(&worker->queue_mutex);
+    bunny_mutex_lock(&worker->queue_mutex);
     worker->due_job_pending = false;
-    pthread_mutex_unlock(&worker->queue_mutex);
+    bunny_mutex_unlock(&worker->queue_mutex);
 }
 
 static void *sync_worker_loop(void *arg)
@@ -115,18 +116,18 @@ static void *sync_worker_loop(void *arg)
     sync_worker_t *worker = (sync_worker_t *)arg;
 
     for (;;) {
-        pthread_mutex_lock(&worker->queue_mutex);
+        bunny_mutex_lock(&worker->queue_mutex);
         while (worker->queue_count == 0 && !worker->stop_requested) {
-            pthread_cond_wait(&worker->queue_cond, &worker->queue_mutex);
+            bunny_cond_wait(&worker->queue_cond, &worker->queue_mutex);
         }
         if (worker->queue_count == 0 && worker->stop_requested) {
-            pthread_mutex_unlock(&worker->queue_mutex);
+            bunny_mutex_unlock(&worker->queue_mutex);
             break;
         }
         sync_worker_job_t job = worker->queue[worker->queue_head];
         worker->queue_head = (worker->queue_head + 1) % SYNC_WORKER_QUEUE_CAPACITY;
         worker->queue_count--;
-        pthread_mutex_unlock(&worker->queue_mutex);
+        bunny_mutex_unlock(&worker->queue_mutex);
 
         switch (job.type) {
             case SYNC_WORKER_JOB_SEARCH:
@@ -152,18 +153,18 @@ sync_worker_t *sync_worker_start(bunny_core_t *core, server_sync_status_t *statu
     worker->core = core;
     worker->status = status;
 
-    if (pthread_mutex_init(&worker->queue_mutex, NULL) != 0) {
+    if (bunny_mutex_init(&worker->queue_mutex) != 0) {
         free(worker);
         return NULL;
     }
-    if (pthread_cond_init(&worker->queue_cond, NULL) != 0) {
-        pthread_mutex_destroy(&worker->queue_mutex);
+    if (bunny_cond_init(&worker->queue_cond) != 0) {
+        bunny_mutex_destroy(&worker->queue_mutex);
         free(worker);
         return NULL;
     }
-    if (pthread_create(&worker->thread, NULL, sync_worker_loop, worker) != 0) {
-        pthread_cond_destroy(&worker->queue_cond);
-        pthread_mutex_destroy(&worker->queue_mutex);
+    if (bunny_thread_create(&worker->thread, sync_worker_loop, worker) != 0) {
+        bunny_cond_destroy(&worker->queue_cond);
+        bunny_mutex_destroy(&worker->queue_mutex);
         free(worker);
         return NULL;
     }
@@ -175,28 +176,28 @@ void sync_worker_stop(sync_worker_t *worker)
     if (!worker) {
         return;
     }
-    pthread_mutex_lock(&worker->queue_mutex);
+    bunny_mutex_lock(&worker->queue_mutex);
     worker->stop_requested = true;
-    pthread_cond_broadcast(&worker->queue_cond);
-    pthread_mutex_unlock(&worker->queue_mutex);
+    bunny_cond_broadcast(&worker->queue_cond);
+    bunny_mutex_unlock(&worker->queue_mutex);
 
-    pthread_join(worker->thread, NULL);
-    pthread_cond_destroy(&worker->queue_cond);
-    pthread_mutex_destroy(&worker->queue_mutex);
+    bunny_thread_join(worker->thread);
+    bunny_cond_destroy(&worker->queue_cond);
+    bunny_mutex_destroy(&worker->queue_mutex);
     free(worker);
 }
 
 static bool enqueue_job(sync_worker_t *worker, sync_worker_job_t job)
 {
-    pthread_mutex_lock(&worker->queue_mutex);
+    bunny_mutex_lock(&worker->queue_mutex);
     bool has_room = worker->queue_count < SYNC_WORKER_QUEUE_CAPACITY;
     if (has_room) {
         size_t tail = (worker->queue_head + worker->queue_count) % SYNC_WORKER_QUEUE_CAPACITY;
         worker->queue[tail] = job;
         worker->queue_count++;
-        pthread_cond_signal(&worker->queue_cond);
+        bunny_cond_signal(&worker->queue_cond);
     }
-    pthread_mutex_unlock(&worker->queue_mutex);
+    bunny_mutex_unlock(&worker->queue_mutex);
     return has_room;
 }
 
@@ -208,19 +209,19 @@ bool sync_worker_enqueue_search(sync_worker_t *worker, int64_t search_id)
 
 bool sync_worker_enqueue_all(sync_worker_t *worker)
 {
-    pthread_mutex_lock(&worker->queue_mutex);
+    bunny_mutex_lock(&worker->queue_mutex);
     if (worker->all_job_pending) {
-        pthread_mutex_unlock(&worker->queue_mutex);
+        bunny_mutex_unlock(&worker->queue_mutex);
         return false;
     }
     worker->all_job_pending = true;
-    pthread_mutex_unlock(&worker->queue_mutex);
+    bunny_mutex_unlock(&worker->queue_mutex);
 
     sync_worker_job_t job = {SYNC_WORKER_JOB_ALL, 0};
     if (!enqueue_job(worker, job)) {
-        pthread_mutex_lock(&worker->queue_mutex);
+        bunny_mutex_lock(&worker->queue_mutex);
         worker->all_job_pending = false;
-        pthread_mutex_unlock(&worker->queue_mutex);
+        bunny_mutex_unlock(&worker->queue_mutex);
         return false;
     }
     return true;
@@ -228,19 +229,19 @@ bool sync_worker_enqueue_all(sync_worker_t *worker)
 
 bool sync_worker_enqueue_due(sync_worker_t *worker)
 {
-    pthread_mutex_lock(&worker->queue_mutex);
+    bunny_mutex_lock(&worker->queue_mutex);
     if (worker->due_job_pending) {
-        pthread_mutex_unlock(&worker->queue_mutex);
+        bunny_mutex_unlock(&worker->queue_mutex);
         return false;
     }
     worker->due_job_pending = true;
-    pthread_mutex_unlock(&worker->queue_mutex);
+    bunny_mutex_unlock(&worker->queue_mutex);
 
     sync_worker_job_t job = {SYNC_WORKER_JOB_DUE, 0};
     if (!enqueue_job(worker, job)) {
-        pthread_mutex_lock(&worker->queue_mutex);
+        bunny_mutex_lock(&worker->queue_mutex);
         worker->due_job_pending = false;
-        pthread_mutex_unlock(&worker->queue_mutex);
+        bunny_mutex_unlock(&worker->queue_mutex);
         return false;
     }
     return true;

@@ -63,6 +63,8 @@ static int health_handler(struct mg_connection *conn, void *cbdata)
 
 server_app_t *server_app_start(const bunny_core_config_t *core_config, const char *data_dir, int port, int poll_interval_sec)
 {
+    server_log_init(); /* before anything below that could log (civetweb's own callbacks, bunny_core_open's log_callback) */
+
     server_app_t *app = calloc(1, sizeof(server_app_t));
     if (!app) {
         return NULL;
