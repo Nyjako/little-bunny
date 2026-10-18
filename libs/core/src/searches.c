@@ -35,9 +35,10 @@ bunny_core_result_t bunny_core_get_default_sync_interval_hours(bunny_core_t *cor
     if (!core) {
         return BUNNY_CORE_ERR_INVALID_ARG;
     }
-    bunny_core_db_lock(core);
-    bunny_db_result_t result = bunny_db_settings_get_default_interval_hours(core->db, out_hours);
-    bunny_core_db_unlock(core);
+    size_t slot;
+    bunny_db_t *read_db = bunny_core_db_read_lock(core, &slot);
+    bunny_db_result_t result = bunny_db_settings_get_default_interval_hours(read_db, out_hours);
+    bunny_core_db_read_unlock(core, slot);
     return bunny_core_map_db_result(result);
 }
 
@@ -79,9 +80,10 @@ bunny_core_result_t bunny_core_group_list(bunny_core_t *core, bunny_db_group_lis
     if (!core) {
         return BUNNY_CORE_ERR_INVALID_ARG;
     }
-    bunny_core_db_lock(core);
-    bunny_db_result_t result = bunny_db_group_list(core->db, out_list);
-    bunny_core_db_unlock(core);
+    size_t slot;
+    bunny_db_t *read_db = bunny_core_db_read_lock(core, &slot);
+    bunny_db_result_t result = bunny_db_group_list(read_db, out_list);
+    bunny_core_db_read_unlock(core, slot);
     return bunny_core_map_db_result(result);
 }
 
@@ -145,9 +147,10 @@ bunny_core_result_t bunny_core_search_list(bunny_core_t *core, bunny_db_search_l
     if (!core) {
         return BUNNY_CORE_ERR_INVALID_ARG;
     }
-    bunny_core_db_lock(core);
-    bunny_db_result_t result = bunny_db_search_list(core->db, out_list);
-    bunny_core_db_unlock(core);
+    size_t slot;
+    bunny_db_t *read_db = bunny_core_db_read_lock(core, &slot);
+    bunny_db_result_t result = bunny_db_search_list(read_db, out_list);
+    bunny_core_db_read_unlock(core, slot);
     return bunny_core_map_db_result(result);
 }
 
@@ -156,9 +159,10 @@ bunny_core_result_t bunny_core_search_list_posts(bunny_core_t *core, int64_t sea
     if (!core) {
         return BUNNY_CORE_ERR_INVALID_ARG;
     }
-    bunny_core_db_lock(core);
-    bunny_db_result_t result = bunny_db_search_list_posts(core->db, search_id, unseen_only, out_list);
-    bunny_core_db_unlock(core);
+    size_t slot;
+    bunny_db_t *read_db = bunny_core_db_read_lock(core, &slot);
+    bunny_db_result_t result = bunny_db_search_list_posts(read_db, search_id, unseen_only, out_list);
+    bunny_core_db_read_unlock(core, slot);
     return bunny_core_map_db_result(result);
 }
 
@@ -167,9 +171,10 @@ bunny_core_result_t bunny_core_post_get_by_id(bunny_core_t *core, int64_t post_i
     if (!core) {
         return BUNNY_CORE_ERR_INVALID_ARG;
     }
-    bunny_core_db_lock(core);
-    bunny_db_result_t result = bunny_db_post_get_by_id(core->db, post_id, out_post);
-    bunny_core_db_unlock(core);
+    size_t slot;
+    bunny_db_t *read_db = bunny_core_db_read_lock(core, &slot);
+    bunny_db_result_t result = bunny_db_post_get_by_id(read_db, post_id, out_post);
+    bunny_core_db_read_unlock(core, slot);
     return bunny_core_map_db_result(result);
 }
 
@@ -178,9 +183,10 @@ bunny_core_result_t bunny_core_tag_autocomplete(bunny_core_t *core, bunny_db_sit
     if (!core) {
         return BUNNY_CORE_ERR_INVALID_ARG;
     }
-    bunny_core_db_lock(core);
-    bunny_db_result_t result = bunny_db_tag_autocomplete(core->db, site, prefix, limit, out_list);
-    bunny_core_db_unlock(core);
+    size_t slot;
+    bunny_db_t *read_db = bunny_core_db_read_lock(core, &slot);
+    bunny_db_result_t result = bunny_db_tag_autocomplete(read_db, site, prefix, limit, out_list);
+    bunny_core_db_read_unlock(core, slot);
     return bunny_core_map_db_result(result);
 }
 
@@ -189,9 +195,10 @@ bunny_core_result_t bunny_core_top_favorited_tags(bunny_core_t *core, bunny_db_s
     if (!core) {
         return BUNNY_CORE_ERR_INVALID_ARG;
     }
-    bunny_core_db_lock(core);
-    bunny_db_result_t result = bunny_db_top_favorited_tags(core->db, site, limit, out_list);
-    bunny_core_db_unlock(core);
+    size_t slot;
+    bunny_db_t *read_db = bunny_core_db_read_lock(core, &slot);
+    bunny_db_result_t result = bunny_db_top_favorited_tags(read_db, site, limit, out_list);
+    bunny_core_db_read_unlock(core, slot);
     return bunny_core_map_db_result(result);
 }
 
@@ -200,9 +207,10 @@ bunny_core_result_t bunny_core_top_used_tags(bunny_core_t *core, bunny_db_site_t
     if (!core) {
         return BUNNY_CORE_ERR_INVALID_ARG;
     }
-    bunny_core_db_lock(core);
-    bunny_db_result_t result = bunny_db_top_used_tags(core->db, site, limit, out_list);
-    bunny_core_db_unlock(core);
+    size_t slot;
+    bunny_db_t *read_db = bunny_core_db_read_lock(core, &slot);
+    bunny_db_result_t result = bunny_db_top_used_tags(read_db, site, limit, out_list);
+    bunny_core_db_read_unlock(core, slot);
     return bunny_core_map_db_result(result);
 }
 
@@ -233,9 +241,10 @@ bunny_core_result_t bunny_core_post_get_tags_by_category(bunny_core_t *core, int
     if (!core) {
         return BUNNY_CORE_ERR_INVALID_ARG;
     }
-    bunny_core_db_lock(core);
-    bunny_db_result_t result = bunny_db_post_get_tags_by_category(core->db, post_id, out_list);
-    bunny_core_db_unlock(core);
+    size_t slot;
+    bunny_db_t *read_db = bunny_core_db_read_lock(core, &slot);
+    bunny_db_result_t result = bunny_db_post_get_tags_by_category(read_db, post_id, out_list);
+    bunny_core_db_read_unlock(core, slot);
     return bunny_core_map_db_result(result);
 }
 
@@ -244,9 +253,10 @@ bunny_core_result_t bunny_core_post_get_sources(bunny_core_t *core, int64_t post
     if (!core) {
         return BUNNY_CORE_ERR_INVALID_ARG;
     }
-    bunny_core_db_lock(core);
-    bunny_db_result_t result = bunny_db_post_get_sources(core->db, post_id, out_list);
-    bunny_core_db_unlock(core);
+    size_t slot;
+    bunny_db_t *read_db = bunny_core_db_read_lock(core, &slot);
+    bunny_db_result_t result = bunny_db_post_get_sources(read_db, post_id, out_list);
+    bunny_core_db_read_unlock(core, slot);
     return bunny_core_map_db_result(result);
 }
 
@@ -255,9 +265,10 @@ bunny_core_result_t bunny_core_post_get_relationships(bunny_core_t *core, int64_
     if (!core) {
         return BUNNY_CORE_ERR_INVALID_ARG;
     }
-    bunny_core_db_lock(core);
-    bunny_db_result_t result = bunny_db_post_get_relationships(core->db, post_id, out_relationships);
-    bunny_core_db_unlock(core);
+    size_t slot;
+    bunny_db_t *read_db = bunny_core_db_read_lock(core, &slot);
+    bunny_db_result_t result = bunny_db_post_get_relationships(read_db, post_id, out_relationships);
+    bunny_core_db_read_unlock(core, slot);
     return bunny_core_map_db_result(result);
 }
 
@@ -266,8 +277,9 @@ bunny_core_result_t bunny_core_post_get_pool_ids(bunny_core_t *core, int64_t pos
     if (!core) {
         return BUNNY_CORE_ERR_INVALID_ARG;
     }
-    bunny_core_db_lock(core);
-    bunny_db_result_t result = bunny_db_post_get_pool_ids(core->db, post_id, out_list);
-    bunny_core_db_unlock(core);
+    size_t slot;
+    bunny_db_t *read_db = bunny_core_db_read_lock(core, &slot);
+    bunny_db_result_t result = bunny_db_post_get_pool_ids(read_db, post_id, out_list);
+    bunny_core_db_read_unlock(core, slot);
     return bunny_core_map_db_result(result);
 }
