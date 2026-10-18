@@ -87,14 +87,14 @@ class _PostGridScreenState extends State<PostGridScreen> {
     return post.previewUrl;
   }
 
-  /// The repository always returns newest-first (by the site's own creation
-  /// date) -- right for a normal search's feed, but backwards for a pool
-  /// (M22), which reads like a comic: page 1 should come first, not
-  /// whichever page happened to be uploaded most recently.
-  Future<List<BunnyPost>> _loadPosts() async {
-    final posts = await widget.repository.listSearchPosts(widget.search.id, unseenOnly: _unseenOnly);
-    return widget.search.isPool ? posts.reversed.toList() : posts;
-  }
+  /// The repository returns newest-first (by the site's own creation date)
+  /// for a normal search's feed. A pool search (isPool) instead comes back
+  /// already ordered by e621's own pool order (M26, server-side) -- no
+  /// client-side reordering needed here anymore; guessing "reverse upload
+  /// order" (M22, this comment's old approach) was wrong whenever a pool's
+  /// pages were uploaded out of sequence, a common occurrence for ongoing
+  /// comics.
+  Future<List<BunnyPost>> _loadPosts() => widget.repository.listSearchPosts(widget.search.id, unseenOnly: _unseenOnly);
 
   void _toggleUnseenOnly() {
     setState(() {
