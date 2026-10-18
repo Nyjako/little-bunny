@@ -1,0 +1,12 @@
+{
+  "id": 11563,
+  "name": "a_comic_with_references",
+  "description": "Continuation of pool #20495. See also pool #20496 for the side story.",
+  "created_at": "2024-01-01T00:00:00.000-05:00",
+  "updated_at": "2024-01-02T00:00:00.000-05:00",
+  "creator_id": 1,
+  "creator_name": "someone",
+  "is_active": true,
+  "category": "series",
+  "post_ids": [1, 2]
+}
