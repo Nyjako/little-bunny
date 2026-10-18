@@ -6,8 +6,19 @@ Wants=network-online.target
 
 [Service]
 Type=simple
+# Runs BEFORE ExecStart, as full root regardless of DynamicUser/the
+# hardening below (the `+` prefix) -- installs a staged update (if any) the
+# main process downloaded+verified last run, into /usr/local/bin, which the
+# main process's own sandboxing (ProtectSystem=strict) deliberately
+# prevents it from touching itself. See
+# deploy/bunny-server-update-apply.sh and server/src/updater.c (M23).
+ExecStartPre=+/usr/local/bin/bunny-server-update-apply.sh
 ExecStart=/usr/local/bin/bunny_server
-Restart=on-failure
+# always, not on-failure -- the updater's own self-restart (a clean exit(0)
+# once an update is staged, server/src/scheduler.c) needs systemd to bring
+# the unit back up on ANY exit, not just a crash, so ExecStartPre can then
+# install the update before this ExecStart runs again.
+Restart=always
 RestartSec=5s
 
 # StateDirectory (systemd >= 230) creates/owns %S/bunny-server (normally
