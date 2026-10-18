@@ -203,19 +203,54 @@ bunny_core_result_t bunny_core_blacklist_remove(bunny_core_t *core, bunny_db_sit
 bunny_core_result_t bunny_core_fetch_and_cache_post(bunny_core_t *core, bunny_db_site_t site, int64_t external_id, int64_t *out_post_id);
 
 /* A pool's own metadata, fetched live (e621 only -- no persistence, no
- * equivalent on Inkbunny). Used only to auto-fill a pool search's label at
- * creation time; the pool's posts themselves are fetched via a normal
- * tag search for "pool:<id>" (bunny_core_search_create), not through this. */
+ * equivalent on Inkbunny). Used to auto-fill a pool search's label at
+ * creation time, and to show the pool's own description (M26) -- the
+ * pool's posts themselves are fetched via a normal tag search for
+ * "pool:<id>" (bunny_core_search_create), not through this. */
 typedef struct
 {
     int64_t id;
     char *name;
+    char *description; /* e621's own dtext markup, verbatim; NULL if empty */
     int64_t post_count;
+
+    /* Every "pool #<N>" mention found in `description` (M26) -- e621 pool
+     * descriptions routinely cross-reference related/continuation pools
+     * this way (see bunny_core_fetch_pool's doc comment). In first-seen
+     * order, duplicates included. Empty when description has none or is
+     * NULL. */
+    int64_t *referenced_pool_ids;
+    size_t referenced_pool_id_count;
 } bunny_core_pool_info_t;
 
 void bunny_core_pool_info_free(bunny_core_pool_info_t *info);
 
+/* referenced_pool_ids (above) is populated by scanning the fetched
+ * description for e621's own "pool #<N>" dtext convention -- callers don't
+ * need to parse it themselves. */
 bunny_core_result_t bunny_core_fetch_pool(bunny_core_t *core, int64_t pool_id, bunny_core_pool_info_t *out_info);
+
+/* Fetches `pool_id`'s own post_ids from e621 (its real, authoritative
+ * reading order) and writes each entry's index as its `position` in
+ * post_pools for any of those posts already cached locally (M26) -- called
+ * once per sync of a "pool:<id>" search (see sync_e621_search) so
+ * PostGridScreen can show a pool in the order e621 itself intends instead
+ * of guessing from upload date, which is wrong whenever pages were
+ * uploaded out of order (a common occurrence for ongoing comics). A
+ * network + db call, same shape as bunny_core_fetch_and_cache_post. */
+bunny_core_result_t bunny_core_sync_pool_order(bunny_core_t *core, int64_t pool_id);
+
+/* One-time backfill (M26): re-fetches every pool_id already present in
+ * post_pools (from before the `position` column existed) via
+ * bunny_core_sync_pool_order, so already-synced pools get correct order
+ * immediately rather than waiting for their search's own next sync. No-op
+ * (BUNNY_CORE_OK immediately) if server_settings.pool_positions_backfilled
+ * is already set; sets it once this completes, successfully or not --
+ * see the call sites (scheduler.c's first tick, standalone's FfiBunnyRepository.open)
+ * for why "never retry automatically" is the right call here: a handful of
+ * stale pools is a much smaller problem than this blocking startup or
+ * burning e621 rate-limit budget on every single launch. */
+bunny_core_result_t bunny_core_backfill_pool_positions_once(bunny_core_t *core);
 
 /* Runs a single page (1-indexed) of `query` live against `site` and upserts
  * whatever comes back into the local post cache (so thumbnails/ids are
