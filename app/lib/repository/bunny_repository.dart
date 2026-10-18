@@ -244,6 +244,13 @@ abstract interface class BunnyRepository {
   /// be running, from any device, not just the one that started it.
   Future<BunnySyncStatus> getSyncStatus();
 
+  /// Every pending + currently-running task_queue job (M24), in the order
+  /// they'll actually run -- the in-app task queue view. Server mode only;
+  /// standalone/FFI mode has no background task queue of its own (every
+  /// repository call there runs synchronously in-process), so
+  /// [FfiBunnyRepository] always returns an empty list.
+  Future<List<BunnyTask>> getTasks();
+
   /// Enqueues a favorite-add action; it isn't sent to the site until
   /// [processQueue] runs. `stars` is Inkbunny's 1-3 rating, or omitted for
   /// e621's plain favorite.
