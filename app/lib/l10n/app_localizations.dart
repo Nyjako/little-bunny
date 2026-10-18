@@ -712,6 +712,18 @@ abstract class AppLocalizations {
   /// **'Save as a search'**
   String get tagBrowseAddToSearchesTooltip;
 
+  /// No description provided for @tagBrowseRelatedPoolsLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Related pools'**
+  String get tagBrowseRelatedPoolsLabel;
+
+  /// No description provided for @tagBrowseRelatedPoolChip.
+  ///
+  /// In en, this message translates to:
+  /// **'Pool #{poolId}'**
+  String tagBrowseRelatedPoolChip(int poolId);
+
   /// No description provided for @postDetailScreenTitle.
   ///
   /// In en, this message translates to:

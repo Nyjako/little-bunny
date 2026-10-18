@@ -104,6 +104,63 @@ void main() {
     expect(find.byKey(const ValueKey(1)), findsOneWidget);
   });
 
+  group('pool description + references (M26)', () {
+    Widget wrapPool(FakeBunnyRepository repository, {int poolId = 123}) => wrapWithLocalization(
+      TagBrowseScreen(site: BunnySite.e621, query: 'pool:$poolId', repository: repository, displaySettingsStore: const DisplaySettingsStore(), downloadSettingsStore: const DownloadSettingsStore()),
+    );
+
+    testWidgets('shows the pool description', (WidgetTester tester) async {
+      final repository = FakeBunnyRepository();
+      repository.previewSearchResults['e621:pool:123 order:id:1'] = [_post(1)];
+      repository.poolInfoById[123] = const BunnyPoolInfo(id: 123, name: 'a pool', description: 'A comic about wolves.', postCount: 1);
+
+      await tester.pumpWidget(wrapPool(repository));
+      await tester.pumpAndSettle();
+
+      expect(find.text('A comic about wolves.'), findsOneWidget);
+    });
+
+    testWidgets('shows a tappable chip for each referenced pool and navigates to it', (WidgetTester tester) async {
+      final repository = FakeBunnyRepository();
+      repository.previewSearchResults['e621:pool:123 order:id:1'] = [_post(1)];
+      repository.previewSearchResults['e621:pool:456 order:id:1'] = [_post(2)];
+      repository.poolInfoById[123] = const BunnyPoolInfo(id: 123, name: 'a pool', description: 'See pool #456.', postCount: 1, referencedPoolIds: [456]);
+      repository.poolInfoById[456] = const BunnyPoolInfo(id: 456, name: 'the other pool', postCount: 1);
+
+      await tester.pumpWidget(wrapPool(repository));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Related pools'), findsOneWidget);
+      expect(find.text('Pool #456'), findsOneWidget);
+
+      await tester.tap(find.text('Pool #456'));
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const ValueKey(2)), findsOneWidget);
+    });
+
+    testWidgets('shows no header at all when the pool has neither a description nor references', (WidgetTester tester) async {
+      final repository = FakeBunnyRepository();
+      repository.previewSearchResults['e621:pool:123 order:id:1'] = [_post(1)];
+      repository.poolInfoById[123] = const BunnyPoolInfo(id: 123, name: 'a pool', postCount: 1);
+
+      await tester.pumpWidget(wrapPool(repository));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Related pools'), findsNothing);
+    });
+
+    testWidgets('shows no header at all for a non-pool browse', (WidgetTester tester) async {
+      final repository = FakeBunnyRepository();
+      repository.previewSearchResults['e621:someartist:1'] = [_post(1)];
+
+      await tester.pumpWidget(wrap(repository));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Related pools'), findsNothing);
+    });
+  });
+
   testWidgets('scrolling near the bottom requests and appends the next page', (WidgetTester tester) async {
     final repository = FakeBunnyRepository();
     repository.previewSearchResults['e621:someartist:1'] = List.generate(30, (i) => _post(i + 1));
