@@ -1672,6 +1672,79 @@ this file is the single source of truth for "what's done" across sessions.
     `setSearchPinned` after `createSearch`, since creation itself has no `pinned`/`groupId`
     parameters.
 
+- [x] **M23 — Autoupdates (server + app)**
+  The server checks GitHub's own Releases API (not libgit2 -- release binaries live in
+  GitHub's separate release-asset storage, never reachable via the git object database)
+  for a newer build and self-updates; the app checks the same way and prompts the user to
+  download and apply the update itself.
+  - **Versioning**: both the server (`BUNNY_BUILD_NUMBER`, compiled in via
+    `-DBUNNY_BUILD_NUMBER=N`) and the app (`appBuildNumber`, via
+    `--dart-define=BUNNY_BUILD_NUMBER=N`) embed the release tag's `build-<N>` suffix
+    (`github.run_number`), defaulting to `0` for local/dev builds so the updater never
+    fires against those. `release.yml` threads the same build number into every release
+    artifact (server, and all four app builds) and into the new `--version`/`-v` server
+    flag.
+  - **Server**: new `server/src/updater.c/.h` -- `bunny_updater_check` GETs
+    `api.github.com/repos/<owner>/<repo>/releases/latest` over the existing
+    `bunny_common/http.h` transport, parses `tag_name`/`body`/matching `assets[]` entry,
+    downloads the matching asset, and extracts it (`fork`+`execlp("tar", ...)`, not
+    `system()`, to avoid any shell-injection surface -- Windows has no equivalent and gets
+    a stub). Wired into the scheduler's existing periodic tick, self-throttled via a
+    `.last_update_check` marker file's mtime (same 24h-interval pattern as the backup
+    check). The hardened systemd unit (`DynamicUser=yes`, `ProtectSystem=strict`) can't
+    write to `/usr/local/bin` itself, so the tick only stages the extracted binary into its
+    own `StateDirectory` and writes an `update-ready` marker, then does a clean `exit(0)`;
+    `Restart=always` (not `on-failure`) makes systemd actually restart on that exit, and a
+    new root-run `ExecStartPre=+deploy/bunny-server-update-apply.sh` (the `+` prefix is the
+    only privileged step in the whole unit) does the actual file swap into
+    `/usr/local/bin` before the next `ExecStart`.
+  - **App**: new `UpdateCheckService` (same GitHub API check, platform-specific asset
+    suffix matching) and `UpdateApplyService`, using the pure-Dart `archive` package for
+    `.zip`/`.tar.gz` extraction rather than shelling out to `tar`/`Expand-Archive` (a
+    general user's machine, unlike the controlled server deployment, can't be assumed to
+    have one on PATH). Apply mechanics are platform-specific: Linux/macOS overwrite the
+    running executable's files in place (safe -- the kernel keeps the old inode mapped
+    until exit) and relaunch; Windows spawns a detached generated `.bat` helper that polls
+    for the parent PID's disappearance before swapping files and relaunching (a running
+    `.exe`/loaded DLLs can't be overwritten directly); Android hands the downloaded `.apk`
+    off to the OS's own package installer via `open_filex`; iOS is unsupported (no
+    signing/distribution story for this project's sideloaded builds). A new
+    `checkForUpdateAndMaybePrompt` dialog, checked once from `SearchesScreen.initState`,
+    shows the release notes and lets the user pick "Later" or "Update now".
+
+- [x] **M24 — Priority task queue**
+  Replaces `sync_worker`'s plain FIFO with a 3-level priority queue so direct
+  user interactions never wait behind background work, plus an in-app view
+  of what's queued.
+  - **Server**: new `server/src/task_queue.c/.h` -- a fixed-capacity slot
+    table dispatched by priority (HIGH for routes acting on a direct user
+    request: single-search sync, "check for updates", pull-to-refresh;
+    MEDIUM for the favorite/vote/comment action queue's background drain;
+    LOW for the scheduler's own periodic due-search sync), FIFO within a
+    priority. The scheduler's background due-sync and action-queue drain
+    (previously called `bunny_core_sync_due_searches`/
+    `bunny_core_process_queue` directly on its own thread) now enqueue onto
+    the same queue instead, so they're visible and properly prioritized
+    against user-triggered jobs rather than running on an entirely separate,
+    invisible thread. A HIGH-priority request for work a LOW-priority
+    background job already covers (e.g. the user hits pull-to-refresh while
+    the scheduler's own due-sync is already pending) promotes that slot in
+    place instead of queuing a redundant duplicate; a genuine duplicate at
+    the same priority is still rejected (409), unchanged from before.
+    `POST /queue/process`'s synchronous favorite/vote drain (for the
+    detail screen's immediate success/failure feedback) deliberately stays
+    outside the queue, same as before.
+  - **New route**: `GET /tasks` returns every pending + running job as JSON,
+    already sorted in actual dispatch order (priority first, then enqueue
+    order) -- the in-app queue view, as opposed to the existing `GET
+    /sync/status`'s single "what's running right now" snapshot.
+  - **App**: new `BunnyTask`/`BunnyTaskPriority`/`BunnyTaskStatus` models,
+    `BunnyRepository.getTasks()` (HTTP mode hits `GET /tasks`; standalone/FFI
+    mode always returns an empty list, since it has no background queue of
+    its own -- every call there runs synchronously in-process). New
+    `TaskQueueScreen`, polling every 2s while open, linked from Settings
+    next to the existing server logs entry (server mode only).
+
 - [x] **M25 — Read-connection pool (server freeze fixes)**
   Both reported freezes ("a second device can't load anything while a sync is running,"
   "opening tag stats freezes the server") traced to the same root cause: every db access,

@@ -87,6 +87,17 @@ directory is deleted by hand.
 
 ## Updating
 
+As of M23, this happens automatically: the server checks GitHub for a new release once
+a day (as part of its existing scheduler tick), and if one's out, downloads, extracts,
+and verifies it in the background, then exits cleanly to let systemd (`Restart=always`)
+restart it -- `bunny-server-update-apply.sh`, installed as root via the unit's
+`ExecStartPre=+`, is what actually swaps the new binary into `/usr/local/bin` right
+before the restarted process starts (the main server process itself never has
+permission to write there, by design -- see `server/src/updater.c`). Nothing to do;
+`journalctl -u bunny-server -f` shows `updater: ...` log lines when it runs.
+
+To update manually anyway (or if outbound internet to GitHub is blocked):
+
 ```sh
 cd little-bunny
 git pull

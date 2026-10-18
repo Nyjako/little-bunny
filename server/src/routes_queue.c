@@ -429,12 +429,13 @@ static int posts_handler(struct mg_connection *conn, void *cbdata)
     return server_json_respond_error(conn, BUNNY_CORE_ERR_NOT_FOUND);
 }
 
-/* Enqueues onto ctx->sync_worker instead of calling bunny_core_sync_due_
- * searches directly -- see the identical note on handle_sync_search in
- * routes_searches.c. Progress/results are read via GET /sync/status. */
+/* Enqueues a HIGH-priority job onto ctx->task_queue instead of calling
+ * bunny_core_sync_due_searches directly -- see the identical note on
+ * handle_sync_search in routes_searches.c. Progress/results are read via
+ * GET /sync/status. */
 static int handle_sync(struct mg_connection *conn, server_context_t *ctx)
 {
-    bool enqueued = sync_worker_enqueue_due(ctx->sync_worker);
+    bool enqueued = task_queue_enqueue_sync_due(ctx->task_queue);
 
     cJSON *response = cJSON_CreateObject();
     cJSON_AddBoolToObject(response, "enqueued", enqueued);
@@ -456,7 +457,7 @@ static int sync_handler(struct mg_connection *conn, void *cbdata)
     return handle_sync(conn, ctx);
 }
 
-/* Deliberately NOT routed through sync_worker, unlike handle_sync/handle_
+/* Deliberately NOT routed through task_queue, unlike handle_sync/handle_
  * sync_search above: post_detail_screen.dart's favorite/vote actions drain
  * the queue synchronously right after enqueueing specifically to show
  * immediate success/failure feedback from the real actionsFailed count, and

@@ -300,6 +300,54 @@ class BunnySyncStatus {
   static const BunnySyncStatus inactive = BunnySyncStatus(active: false);
 }
 
+/// Priority level task_queue dispatches by -- see `GET /tasks` (M24).
+/// HIGH is a direct user interaction (manual sync, "check for updates");
+/// MEDIUM is the background favorite/vote/comment queue drain; LOW is the
+/// scheduler's own periodic due-search sync. Ordered so `index` sorts
+/// highest-first the same way the server's own dispatch order does.
+enum BunnyTaskPriority {
+  low,
+  medium,
+  high;
+
+  static BunnyTaskPriority fromWireString(String value) => switch (value) {
+    'high' => BunnyTaskPriority.high,
+    'medium' => BunnyTaskPriority.medium,
+    'low' => BunnyTaskPriority.low,
+    _ => throw ArgumentError.value(value, 'value', 'unknown task priority'),
+  };
+}
+
+/// Mirrors task_queue.c's `task_status_t`.
+enum BunnyTaskStatus {
+  pending,
+  running;
+
+  static BunnyTaskStatus fromWireString(String value) => switch (value) {
+    'running' => BunnyTaskStatus.running,
+    'pending' => BunnyTaskStatus.pending,
+    _ => throw ArgumentError.value(value, 'value', 'unknown task status'),
+  };
+}
+
+/// One entry from `GET /tasks` (M24) -- the in-app task queue view, as
+/// opposed to [BunnySyncStatus]'s single "what's running right now"
+/// snapshot. The list this appears in is already server-sorted in dispatch
+/// order (highest priority first, then FIFO within a priority).
+class BunnyTask {
+  final int id;
+  final BunnyTaskPriority priority;
+  final BunnyTaskStatus status;
+
+  /// Human-readable, e.g. "Sync: my search" or "Process favorite/vote/
+  /// comment queue" -- display-only, not meant to be parsed.
+  final String label;
+
+  final DateTime enqueuedAt;
+
+  const BunnyTask({required this.id, required this.priority, required this.status, required this.label, required this.enqueuedAt});
+}
+
 /// Mirrors `bunny_core_queue_stats_t`.
 class BunnyQueueStats {
   final int actionsProcessed;

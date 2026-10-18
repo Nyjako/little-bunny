@@ -18,6 +18,7 @@ import '../settings/theme_settings_store.dart';
 import 'lock_setup_screen.dart';
 import 'server_logs_screen.dart';
 import 'setup_screen.dart';
+import 'task_queue_screen.dart';
 
 /// One place for cross-cutting app preferences -- reachable from
 /// [AccountsScreen]'s app bar. Structured so adding more appearance options
@@ -276,7 +277,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final previewQuality = _previewQuality;
     final repositoryConfig = _repositoryConfig;
     final httpRepository = widget.repository;
-    final showServerLogs = repositoryConfig is NetworkedConfig && httpRepository is HttpBunnyRepository;
+    final showServerOnlyEntries = repositoryConfig is NetworkedConfig && httpRepository is HttpBunnyRepository;
 
     return Scaffold(
       appBar: AppBar(title: Text(l10n.settingsScreenTitle)),
@@ -296,12 +297,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
             trailing: const Icon(Icons.chevron_right),
             onTap: _switchConnectionMode,
           ),
-          if (showServerLogs)
+          if (showServerOnlyEntries)
             ListTile(
               contentPadding: EdgeInsets.zero,
               title: Text(l10n.settingsServerLogsEntry),
               trailing: const Icon(Icons.chevron_right),
               onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => ServerLogsScreen(repository: httpRepository))),
+            ),
+          if (showServerOnlyEntries)
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              title: Text(l10n.settingsTaskQueueEntry),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => TaskQueueScreen(repository: httpRepository))),
             ),
           const SizedBox(height: 24),
           Text(l10n.settingsAppearanceSection, style: Theme.of(context).textTheme.titleMedium),

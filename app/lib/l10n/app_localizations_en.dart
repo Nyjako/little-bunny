@@ -529,6 +529,30 @@ class AppLocalizationsEn extends AppLocalizations {
   String get serverLogsRefreshTooltip => 'Refresh';
 
   @override
+  String get settingsTaskQueueEntry => 'Task queue';
+
+  @override
+  String get taskQueueScreenTitle => 'Task queue';
+
+  @override
+  String get taskQueueEmptyState => 'Nothing queued right now.';
+
+  @override
+  String get taskQueuePriorityHigh => 'High';
+
+  @override
+  String get taskQueuePriorityMedium => 'Medium';
+
+  @override
+  String get taskQueuePriorityLow => 'Low';
+
+  @override
+  String get taskQueueStatusRunning => 'Running';
+
+  @override
+  String get taskQueueStatusPending => 'Pending';
+
+  @override
   String get settingsAppearanceSection => 'Appearance';
 
   @override
@@ -641,4 +665,22 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get postDetailDownloadFailed => 'Download failed';
+
+  @override
+  String updateAvailableTitle(String tagName) {
+    return 'Update available ($tagName)';
+  }
+
+  @override
+  String get updateDownloadingMessage => 'Downloading update...';
+
+  @override
+  String get updateFailedMessage =>
+      'Update failed. Try again later, or update manually from the project\'s GitHub releases page.';
+
+  @override
+  String get updateLaterAction => 'Later';
+
+  @override
+  String get updateNowAction => 'Update';
 }
