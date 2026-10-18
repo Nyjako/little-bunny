@@ -23,7 +23,10 @@ add_library(bunny_server_lib STATIC
     src/routes_sync.c
     src/routes_settings.c
     src/routes_groups.c
+    src/updater.c
 )
+
+target_compile_definitions(bunny_server_lib PUBLIC BUNNY_BUILD_NUMBER=${BUNNY_BUILD_NUMBER})
 
 target_include_directories(bunny_server_lib
     PUBLIC
