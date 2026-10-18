@@ -477,7 +477,8 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('pool:9'), findsOneWidget);
-    expect(repository.previewSearchCalls, contains((BunnySite.e621, 'pool:9', 1)));
+    // "order:id" (M22) -- pools display oldest-to-newest, not e621's default.
+    expect(repository.previewSearchCalls, contains((BunnySite.e621, 'pool:9 order:id', 1)));
     expect(repository.searches, isEmpty);
   });
 
