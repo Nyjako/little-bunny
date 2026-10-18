@@ -2,9 +2,17 @@ name: Test
 
 # Reusable (workflow_call) so release.yml can gate its build jobs on the
 # exact same test run instead of duplicating these steps -- see that
-# workflow's own `test` job.
+# workflow's own `test` job. Scoped to dev/master, not every branch -- those
+# are the only two that ever receive a PR or a direct push under the
+# dev-is-permanent-integration-branch workflow. master's own push-triggered
+# run goes through release.yml's workflow_call above, not a redundant
+# `push: branches: [master]` here, which would otherwise run this twice for
+# the same push.
 on:
   pull_request:
+    branches: [dev, master]
+  push:
+    branches: [dev]
   workflow_call:
 
 env:
