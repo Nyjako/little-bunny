@@ -9,7 +9,7 @@ add_library(bunny_server_lib STATIC
     src/log.c
     src/scheduler.c
     src/sync_status.c
-    src/sync_worker.c
+    src/task_queue.c
     src/route_utils.c
     src/json_helpers.c
     src/routes_accounts.c
@@ -23,6 +23,7 @@ add_library(bunny_server_lib STATIC
     src/routes_sync.c
     src/routes_settings.c
     src/routes_groups.c
+    src/routes_tasks.c
     src/updater.c
 )
 

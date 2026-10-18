@@ -581,6 +581,26 @@ class HttpBunnyRepository implements BunnyRepository {
   }
 
   @override
+  Future<List<BunnyTask>> getTasks() async {
+    final response = await _client.get(_uri('/tasks'), headers: _headers);
+    if (response.statusCode != 200) {
+      _throwError(response);
+    }
+    final list = _decodeList(response);
+    return list
+        .map(
+          (e) => BunnyTask(
+            id: (e['id'] as num).toInt(),
+            priority: BunnyTaskPriority.fromWireString(e['priority'] as String),
+            status: BunnyTaskStatus.fromWireString(e['status'] as String),
+            label: e['label'] as String,
+            enqueuedAt: DateTime.parse(e['enqueued_at'] as String),
+          ),
+        )
+        .toList();
+  }
+
+  @override
   Future<void> queueFavoriteAdd(int postId, {int? stars}) async {
     final response = await _client.post(_uri('/posts/$postId/favorite'), headers: _headers, body: stars == null ? null : jsonEncode({'stars': stars}));
     if (response.statusCode != 202) {
