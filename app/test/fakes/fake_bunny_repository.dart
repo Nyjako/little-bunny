@@ -259,8 +259,19 @@ class FakeBunnyRepository implements BunnyRepository {
     isFavorited: post.isFavorited,
   );
 
+  /// Post ids whose NEXT markPostSeen call should throw once -- removed
+  /// from this set as soon as it does, so a retry (or a second real call)
+  /// succeeds normally. Simulates a transient failure (M26's retry test).
+  final Set<int> markPostSeenTransientFailures = {};
+
+  final List<int> markPostSeenCalls = [];
+
   @override
   Future<void> markPostSeen(int postId) async {
+    markPostSeenCalls.add(postId);
+    if (markPostSeenTransientFailures.remove(postId)) {
+      throw BunnyRepositoryException('transient failure');
+    }
     for (final entry in postsBySearchId.entries) {
       final index = entry.value.indexWhere((post) => post.id == postId);
       if (index == -1) {
