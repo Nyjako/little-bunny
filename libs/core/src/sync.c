@@ -295,26 +295,38 @@ static void format_position_suffix(char *out, size_t out_size, int position, int
  * `found_count`, and `new_count` (posts not already linked to this search
  * before this call) and queuing auto-favorite/upvote as needed -- shared by
  * the first-scan and incremental branches of sync_e621_search below. */
+/* Batches the whole page into one transaction (and one db_mutex hold)
+ * instead of one implicit auto-commit transaction (and one db_mutex
+ * acquisition) per post. A page can have up to BUNNY_CORE_SYNC_E621_PAGE_LIMIT
+ * (320) posts -- committing each individually meant up to 320 separate
+ * fsync-backed commits per page. Under a long sync (many pages back-to-back,
+ * no cap -- see the comment above sync_e621_search), that added up to
+ * db_mutex rarely ever being free, which is what actually made routes like
+ * GET /searches feel slow during a sync even though no single critical
+ * section was ever individually long. One transaction per page cuts commit
+ * count (and db_mutex acquisitions) by up to 320x with no behavior change. */
 static void upsert_e621_search_page(bunny_core_t *core, const bunny_db_search_t *search, const e621_post_list_t *posts, bunny_core_sync_stats_t *stats, int *found_count, int *new_count)
 {
+    int64_t to_favorite[BUNNY_CORE_SYNC_E621_PAGE_LIMIT];
+    size_t to_favorite_count = 0;
+    int64_t to_upvote[BUNNY_CORE_SYNC_E621_PAGE_LIMIT];
+    size_t to_upvote_count = 0;
+
+    bunny_core_db_lock(core);
+    bunny_db_begin_transaction(core->db);
     for (size_t i = 0; i < posts->count; i++) {
         int64_t post_id = 0;
-        bunny_core_db_lock(core);
         bool upserted_ok = upsert_e621_post(core->db, &posts->items[i], &post_id) == BUNNY_CORE_OK;
         bool was_new = false;
         if (upserted_ok) {
             bunny_db_search_add_result(core->db, search->id, post_id, &was_new);
         }
-        bunny_core_db_unlock(core);
         if (upserted_ok) {
-            /* bunny_core_queue_favorite_add/queue_vote lock internally for
-             * their own single write -- called outside this critical
-             * section since bunny_core_db_lock/unlock isn't re-entrant. */
             if (search->auto_favorite) {
-                bunny_core_queue_favorite_add(core, post_id, search->auto_favorite_stars);
+                to_favorite[to_favorite_count++] = post_id;
             }
             if (search->auto_upvote) {
-                bunny_core_queue_vote(core, post_id, 1, false);
+                to_upvote[to_upvote_count++] = post_id;
             }
             if (stats) {
                 stats->posts_upserted++;
@@ -324,6 +336,18 @@ static void upsert_e621_search_page(bunny_core_t *core, const bunny_db_search_t 
                 (*new_count)++;
             }
         }
+    }
+    bunny_db_commit_transaction(core->db);
+    bunny_core_db_unlock(core);
+
+    /* bunny_core_queue_favorite_add/queue_vote lock internally for their own
+     * single write -- called outside the critical section above since
+     * bunny_core_db_lock/unlock isn't re-entrant. */
+    for (size_t i = 0; i < to_favorite_count; i++) {
+        bunny_core_queue_favorite_add(core, to_favorite[i], search->auto_favorite_stars);
+    }
+    for (size_t i = 0; i < to_upvote_count; i++) {
+        bunny_core_queue_vote(core, to_upvote[i], 1, false);
     }
 }
 
@@ -494,10 +518,17 @@ static bunny_core_result_t sync_inkbunny_search(bunny_core_t *core, const bunny_
             break;
         }
 
+        /* Batched into one transaction (and one db_mutex hold) for the whole
+         * page instead of one implicit auto-commit transaction per
+         * submission -- same reasoning as upsert_e621_search_page above. */
         bool reached_already_synced = false;
+        int64_t *to_favorite = malloc(submissions.count * sizeof(int64_t));
+        size_t to_favorite_count = 0;
+
+        bunny_core_db_lock(core);
+        bunny_db_begin_transaction(core->db);
         for (size_t i = 0; i < submissions.count; i++) {
             int64_t post_id = 0;
-            bunny_core_db_lock(core);
             bool upserted_ok = upsert_inkbunny_submission(core->db, &submissions.items[i], &post_id) == BUNNY_CORE_OK;
             bool already_linked = false;
             if (upserted_ok) {
@@ -510,7 +541,6 @@ static bunny_core_result_t sync_inkbunny_search(bunny_core_t *core, const bunny_
                     bunny_db_search_add_result(core->db, search->id, post_id, NULL);
                 }
             }
-            bunny_core_db_unlock(core);
 
             if (!upserted_ok) {
                 continue;
@@ -522,15 +552,23 @@ static bunny_core_result_t sync_inkbunny_search(bunny_core_t *core, const bunny_
             }
 
             new_count++;
-            /* bunny_core_queue_favorite_add locks internally -- called
-             * outside this iteration's own critical section above. */
             if (search->auto_favorite) {
-                bunny_core_queue_favorite_add(core, post_id, -1);
+                to_favorite[to_favorite_count++] = post_id;
             }
             if (stats) {
                 stats->posts_upserted++;
             }
         }
+        bunny_db_commit_transaction(core->db);
+        bunny_core_db_unlock(core);
+
+        /* bunny_core_queue_favorite_add locks internally -- called outside
+         * the critical section above since bunny_core_db_lock/unlock isn't
+         * re-entrant. */
+        for (size_t i = 0; i < to_favorite_count; i++) {
+            bunny_core_queue_favorite_add(core, to_favorite[i], -1);
+        }
+        free(to_favorite);
         inkbunny_submission_list_free(&submissions);
         if (reached_already_synced) {
             break;
