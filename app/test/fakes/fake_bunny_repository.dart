@@ -452,6 +452,13 @@ class FakeBunnyRepository implements BunnyRepository {
   @override
   Future<BunnySyncStatus> getSyncStatus() async => syncStatus;
 
+  /// Set by a test to simulate task_queue entries (M24) -- empty by default,
+  /// same as the real FfiBunnyRepository.
+  List<BunnyTask> tasks = [];
+
+  @override
+  Future<List<BunnyTask>> getTasks() async => List.of(tasks);
+
   int defaultSyncIntervalHours = 24;
 
   @override

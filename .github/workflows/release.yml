@@ -24,7 +24,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: sudo apt-get update -qq && sudo apt-get install -y --no-install-recommends build-essential cmake libssl-dev
-      - run: make release
+      # BUNNY_BUILD_NUMBER (server/src/updater.c, M23) -- the server's own
+      # version identifier is this same run number, matching the release
+      # tag below (build-${{ github.run_number }}) exactly.
+      - run: make release BUNNY_BUILD_NUMBER=${{ github.run_number }}
       - run: tar -C build-release/server -czf bunny-server-linux-x64.tar.gz bunny_server
       - uses: actions/upload-artifact@v4
         with:
@@ -44,7 +47,7 @@ jobs:
       - working-directory: app
         run: |
           flutter pub get
-          flutter build linux --release
+          flutter build linux --release --dart-define=BUNNY_BUILD_NUMBER=${{ github.run_number }}
       - working-directory: app/build/linux/x64/release
         run: tar -czf "${{ github.workspace }}/little-bunny-app-linux-x64.tar.gz" bundle
       - uses: actions/upload-artifact@v4
@@ -70,11 +73,21 @@ jobs:
           # only exist for Android emulators. Building a 3rd ABI (x86_64, via
           # --split-per-abi) reintroduced "No space left on device" even with
           # BUILD_EXAMPLES=OFF -- back to one fat 2-ABI APK.
-          flutter build apk --release --target-platform android-arm,android-arm64
+          #
+          # BUNNY_BUILD_NUMBER (app/lib/app_version.dart, M23) -- this app's
+          # own version identifier, matching the release tag exactly, same
+          # as the server's own compiled-in version.
+          flutter build apk --release --target-platform android-arm,android-arm64 --dart-define=BUNNY_BUILD_NUMBER=${{ github.run_number }}
+      # Renamed from flutter's default app-release.apk -- every other
+      # platform's release asset already has a little-bunny-app- prefix;
+      # matching it here too keeps UpdateCheckService's (app/lib/services/
+      # update_check_service.dart) asset-name matching simple and the
+      # release page's own asset list self-explanatory.
+      - run: mv app/build/app/outputs/flutter-apk/app-release.apk app/build/app/outputs/flutter-apk/little-bunny-app-android.apk
       - uses: actions/upload-artifact@v4
         with:
           name: little-bunny-app-android
-          path: app/build/app/outputs/flutter-apk/app-release.apk
+          path: app/build/app/outputs/flutter-apk/little-bunny-app-android.apk
 
   build-windows:
     needs: test
@@ -84,7 +97,7 @@ jobs:
       - run: vcpkg install openssl:x64-windows
       - name: Build server
         run: |
-          cmake -S . -B build-windows -DCMAKE_BUILD_TYPE=Release -DBUNNY_BUILD_TESTS=OFF -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake" -DVCPKG_TARGET_TRIPLET=x64-windows
+          cmake -S . -B build-windows -DCMAKE_BUILD_TYPE=Release -DBUNNY_BUILD_TESTS=OFF -DBUNNY_BUILD_NUMBER=${{ github.run_number }} -DCMAKE_TOOLCHAIN_FILE="$env:VCPKG_INSTALLATION_ROOT/scripts/buildsystems/vcpkg.cmake" -DVCPKG_TARGET_TRIPLET=x64-windows
           cmake --build build-windows --config Release -j
       - uses: subosito/flutter-action@v2
         with:
@@ -94,7 +107,7 @@ jobs:
         working-directory: app
         run: |
           flutter pub get
-          flutter build windows --release
+          flutter build windows --release --dart-define=BUNNY_BUILD_NUMBER=${{ github.run_number }}
       # Server and app are separate downloads -- someone grabbing one
       # shouldn't be forced to also download the other. Both zipped, for
       # consistency with every other platform's app archive.
@@ -128,7 +141,7 @@ jobs:
       - working-directory: app
         run: |
           flutter pub get
-          flutter build macos --release
+          flutter build macos --release --dart-define=BUNNY_BUILD_NUMBER=${{ github.run_number }}
       - working-directory: app/build/macos/Build/Products/Release
         run: zip -r "${{ github.workspace }}/little-bunny-app-macos-arm64.zip" little_bunny.app
       - uses: actions/upload-artifact@v4

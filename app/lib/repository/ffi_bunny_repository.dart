@@ -360,6 +360,12 @@ class FfiBunnyRepository implements BunnyRepository {
   @override
   Future<BunnySyncStatus> getSyncStatus() async => _syncStatus;
 
+  /// Standalone mode has no task_queue (M24) -- every call here runs
+  /// synchronously in-process (see [syncAllSearches] above), so there's
+  /// never anything queued or running in the background to report.
+  @override
+  Future<List<BunnyTask>> getTasks() async => const [];
+
   @override
   Future<void> queueFavoriteAdd(int postId, {int? stars}) => _wrapped(() => _native.queueFavoriteAdd(postId, stars ?? -1));
 

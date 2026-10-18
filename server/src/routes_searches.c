@@ -220,22 +220,23 @@ static bool search_exists(server_context_t *ctx, int64_t search_id)
     return found;
 }
 
-/* Enqueues onto ctx->sync_worker and returns immediately instead of calling
- * bunny_core_sync_search directly -- a sync can run for minutes against a
- * large search, and blocking the civetweb worker thread handling this
- * request for that whole time risks starving the server's small (4) thread
- * pool for everything else. See sync_worker.h. The existence check below is
- * a cheap synchronous db read done up front specifically so an unknown id
- * still gets an immediate 404 -- sync_worker_enqueue_search itself has no
- * way to report a NOT_FOUND back once it's already returned 202. Actual
- * sync progress/results are read via GET /sync/status, not this response. */
+/* Enqueues a HIGH-priority job onto ctx->task_queue and returns immediately
+ * instead of calling bunny_core_sync_search directly -- a sync can run for
+ * minutes against a large search, and blocking the civetweb worker thread
+ * handling this request for that whole time risks starving the server's
+ * small (4) thread pool for everything else. See task_queue.h. The
+ * existence check below is a cheap synchronous db read done up front
+ * specifically so an unknown id still gets an immediate 404 --
+ * task_queue_enqueue_sync_search itself has no way to report a NOT_FOUND
+ * back once it's already returned 202. Actual sync progress/results are
+ * read via GET /sync/status, not this response. */
 static int handle_sync_search(struct mg_connection *conn, server_context_t *ctx, int64_t search_id)
 {
     if (!search_exists(ctx, search_id)) {
         return server_json_respond_error(conn, BUNNY_CORE_ERR_NOT_FOUND);
     }
 
-    bool enqueued = sync_worker_enqueue_search(ctx->sync_worker, search_id);
+    bool enqueued = task_queue_enqueue_sync_search(ctx->task_queue, search_id);
 
     cJSON *response = cJSON_CreateObject();
     cJSON_AddBoolToObject(response, "enqueued", enqueued);

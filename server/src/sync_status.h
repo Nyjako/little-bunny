@@ -5,12 +5,12 @@
 #include <time.h>
 
 /* Shared, mutex-guarded "what's syncing right now" state, read by any device
- * via GET /sync/status and written by both scheduler.c (automatic due-search
- * runs) and sync_worker.c (manually-triggered single-search/all-search/
- * queue-process jobs) -- the single place that answers "is a sync in
- * progress, and what's it doing" regardless of who started it. The lock here
- * only ever guards this small struct; it's never held across a network call
- * or a blocking bunny_core_* call, so reading/writing it is always fast. */
+ * via GET /sync/status and written by task_queue.c as it works through its
+ * priority queue -- the single place that answers "is a sync in progress,
+ * and what's it doing" regardless of who enqueued it (a route, or the
+ * scheduler's own background cadence). The lock here only ever guards this
+ * small struct; it's never held across a network call or a blocking
+ * bunny_core_* call, so reading/writing it is always fast. */
 typedef struct server_sync_status server_sync_status_t;
 
 server_sync_status_t *server_sync_status_create(void);

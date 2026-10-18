@@ -238,6 +238,14 @@
   "serverLogsScreenTitle": "Server logs",
   "serverLogsEmptyState": "No log lines yet.",
   "serverLogsRefreshTooltip": "Refresh",
+  "settingsTaskQueueEntry": "Task queue",
+  "taskQueueScreenTitle": "Task queue",
+  "taskQueueEmptyState": "Nothing queued right now.",
+  "taskQueuePriorityHigh": "High",
+  "taskQueuePriorityMedium": "Medium",
+  "taskQueuePriorityLow": "Low",
+  "taskQueueStatusRunning": "Running",
+  "taskQueueStatusPending": "Pending",
   "settingsAppearanceSection": "Appearance",
   "settingsThemeLight": "Light",
   "settingsThemeDark": "Dark",
@@ -288,5 +296,14 @@
   "postDetailDownloadTooltip": "Download",
   "postDetailDownloadVerified": "Downloaded and checksum verified",
   "postDetailDownloadMismatch": "Downloaded, but the checksum didn't match",
-  "postDetailDownloadFailed": "Download failed"
+  "postDetailDownloadFailed": "Download failed",
+
+  "updateAvailableTitle": "Update available ({tagName})",
+  "@updateAvailableTitle": {
+    "placeholders": {"tagName": {"type": "String"}}
+  },
+  "updateDownloadingMessage": "Downloading update...",
+  "updateFailedMessage": "Update failed. Try again later, or update manually from the project's GitHub releases page.",
+  "updateLaterAction": "Later",
+  "updateNowAction": "Update"
 }
