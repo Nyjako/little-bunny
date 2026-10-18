@@ -26,6 +26,14 @@ option(BUNNY_ENABLE_ASAN "Build with AddressSanitizer/UndefinedBehaviorSanitizer
 option(BUNNY_BUILD_TOOLS "Build developer/experimental command-line tools (not part of the shipped product)" OFF)
 option(BUNNY_BUILD_SERVER "Build the C server (civetweb, requires network to fetch). OFF for the Flutter FFI plugin's build (bunny_core_ffi/), which only needs libs/." ON)
 
+# The release build number (release.yml's `build-${{ github.run_number }}`
+# tag) doubles as this server's own version identifier -- a monotonically
+# increasing integer is all a "is there a newer release" check needs, no
+# real semver required. 0 for local/dev builds (never "newer" than any real
+# release, so the updater never fires); release.yml passes the real value via
+# -DBUNNY_BUILD_NUMBER=$GITHUB_RUN_NUMBER.
+set(BUNNY_BUILD_NUMBER "0" CACHE STRING "Release build number, embedded as this binary's version (see server/src/updater.c)")
+
 if(BUNNY_ENABLE_ASAN)
   add_compile_options(-fsanitize=address,undefined -fno-omit-frame-pointer)
   add_link_options(-fsanitize=address,undefined)

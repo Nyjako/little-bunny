@@ -13,6 +13,12 @@ target_include_directories(bunny_server_test_log PRIVATE ${CMAKE_CURRENT_SOURCE_
 target_link_libraries(bunny_server_test_log PRIVATE bunny_common unity::framework)
 add_test(NAME bunny_server_test_log COMMAND bunny_server_test_log)
 
+add_executable(bunny_server_test_updater test_updater.c ../src/updater.c ../src/log.c)
+target_include_directories(bunny_server_test_updater PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../src)
+target_compile_definitions(bunny_server_test_updater PRIVATE FIXTURES_DIR="${CMAKE_CURRENT_SOURCE_DIR}/fixtures")
+target_link_libraries(bunny_server_test_updater PRIVATE bunny_common cjson goblin unity::framework)
+add_test(NAME bunny_server_test_updater COMMAND bunny_server_test_updater)
+
 # Starts a real bunny_server (via server_app_start(), the same code path
 # main.c uses) on :memory: with a fake e621 transport, and exercises it with
 # real HTTPS requests over libcurl -- no fixture can substitute for actually
