@@ -47,6 +47,22 @@ static const bunny_db_migration_t BUNNY_DB_MIGRATIONS[] = {
      * 0 <-> SQL NULL at the bind/read boundary, same public-API shape as
      * every other "0 means none" column in this codebase. */
     {11, "ALTER TABLE searches ADD COLUMN group_id INTEGER REFERENCES search_groups(id) ON DELETE SET NULL;"},
+    /* -1 ("not yet determined") rather than 0, since 0 is itself a valid,
+     * meaningful position (the first post in the pool) -- a freshly-synced
+     * membership row seeds to -1 until the next pool-order sync
+     * (bunny_core_sync_pool_order) fills in e621's real post_ids order
+     * (M26). Existing rows all seed to -1 too; the one-time backfill
+     * (server_settings.pool_positions_backfilled below) fixes those up
+     * without waiting for each pool's own search to sync again. */
+    {12, "ALTER TABLE post_pools ADD COLUMN position INTEGER NOT NULL DEFAULT -1;"},
+    /* Tracks whether the one-time backfill (M26) that re-fetches every
+     * pool already in post_pools from e621, to populate `position` for
+     * data that predates this column, has run yet -- a network operation,
+     * so it can't be part of this SQL migration itself. Checked/set by
+     * bunny_core_backfill_pool_positions_once, called once from the
+     * scheduler's first tick (server mode) or FfiBunnyRepository.open
+     * (standalone mode). */
+    {13, "ALTER TABLE server_settings ADD COLUMN pool_positions_backfilled INTEGER NOT NULL DEFAULT 0;"},
 };
 // clang-format on
 
