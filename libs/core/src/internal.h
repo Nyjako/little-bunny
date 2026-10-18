@@ -12,17 +12,50 @@
 #include "bunny_core/error.h"
 #include "bunny_db/db.h"
 
+/* Read pool size (M25): matches civetweb's own num_threads (server/src/app.c)
+ * so up to that many concurrent GET requests (searches list, tag stats, a
+ * second device's own requests, ...) can each get their own connection
+ * instead of queuing behind one another -- see bunny_core_db_read_lock
+ * below for why this exists at all. */
+#define BUNNY_CORE_READ_POOL_SIZE 4
+
 struct bunny_core
 {
     bunny_db_t *db;
-    bunny_mutex_t db_mutex; /* serializes every core->db access; NEVER held
+    bunny_mutex_t db_mutex; /* serializes every WRITE to core->db; NEVER held
                              * across a network call (e621_/inkbunny_
                              * functions or curl) -- see sync.c/queue.c/site_clients.c/
                              * backup.c/accounts.c/searches.c/blacklist.c/
                              * downloads.c for the lock-only-around-db-ops
-                             * pattern every bunny_core_* function follows.
-                             * verify.c is the one exception: it never
-                             * touches core->db at all, so it needs no lock. */
+                             * pattern every write-touching bunny_core_*
+                             * function follows. verify.c is the one
+                             * exception: it never touches core->db at all,
+                             * so it needs no lock. Pure reads go through
+                             * read_dbs/bunny_core_db_read_lock instead --
+                             * see the comment there. */
+    /* M25: a small pool of extra connections to the same database file,
+     * used by every pure-read bunny_core_* function (bunny_core_search_list,
+     * bunny_core_top_used_tags, ...) instead of db_mutex/db. Before this,
+     * EVERY db access -- reads and writes alike -- serialized through the
+     * single db_mutex above, so a slow write (a big sync's batched insert)
+     * or a slow read (an unindexed tag-stats aggregate over a large table)
+     * blocked every other request for its entire duration, including a
+     * second device's plain GET /searches. WAL mode (enabled in
+     * bunny_db_open) is what makes this actually work: separate connections
+     * to the same WAL database don't block each other for reads, and don't
+     * block the one writer either. NULL/unused (has_read_pool false) for
+     * ":memory:" databases (every test's db_path) -- SQLite gives each
+     * ":memory:" open its own independent, empty database, so a pool of
+     * them wouldn't see the writer's data at all; those fall back to
+     * db/db_mutex for reads too, same as before this existed. Each slot's
+     * own mutex (not one shared read mutex) is what lets multiple reads
+     * actually run in parallel instead of just moving the serialization
+     * point from db_mutex to a single shared read lock. */
+    bool has_read_pool;
+    bunny_db_t *read_dbs[BUNNY_CORE_READ_POOL_SIZE];
+    bunny_mutex_t read_mutexes[BUNNY_CORE_READ_POOL_SIZE];
+    bunny_mutex_t read_rr_mutex; /* guards next_read_slot only, held very briefly */
+    size_t next_read_slot;
     bunny_mutex_t sync_mutex; /* serializes the site-facing sync operations
                                * against EACH OTHER (sync_e621_search/
                                * sync_inkbunny_search, bunny_core_process_
@@ -53,6 +86,42 @@ struct bunny_core
  * thread deadlocks against itself. */
 static inline void bunny_core_db_lock(bunny_core_t *core) { bunny_mutex_lock(&core->db_mutex); }
 static inline void bunny_core_db_unlock(bunny_core_t *core) { bunny_mutex_unlock(&core->db_mutex); }
+
+/* Every bunny_core_* function that only READS core->db (never INSERT/UPDATE/
+ * DELETE) uses this pair instead of bunny_core_db_lock/unlock -- picks the
+ * next read connection round-robin, locks just that slot's own mutex (not a
+ * single shared one, so concurrent reads can actually run in parallel
+ * instead of queuing), and returns which bunny_db_t* to call the matching
+ * bunny_db_* read function on. *out_slot is BUNNY_CORE_READ_POOL_SIZE as a
+ * sentinel meaning "fell back to db_mutex/db" (the :memory: case, see
+ * has_read_pool above) -- bunny_core_db_read_unlock checks for that same
+ * sentinel, so callers never need to branch on it themselves. Not
+ * re-entrant, same rule as bunny_core_db_lock. */
+static inline bunny_db_t *bunny_core_db_read_lock(bunny_core_t *core, size_t *out_slot)
+{
+    if (!core->has_read_pool) {
+        bunny_mutex_lock(&core->db_mutex);
+        *out_slot = BUNNY_CORE_READ_POOL_SIZE;
+        return core->db;
+    }
+    bunny_mutex_lock(&core->read_rr_mutex);
+    size_t slot = core->next_read_slot;
+    core->next_read_slot = (slot + 1) % BUNNY_CORE_READ_POOL_SIZE;
+    bunny_mutex_unlock(&core->read_rr_mutex);
+
+    bunny_mutex_lock(&core->read_mutexes[slot]);
+    *out_slot = slot;
+    return core->read_dbs[slot];
+}
+
+static inline void bunny_core_db_read_unlock(bunny_core_t *core, size_t slot)
+{
+    if (slot == BUNNY_CORE_READ_POOL_SIZE) {
+        bunny_mutex_unlock(&core->db_mutex);
+        return;
+    }
+    bunny_mutex_unlock(&core->read_mutexes[slot]);
+}
 
 /* See sync_mutex above -- held around the entire body of a site-syncing
  * function (network calls included), never nested with another call that
