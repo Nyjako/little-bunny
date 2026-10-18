@@ -47,8 +47,13 @@ test-flutter:
 	cd bunny_core_ffi && LD_LIBRARY_PATH=$(CURDIR)/$(APP_BUILD_DIR)/linux/x64/debug/bundle/lib fvm flutter test
 	cd app && LD_LIBRARY_PATH=$(CURDIR)/$(APP_BUILD_DIR)/linux/x64/debug/bundle/lib fvm flutter test
 
+# BUNNY_BUILD_NUMBER defaults to 0 (see the CMake option's own comment) --
+# release.yml overrides it with the real run number:
+# `make release BUNNY_BUILD_NUMBER=$GITHUB_RUN_NUMBER`.
+BUNNY_BUILD_NUMBER ?= 0
+
 release:
-	cmake -S . -B $(RELEASE_DIR) -DCMAKE_BUILD_TYPE=Release -DBUNNY_BUILD_TESTS=OFF
+	cmake -S . -B $(RELEASE_DIR) -DCMAKE_BUILD_TYPE=Release -DBUNNY_BUILD_TESTS=OFF -DBUNNY_BUILD_NUMBER=$(BUNNY_BUILD_NUMBER)
 	cmake --build $(RELEASE_DIR) -j
 
 # Use this (not plain `release`) when building on one machine to deploy onto
