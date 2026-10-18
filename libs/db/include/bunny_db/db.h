@@ -57,6 +57,11 @@ bunny_db_result_t bunny_db_account_delete(bunny_db_t *db, bunny_db_site_t site);
 bunny_db_result_t bunny_db_settings_get_default_interval_hours(bunny_db_t *db, int *out_hours);
 bunny_db_result_t bunny_db_settings_set_default_interval_hours(bunny_db_t *db, int hours);
 
+/* Whether the one-time pool-position backfill (M26) has run yet -- see its
+ * own doc comment on bunny_db_pool_set_post_positions/db.c's migration 13. */
+bunny_db_result_t bunny_db_settings_get_pool_positions_backfilled(bunny_db_t *db, bool *out_done);
+bunny_db_result_t bunny_db_settings_set_pool_positions_backfilled(bunny_db_t *db, bool done);
+
 /* --- Searches ------------------------------------------------------------ */
 
 bunny_db_result_t bunny_db_search_create(bunny_db_t *db, bunny_db_site_t site, const char *label, const char *query, int interval_hours, const bunny_db_search_options_t *options, int64_t *out_id);
@@ -195,6 +200,29 @@ bunny_db_result_t bunny_db_post_get_relationships(bunny_db_t *db, int64_t post_i
 /* The e621 pool ids a post belongs to (empty for Inkbunny, or an e621 post in
  * no pools). Same "empty is OK, not NOT_FOUND" rule as the relationships read above. */
 bunny_db_result_t bunny_db_post_get_pool_ids(bunny_db_t *db, int64_t post_id, bunny_db_int64_list_t *out_list);
+
+/* Writes each post_ids[i]'s index as its position within `pool_id` (M26) --
+ * post_ids is e621's own, already-ordered array from GET /pools/{id}.json,
+ * using e621's EXTERNAL post ids (translated to local post ids internally
+ * via posts.external_id, since that's what post_pools.post_id references).
+ * A no-op for any entry whose post isn't cached locally yet (nothing to
+ * update) or isn't a member of this pool at all (e.g. the pool grew since
+ * this post's own page was last synced) -- harmless, since a future sync of
+ * either the pool-order or that specific post fills it in then. */
+bunny_db_result_t bunny_db_pool_set_post_positions(bunny_db_t *db, int64_t pool_id, const int64_t *post_ids, size_t count);
+
+/* Every distinct pool_id currently referenced in post_pools -- feeds the
+ * one-time backfill (M26) that re-fetches each already-known pool from
+ * e621 to populate `position` for data that predates that column. */
+bunny_db_result_t bunny_db_list_distinct_pool_ids(bunny_db_t *db, bunny_db_int64_list_t *out_list);
+
+/* Same contract as bunny_db_search_list_posts, but for a search whose query
+ * is a pool browse ("pool:<pool_id>", M9.6.3/M22) -- orders by this pool's
+ * own `position` (ascending, e621's own reading order) instead of newest-
+ * first by creation date, falling back to creation date (ascending, so a
+ * still-undetermined tail at least reads oldest-first like the rest of the
+ * pool) for any post whose position isn't known yet. */
+bunny_db_result_t bunny_db_pool_search_list_posts(bunny_db_t *db, int64_t search_id, int64_t pool_id, bool unseen_only, bunny_db_post_list_t *out_list);
 
 /* --- Seen state (global per post, not per search) ------------------------- */
 
