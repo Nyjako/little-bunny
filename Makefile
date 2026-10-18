@@ -3,6 +3,8 @@ RELEASE_DIR ?= build-release
 PORTABLE_DIR ?= build-release-portable
 WINDOWS_DIR ?= build-windows
 TOOLS_DIR ?= build-tools
+APP_BUILD_DIR ?= app/build
+FFI_BUILD_DIR ?= bunny_core_ffi/build
 # glibc/OpenSSL symbol versions are forward-compatible only -- a binary built
 # against a newer glibc/OpenSSL than the deploy target has won't run there
 # (see "error while loading shared libraries: ... version `GLIBC_2.xx' not
@@ -34,16 +36,30 @@ release:
 # OpenSSL are never used. Output lands in $(PORTABLE_DIR)/server/bunny_server,
 # owned by the invoking user (not root) despite the build running as root
 # inside the container, since apt-get needs it.
+#
+# The chown is in a trap, not chained with `&&` after the build -- a `&&`
+# chain only runs it after every earlier step succeeds, so any failure
+# (a transient apt-get/network blip, a real build error, etc.) skipped it
+# and left $(PORTABLE_DIR) root-owned on disk, which then needed `sudo rm -rf`
+# to remove (plain non-root `rm -rf`/`make clean` can't delete a directory
+# it doesn't have write permission into) and made the next `release-portable`
+# run fail too. `trap ... EXIT` always fires, success or failure, so
+# ownership is fixed either way; `|| true` only guards the case where
+# $(PORTABLE_DIR) doesn't exist yet at all (e.g. apt-get itself failed).
 release-portable:
 	docker run --rm -v $(CURDIR):/src -w /src $(PORTABLE_IMAGE) bash -c "\
+		trap 'chown -R $(HOST_UID):$(HOST_GID) $(PORTABLE_DIR) 2>/dev/null || true' EXIT; \
 		apt-get update -qq && \
 		apt-get install -y --no-install-recommends build-essential cmake libssl-dev ca-certificates git && \
 		cmake -S . -B $(PORTABLE_DIR) -DCMAKE_BUILD_TYPE=Release -DBUNNY_BUILD_TESTS=OFF && \
-		cmake --build $(PORTABLE_DIR) -j && \
-		chown -R $(HOST_UID):$(HOST_GID) $(PORTABLE_DIR)"
+		cmake --build $(PORTABLE_DIR) -j"
 
+# Also removes app/ and bunny_core_ffi/'s own build output -- app-linux/
+# app-android (below) are this Makefile's own wrappers for building the
+# Flutter app, so this is the one clean target that should take care of
+# everything `make` itself can produce, not just the C side.
 clean:
-	rm -rf $(BUILD_DIR) $(RELEASE_DIR) $(PORTABLE_DIR) $(WINDOWS_DIR) $(TOOLS_DIR)
+	rm -rf $(BUILD_DIR) $(RELEASE_DIR) $(PORTABLE_DIR) $(WINDOWS_DIR) $(TOOLS_DIR) $(APP_BUILD_DIR) $(FFI_BUILD_DIR)
 
 tools:
 	cmake -S . -B $(TOOLS_DIR) -DCMAKE_BUILD_TYPE=Debug -DBUNNY_BUILD_TOOLS=ON
