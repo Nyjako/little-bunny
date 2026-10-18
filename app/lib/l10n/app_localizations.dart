@@ -1036,6 +1036,54 @@ abstract class AppLocalizations {
   /// **'Refresh'**
   String get serverLogsRefreshTooltip;
 
+  /// No description provided for @settingsTaskQueueEntry.
+  ///
+  /// In en, this message translates to:
+  /// **'Task queue'**
+  String get settingsTaskQueueEntry;
+
+  /// No description provided for @taskQueueScreenTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Task queue'**
+  String get taskQueueScreenTitle;
+
+  /// No description provided for @taskQueueEmptyState.
+  ///
+  /// In en, this message translates to:
+  /// **'Nothing queued right now.'**
+  String get taskQueueEmptyState;
+
+  /// No description provided for @taskQueuePriorityHigh.
+  ///
+  /// In en, this message translates to:
+  /// **'High'**
+  String get taskQueuePriorityHigh;
+
+  /// No description provided for @taskQueuePriorityMedium.
+  ///
+  /// In en, this message translates to:
+  /// **'Medium'**
+  String get taskQueuePriorityMedium;
+
+  /// No description provided for @taskQueuePriorityLow.
+  ///
+  /// In en, this message translates to:
+  /// **'Low'**
+  String get taskQueuePriorityLow;
+
+  /// No description provided for @taskQueueStatusRunning.
+  ///
+  /// In en, this message translates to:
+  /// **'Running'**
+  String get taskQueueStatusRunning;
+
+  /// No description provided for @taskQueueStatusPending.
+  ///
+  /// In en, this message translates to:
+  /// **'Pending'**
+  String get taskQueueStatusPending;
+
   /// No description provided for @settingsAppearanceSection.
   ///
   /// In en, this message translates to:
