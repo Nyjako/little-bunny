@@ -1672,6 +1672,39 @@ this file is the single source of truth for "what's done" across sessions.
     `setSearchPinned` after `createSearch`, since creation itself has no `pinned`/`groupId`
     parameters.
 
+- [x] **M24 — Priority task queue**
+  Replaces `sync_worker`'s plain FIFO with a 3-level priority queue so direct
+  user interactions never wait behind background work, plus an in-app view
+  of what's queued.
+  - **Server**: new `server/src/task_queue.c/.h` -- a fixed-capacity slot
+    table dispatched by priority (HIGH for routes acting on a direct user
+    request: single-search sync, "check for updates", pull-to-refresh;
+    MEDIUM for the favorite/vote/comment action queue's background drain;
+    LOW for the scheduler's own periodic due-search sync), FIFO within a
+    priority. The scheduler's background due-sync and action-queue drain
+    (previously called `bunny_core_sync_due_searches`/
+    `bunny_core_process_queue` directly on its own thread) now enqueue onto
+    the same queue instead, so they're visible and properly prioritized
+    against user-triggered jobs rather than running on an entirely separate,
+    invisible thread. A HIGH-priority request for work a LOW-priority
+    background job already covers (e.g. the user hits pull-to-refresh while
+    the scheduler's own due-sync is already pending) promotes that slot in
+    place instead of queuing a redundant duplicate; a genuine duplicate at
+    the same priority is still rejected (409), unchanged from before.
+    `POST /queue/process`'s synchronous favorite/vote drain (for the
+    detail screen's immediate success/failure feedback) deliberately stays
+    outside the queue, same as before.
+  - **New route**: `GET /tasks` returns every pending + running job as JSON,
+    already sorted in actual dispatch order (priority first, then enqueue
+    order) -- the in-app queue view, as opposed to the existing `GET
+    /sync/status`'s single "what's running right now" snapshot.
+  - **App**: new `BunnyTask`/`BunnyTaskPriority`/`BunnyTaskStatus` models,
+    `BunnyRepository.getTasks()` (HTTP mode hits `GET /tasks`; standalone/FFI
+    mode always returns an empty list, since it has no background queue of
+    its own -- every call there runs synchronously in-process). New
+    `TaskQueueScreen`, polling every 2s while open, linked from Settings
+    next to the existing server logs entry (server mode only).
+
 - [ ] **M12 — Cross-platform polish**
   Responsive desktop/mobile layout, consistent theming pass, Windows app build, packaging.
   - [x] **M12.1 — Android client build.** `fvm flutter build apk` now succeeds end-to-end
