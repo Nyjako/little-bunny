@@ -74,6 +74,15 @@ class BunnySearch {
   /// The [BunnyGroup] this search belongs to, or 0 if ungrouped (M21).
   final int groupId;
 
+  /// e621's own tag-search syntax treats `pool:<id>` as a literal query
+  /// string -- `bunny_core_search_create(site: e621, query: 'pool:$id')`
+  /// already works with no dedicated backend concept of "this is a pool",
+  /// so this is the one place that distinguishes a pool search from a
+  /// regular one, for anywhere in the UI that needs to tell them apart
+  /// (e.g. SearchesScreen's tab split, M9.6.2; PostGridScreen's display
+  /// order, M22 -- pools read like comics, oldest page first).
+  bool get isPool => site == BunnySite.e621 && query.startsWith('pool:');
+
   const BunnySearch({
     required this.id,
     required this.site,

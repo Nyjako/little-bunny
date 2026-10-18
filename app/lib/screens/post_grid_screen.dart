@@ -87,7 +87,14 @@ class _PostGridScreenState extends State<PostGridScreen> {
     return post.previewUrl;
   }
 
-  Future<List<BunnyPost>> _loadPosts() => widget.repository.listSearchPosts(widget.search.id, unseenOnly: _unseenOnly);
+  /// The repository always returns newest-first (by the site's own creation
+  /// date) -- right for a normal search's feed, but backwards for a pool
+  /// (M22), which reads like a comic: page 1 should come first, not
+  /// whichever page happened to be uploaded most recently.
+  Future<List<BunnyPost>> _loadPosts() async {
+    final posts = await widget.repository.listSearchPosts(widget.search.id, unseenOnly: _unseenOnly);
+    return widget.search.isPool ? posts.reversed.toList() : posts;
+  }
 
   void _toggleUnseenOnly() {
     setState(() {
