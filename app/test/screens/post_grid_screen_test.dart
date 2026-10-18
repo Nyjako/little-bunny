@@ -10,6 +10,7 @@ import 'package:little_bunny/screens/post_grid_screen.dart';
 import 'package:little_bunny/services/download_manager.dart';
 import 'package:little_bunny/settings/display_settings_store.dart';
 import 'package:little_bunny/settings/download_settings_store.dart';
+import 'package:little_bunny/widgets/post_grid_tile.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../fakes/fake_bunny_repository.dart';
@@ -56,6 +57,31 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('No posts cached yet. Tap refresh to sync.'), findsOneWidget);
+  });
+
+  testWidgets('a pool search (M22) displays oldest-to-newest, reversing the repository\'s newest-first order', (WidgetTester tester) async {
+    final repository = FakeBunnyRepository();
+    final poolSearch = const BunnySearch(id: 3, site: BunnySite.e621, label: 'A pool', query: 'pool:123', intervalHours: 24, createdAt: '2026-01-01T00:00:00Z');
+    // Repository order is newest-first, as it always is -- posts here are
+    // deliberately listed id 3, 2, 1 to match that.
+    repository.postsBySearchId[3] = [_post(id: 3, isSeen: false), _post(id: 2, isSeen: false), _post(id: 1, isSeen: false)];
+
+    await tester.pumpWidget(wrapWithLocalization(PostGridScreen(search: poolSearch, repository: repository, displaySettingsStore: const DisplaySettingsStore(), downloadSettingsStore: const DownloadSettingsStore())));
+    await tester.pumpAndSettle();
+
+    final tiles = tester.widgetList<PostGridTile>(find.byType(PostGridTile)).toList();
+    expect(tiles.map((t) => t.post.id).toList(), [1, 2, 3]);
+  });
+
+  testWidgets('a regular (non-pool) search keeps the repository\'s own order', (WidgetTester tester) async {
+    final repository = FakeBunnyRepository();
+    repository.postsBySearchId[1] = [_post(id: 3, isSeen: false), _post(id: 2, isSeen: false), _post(id: 1, isSeen: false)];
+
+    await tester.pumpWidget(wrapWithLocalization(PostGridScreen(search: search, repository: repository, displaySettingsStore: const DisplaySettingsStore(), downloadSettingsStore: const DownloadSettingsStore())));
+    await tester.pumpAndSettle();
+
+    final tiles = tester.widgetList<PostGridTile>(find.byType(PostGridTile)).toList();
+    expect(tiles.map((t) => t.post.id).toList(), [3, 2, 1]);
   });
 
   testWidgets('app bar shrinks on wide windows (M9.6.6)', (WidgetTester tester) async {

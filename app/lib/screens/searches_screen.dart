@@ -47,12 +47,6 @@ class SearchesScreen extends StatefulWidget {
   State<SearchesScreen> createState() => _SearchesScreenState();
 }
 
-/// e621's own tag-search syntax treats `pool:<id>` as a literal query string
-/// -- `bunny_core_search_create(site: e621, query: 'pool:$id')` already works
-/// today with no new backend logic, so a "pool search" is just a regular
-/// [BunnySearch] with a recognizable query shape, filtered into its own tab.
-bool _isPoolSearch(BunnySearch search) => search.site == BunnySite.e621 && search.query.startsWith('pool:');
-
 /// One row in the tree view (M21) -- either a standalone search or a group
 /// with its member searches nested inside an [ExpansionTile]. A common
 /// shape lets both kinds share one pin-first/[SearchSortOrder] sort pass.
@@ -639,8 +633,8 @@ class _SearchesScreenState extends State<SearchesScreen> with SingleTickerProvid
           }
           final all = snapshot.data!.searches;
           final groups = snapshot.data!.groups;
-          final searches = _sortedEntries(_buildEntries(all.where((search) => !_isPoolSearch(search)).toList(), groups));
-          final pools = _sortedEntries(_buildEntries(all.where(_isPoolSearch).toList(), groups));
+          final searches = _sortedEntries(_buildEntries(all.where((search) => !search.isPool).toList(), groups));
+          final pools = _sortedEntries(_buildEntries(all.where((search) => search.isPool).toList(), groups));
           return TabBarView(controller: _tabController, children: [_searchList(searches, l10n.searchesEmptyState), _searchList(pools, l10n.searchesPoolsEmptyState)]);
         },
       ),
