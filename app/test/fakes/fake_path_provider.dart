@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:path_provider_platform_interface/path_provider_platform_interface.dart';
 import 'package:plugin_platform_interface/plugin_platform_interface.dart';
@@ -18,4 +20,11 @@ class FakePathProviderPlatform extends Fake with MockPlatformInterfaceMixin impl
   /// fake and never actually opens the path).
   @override
   Future<String?> getApplicationSupportPath() async => '/fake/support';
+
+  /// Backs `UpdateApplyService`'s download/extract staging directory (M23)
+  /// -- a real temp dir on the actual host filesystem (not a bare string
+  /// like the two fakes above), since tests here genuinely write/read
+  /// files through it.
+  @override
+  Future<String?> getTemporaryPath() async => Directory.systemTemp.createTempSync('bunny_test_').path;
 }
