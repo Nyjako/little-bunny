@@ -617,7 +617,17 @@ Map<String, Object?> _handleFetchPool(Pointer<bunny_core_t> core, _FetchPoolRequ
   return using((arena) {
     final out = arena<bunny_core_pool_info_t>();
     _check(_bindings.bunny_core_fetch_pool(core, r.poolId, out));
-    final map = {'id': out.ref.id, 'name': _readNullableString(out.ref.name), 'postCount': out.ref.post_count};
+    final referencedPoolIds = <int>[];
+    for (var i = 0; i < out.ref.referenced_pool_id_count; i++) {
+      referencedPoolIds.add(out.ref.referenced_pool_ids[i]);
+    }
+    final map = {
+      'id': out.ref.id,
+      'name': _readNullableString(out.ref.name),
+      'description': _readNullableString(out.ref.description),
+      'postCount': out.ref.post_count,
+      'referencedPoolIds': referencedPoolIds,
+    };
     _bindings.bunny_core_pool_info_free(out);
     return map;
   });
