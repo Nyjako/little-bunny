@@ -350,6 +350,14 @@ class AppLocalizationsEn extends AppLocalizations {
   String get tagBrowseAddToSearchesTooltip => 'Save as a search';
 
   @override
+  String get tagBrowseRelatedPoolsLabel => 'Related pools';
+
+  @override
+  String tagBrowseRelatedPoolChip(int poolId) {
+    return 'Pool #$poolId';
+  }
+
+  @override
   String get postDetailScreenTitle => 'Post';
 
   @override
