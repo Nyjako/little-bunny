@@ -154,6 +154,12 @@ static void *scheduler_loop(void *arg)
 {
     server_scheduler_t *scheduler = (server_scheduler_t *)arg;
 
+    /* One-time pool-position backfill (M26) -- runs once ever (tracked in
+     * server_settings, survives restarts), before the first regular tick,
+     * so already-synced pools get correct order without waiting on their
+     * own search's next sync. */
+    bunny_core_backfill_pool_positions_once(scheduler->ctx->core);
+
     while (!scheduler->stop_requested) {
         /* Sleep in 1-second increments so a shutdown request is picked up
          * quickly instead of waiting out the full poll interval. */
