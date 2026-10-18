@@ -23,6 +23,16 @@ static int handle_get_pool(struct mg_connection *conn, server_context_t *ctx, in
     cJSON_AddNumberToObject(response, "id", (double)info.id);
     cJSON_AddStringToObject(response, "name", info.name ? info.name : "");
     cJSON_AddNumberToObject(response, "post_count", (double)info.post_count);
+    if (info.description) {
+        cJSON_AddStringToObject(response, "description", info.description);
+    } else {
+        cJSON_AddNullToObject(response, "description");
+    }
+    cJSON *referenced_pool_ids = cJSON_CreateArray();
+    for (size_t i = 0; i < info.referenced_pool_id_count; i++) {
+        cJSON_AddItemToArray(referenced_pool_ids, cJSON_CreateNumber((double)info.referenced_pool_ids[i]));
+    }
+    cJSON_AddItemToObject(response, "referenced_pool_ids", referenced_pool_ids);
     bunny_core_pool_info_free(&info);
 
     int status = server_json_respond(conn, 200, response);
