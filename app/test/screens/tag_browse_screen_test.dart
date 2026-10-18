@@ -89,6 +89,21 @@ void main() {
     expect(find.byType(PostDetailScreen), findsOneWidget);
   });
 
+  testWidgets('a pool query (M22) requests ascending order from e621, not the default newest-first', (WidgetTester tester) async {
+    final repository = FakeBunnyRepository();
+    repository.previewSearchResults['e621:pool:123 order:id:1'] = [_post(1)];
+
+    await tester.pumpWidget(
+      wrapWithLocalization(
+        TagBrowseScreen(site: BunnySite.e621, query: 'pool:123', repository: repository, displaySettingsStore: const DisplaySettingsStore(), downloadSettingsStore: const DownloadSettingsStore()),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(repository.previewSearchCalls, [(BunnySite.e621, 'pool:123 order:id', 1)]);
+    expect(find.byKey(const ValueKey(1)), findsOneWidget);
+  });
+
   testWidgets('scrolling near the bottom requests and appends the next page', (WidgetTester tester) async {
     final repository = FakeBunnyRepository();
     repository.previewSearchResults['e621:someartist:1'] = List.generate(30, (i) => _post(i + 1));

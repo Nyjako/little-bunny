@@ -105,9 +105,20 @@ class _TagBrowseScreenState extends State<TagBrowseScreen> {
     }
   }
 
+  /// e621's own default sort is newest-first (by post id) -- right for a
+  /// normal tag browse, but backwards for a pool (M9.6.3's live preview,
+  /// M22's ordering fix), which reads like a comic: page 1 should come
+  /// first. Unlike [PostGridScreen] (which reorders an already-fully-synced
+  /// local list by reversing it), this is a live, paginated e621 search, so
+  /// the fix has to ask the site itself to sort ascending -- reversing one
+  /// page at a time wouldn't produce a correct overall order across pages.
   Future<List<BunnyPost>> _fetchPage(int page) {
     final customFetch = widget.customFetch;
-    return customFetch != null ? customFetch(page) : widget.repository.previewSearch(widget.site, widget.query, page: page);
+    if (customFetch != null) {
+      return customFetch(page);
+    }
+    final query = widget.query.startsWith('pool:') ? '${widget.query} order:id' : widget.query;
+    return widget.repository.previewSearch(widget.site, query, page: page);
   }
 
   Future<void> _loadInitial() async {
