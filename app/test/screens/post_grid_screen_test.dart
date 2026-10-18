@@ -59,12 +59,14 @@ void main() {
     expect(find.text('No posts cached yet. Tap refresh to sync.'), findsOneWidget);
   });
 
-  testWidgets('a pool search (M22) displays oldest-to-newest, reversing the repository\'s newest-first order', (WidgetTester tester) async {
+  testWidgets('a pool search (M26) keeps the repository\'s own order (already e621-pool-ordered server-side)', (WidgetTester tester) async {
     final repository = FakeBunnyRepository();
     final poolSearch = const BunnySearch(id: 3, site: BunnySite.e621, label: 'A pool', query: 'pool:123', intervalHours: 24, createdAt: '2026-01-01T00:00:00Z');
-    // Repository order is newest-first, as it always is -- posts here are
-    // deliberately listed id 3, 2, 1 to match that.
-    repository.postsBySearchId[3] = [_post(id: 3, isSeen: false), _post(id: 2, isSeen: false), _post(id: 1, isSeen: false)];
+    // The server (bunny_core_search_list_posts, M26) is the one that orders
+    // a pool search's posts by e621's own pool order now -- this screen no
+    // longer reorders anything itself, so it must show exactly what the
+    // repository returns, same as a regular search.
+    repository.postsBySearchId[3] = [_post(id: 1, isSeen: false), _post(id: 2, isSeen: false), _post(id: 3, isSeen: false)];
 
     await tester.pumpWidget(wrapWithLocalization(PostGridScreen(search: poolSearch, repository: repository, displaySettingsStore: const DisplaySettingsStore(), downloadSettingsStore: const DownloadSettingsStore())));
     await tester.pumpAndSettle();
