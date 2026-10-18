@@ -16,6 +16,7 @@
 #include <goblin/dyn_array.h>
 #include <inkbunny/client.h>
 
+#include <ctype.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -47,6 +48,10 @@ typedef struct
  * codebase (the macro expands to `static inline` functions, so there's no
  * link collision with libs/db's own identically-shaped bunny_db_post_array). */
 GOBLIN_DYN_ARRAY_DECL(bunny_core_post, bunny_db_post_t)
+
+/* Used only by parse_pool_references below, to accumulate matches before
+ * handing the caller a plain array. */
+GOBLIN_DYN_ARRAY_DECL(bunny_core_int64, int64_t)
 
 /* timegm's Windows equivalent -- same signature/semantics (struct tm,
  * interpreted as UTC, converted to time_t), just a different name. */
@@ -463,6 +468,16 @@ static bunny_core_result_t sync_e621_search(bunny_core_t *core, const bunny_db_s
     bunny_core_db_unlock(core);
     e621_client_destroy(client);
     bunny_core_log(core, "INFO", "Scanned \"%s\" -- found %d post(s), %d new", search->label, found_count, new_count);
+
+    /* A pool search also gets its own order synced once per pass (M26) --
+     * best-effort, a failure here (e.g. the pool itself got deleted) is
+     * logged but doesn't fail the whole search sync, which already
+     * succeeded above. */
+    int64_t pool_id = 0;
+    if (bunny_core_parse_pool_id_from_query(search->query, &pool_id) && bunny_core_sync_pool_order(core, pool_id) != BUNNY_CORE_OK) {
+        bunny_core_log(core, "WARN", "Failed to sync pool order for \"%s\" (pool #%lld)", search->label, (long long)pool_id);
+    }
+
     bunny_core_sync_unlock(core);
     return BUNNY_CORE_OK;
 }
@@ -758,7 +773,48 @@ void bunny_core_pool_info_free(bunny_core_pool_info_t *info)
         return;
     }
     free(info->name);
+    free(info->description);
+    free(info->referenced_pool_ids);
     memset(info, 0, sizeof(*info));
+}
+
+/* e621's own dtext convention for cross-referencing another pool from free
+ * text (a pool's description, M26) -- the literal substring "pool #"
+ * followed by one or more digits, however it's wrapped (plain text, inside
+ * a "label":url link, mid-sentence, ...). Matches are returned in
+ * first-seen order, duplicates included -- out_ids is NULL/out_count 0 for
+ * no matches (including a NULL description), never an error, since "no
+ * references" is the overwhelmingly common, entirely valid case. */
+static void parse_pool_references(const char *description, int64_t **out_ids, size_t *out_count)
+{
+    *out_ids = NULL;
+    *out_count = 0;
+    if (!description) {
+        return;
+    }
+
+    static const char *MARKER = "pool #";
+    const size_t marker_len = 6; /* strlen("pool #") */
+
+    bunny_core_int64_array arr;
+    bunny_core_int64_array_init(&arr);
+
+    const char *cursor = description;
+    while ((cursor = strstr(cursor, MARKER)) != NULL) {
+        cursor += marker_len;
+        if (!isdigit((unsigned char)*cursor)) {
+            continue; /* "pool #" without a number after it isn't a real reference */
+        }
+        int64_t id = 0;
+        while (isdigit((unsigned char)*cursor)) {
+            id = id * 10 + (*cursor - '0');
+            cursor++;
+        }
+        bunny_core_int64_array_push(&arr, id); /* best-effort: a push failure here just drops one reference, not a real failure */
+    }
+
+    *out_ids = arr.items;
+    *out_count = arr.count;
 }
 
 bunny_core_result_t bunny_core_fetch_pool(bunny_core_t *core, int64_t pool_id, bunny_core_pool_info_t *out_info)
@@ -783,9 +839,74 @@ bunny_core_result_t bunny_core_fetch_pool(bunny_core_t *core, int64_t pool_id, b
 
     out_info->id = pool.id;
     out_info->name = pool.name ? goblin_copy_cstr(pool.name) : NULL;
+    out_info->description = pool.description ? goblin_copy_cstr(pool.description) : NULL;
     out_info->post_count = (int64_t)pool.post_count;
+    parse_pool_references(pool.description, &out_info->referenced_pool_ids, &out_info->referenced_pool_id_count);
     e621_pool_free(&pool);
     return BUNNY_CORE_OK;
+}
+
+bunny_core_result_t bunny_core_sync_pool_order(bunny_core_t *core, int64_t pool_id)
+{
+    if (!core) {
+        return BUNNY_CORE_ERR_INVALID_ARG;
+    }
+
+    e621_client_t *client = bunny_core_build_e621_client(core);
+    if (!client) {
+        return BUNNY_CORE_ERR_SITE;
+    }
+
+    e621_pool_t pool;
+    memset(&pool, 0, sizeof(pool));
+    e621_result_t fetch_result = e621_get_pool(client, pool_id, &pool);
+    e621_client_destroy(client);
+    if (fetch_result != E621_OK) {
+        return BUNNY_CORE_ERR_SITE;
+    }
+
+    bunny_core_db_lock(core);
+    bunny_db_result_t result = bunny_db_pool_set_post_positions(core->db, pool_id, pool.post_ids, pool.post_count);
+    bunny_core_db_unlock(core);
+    e621_pool_free(&pool);
+    return bunny_core_map_db_result(result);
+}
+
+bunny_core_result_t bunny_core_backfill_pool_positions_once(bunny_core_t *core)
+{
+    if (!core) {
+        return BUNNY_CORE_ERR_INVALID_ARG;
+    }
+
+    size_t status_slot;
+    bunny_db_t *status_read_db = bunny_core_db_read_lock(core, &status_slot);
+    bool already_done = false;
+    bunny_db_result_t check_result = bunny_db_settings_get_pool_positions_backfilled(status_read_db, &already_done);
+    bunny_core_db_read_unlock(core, status_slot);
+    if (check_result != BUNNY_DB_OK) {
+        return bunny_core_map_db_result(check_result);
+    }
+    if (already_done) {
+        return BUNNY_CORE_OK;
+    }
+
+    bunny_db_int64_list_t pool_ids;
+    memset(&pool_ids, 0, sizeof(pool_ids));
+    size_t list_slot;
+    bunny_db_t *list_read_db = bunny_core_db_read_lock(core, &list_slot);
+    bunny_db_result_t list_result = bunny_db_list_distinct_pool_ids(list_read_db, &pool_ids);
+    bunny_core_db_read_unlock(core, list_slot);
+    if (list_result == BUNNY_DB_OK) {
+        for (size_t i = 0; i < pool_ids.count; i++) {
+            bunny_core_sync_pool_order(core, pool_ids.items[i]); /* best-effort -- one bad/deleted pool shouldn't stop the rest */
+        }
+        bunny_db_int64_list_free(&pool_ids);
+    }
+
+    bunny_core_db_lock(core);
+    bunny_db_result_t set_result = bunny_db_settings_set_pool_positions_backfilled(core->db, true);
+    bunny_core_db_unlock(core);
+    return bunny_core_map_db_result(set_result);
 }
 
 void bunny_core_comment_list_free(bunny_core_comment_list_t *list)
@@ -811,9 +932,10 @@ bunny_core_result_t bunny_core_list_comments(bunny_core_t *core, int64_t post_id
 
     bunny_db_post_t post;
     memset(&post, 0, sizeof(post));
-    bunny_core_db_lock(core);
-    bunny_db_result_t post_result = bunny_db_post_get_by_id(core->db, post_id, &post);
-    bunny_core_db_unlock(core);
+    size_t slot;
+    bunny_db_t *read_db = bunny_core_db_read_lock(core, &slot);
+    bunny_db_result_t post_result = bunny_db_post_get_by_id(read_db, post_id, &post);
+    bunny_core_db_read_unlock(core, slot);
     bunny_core_result_t lookup_result = bunny_core_map_db_result(post_result);
     if (lookup_result != BUNNY_CORE_OK) {
         return lookup_result;

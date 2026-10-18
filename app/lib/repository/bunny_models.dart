@@ -238,13 +238,20 @@ class BunnyDownload {
 }
 
 /// A pool's own metadata, fetched live (e621 only) -- used to auto-fill a
-/// pool search's label at creation time. Mirrors `bunny_core_pool_info_t`.
+/// pool search's label at creation time, and to show the pool's own
+/// description (M26). Mirrors `bunny_core_pool_info_t`.
 class BunnyPoolInfo {
   final int id;
   final String? name;
+  final String? description;
   final int postCount;
 
-  const BunnyPoolInfo({required this.id, this.name, required this.postCount});
+  /// Every pool id mentioned via e621's own "pool #`<N>`" dtext convention
+  /// in [description] -- e621 pool descriptions routinely cross-reference
+  /// related/continuation pools this way. Empty when there are none.
+  final List<int> referencedPoolIds;
+
+  const BunnyPoolInfo({required this.id, this.name, this.description, required this.postCount, this.referencedPoolIds = const []});
 }
 
 /// Mirrors `bunny_core_sync_stats_t`.

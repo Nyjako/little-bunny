@@ -70,6 +70,24 @@ void main() {
     expect(repository.postsBySearchId[1]!.single.isSeen, isTrue);
   });
 
+  /// A post viewed via a pool/tag browse (TagBrowseScreen) rather than a
+  /// saved search's own grid resolves to the same global per-post is_seen
+  /// flag either way, but markPostSeen is fire-and-forget here -- a
+  /// transient failure on that one call previously left the post unseen
+  /// forever with no retry and no visible error (M26's investigation into
+  /// "posts viewed through a pool stay marked unread").
+  testWidgets('retries once if markPostSeen fails transiently, and still marks the post seen', (WidgetTester tester) async {
+    final repository = FakeBunnyRepository();
+    repository.postsBySearchId[1] = [_post(fileExt: 'jpg')];
+    repository.markPostSeenTransientFailures.add(1);
+
+    await tester.pumpWidget(wrapWithLocalization(PostDetailScreen(post: repository.postsBySearchId[1]!.single, repository: repository, displaySettingsStore: const DisplaySettingsStore(), downloadSettingsStore: const DownloadSettingsStore())));
+    await tester.pumpAndSettle();
+
+    expect(repository.markPostSeenCalls, [1, 1]); // first call failed, retried once
+    expect(repository.postsBySearchId[1]!.single.isSeen, isTrue);
+  });
+
   testWidgets('swiping moves to the next post in siblingPosts and marks only that one seen', (WidgetTester tester) async {
     final repository = FakeBunnyRepository();
     final posts = [_post(id: 1, externalId: 1, title: 'First'), _post(id: 2, externalId: 2, title: 'Second'), _post(id: 3, externalId: 3, title: 'Third')];

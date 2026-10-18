@@ -376,6 +376,8 @@ void test_full_account_search_sync_favorite_flow(void)
     TEST_ASSERT_EQUAL(200, status);
     TEST_ASSERT_NOT_NULL(strstr(response.data, "\"name\":\"a_test_pool\""));
     TEST_ASSERT_NOT_NULL(strstr(response.data, "\"post_count\":3"));
+    TEST_ASSERT_NOT_NULL(strstr(response.data, "\"description\":\"a test pool\""));
+    TEST_ASSERT_NOT_NULL(strstr(response.data, "\"referenced_pool_ids\":[]"));
     free(response.data);
     memset(&response, 0, sizeof(response));
 

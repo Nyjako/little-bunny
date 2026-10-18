@@ -208,15 +208,41 @@ bunny_db_result_t bunny_db_post_upsert(bunny_db_t *db, const bunny_db_post_upser
         }
     }
 
-    const char *del_pools_sql = "DELETE FROM post_pools WHERE post_id = ?;";
-    sqlite3_stmt *del_pools_stmt = NULL;
-    if (sqlite3_prepare_v2(db->handle, del_pools_sql, -1, &del_pools_stmt, NULL) == SQLITE_OK) {
-        sqlite3_bind_int64(del_pools_stmt, 1, post_id);
-        sqlite3_step(del_pools_stmt);
-        sqlite3_finalize(del_pools_stmt);
+    /* Unlike post_children above, this can't just delete-then-reinsert
+     * wholesale -- that would wipe out `position` (M26, the post's index in
+     * e621's own post_ids order for that pool) on every single resync. Only
+     * memberships this post no longer actually has get deleted; ones it
+     * still has keep their existing row (and position) completely
+     * untouched. New memberships seed position to -1 ("not yet determined")
+     * -- the next pool-order sync fills it in. */
+    if (post->pool_count > 0) {
+        char del_pools_sql[512] = "DELETE FROM post_pools WHERE post_id = ? AND pool_id NOT IN (";
+        size_t offset = strlen(del_pools_sql);
+        for (size_t i = 0; i < post->pool_count && offset + 4 < sizeof(del_pools_sql); i++) {
+            offset += (size_t)snprintf(del_pools_sql + offset, sizeof(del_pools_sql) - offset, i == 0 ? "?" : ",?");
+        }
+        snprintf(del_pools_sql + offset, sizeof(del_pools_sql) - offset, ");");
+
+        sqlite3_stmt *del_pools_stmt = NULL;
+        if (sqlite3_prepare_v2(db->handle, del_pools_sql, -1, &del_pools_stmt, NULL) == SQLITE_OK) {
+            sqlite3_bind_int64(del_pools_stmt, 1, post_id);
+            for (size_t i = 0; i < post->pool_count; i++) {
+                sqlite3_bind_int64(del_pools_stmt, (int)(i + 2), post->pool_ids[i]);
+            }
+            sqlite3_step(del_pools_stmt);
+            sqlite3_finalize(del_pools_stmt);
+        }
+    } else {
+        const char *del_all_pools_sql = "DELETE FROM post_pools WHERE post_id = ?;";
+        sqlite3_stmt *del_all_pools_stmt = NULL;
+        if (sqlite3_prepare_v2(db->handle, del_all_pools_sql, -1, &del_all_pools_stmt, NULL) == SQLITE_OK) {
+            sqlite3_bind_int64(del_all_pools_stmt, 1, post_id);
+            sqlite3_step(del_all_pools_stmt);
+            sqlite3_finalize(del_all_pools_stmt);
+        }
     }
     for (size_t i = 0; i < post->pool_count; i++) {
-        const char *pool_sql = "INSERT OR IGNORE INTO post_pools (post_id, pool_id) VALUES (?, ?);";
+        const char *pool_sql = "INSERT INTO post_pools (post_id, pool_id, position) VALUES (?, ?, -1) ON CONFLICT(post_id, pool_id) DO NOTHING;";
         sqlite3_stmt *pool_stmt = NULL;
         if (sqlite3_prepare_v2(db->handle, pool_sql, -1, &pool_stmt, NULL) == SQLITE_OK) {
             sqlite3_bind_int64(pool_stmt, 1, post_id);
@@ -507,6 +533,141 @@ bunny_db_result_t bunny_db_search_list_posts(bunny_db_t *db, int64_t search_id, 
             bunny_db_post_free(&arr.items[i]);
         }
         bunny_db_post_array_free(&arr);
+        return bunny_db_sqlite_rc_to_result(rc);
+    }
+
+    out_list->items = arr.items;
+    out_list->count = arr.count;
+    return BUNNY_DB_OK;
+}
+
+bunny_db_result_t bunny_db_pool_search_list_posts(bunny_db_t *db, int64_t search_id, int64_t pool_id, bool unseen_only, bunny_db_post_list_t *out_list)
+{
+    if (!db || !out_list) {
+        return BUNNY_DB_ERR_INVALID_ARG;
+    }
+    memset(out_list, 0, sizeof(*out_list));
+
+    /* Same blacklist exclusion as bunny_db_search_list_posts, but ordered
+     * by this pool's own position (M26) -- e621's real post_ids order,
+     * ascending -- instead of newest-first by creation date. A post whose
+     * position isn't known yet (-1, not yet covered by a pool-order sync)
+     * sorts after every known one, itself ordered oldest-first by creation
+     * date as a reasonable placeholder until it's filled in. */
+    const char *sql_seen = "SELECT " BUNNY_DB_POST_SELECT_COLUMNS BUNNY_DB_POST_SELECT_FROM_JOIN "JOIN search_results sr ON sr.post_id = p.id "
+                           "LEFT JOIN post_pools pp ON pp.post_id = p.id AND pp.pool_id = ? "
+                           "WHERE sr.search_id = ? "
+                           "AND NOT EXISTS (SELECT 1 FROM post_tags pt JOIN tags t ON t.id = pt.tag_id "
+                           "JOIN blacklist_tags bl ON bl.site = t.site AND bl.tag = t.name WHERE pt.post_id = p.id) "
+                           "ORDER BY (COALESCE(pp.position, -1) >= 0) DESC, pp.position ASC, COALESCE(p.created_at_site, p.cached_at) ASC;";
+    const char *sql_unseen = "SELECT " BUNNY_DB_POST_SELECT_COLUMNS BUNNY_DB_POST_SELECT_FROM_JOIN "JOIN search_results sr ON sr.post_id = p.id "
+                             "LEFT JOIN post_pools pp ON pp.post_id = p.id AND pp.pool_id = ? "
+                             "WHERE sr.search_id = ? AND seen.post_id IS NULL "
+                             "AND NOT EXISTS (SELECT 1 FROM post_tags pt JOIN tags t ON t.id = pt.tag_id "
+                             "JOIN blacklist_tags bl ON bl.site = t.site AND bl.tag = t.name WHERE pt.post_id = p.id) "
+                             "ORDER BY (COALESCE(pp.position, -1) >= 0) DESC, pp.position ASC, COALESCE(p.created_at_site, p.cached_at) ASC;";
+
+    const char *sql = unseen_only ? sql_unseen : sql_seen;
+    sqlite3_stmt *stmt = NULL;
+    if (sqlite3_prepare_v2(db->handle, sql, -1, &stmt, NULL) != SQLITE_OK) {
+        return BUNNY_DB_ERR_QUERY_FAILED;
+    }
+    sqlite3_bind_int64(stmt, 1, pool_id);
+    sqlite3_bind_int64(stmt, 2, search_id);
+
+    bunny_db_post_array arr;
+    bunny_db_post_array_init(&arr);
+
+    int rc;
+    while ((rc = sqlite3_step(stmt)) == SQLITE_ROW) {
+        bunny_db_post_t item;
+        memset(&item, 0, sizeof(item));
+        bunny_db_fill_post_from_row(stmt, &item);
+        if (!bunny_db_post_array_push(&arr, item)) {
+            sqlite3_finalize(stmt);
+            bunny_db_post_free(&item);
+            for (size_t i = 0; i < arr.count; i++) {
+                bunny_db_post_free(&arr.items[i]);
+            }
+            bunny_db_post_array_free(&arr);
+            return BUNNY_DB_ERR_UNKNOWN;
+        }
+    }
+    sqlite3_finalize(stmt);
+
+    if (rc != SQLITE_DONE) {
+        for (size_t i = 0; i < arr.count; i++) {
+            bunny_db_post_free(&arr.items[i]);
+        }
+        bunny_db_post_array_free(&arr);
+        return bunny_db_sqlite_rc_to_result(rc);
+    }
+
+    out_list->items = arr.items;
+    out_list->count = arr.count;
+    return BUNNY_DB_OK;
+}
+
+bunny_db_result_t bunny_db_pool_set_post_positions(bunny_db_t *db, int64_t pool_id, const int64_t *post_ids, size_t count)
+{
+    if (!db || (!post_ids && count > 0)) {
+        return BUNNY_DB_ERR_INVALID_ARG;
+    }
+
+    /* post_ids holds e621's EXTERNAL post ids (straight from GET
+     * /pools/{id}.json); post_pools.post_id is the LOCAL id, so each
+     * update resolves one from the other via posts(site, external_id) --
+     * a no-op (0 rows affected) for any post not cached locally yet, or
+     * not actually a member of this pool, both harmless (see this
+     * function's doc comment in db.h). */
+    const char *sql = "UPDATE post_pools SET position = ? "
+                      "WHERE pool_id = ? AND post_id = (SELECT id FROM posts WHERE site = 'e621' AND external_id = ?);";
+    sqlite3_stmt *stmt = NULL;
+    if (sqlite3_prepare_v2(db->handle, sql, -1, &stmt, NULL) != SQLITE_OK) {
+        return BUNNY_DB_ERR_QUERY_FAILED;
+    }
+
+    bunny_db_begin_transaction(db);
+    for (size_t i = 0; i < count; i++) {
+        sqlite3_bind_int(stmt, 1, (int)i);
+        sqlite3_bind_int64(stmt, 2, pool_id);
+        sqlite3_bind_int64(stmt, 3, post_ids[i]);
+        sqlite3_step(stmt);
+        sqlite3_reset(stmt);
+    }
+    sqlite3_finalize(stmt);
+    bunny_db_commit_transaction(db);
+    return BUNNY_DB_OK;
+}
+
+bunny_db_result_t bunny_db_list_distinct_pool_ids(bunny_db_t *db, bunny_db_int64_list_t *out_list)
+{
+    if (!db || !out_list) {
+        return BUNNY_DB_ERR_INVALID_ARG;
+    }
+    memset(out_list, 0, sizeof(*out_list));
+
+    const char *sql = "SELECT DISTINCT pool_id FROM post_pools ORDER BY pool_id ASC;";
+    sqlite3_stmt *stmt = NULL;
+    if (sqlite3_prepare_v2(db->handle, sql, -1, &stmt, NULL) != SQLITE_OK) {
+        return BUNNY_DB_ERR_QUERY_FAILED;
+    }
+
+    bunny_db_int64_array arr;
+    bunny_db_int64_array_init(&arr);
+
+    int rc;
+    while ((rc = sqlite3_step(stmt)) == SQLITE_ROW) {
+        if (!bunny_db_int64_array_push(&arr, sqlite3_column_int64(stmt, 0))) {
+            sqlite3_finalize(stmt);
+            bunny_db_int64_array_free(&arr);
+            return BUNNY_DB_ERR_UNKNOWN;
+        }
+    }
+    sqlite3_finalize(stmt);
+
+    if (rc != SQLITE_DONE) {
+        bunny_db_int64_array_free(&arr);
         return bunny_db_sqlite_rc_to_result(rc);
     }
 

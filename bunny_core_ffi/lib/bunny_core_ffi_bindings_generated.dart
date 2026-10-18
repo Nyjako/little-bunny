@@ -1395,6 +1395,9 @@ class BunnyCoreFfiBindings {
   late final _bunny_core_pool_info_free = _bunny_core_pool_info_freePtr
       .asFunction<void Function(ffi.Pointer<bunny_core_pool_info_t>)>();
 
+  /// referenced_pool_ids (above) is populated by scanning the fetched
+  /// description for e621's own "pool #<N>" dtext convention -- callers don't
+  /// need to parse it themselves.
   bunny_core_result_t bunny_core_fetch_pool(
     ffi.Pointer<bunny_core_t> core,
     int pool_id,
@@ -1423,6 +1426,58 @@ class BunnyCoreFfiBindings {
           ffi.Pointer<bunny_core_pool_info_t>,
         )
       >();
+
+  /// Fetches `pool_id`'s own post_ids from e621 (its real, authoritative
+  /// reading order) and writes each entry's index as its `position` in
+  /// post_pools for any of those posts already cached locally (M26) -- called
+  /// once per sync of a "pool:<id>" search (see sync_e621_search) so
+  /// PostGridScreen can show a pool in the order e621 itself intends instead
+  /// of guessing from upload date, which is wrong whenever pages were
+  /// uploaded out of order (a common occurrence for ongoing comics). A
+  /// network + db call, same shape as bunny_core_fetch_and_cache_post.
+  bunny_core_result_t bunny_core_sync_pool_order(
+    ffi.Pointer<bunny_core_t> core,
+    int pool_id,
+  ) {
+    return bunny_core_result_t.fromValue(
+      _bunny_core_sync_pool_order(core, pool_id),
+    );
+  }
+
+  late final _bunny_core_sync_pool_orderPtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.UnsignedInt Function(ffi.Pointer<bunny_core_t>, ffi.Int64)
+        >
+      >('bunny_core_sync_pool_order');
+  late final _bunny_core_sync_pool_order = _bunny_core_sync_pool_orderPtr
+      .asFunction<int Function(ffi.Pointer<bunny_core_t>, int)>();
+
+  /// One-time backfill (M26): re-fetches every pool_id already present in
+  /// post_pools (from before the `position` column existed) via
+  /// bunny_core_sync_pool_order, so already-synced pools get correct order
+  /// immediately rather than waiting for their search's own next sync. No-op
+  /// (BUNNY_CORE_OK immediately) if server_settings.pool_positions_backfilled
+  /// is already set; sets it once this completes, successfully or not --
+  /// see the call sites (scheduler.c's first tick, standalone's FfiBunnyRepository.open)
+  /// for why "never retry automatically" is the right call here: a handful of
+  /// stale pools is a much smaller problem than this blocking startup or
+  /// burning e621 rate-limit budget on every single launch.
+  bunny_core_result_t bunny_core_backfill_pool_positions_once(
+    ffi.Pointer<bunny_core_t> core,
+  ) {
+    return bunny_core_result_t.fromValue(
+      _bunny_core_backfill_pool_positions_once(core),
+    );
+  }
+
+  late final _bunny_core_backfill_pool_positions_oncePtr =
+      _lookup<
+        ffi.NativeFunction<ffi.UnsignedInt Function(ffi.Pointer<bunny_core_t>)>
+      >('bunny_core_backfill_pool_positions_once');
+  late final _bunny_core_backfill_pool_positions_once =
+      _bunny_core_backfill_pool_positions_oncePtr
+          .asFunction<int Function(ffi.Pointer<bunny_core_t>)>();
 
   /// Runs a single page (1-indexed) of `query` live against `site` and upserts
   /// whatever comes back into the local post cache (so thumbnails/ids are
@@ -2355,17 +2410,31 @@ final class bunny_core_config_t extends ffi.Struct {
 }
 
 /// A pool's own metadata, fetched live (e621 only -- no persistence, no
-/// equivalent on Inkbunny). Used only to auto-fill a pool search's label at
-/// creation time; the pool's posts themselves are fetched via a normal
-/// tag search for "pool:<id>" (bunny_core_search_create), not through this.
+/// equivalent on Inkbunny). Used to auto-fill a pool search's label at
+/// creation time, and to show the pool's own description (M26) -- the
+/// pool's posts themselves are fetched via a normal tag search for
+/// "pool:<id>" (bunny_core_search_create), not through this.
 final class bunny_core_pool_info_t extends ffi.Struct {
   @ffi.Int64()
   external int id;
 
   external ffi.Pointer<ffi.Char> name;
 
+  /// e621's own dtext markup, verbatim; NULL if empty
+  external ffi.Pointer<ffi.Char> description;
+
   @ffi.Int64()
   external int post_count;
+
+  /// Every "pool #<N>" mention found in `description` (M26) -- e621 pool
+  /// descriptions routinely cross-reference related/continuation pools
+  /// this way (see bunny_core_fetch_pool's doc comment). In first-seen
+  /// order, duplicates included. Empty when description has none or is
+  /// NULL.
+  external ffi.Pointer<ffi.Int64> referenced_pool_ids;
+
+  @ffi.Size()
+  external int referenced_pool_id_count;
 }
 
 /// A post's existing comments, fetched live (e621 only -- no persistence, no

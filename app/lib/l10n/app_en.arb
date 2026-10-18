@@ -166,6 +166,11 @@
 
   "tagBrowseEmptyState": "No posts found for this search.",
   "tagBrowseAddToSearchesTooltip": "Save as a search",
+  "tagBrowseRelatedPoolsLabel": "Related pools",
+  "tagBrowseRelatedPoolChip": "Pool #{poolId}",
+  "@tagBrowseRelatedPoolChip": {
+    "placeholders": {"poolId": {"type": "int"}}
+  },
 
   "postDetailScreenTitle": "Post",
   "postDetailUnsupportedFormat": "This file format ({extension}) isn't supported yet",

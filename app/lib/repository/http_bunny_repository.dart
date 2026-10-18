@@ -75,7 +75,13 @@ BunnyPostRelationships _relationshipsFromJson(Map<String, Object?> j) => BunnyPo
   children: (j['children'] as List).map((e) => (e as num).toInt()).toList(),
 );
 
-BunnyPoolInfo _poolInfoFromJson(Map<String, Object?> j) => BunnyPoolInfo(id: (j['id'] as num).toInt(), name: j['name'] as String?, postCount: (j['post_count'] as num).toInt());
+BunnyPoolInfo _poolInfoFromJson(Map<String, Object?> j) => BunnyPoolInfo(
+  id: (j['id'] as num).toInt(),
+  name: j['name'] as String?,
+  description: j['description'] as String?,
+  postCount: (j['post_count'] as num).toInt(),
+  referencedPoolIds: (j['referenced_pool_ids'] as List? ?? const []).map((e) => (e as num).toInt()).toList(),
+);
 
 BunnyComment _commentFromJson(Map<String, Object?> j) =>
     BunnyComment(id: (j['id'] as num).toInt(), creatorName: j['creator_name'] as String?, body: j['body'] as String?, createdAt: j['created_at'] as String?);

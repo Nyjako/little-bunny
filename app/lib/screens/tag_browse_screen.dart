@@ -69,12 +69,59 @@ class _TagBrowseScreenState extends State<TagBrowseScreen> {
   PreviewQuality _previewQuality = PreviewQuality.thumbnail;
   int _gridColumns = 3;
 
+  /// Non-null only when [TagBrowseScreen.query] is itself a pool browse
+  /// ("pool:`<id>`") -- the id this screen is showing, parsed once up front
+  /// rather than re-parsed on every build.
+  int? get _poolId {
+    if (!widget.query.startsWith('pool:')) {
+      return null;
+    }
+    return int.tryParse(widget.query.substring(5));
+  }
+
+  /// The pool's own metadata (description + cross-referenced pools, M26) --
+  /// fetched best-effort alongside the post grid; a failure here doesn't
+  /// block browsing the pool's actual posts, it just means the header below
+  /// the app bar stays empty.
+  BunnyPoolInfo? _poolInfo;
+
   @override
   void initState() {
     super.initState();
     _loadInitial();
     _loadDisplaySettings();
+    _loadPoolInfo();
     _scrollController.addListener(_maybeLoadMore);
+  }
+
+  Future<void> _loadPoolInfo() async {
+    final poolId = _poolId;
+    if (poolId == null) {
+      return;
+    }
+    try {
+      final info = await widget.repository.fetchPool(poolId);
+      if (mounted) {
+        setState(() => _poolInfo = info);
+      }
+    } catch (_) {
+      // Best-effort, see this field's doc comment.
+    }
+  }
+
+  void _openRelatedPool(int poolId) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => TagBrowseScreen(
+          site: widget.site,
+          query: 'pool:$poolId',
+          repository: widget.repository,
+          displaySettingsStore: widget.displaySettingsStore,
+          downloadSettingsStore: widget.downloadSettingsStore,
+        ),
+      ),
+    );
   }
 
   @override
@@ -202,32 +249,75 @@ class _TagBrowseScreenState extends State<TagBrowseScreen> {
     }
   }
 
+  /// The pool's own description + clickable chips for any "pool #`<N>`"
+  /// cross-references found in it (M26) -- null when this isn't a pool
+  /// browse, the fetch hasn't resolved yet, or the pool has neither.
+  Widget? _poolHeader(AppLocalizations l10n) {
+    final info = _poolInfo;
+    if (info == null) {
+      return null;
+    }
+    final description = info.description;
+    final hasDescription = description != null && description.isNotEmpty;
+    final hasReferences = info.referencedPoolIds.isNotEmpty;
+    if (!hasDescription && !hasReferences) {
+      return null;
+    }
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (hasDescription) Text(description),
+          if (hasReferences) ...[
+            if (hasDescription) const SizedBox(height: 8),
+            Text(l10n.tagBrowseRelatedPoolsLabel, style: Theme.of(context).textTheme.labelMedium),
+            const SizedBox(height: 4),
+            Wrap(
+              spacing: 4,
+              children: info.referencedPoolIds.map((poolId) => ActionChip(label: Text(l10n.tagBrowseRelatedPoolChip(poolId)), onPressed: () => _openRelatedPool(poolId))).toList(),
+            ),
+          ],
+          const Divider(height: 1),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
+    final poolHeader = _poolHeader(l10n);
     return Scaffold(
       appBar: AppBar(
         toolbarHeight: isWideScreen(context) ? compactToolbarHeight : null,
         title: Text(widget.title ?? widget.query),
         actions: widget.customFetch == null ? [IconButton(icon: const Icon(Icons.add), tooltip: l10n.tagBrowseAddToSearchesTooltip, onPressed: _addToSearches)] : null,
       ),
-      body: _loading
-          ? const Center(child: CircularProgressIndicator())
-          : _posts.isEmpty
-          ? Center(child: Text(l10n.tagBrowseEmptyState))
-          : GridView.builder(
-              controller: _scrollController,
-              padding: const EdgeInsets.all(4),
-              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: _gridColumns, crossAxisSpacing: 4, mainAxisSpacing: 4),
-              itemCount: _posts.length + (_loadingMore ? 1 : 0),
-              itemBuilder: (context, index) {
-                if (index >= _posts.length) {
-                  return const Center(child: CircularProgressIndicator());
-                }
-                final post = _posts[index];
-                return PostGridTile(key: ValueKey(post.id), post: post, imageUrl: _imageUrlFor(post), onTap: () => _openPost(_posts, post));
-              },
-            ),
+      body: Column(
+        children: [
+          ?poolHeader,
+          Expanded(
+            child: _loading
+                ? const Center(child: CircularProgressIndicator())
+                : _posts.isEmpty
+                ? Center(child: Text(l10n.tagBrowseEmptyState))
+                : GridView.builder(
+                    controller: _scrollController,
+                    padding: const EdgeInsets.all(4),
+                    gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: _gridColumns, crossAxisSpacing: 4, mainAxisSpacing: 4),
+                    itemCount: _posts.length + (_loadingMore ? 1 : 0),
+                    itemBuilder: (context, index) {
+                      if (index >= _posts.length) {
+                        return const Center(child: CircularProgressIndicator());
+                      }
+                      final post = _posts[index];
+                      return PostGridTile(key: ValueKey(post.id), post: post, imageUrl: _imageUrlFor(post), onTap: () => _openPost(_posts, post));
+                    },
+                  ),
+          ),
+        ],
+      ),
     );
   }
 }

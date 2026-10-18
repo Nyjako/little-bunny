@@ -69,7 +69,13 @@ BunnyPostRelationships _relationshipsFromMap(Map<String, Object?> m) => BunnyPos
   children: (m['children'] as List).cast<int>(),
 );
 
-BunnyPoolInfo _poolInfoFromMap(Map<String, Object?> m) => BunnyPoolInfo(id: m['id'] as int, name: m['name'] as String?, postCount: m['postCount'] as int);
+BunnyPoolInfo _poolInfoFromMap(Map<String, Object?> m) => BunnyPoolInfo(
+  id: m['id'] as int,
+  name: m['name'] as String?,
+  description: m['description'] as String?,
+  postCount: m['postCount'] as int,
+  referencedPoolIds: (m['referencedPoolIds'] as List? ?? const []).cast<int>(),
+);
 
 BunnyComment _commentFromMap(Map<String, Object?> m) => BunnyComment(id: m['id'] as int, creatorName: m['creatorName'] as String?, body: m['body'] as String?, createdAt: m['createdAt'] as String?);
 

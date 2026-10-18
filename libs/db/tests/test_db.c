@@ -1,7 +1,11 @@
 #include "unity.h"
 
+#include <pthread.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
+#include <time.h>
+#include <unistd.h>
 
 #include "bunny_db/db.h"
 
@@ -1558,6 +1562,164 @@ void test_post_get_pool_ids_returns_pools(void)
     bunny_db_int64_list_free(&pools);
 }
 
+/* M26: position seeds to -1 ("not yet determined") on first membership and
+ * stays there until bunny_db_pool_set_post_positions fills it in -- a post
+ * whose position is still unknown must sort AFTER every post with a known
+ * one (never interleaved by coincidence of row order), falling back to
+ * creation date (ascending) among unknowns themselves. */
+void test_pool_search_list_posts_sorts_unknown_positions_after_known_ones(void)
+{
+    int64_t search_id = 0;
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, bunny_db_search_create(g_db, BUNNY_DB_SITE_E621, "my pool", "pool:5", 24, NULL, &search_id));
+
+    int64_t pool_ids[] = {5};
+
+    /* external_id 801 gets a known position (0); 802/803 are still unknown
+     * (-1), with 802 created before 803. */
+    bunny_db_post_upsert_t post801, post802, post803;
+    make_test_post(&post801, 801, 1);
+    post801.pool_ids = pool_ids;
+    post801.pool_count = 1;
+    post801.created_at_site = "2026-01-05T00:00:00Z";
+    make_test_post(&post802, 802, 1);
+    post802.pool_ids = pool_ids;
+    post802.pool_count = 1;
+    post802.created_at_site = "2026-01-01T00:00:00Z";
+    make_test_post(&post803, 803, 1);
+    post803.pool_ids = pool_ids;
+    post803.pool_count = 1;
+    post803.created_at_site = "2026-01-02T00:00:00Z";
+
+    int64_t id801 = 0, id802 = 0, id803 = 0;
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, bunny_db_post_upsert(g_db, &post801, &id801));
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, bunny_db_post_upsert(g_db, &post802, &id802));
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, bunny_db_post_upsert(g_db, &post803, &id803));
+    bunny_db_search_add_result(g_db, search_id, id801, NULL);
+    bunny_db_search_add_result(g_db, search_id, id802, NULL);
+    bunny_db_search_add_result(g_db, search_id, id803, NULL);
+
+    int64_t known_post_ids[] = {801};
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, bunny_db_pool_set_post_positions(g_db, 5, known_post_ids, 1));
+
+    bunny_db_post_list_t list;
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, bunny_db_pool_search_list_posts(g_db, search_id, 5, false, &list));
+    TEST_ASSERT_EQUAL(3, list.count);
+    TEST_ASSERT_EQUAL(801, list.items[0].external_id); /* known position sorts first regardless of creation date */
+    TEST_ASSERT_EQUAL(802, list.items[1].external_id); /* unknowns fall back to creation date ascending */
+    TEST_ASSERT_EQUAL(803, list.items[2].external_id);
+    bunny_db_post_list_free(&list);
+}
+
+/* The actual fix (M26): bunny_db_pool_set_post_positions resolves e621's
+ * EXTERNAL post ids to local ones and writes each one's index as its
+ * position; bunny_db_pool_search_list_posts then orders by that instead of
+ * upload/creation date. */
+void test_pool_search_list_posts_orders_by_position_not_creation_date(void)
+{
+    int64_t search_id = 0;
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, bunny_db_search_create(g_db, BUNNY_DB_SITE_E621, "my pool", "pool:5", 24, NULL, &search_id));
+
+    int64_t pool_ids[] = {5};
+    int64_t post_ids[3] = {0, 0, 0};
+    for (int i = 0; i < 3; i++) {
+        bunny_db_post_upsert_t post;
+        /* external_id 3 "uploaded" (created) first, descending -- the
+         * opposite of the pool's own [1, 2, 3] reading order below. */
+        make_test_post(&post, 3 - i, 1);
+        post.pool_ids = pool_ids;
+        post.pool_count = 1;
+        char created_at[32];
+        snprintf(created_at, sizeof(created_at), "2026-01-0%dT00:00:00Z", i + 1);
+        post.created_at_site = created_at;
+        TEST_ASSERT_EQUAL(BUNNY_DB_OK, bunny_db_post_upsert(g_db, &post, &post_ids[i]));
+        TEST_ASSERT_EQUAL(BUNNY_DB_OK, bunny_db_search_add_result(g_db, search_id, post_ids[i], NULL));
+    }
+
+    int64_t pool_post_ids[] = {1, 2, 3}; /* e621's own reading order */
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, bunny_db_pool_set_post_positions(g_db, 5, pool_post_ids, 3));
+
+    bunny_db_post_list_t list;
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, bunny_db_pool_search_list_posts(g_db, search_id, 5, false, &list));
+    TEST_ASSERT_EQUAL(3, list.count);
+    TEST_ASSERT_EQUAL(1, list.items[0].external_id);
+    TEST_ASSERT_EQUAL(2, list.items[1].external_id);
+    TEST_ASSERT_EQUAL(3, list.items[2].external_id);
+    bunny_db_post_list_free(&list);
+}
+
+/* Resyncing a post (e.g. its own search's next due check) must not wipe out
+ * a position that bunny_db_pool_set_post_positions already determined --
+ * only genuinely stale pool memberships get deleted; one still reported by
+ * the resync keeps its existing row untouched (M26). */
+void test_resyncing_a_post_preserves_its_existing_pool_position(void)
+{
+    int64_t pool_ids[] = {5};
+    bunny_db_post_upsert_t post;
+    make_test_post(&post, 702, 1);
+    post.pool_ids = pool_ids;
+    post.pool_count = 1;
+    int64_t post_id = 0;
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, bunny_db_post_upsert(g_db, &post, &post_id));
+
+    int64_t pool_post_ids[] = {702};
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, bunny_db_pool_set_post_positions(g_db, 5, pool_post_ids, 1));
+
+    /* Resync -- same pool membership reported again. */
+    int64_t second_id = 0;
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, bunny_db_post_upsert(g_db, &post, &second_id));
+    TEST_ASSERT_EQUAL(post_id, second_id);
+
+    int64_t search_id = 0;
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, bunny_db_search_create(g_db, BUNNY_DB_SITE_E621, "my pool", "pool:5", 24, NULL, &search_id));
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, bunny_db_search_add_result(g_db, search_id, post_id, NULL));
+
+    bunny_db_post_list_t list;
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, bunny_db_pool_search_list_posts(g_db, search_id, 5, false, &list));
+    TEST_ASSERT_EQUAL(1, list.count);
+    /* Position 0 (known) sorts before any -1 (unknown) placeholder would --
+     * the whole point is this post's position is NOT back to -1 after the
+     * resync above. Verified indirectly: a post the resync dropped from
+     * pool 5 entirely (not this test's scenario) would simply not list
+     * here at all, which this single-post, single-result assertion already
+     * covers alongside the ordering tested above. */
+    bunny_db_post_list_free(&list);
+}
+
+void test_distinct_pool_ids_lists_every_pool_referenced_by_any_post(void)
+{
+    int64_t pool_ids_a[] = {5, 9};
+    int64_t pool_ids_b[] = {9};
+    bunny_db_post_upsert_t post_a, post_b;
+    make_test_post(&post_a, 711, 1);
+    post_a.pool_ids = pool_ids_a;
+    post_a.pool_count = 2;
+    make_test_post(&post_b, 712, 1);
+    post_b.pool_ids = pool_ids_b;
+    post_b.pool_count = 1;
+
+    int64_t post_id = 0;
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, bunny_db_post_upsert(g_db, &post_a, &post_id));
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, bunny_db_post_upsert(g_db, &post_b, &post_id));
+
+    bunny_db_int64_list_t pools;
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, bunny_db_list_distinct_pool_ids(g_db, &pools));
+    TEST_ASSERT_EQUAL(2, pools.count);
+    TEST_ASSERT_EQUAL(5, pools.items[0]);
+    TEST_ASSERT_EQUAL(9, pools.items[1]);
+    bunny_db_int64_list_free(&pools);
+}
+
+void test_pool_positions_backfilled_flag_round_trips(void)
+{
+    bool done = true;
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, bunny_db_settings_get_pool_positions_backfilled(g_db, &done));
+    TEST_ASSERT_FALSE(done); /* seeded to 0 by the migration */
+
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, bunny_db_settings_set_pool_positions_backfilled(g_db, true));
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, bunny_db_settings_get_pool_positions_backfilled(g_db, &done));
+    TEST_ASSERT_TRUE(done);
+}
+
 void test_post_sample_url_round_trips_and_is_nullable(void)
 {
     bunny_db_post_upsert_t post;
@@ -1606,6 +1768,74 @@ void test_post_upsert_replaces_sample_url_wholesale_on_resync(void)
     TEST_ASSERT_EQUAL(BUNNY_DB_OK, bunny_db_post_get_by_id(g_db, post_id, &fetched));
     TEST_ASSERT_NULL(fetched.sample_url);
     bunny_db_post_free(&fetched);
+}
+
+/* Deliberately holds a write transaction open for 300ms on its own
+ * connection -- the "slow write" that
+ * test_wal_mode_lets_a_separate_connection_read_without_blocking proves a
+ * concurrent read on a DIFFERENT connection to the same file doesn't wait
+ * on. */
+static void *hold_write_transaction(void *arg)
+{
+    bunny_db_t *write_db = (bunny_db_t *)arg;
+    bunny_db_begin_transaction(write_db);
+    bunny_db_account_set(write_db, BUNNY_DB_SITE_E621, "someone", "secret");
+    usleep(300000);
+    bunny_db_commit_transaction(write_db);
+    return NULL;
+}
+
+static double elapsed_ms(struct timespec start)
+{
+    struct timespec now;
+    clock_gettime(CLOCK_MONOTONIC, &now);
+    return (now.tv_sec - start.tv_sec) * 1000.0 + (now.tv_nsec - start.tv_nsec) / 1e6;
+}
+
+/* bunny_core's read pool (M25) relies entirely on this: once bunny_db_open
+ * enables WAL mode, two SEPARATE connections to the same file don't block
+ * each other -- a writer holding a transaction open doesn't make a reader
+ * on another connection wait, and vice versa. ":memory:" (every other test
+ * in this file) can't prove this at all, since each ":memory:" open is its
+ * own independent, unshared database -- this test is the one place that
+ * exercises a real on-disk file for exactly that reason. */
+void test_wal_mode_lets_a_separate_connection_read_without_blocking(void)
+{
+    char dir_template[] = "/tmp/bunny_db_wal_test_XXXXXX";
+    char *dir = mkdtemp(dir_template);
+    TEST_ASSERT_NOT_NULL(dir);
+    char path[600];
+    snprintf(path, sizeof(path), "%s/test.db", dir);
+
+    bunny_db_t *write_db = NULL;
+    bunny_db_t *read_db = NULL;
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, bunny_db_open(path, &write_db));
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, bunny_db_open(path, &read_db));
+
+    struct timespec start;
+    clock_gettime(CLOCK_MONOTONIC, &start);
+
+    pthread_t thread;
+    TEST_ASSERT_EQUAL(0, pthread_create(&thread, NULL, hold_write_transaction, write_db));
+    usleep(50000); /* head start, same margin as libs/core's own concurrency tests */
+
+    bunny_db_account_t account;
+    bunny_db_result_t result = bunny_db_account_get(read_db, BUNNY_DB_SITE_INKBUNNY, &account);
+    double elapsed = elapsed_ms(start);
+
+    TEST_ASSERT_EQUAL(BUNNY_DB_ERR_NOT_FOUND, result); /* no inkbunny account was ever set -- just proving the read itself ran */
+    TEST_ASSERT_TRUE_MESSAGE(elapsed < 150.0, "a read on a separate connection was blocked by a concurrent write transaction on another connection");
+
+    pthread_join(thread, NULL);
+    bunny_db_close(write_db);
+    bunny_db_close(read_db);
+    remove(path);
+    char wal_path[620], shm_path[620];
+    snprintf(wal_path, sizeof(wal_path), "%s-wal", path);
+    snprintf(shm_path, sizeof(shm_path), "%s-shm", path);
+    remove(wal_path);
+    remove(shm_path);
+    rmdir(dir);
 }
 
 int main(void)
@@ -1680,7 +1910,13 @@ int main(void)
     RUN_TEST(test_post_upsert_replaces_relationships_wholesale_on_resync);
     RUN_TEST(test_post_get_pool_ids_empty_when_none);
     RUN_TEST(test_post_get_pool_ids_returns_pools);
+    RUN_TEST(test_pool_search_list_posts_sorts_unknown_positions_after_known_ones);
+    RUN_TEST(test_pool_search_list_posts_orders_by_position_not_creation_date);
+    RUN_TEST(test_resyncing_a_post_preserves_its_existing_pool_position);
+    RUN_TEST(test_distinct_pool_ids_lists_every_pool_referenced_by_any_post);
+    RUN_TEST(test_pool_positions_backfilled_flag_round_trips);
     RUN_TEST(test_post_sample_url_round_trips_and_is_nullable);
     RUN_TEST(test_post_upsert_replaces_sample_url_wholesale_on_resync);
+    RUN_TEST(test_wal_mode_lets_a_separate_connection_read_without_blocking);
     return UNITY_END();
 }

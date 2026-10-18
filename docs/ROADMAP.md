@@ -1745,6 +1745,65 @@ this file is the single source of truth for "what's done" across sessions.
     `TaskQueueScreen`, polling every 2s while open, linked from Settings
     next to the existing server logs entry (server mode only).
 
+- [x] **M25 — Read-connection pool (server freeze fixes)**
+  Both reported freezes ("a second device can't load anything while a sync is running,"
+  "opening tag stats freezes the server") traced to the same root cause: every db access,
+  reads and writes alike, serialized through one global `db_mutex` guarding a single
+  SQLite connection, so a slow write (a sync's batch insert) or a slow read (tag stats'
+  unindexed full-table `GROUP BY`) blocked literally every other request for its whole
+  duration. WAL mode was already enabled (M24's batching fix) but never actually
+  exploited -- one connection means no real concurrency regardless of journal mode.
+  - **Fix**: `bunny_core_t` now opens a small pool of extra connections (`read_dbs`,
+    sized to match civetweb's own `num_threads`) to the same file, each with its own
+    mutex, alongside the existing single write connection. Every pure-read `bunny_core_*`
+    function (`search_list`, `search_list_posts`, `top_used_tags`, `top_favorited_tags`,
+    `account_get`, `blacklist_list`, `list_downloads_for_post`, `backup_database`, ...)
+    round-robins through this pool via a new `bunny_core_db_read_lock`/`read_unlock`
+    pair instead of the write mutex; write-touching functions are unchanged. Falls back
+    to the old single-connection behavior for `:memory:` databases (every test's
+    `db_path`), which can't be opened from multiple connections and see the same data.
+  - **Tests**: a real on-disk WAL-mode test (`bunny_db_test_db`) proving a write
+    transaction held open on one connection doesn't block a read on a separate one, plus
+    a read-pool correctness test (`bunny_core_test_core`) proving every slot in the pool
+    (not just whichever one a single call happens to land on) sees what the write
+    connection wrote.
+
+- [x] **M26 — Pool reading order, descriptions, and a mark-seen reliability fix**
+  A batch of fixes from testing M24/M25 against a real, large database: pools displayed
+  in the wrong order when pages were uploaded out of sequence (a real e621 pool search
+  guessed "reverse upload date" instead of using e621's own authoritative order), pool
+  descriptions and their cross-references to other pools were never surfaced at all, and
+  posts viewed through a pool sometimes stayed marked unread after returning to the
+  original search.
+  - **Pool order**: new `post_pools.position` column (migration 13) stores each post's
+    index within e621's own `post_ids` array (from `GET /pools/{id}.json`, already parsed
+    by the e621 client) instead of inferring order from upload date. `bunny_core_
+    sync_pool_order` fetches and writes this once per sync of any `pool:<id>` search
+    (`sync_e621_search`'s own hook); `bunny_db_pool_search_list_posts` orders a pool
+    search's results by it, falling back to creation-date-ascending for any post whose
+    position isn't known yet (never interleaved with known ones). `upsert_e621_post`'s
+    pool-membership write no longer deletes-then-reinserts wholesale on every resync,
+    which would have wiped `position` right back to "unknown" every single time --
+    only memberships a post no longer actually has get removed. A one-time backfill
+    (`bunny_core_backfill_pool_positions_once`, tracked via a new `server_settings` flag,
+    run once from the scheduler's first tick) re-fetches every pool already known locally
+    so already-synced pools get correct order immediately rather than waiting on their
+    own search's next sync. `PostGridScreen`'s old "just reverse the list" heuristic
+    (M22) is gone -- the server does the real ordering now.
+  - **Pool descriptions + cross-references**: `bunny_core_fetch_pool`/`bunny_core_pool_
+    info_t` now also carry the pool's raw description and every pool id mentioned via
+    e621's own "pool #`<N>`" dtext convention (descriptions routinely cross-reference
+    continuation/related pools this way) parsed out of it. `GET /pools/{id}` exposes both;
+    `TagBrowseScreen` shows the description and a tappable chip per reference (opening
+    that pool in a new browse) when browsing a pool. Regenerated `bunny_core_ffi`'s
+    ffigen bindings to match the extended native struct -- a stale binding here would
+    have mismatched the struct's actual size and corrupted memory on the native call.
+  - **Mark-seen reliability**: `PostDetailScreen`'s `markPostSeen` call (fire-and-forget
+    by design, on open and on every swipe) now retries once on failure instead of
+    silently giving up after a single attempt -- plausibly compounded by the M25 lock
+    contention this same round of testing surfaced, which could make a concurrent
+    markPostSeen call more likely to fail under load.
+
 - [ ] **M12 — Cross-platform polish**
   Responsive desktop/mobile layout, consistent theming pass, Windows app build, packaging.
   - [x] **M12.1 — Android client build.** `fvm flutter build apk` now succeeds end-to-end
