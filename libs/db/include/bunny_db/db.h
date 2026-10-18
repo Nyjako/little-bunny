@@ -25,6 +25,17 @@ void bunny_db_close(bunny_db_t *db);
  * own periodic backup job). `dest_path` is created or overwritten. */
 bunny_db_result_t bunny_db_backup(bunny_db_t *db, const char *dest_path);
 
+/* --- Transactions -----------------------------------------------------------
+ * Batches multiple writes into a single commit instead of one implicit
+ * auto-commit transaction per statement -- callers writing many rows in a
+ * loop (e.g. upserting a whole search-result page during sync) should wrap
+ * the loop in begin/commit so SQLite only fsyncs once per batch instead of
+ * once per row. Not reentrant/nestable -- never call bunny_db_begin_transaction
+ * again before the matching commit/rollback. */
+bunny_db_result_t bunny_db_begin_transaction(bunny_db_t *db);
+bunny_db_result_t bunny_db_commit_transaction(bunny_db_t *db);
+bunny_db_result_t bunny_db_rollback_transaction(bunny_db_t *db);
+
 /* --- Accounts ---------------------------------------------------------------
  * One account per site (e621 API key, or Inkbunny username/password). Stored
  * as plain text: the server needs to read these unattended to run scheduled
