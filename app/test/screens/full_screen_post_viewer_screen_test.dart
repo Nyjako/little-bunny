@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:little_bunny/repository/bunny_models.dart';
 import 'package:little_bunny/screens/full_screen_post_viewer_screen.dart';
@@ -51,6 +52,44 @@ void main() {
     expect(repository.postsBySearchId[1]![1].isSeen, isTrue);
     expect(repository.postsBySearchId[1]![0].isSeen, isFalse);
     expect(repository.postsBySearchId[1]![2].isSeen, isFalse);
+  });
+
+  testWidgets('right/left arrow keys move to the next/previous post and stay in fullscreen', (WidgetTester tester) async {
+    final repository = FakeBunnyRepository();
+    final posts = [_post(1), _post(2), _post(3)];
+    repository.postsBySearchId[1] = posts;
+
+    await tester.pumpWidget(wrapWithLocalization(FullScreenPostViewerScreen(posts: posts, initialIndex: 0, repository: repository)));
+    await tester.pump();
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
+
+    expect(repository.postsBySearchId[1]![1].isSeen, isTrue);
+    expect(find.byType(FullScreenPostViewerScreen), findsOneWidget);
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
+
+    expect(repository.postsBySearchId[1]![0].isSeen, isTrue);
+    expect(find.byType(FullScreenPostViewerScreen), findsOneWidget);
+  });
+
+  testWidgets('arrow keys do not move past the first/last post', (WidgetTester tester) async {
+    final repository = FakeBunnyRepository();
+    final posts = [_post(1), _post(2)];
+
+    await tester.pumpWidget(wrapWithLocalization(FullScreenPostViewerScreen(posts: posts, initialIndex: 0, repository: repository)));
+    await tester.pump();
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
+
+    final gallery = tester.widget<PhotoViewGallery>(find.byType(PhotoViewGallery));
+    expect(gallery.pageController!.page, 0);
   });
 
   testWidgets('a close button pops the viewer', (WidgetTester tester) async {
