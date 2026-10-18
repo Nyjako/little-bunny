@@ -1,5 +1,6 @@
 #include "scheduler.h"
 
+#include <bunny_common/http.h>
 #include <bunny_common/thread.h>
 #include <bunny_core/core.h>
 #include <goblin/appdirs.h>
@@ -20,6 +21,7 @@
 
 #include "log.h"
 #include "task_queue.h"
+#include "updater.h"
 
 #define BUNNY_BACKUP_INTERVAL_SEC (24 * 60 * 60)
 #define BUNNY_BACKUP_KEEP_COUNT 5
@@ -173,15 +175,37 @@ static void *scheduler_loop(void *arg)
         if (scheduler->backups_dir) {
             backup_due_and_prune(scheduler->ctx, scheduler->backups_dir);
         }
+
+        /* Checked last, and only acted on at the very end of a tick (never
+         * mid-sync/mid-backup) -- bunny_updater_scheduler_tick itself
+         * self-throttles (at most once a day, see updater.c), so calling it
+         * every tick is cheap on every tick that isn't actually due. A
+         * restart request just means "a verified update is staged and
+         * ready" -- exiting cleanly here, with the unit's Restart=always
+         * (deploy/bunny-server.service, M23), is what actually applies it
+         * on the next start via ExecStartPre=+'s root-run helper script
+         * (deploy/bunny-server-update-apply.sh) -- never this (sandboxed,
+         * unprivileged) process writing to /usr/local/bin itself. */
+        if (scheduler->data_dir) {
+            bool restart_requested = false;
+            bunny_http_transport_t transport = bunny_http_curl_transport();
+            bunny_updater_scheduler_tick(&transport, scheduler->data_dir, scheduler->user_agent, &restart_requested);
+            if (restart_requested) {
+                server_log("INFO", "scheduler: exiting for the staged update to take effect on restart");
+                exit(0);
+            }
+        }
     }
     return NULL;
 }
 
-bool server_scheduler_start(server_scheduler_t *scheduler, server_context_t *ctx, const char *data_dir, int poll_interval_sec)
+bool server_scheduler_start(server_scheduler_t *scheduler, server_context_t *ctx, const char *data_dir, int poll_interval_sec, const char *user_agent)
 {
     scheduler->ctx = ctx;
     scheduler->poll_interval_sec = poll_interval_sec;
     scheduler->backups_dir = data_dir ? goblin_appdir_join(data_dir, "backups") : NULL;
+    scheduler->data_dir = data_dir ? goblin_copy_cstr(data_dir) : NULL;
+    scheduler->user_agent = user_agent ? goblin_copy_cstr(user_agent) : NULL;
     scheduler->stop_requested = false;
     scheduler->running = false;
 
@@ -205,4 +229,8 @@ void server_scheduler_stop(server_scheduler_t *scheduler)
     }
     free(scheduler->backups_dir);
     scheduler->backups_dir = NULL;
+    free(scheduler->data_dir);
+    scheduler->data_dir = NULL;
+    free(scheduler->user_agent);
+    scheduler->user_agent = NULL;
 }

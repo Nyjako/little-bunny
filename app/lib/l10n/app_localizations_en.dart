@@ -657,4 +657,22 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get postDetailDownloadFailed => 'Download failed';
+
+  @override
+  String updateAvailableTitle(String tagName) {
+    return 'Update available ($tagName)';
+  }
+
+  @override
+  String get updateDownloadingMessage => 'Downloading update...';
+
+  @override
+  String get updateFailedMessage =>
+      'Update failed. Try again later, or update manually from the project\'s GitHub releases page.';
+
+  @override
+  String get updateLaterAction => 'Later';
+
+  @override
+  String get updateNowAction => 'Update';
 }

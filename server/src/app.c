@@ -160,7 +160,7 @@ server_app_t *server_app_start(const bunny_core_config_t *core_config, const cha
     server_routes_register_groups(app->mg_ctx, &app->ctx);
     server_routes_register_tasks(app->mg_ctx, &app->ctx);
 
-    if (!server_scheduler_start(&app->scheduler, &app->ctx, data_dir, poll_interval_sec)) {
+    if (!server_scheduler_start(&app->scheduler, &app->ctx, data_dir, poll_interval_sec, core_config->user_agent)) {
         mg_stop(app->mg_ctx);
         task_queue_stop(app->task_queue);
         server_sync_status_destroy(app->sync_status);

@@ -9,6 +9,7 @@ bunny_install_and_start() {
         systemctl stop "$UNIT_NAME"
     fi
     install -Dm755 "$BINARY" /usr/local/bin/bunny_server
+    install -Dm755 "$REPO_ROOT/deploy/bunny-server-update-apply.sh" /usr/local/bin/bunny-server-update-apply.sh
     install -Dm644 "$REPO_ROOT/deploy/bunny-server.service" "/etc/systemd/system/$UNIT_NAME.service"
 
     # Catches a missing shared library (e.g. the binary was built on a
