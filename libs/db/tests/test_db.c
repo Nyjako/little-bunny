@@ -1,7 +1,11 @@
 #include "unity.h"
 
+#include <pthread.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
+#include <time.h>
+#include <unistd.h>
 
 #include "bunny_db/db.h"
 
@@ -1608,6 +1612,74 @@ void test_post_upsert_replaces_sample_url_wholesale_on_resync(void)
     bunny_db_post_free(&fetched);
 }
 
+/* Deliberately holds a write transaction open for 300ms on its own
+ * connection -- the "slow write" that
+ * test_wal_mode_lets_a_separate_connection_read_without_blocking proves a
+ * concurrent read on a DIFFERENT connection to the same file doesn't wait
+ * on. */
+static void *hold_write_transaction(void *arg)
+{
+    bunny_db_t *write_db = (bunny_db_t *)arg;
+    bunny_db_begin_transaction(write_db);
+    bunny_db_account_set(write_db, BUNNY_DB_SITE_E621, "someone", "secret");
+    usleep(300000);
+    bunny_db_commit_transaction(write_db);
+    return NULL;
+}
+
+static double elapsed_ms(struct timespec start)
+{
+    struct timespec now;
+    clock_gettime(CLOCK_MONOTONIC, &now);
+    return (now.tv_sec - start.tv_sec) * 1000.0 + (now.tv_nsec - start.tv_nsec) / 1e6;
+}
+
+/* bunny_core's read pool (M25) relies entirely on this: once bunny_db_open
+ * enables WAL mode, two SEPARATE connections to the same file don't block
+ * each other -- a writer holding a transaction open doesn't make a reader
+ * on another connection wait, and vice versa. ":memory:" (every other test
+ * in this file) can't prove this at all, since each ":memory:" open is its
+ * own independent, unshared database -- this test is the one place that
+ * exercises a real on-disk file for exactly that reason. */
+void test_wal_mode_lets_a_separate_connection_read_without_blocking(void)
+{
+    char dir_template[] = "/tmp/bunny_db_wal_test_XXXXXX";
+    char *dir = mkdtemp(dir_template);
+    TEST_ASSERT_NOT_NULL(dir);
+    char path[600];
+    snprintf(path, sizeof(path), "%s/test.db", dir);
+
+    bunny_db_t *write_db = NULL;
+    bunny_db_t *read_db = NULL;
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, bunny_db_open(path, &write_db));
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, bunny_db_open(path, &read_db));
+
+    struct timespec start;
+    clock_gettime(CLOCK_MONOTONIC, &start);
+
+    pthread_t thread;
+    TEST_ASSERT_EQUAL(0, pthread_create(&thread, NULL, hold_write_transaction, write_db));
+    usleep(50000); /* head start, same margin as libs/core's own concurrency tests */
+
+    bunny_db_account_t account;
+    bunny_db_result_t result = bunny_db_account_get(read_db, BUNNY_DB_SITE_INKBUNNY, &account);
+    double elapsed = elapsed_ms(start);
+
+    TEST_ASSERT_EQUAL(BUNNY_DB_ERR_NOT_FOUND, result); /* no inkbunny account was ever set -- just proving the read itself ran */
+    TEST_ASSERT_TRUE_MESSAGE(elapsed < 150.0, "a read on a separate connection was blocked by a concurrent write transaction on another connection");
+
+    pthread_join(thread, NULL);
+    bunny_db_close(write_db);
+    bunny_db_close(read_db);
+    remove(path);
+    char wal_path[620], shm_path[620];
+    snprintf(wal_path, sizeof(wal_path), "%s-wal", path);
+    snprintf(shm_path, sizeof(shm_path), "%s-shm", path);
+    remove(wal_path);
+    remove(shm_path);
+    rmdir(dir);
+}
+
 int main(void)
 {
     UNITY_BEGIN();
@@ -1682,5 +1754,6 @@ int main(void)
     RUN_TEST(test_post_get_pool_ids_returns_pools);
     RUN_TEST(test_post_sample_url_round_trips_and_is_nullable);
     RUN_TEST(test_post_upsert_replaces_sample_url_wholesale_on_resync);
+    RUN_TEST(test_wal_mode_lets_a_separate_connection_read_without_blocking);
     return UNITY_END();
 }
