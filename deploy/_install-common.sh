@@ -48,10 +48,14 @@ bunny_install_and_start() {
         exit 1
     fi
 
-    local auth_token fingerprint port
+    local auth_token fingerprint port public_ip host_display
     auth_token="$(cat "$DATA_DIR/auth_token")"
     fingerprint="$(openssl x509 -in "$DATA_DIR/server.pem" -noout -fingerprint -sha256 | cut -d= -f2)"
     port="$(systemctl show -p Environment "$UNIT_NAME" | grep -oP 'BUNNY_SERVER_PORT=\K[0-9]+' || echo 8443)"
+    # Best-effort public IP lookup -- falls back to the old placeholder text
+    # if ipinfo.io is unreachable (no outbound internet, firewalled, etc.).
+    public_ip="$(curl -s -m 5 https://ipinfo.io/ip || true)"
+    host_display="${public_ip:-<this-machine's-public-IP-or-hostname>}"
 
     cat <<EOF
 
@@ -60,7 +64,7 @@ bunny_install_and_start() {
 Enter these into the app's Setup screen (or Settings -> Switch connection mode),
 "Networked" mode:
 
-  Server URL:   https://<this-machine's-public-IP-or-hostname>:$port
+  Server URL:   https://$host_display:$port
   Bearer token: $auth_token
   Cert SHA-256: $fingerprint
 
