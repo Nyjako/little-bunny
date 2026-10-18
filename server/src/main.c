@@ -10,6 +10,7 @@
 #include "app.h"
 #include "config.h"
 #include "log.h"
+#include "updater.h"
 
 static volatile sig_atomic_t g_shutdown_requested = 0;
 
@@ -19,8 +20,17 @@ static void handle_shutdown_signal(int signum)
     g_shutdown_requested = 1;
 }
 
-int main(void)
+int main(int argc, char **argv)
 {
+    /* Used by the updater (updater.c, M23) after extracting a staged
+     * release to confirm the new binary is actually the version it claims
+     * to be, before the systemd ExecStartPre=+ helper installs it over the
+     * live one -- also handy for plain ops/debugging ("what's running"). */
+    if (argc > 1 && (strcmp(argv[1], "--version") == 0 || strcmp(argv[1], "-v") == 0)) {
+        printf("%d\n", BUNNY_BUILD_NUMBER);
+        return 0;
+    }
+
     server_config_t *config = server_config_load();
     if (!config) {
         fprintf(stderr, "failed to load server config\n");

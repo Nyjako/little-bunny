@@ -12,6 +12,7 @@ import '../settings/download_settings_store.dart';
 import '../settings/repository_settings_store.dart';
 import '../settings/theme_settings_store.dart';
 import '../util/responsive.dart';
+import '../widgets/update_dialog.dart';
 import 'accounts_screen.dart';
 import 'create_search_screen.dart';
 import 'edit_search_screen.dart';
@@ -107,6 +108,11 @@ class _SearchesScreenState extends State<SearchesScreen> with SingleTickerProvid
     _loadSortOrder();
     _pollSyncStatusOnce();
     _syncStatusPollTimer = Timer.periodic(const Duration(seconds: 2), (_) => _pollSyncStatusOnce());
+    // Once per app launch, not persisted/throttled further (M23) -- this
+    // screen is itself only reached once per launch anyway (the app's main
+    // post-setup/post-unlock home), so there's no risk of nagging the user
+    // repeatedly within one session.
+    checkForUpdateAndMaybePrompt(context);
   }
 
   Future<void> _loadSortOrder() async {

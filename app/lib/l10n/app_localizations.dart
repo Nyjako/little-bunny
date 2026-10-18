@@ -1239,6 +1239,36 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Download failed'**
   String get postDetailDownloadFailed;
+
+  /// No description provided for @updateAvailableTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Update available ({tagName})'**
+  String updateAvailableTitle(String tagName);
+
+  /// No description provided for @updateDownloadingMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'Downloading update...'**
+  String get updateDownloadingMessage;
+
+  /// No description provided for @updateFailedMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'Update failed. Try again later, or update manually from the project\'s GitHub releases page.'**
+  String get updateFailedMessage;
+
+  /// No description provided for @updateLaterAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Later'**
+  String get updateLaterAction;
+
+  /// No description provided for @updateNowAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Update'**
+  String get updateNowAction;
 }
 
 class _AppLocalizationsDelegate
