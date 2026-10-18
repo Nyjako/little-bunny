@@ -70,6 +70,62 @@ void main() {
     expect(repository.postsBySearchId[1]!.single.isSeen, isTrue);
   });
 
+  testWidgets('swiping moves to the next post in siblingPosts and marks only that one seen', (WidgetTester tester) async {
+    final repository = FakeBunnyRepository();
+    final posts = [_post(id: 1, externalId: 1, title: 'First'), _post(id: 2, externalId: 2, title: 'Second'), _post(id: 3, externalId: 3, title: 'Third')];
+    repository.postsBySearchId[1] = posts;
+
+    await tester.pumpWidget(
+      wrapWithLocalization(PostDetailScreen(post: posts[0], repository: repository, displaySettingsStore: const DisplaySettingsStore(), downloadSettingsStore: const DownloadSettingsStore(), siblingPosts: posts)),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('First'), findsOneWidget);
+    expect(posts[0].isSeen, isTrue);
+    expect(posts[1].isSeen, isFalse);
+
+    await tester.drag(find.byType(PageView), const Offset(-800, 0));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Second'), findsOneWidget);
+    expect(repository.postsBySearchId[1]![1].isSeen, isTrue);
+    expect(repository.postsBySearchId[1]![2].isSeen, isFalse);
+  });
+
+  testWidgets('right/left arrow keys move between posts in siblingPosts', (WidgetTester tester) async {
+    final repository = FakeBunnyRepository();
+    final posts = [_post(id: 1, externalId: 1, title: 'First'), _post(id: 2, externalId: 2, title: 'Second')];
+    repository.postsBySearchId[1] = posts;
+
+    await tester.pumpWidget(
+      wrapWithLocalization(PostDetailScreen(post: posts[0], repository: repository, displaySettingsStore: const DisplaySettingsStore(), downloadSettingsStore: const DownloadSettingsStore(), siblingPosts: posts)),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+    await tester.pumpAndSettle();
+    expect(find.text('Second'), findsOneWidget);
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
+    await tester.pumpAndSettle();
+    expect(find.text('First'), findsOneWidget);
+  });
+
+  testWidgets('with no siblingPosts, falls back to a single-page view of just the opened post', (WidgetTester tester) async {
+    final repository = FakeBunnyRepository();
+    final post = _post(fileExt: 'jpg');
+    repository.postsBySearchId[1] = [post];
+
+    await tester.pumpWidget(wrapWithLocalization(PostDetailScreen(post: post, repository: repository, displaySettingsStore: const DisplaySettingsStore(), downloadSettingsStore: const DownloadSettingsStore())));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(AppBar), findsOneWidget);
+    expect(repository.postsBySearchId[1]!.single.isSeen, isTrue);
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+    await tester.pumpAndSettle();
+    expect(find.byType(AppBar), findsOneWidget);
+  });
+
   testWidgets('app bar shrinks on wide windows (M9.6.6)', (WidgetTester tester) async {
     final repository = FakeBunnyRepository();
     final post = _post(fileExt: 'jpg');

@@ -13,6 +13,7 @@ import '../settings/display_settings_store.dart';
 import '../settings/download_settings_store.dart';
 import '../util/image_headers.dart';
 import '../util/media_type.dart';
+import '../util/mouse_drag_scroll_behavior.dart';
 import '../util/responsive.dart';
 import '../widgets/rating_badge.dart';
 import 'full_screen_post_viewer_screen.dart';
@@ -63,8 +64,12 @@ BunnyPost _applyOptimisticUpdate(BunnyPost post, {bool? isFavorited, int favCoun
 /// Full read-only metadata + media viewer for a single post (M8.4, redesigned
 /// in M8.5.8 to surface categorized tags, sources, and e621 pool/parent/
 /// child navigation; M8.5.14 added favorite/vote actions). No comment
-/// actions yet -- that's M9's scope. Marks the post seen once, on open, same
-/// as tapping it used to in `PostGridScreen` before this screen existed.
+/// actions yet -- that's M9's scope.
+///
+/// A thin shell (M22): the actual per-post content lives in [_PostDetailPage]
+/// below, wrapped in a [PageView] here so swiping/dragging/arrow-keys moves
+/// between posts in [siblingPosts] without leaving this screen, the same way
+/// [FullScreenPostViewerScreen] already does for images (M8.5.9).
 class PostDetailScreen extends StatefulWidget {
   final BunnyPost post;
   final BunnyRepository repository;
@@ -78,11 +83,12 @@ class PostDetailScreen extends StatefulWidget {
   final DownloadManager downloadManager;
 
   /// The post list this post was opened from (e.g. a grid's currently loaded
-  /// posts), used to seed [FullScreenPostViewerScreen]'s swipeable gallery
-  /// when the media is tapped (M8.5.9) -- filtered down to image posts only,
-  /// since videos keep using the in-place player here. `null` (the default,
-  /// used when opening a post standalone, e.g. via a parent/child/pool chip)
-  /// falls back to a single-post gallery of just [post].
+  /// posts) -- both the posts this screen itself pages through (M22) and,
+  /// filtered down to image posts only, the sub-gallery [_PostDetailPage]
+  /// seeds [FullScreenPostViewerScreen] with when the media is tapped
+  /// (M8.5.9). `null` (the default, used when opening a post standalone, e.g.
+  /// via a parent/child/pool chip) falls back to a single-post list of just
+  /// [post] in both places.
   final List<BunnyPost>? siblingPosts;
 
   const PostDetailScreen({
@@ -100,6 +106,110 @@ class PostDetailScreen extends StatefulWidget {
 }
 
 class _PostDetailScreenState extends State<PostDetailScreen> {
+  late final List<BunnyPost> _posts;
+  late final int _initialIndex;
+  late final PageController _pageController;
+
+  @override
+  void initState() {
+    super.initState();
+    _posts = widget.siblingPosts ?? [widget.post];
+    final index = _posts.indexWhere((p) => p.id == widget.post.id);
+    _initialIndex = index == -1 ? 0 : index;
+    _pageController = PageController(initialPage: _initialIndex);
+    // onPageChanged (below) never fires for the page a PageView starts on --
+    // mirrors FullScreenPostViewerScreen's own mark-seen-on-page-change
+    // timing (only when a page actually becomes active, never just because
+    // PageView pre-built it as the next/previous page).
+    widget.repository.markPostSeen(_posts[_initialIndex].id);
+  }
+
+  @override
+  void dispose() {
+    _pageController.dispose();
+    super.dispose();
+  }
+
+  void _onPageChanged(int index) {
+    widget.repository.markPostSeen(_posts[index].id);
+  }
+
+  void _goToDelta(int delta) {
+    final current = _pageController.page?.round() ?? _initialIndex;
+    final target = current + delta;
+    if (target < 0 || target >= _posts.length) {
+      return;
+    }
+    _pageController.animateToPage(target, duration: const Duration(milliseconds: 250), curve: Curves.easeOut);
+  }
+
+  KeyEventResult _handleKey(FocusNode node, KeyEvent event) {
+    if (event is! KeyDownEvent) {
+      return KeyEventResult.ignored;
+    }
+    if (event.logicalKey == LogicalKeyboardKey.arrowRight) {
+      _goToDelta(1);
+      return KeyEventResult.handled;
+    }
+    if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
+      _goToDelta(-1);
+      return KeyEventResult.handled;
+    }
+    return KeyEventResult.ignored;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Focus(
+      autofocus: true,
+      onKeyEvent: _handleKey,
+      child: ScrollConfiguration(
+        behavior: const MouseDragScrollBehavior(),
+        child: PageView.builder(
+          controller: _pageController,
+          itemCount: _posts.length,
+          onPageChanged: _onPageChanged,
+          itemBuilder: (context, index) => _PostDetailPage(
+            key: ValueKey(_posts[index].id),
+            post: _posts[index],
+            repository: widget.repository,
+            displaySettingsStore: widget.displaySettingsStore,
+            downloadSettingsStore: widget.downloadSettingsStore,
+            downloadManager: widget.downloadManager,
+            siblingPosts: widget.siblingPosts,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// The actual single-post content [PostDetailScreen] above pages through --
+/// every field/method here means exactly what it meant on the old
+/// `PostDetailScreen` before M22's refactor split it in two.
+class _PostDetailPage extends StatefulWidget {
+  final BunnyPost post;
+  final BunnyRepository repository;
+  final DisplaySettingsStore displaySettingsStore;
+  final DownloadSettingsStore downloadSettingsStore;
+  final DownloadManager downloadManager;
+  final List<BunnyPost>? siblingPosts;
+
+  const _PostDetailPage({
+    super.key,
+    required this.post,
+    required this.repository,
+    required this.displaySettingsStore,
+    required this.downloadSettingsStore,
+    required this.downloadManager,
+    this.siblingPosts,
+  });
+
+  @override
+  State<_PostDetailPage> createState() => _PostDetailPageState();
+}
+
+class _PostDetailPageState extends State<_PostDetailPage> {
   VideoPlayerController? _videoController;
   ChewieController? _chewieController;
   Future<void>? _videoInitFuture;
@@ -134,7 +244,10 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
   void initState() {
     super.initState();
     _post = widget.post;
-    widget.repository.markPostSeen(widget.post.id);
+    // Marking this post seen is the outer PostDetailScreen's job now (M22) --
+    // it does so on initial build and on every subsequent page change, never
+    // here, since PageView can build this widget for a page it's only
+    // pre-rendering ahead of time, before the user actually swipes to it.
 
     _tagsFuture = widget.repository.getPostTagsByCategory(widget.post.id);
     _sourcesFuture = widget.repository.getPostSources(widget.post.id);
