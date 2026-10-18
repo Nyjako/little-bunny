@@ -103,6 +103,14 @@ bunny_db_result_t bunny_db_open(const char *path, bunny_db_t **out_db)
         return BUNNY_DB_ERR_OPEN_FAILED;
     }
 
+    /* WAL mode commits don't need the exclusive-lock-plus-fsync-the-whole-
+     * rollback-journal dance that the default (DELETE) journal mode does on
+     * every commit -- cheap, persists in the database file itself (set once,
+     * stays set), and directly cuts per-commit latency for exactly the
+     * many-small-writes pattern sync.c's batched upserts rely on. Ignored
+     * (not fatal) for ":memory:" databases, which don't support WAL. */
+    sqlite3_exec(db->handle, "PRAGMA journal_mode=WAL;", NULL, NULL, NULL);
+
     /* BUNNY_DB_SCHEMA_SQL's first statement enables foreign_keys, which is a
      * per-connection setting SQLite doesn't persist -- every open needs it. */
     char *errmsg = NULL;
@@ -131,6 +139,30 @@ void bunny_db_close(bunny_db_t *db)
     }
     sqlite3_close(db->handle);
     free(db);
+}
+
+bunny_db_result_t bunny_db_begin_transaction(bunny_db_t *db)
+{
+    if (!db) {
+        return BUNNY_DB_ERR_INVALID_ARG;
+    }
+    return bunny_db_sqlite_rc_to_result(sqlite3_exec(db->handle, "BEGIN;", NULL, NULL, NULL));
+}
+
+bunny_db_result_t bunny_db_commit_transaction(bunny_db_t *db)
+{
+    if (!db) {
+        return BUNNY_DB_ERR_INVALID_ARG;
+    }
+    return bunny_db_sqlite_rc_to_result(sqlite3_exec(db->handle, "COMMIT;", NULL, NULL, NULL));
+}
+
+bunny_db_result_t bunny_db_rollback_transaction(bunny_db_t *db)
+{
+    if (!db) {
+        return BUNNY_DB_ERR_INVALID_ARG;
+    }
+    return bunny_db_sqlite_rc_to_result(sqlite3_exec(db->handle, "ROLLBACK;", NULL, NULL, NULL));
 }
 
 bunny_db_result_t bunny_db_backup(bunny_db_t *db, const char *dest_path)
