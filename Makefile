@@ -17,14 +17,35 @@ PORTABLE_IMAGE ?= ubuntu:22.04
 HOST_UID := $(shell id -u)
 HOST_GID := $(shell id -g)
 
-.PHONY: build test release release-portable clean dockcross windows tools format format-check app-linux app-android
+.PHONY: build test test-c test-flutter release release-portable clean dockcross windows tools format format-check app-linux app-android
 
 build:
 	cmake -S . -B $(BUILD_DIR) -DCMAKE_BUILD_TYPE=Debug -DBUNNY_BUILD_TESTS=ON
 	cmake --build $(BUILD_DIR) -j
 
-test: build
+# Everything: the C side (libs/server) plus bunny_core_ffi's and the Flutter
+# app's own test suites, same split test.yml runs in CI. `test-c`/
+# `test-flutter` are also available standalone, for a faster loop when only
+# one side actually changed.
+test: test-c test-flutter
+
+test-c: build
 	ctest --test-dir $(BUILD_DIR) --output-on-failure
+
+# Assumes Flutter (via fvm, pinned by app/.fvmrc) and the Linux desktop build
+# deps (ninja-build libgtk-3-dev pkg-config libsecret-1-dev) are already
+# installed -- same assumption `build`/`test-c` make about the C toolchain,
+# never auto-installed by this Makefile either. Both bunny_core_ffi's and
+# app's own FFI-backed tests dlopen libbunny_core_ffi.so at runtime (Dart
+# FFI's DynamicLibrary.open searches LD_LIBRARY_PATH), so it has to be built
+# fresh before either `flutter test` call -- `flutter build linux --debug`
+# builds it as a side effect of building the app itself.
+test-flutter:
+	cd bunny_core_ffi && fvm flutter pub get
+	cd app && fvm flutter pub get
+	cd app && fvm flutter build linux --debug
+	cd bunny_core_ffi && LD_LIBRARY_PATH=$(CURDIR)/$(APP_BUILD_DIR)/linux/x64/debug/bundle/lib fvm flutter test
+	cd app && LD_LIBRARY_PATH=$(CURDIR)/$(APP_BUILD_DIR)/linux/x64/debug/bundle/lib fvm flutter test
 
 release:
 	cmake -S . -B $(RELEASE_DIR) -DCMAKE_BUILD_TYPE=Release -DBUNNY_BUILD_TESTS=OFF
