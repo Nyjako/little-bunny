@@ -459,10 +459,73 @@ void test_fetch_pool_returns_live_pool_info(void)
     TEST_ASSERT_EQUAL(BUNNY_CORE_OK, result);
     TEST_ASSERT_EQUAL(5, info.id);
     TEST_ASSERT_EQUAL_STRING("a_test_pool", info.name);
+    TEST_ASSERT_EQUAL_STRING("a test pool", info.description);
     TEST_ASSERT_EQUAL(3, info.post_count);
+    TEST_ASSERT_EQUAL(0, info.referenced_pool_id_count);
     bunny_core_pool_info_free(&info);
 
     free(fixture);
+}
+
+/* M26: a pool's description routinely cross-references related/
+ * continuation pools via e621's own "pool #<N>" dtext convention --
+ * bunny_core_fetch_pool parses these out so the app can show them as
+ * clickable chips without the caller needing to parse dtext itself. */
+void test_fetch_pool_parses_pool_references_out_of_the_description(void)
+{
+    char *fixture = read_fixture("e621_pool_with_references.json");
+    TEST_ASSERT_NOT_NULL(fixture);
+    g_e621_state.bodies[0] = fixture;
+    g_e621_state.body_count = 1;
+
+    bunny_core_pool_info_t info;
+    bunny_core_result_t result = bunny_core_fetch_pool(g_core, 11563, &info);
+    TEST_ASSERT_EQUAL(BUNNY_CORE_OK, result);
+    TEST_ASSERT_EQUAL(2, info.referenced_pool_id_count);
+    TEST_ASSERT_EQUAL(20495, info.referenced_pool_ids[0]);
+    TEST_ASSERT_EQUAL(20496, info.referenced_pool_ids[1]);
+    bunny_core_pool_info_free(&info);
+
+    free(fixture);
+}
+
+/* The actual user-facing bug (M26): e621's own pool order ([1, 2, 3] per
+ * the pool fixture below) can differ from "newest post first by upload
+ * date" (here, posts 3/2/1 upload in that order) whenever pages were
+ * uploaded out of sequence -- a real, common occurrence for ongoing
+ * comics. Without bunny_core_sync_pool_order, listing a pool search's
+ * posts would show 3, 2, 1 (upload order); with it, it must show the
+ * pool's own 1, 2, 3 instead. */
+void test_syncing_a_pool_search_orders_posts_by_e621s_own_pool_order(void)
+{
+    char *search_fixture = read_fixture("e621_pool_search_posts.json");
+    char *pool_fixture = read_fixture("e621_pool_single.json");
+    TEST_ASSERT_NOT_NULL(search_fixture);
+    TEST_ASSERT_NOT_NULL(pool_fixture);
+    g_e621_state.bodies[0] = search_fixture;
+    g_e621_state.bodies[1] = pool_fixture;
+    g_e621_state.body_count = 2;
+
+    int64_t search_id = 0;
+    bunny_core_result_t result = bunny_core_search_create(g_core, BUNNY_DB_SITE_E621, "my pool", "pool:5", 24, NULL, &search_id);
+    TEST_ASSERT_EQUAL(BUNNY_CORE_OK, result);
+
+    bunny_core_sync_stats_t stats;
+    result = bunny_core_sync_due_searches(g_core, &stats);
+    TEST_ASSERT_EQUAL(BUNNY_CORE_OK, result);
+    TEST_ASSERT_EQUAL(3, stats.posts_upserted);
+
+    bunny_db_post_list_t posts;
+    result = bunny_core_search_list_posts(g_core, search_id, false, &posts);
+    TEST_ASSERT_EQUAL(BUNNY_CORE_OK, result);
+    TEST_ASSERT_EQUAL(3, (int)posts.count);
+    TEST_ASSERT_EQUAL(1, posts.items[0].external_id);
+    TEST_ASSERT_EQUAL(2, posts.items[1].external_id);
+    TEST_ASSERT_EQUAL(3, posts.items[2].external_id);
+    bunny_db_post_list_free(&posts);
+
+    free(search_fixture);
+    free(pool_fixture);
 }
 
 void test_preview_search_upserts_posts_without_creating_a_search(void)
@@ -1272,6 +1335,8 @@ int main(void)
     RUN_TEST(test_list_comments_returns_live_e621_comments);
     RUN_TEST(test_list_comments_rejects_inkbunny_posts);
     RUN_TEST(test_fetch_pool_returns_live_pool_info);
+    RUN_TEST(test_fetch_pool_parses_pool_references_out_of_the_description);
+    RUN_TEST(test_syncing_a_pool_search_orders_posts_by_e621s_own_pool_order);
     RUN_TEST(test_preview_search_upserts_posts_without_creating_a_search);
     RUN_TEST(test_preview_search_is_unaffected_by_the_tag_blacklist);
     RUN_TEST(test_preview_search_requests_the_given_e621_page);
