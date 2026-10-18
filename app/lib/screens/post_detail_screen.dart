@@ -121,7 +121,7 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
     // mirrors FullScreenPostViewerScreen's own mark-seen-on-page-change
     // timing (only when a page actually becomes active, never just because
     // PageView pre-built it as the next/previous page).
-    widget.repository.markPostSeen(_posts[_initialIndex].id);
+    _markSeenWithRetry(_posts[_initialIndex].id);
   }
 
   @override
@@ -130,8 +130,28 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
     super.dispose();
   }
 
+  /// Fire-and-forget by design (same as before this retry existed) --
+  /// nothing here blocks swiping to the next post or navigating away. One
+  /// retry covers a transient failure (e.g. this request racing a
+  /// concurrently slow one on the server) without a full retry queue; a
+  /// second failure is swallowed silently, same as the original contract --
+  /// reopening the post tries again. Without this, a swiped-past post
+  /// whose single markPostSeen call happened to fail stayed unseen
+  /// indefinitely with no visible error and no way to notice.
+  Future<void> _markSeenWithRetry(int postId) async {
+    try {
+      await widget.repository.markPostSeen(postId);
+    } catch (_) {
+      try {
+        await widget.repository.markPostSeen(postId);
+      } catch (_) {
+        // Give up silently -- see this method's doc comment.
+      }
+    }
+  }
+
   void _onPageChanged(int index) {
-    widget.repository.markPostSeen(_posts[index].id);
+    _markSeenWithRetry(_posts[index].id);
   }
 
   void _goToDelta(int delta) {
