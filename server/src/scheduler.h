@@ -14,6 +14,11 @@ typedef struct
     server_sync_status_t *status;
     int poll_interval_sec;
     char *backups_dir;
+    /* Kept (not just backups_dir, derived from it) so the updater check
+     * (scheduler.c, M23) can build its own data_dir-relative paths
+     * (.last_update_check, update-staging/, update-ready). */
+    char *data_dir;
+    char *user_agent;
     volatile bool stop_requested;
     bool running;
 } server_scheduler_t;
@@ -34,7 +39,7 @@ typedef struct
  * don't want a background pass racing their own explicit /sync or
  * /queue/process calls, and also skips the backup check). Returns false only
  * on an actual thread-create failure. */
-bool server_scheduler_start(server_scheduler_t *scheduler, server_context_t *ctx, server_sync_status_t *status, const char *data_dir, int poll_interval_sec);
+bool server_scheduler_start(server_scheduler_t *scheduler, server_context_t *ctx, server_sync_status_t *status, const char *data_dir, int poll_interval_sec, const char *user_agent);
 
 /* Signals the loop to exit and joins the thread (within ~1s, not a full
  * poll interval). Safe to call even if the scheduler was never started. */
