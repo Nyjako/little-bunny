@@ -521,6 +521,30 @@ class AppLocalizationsEn extends AppLocalizations {
   String get serverLogsRefreshTooltip => 'Refresh';
 
   @override
+  String get settingsTaskQueueEntry => 'Task queue';
+
+  @override
+  String get taskQueueScreenTitle => 'Task queue';
+
+  @override
+  String get taskQueueEmptyState => 'Nothing queued right now.';
+
+  @override
+  String get taskQueuePriorityHigh => 'High';
+
+  @override
+  String get taskQueuePriorityMedium => 'Medium';
+
+  @override
+  String get taskQueuePriorityLow => 'Low';
+
+  @override
+  String get taskQueueStatusRunning => 'Running';
+
+  @override
+  String get taskQueueStatusPending => 'Pending';
+
+  @override
   String get settingsAppearanceSection => 'Appearance';
 
   @override

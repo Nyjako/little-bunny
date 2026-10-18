@@ -51,7 +51,7 @@ static int handle_get_sync_status(struct mg_connection *conn, server_context_t *
 
 static int handle_post_sync_all(struct mg_connection *conn, server_context_t *ctx)
 {
-    bool enqueued = sync_worker_enqueue_all(ctx->sync_worker);
+    bool enqueued = task_queue_enqueue_sync_all(ctx->task_queue);
 
     cJSON *response = cJSON_CreateObject();
     cJSON_AddBoolToObject(response, "enqueued", enqueued);

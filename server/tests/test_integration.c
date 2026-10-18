@@ -152,7 +152,7 @@ static long do_request(const char *method, const char *path, const char *body, r
 
 /* POST /searches/{id}/sync, POST /sync, and POST /sync/all all just enqueue
  * onto the background sync worker and return 202 immediately (see
- * sync_worker.h) -- the work itself finishes asynchronously, often within
+ * task_queue.h) -- the work itself finishes asynchronously, often within
  * microseconds against these tests' instant fake transports, but with no
  * guaranteed ordering relative to when this function's response arrives.
  * (POST /queue/process stays synchronous -- see handle_queue_process's own
@@ -507,7 +507,7 @@ void test_full_account_search_sync_favorite_flow(void)
 /* The underlying "a forced single-search sync ignores the due check, unlike
  * the batch /sync endpoint" invariant (M13.2) is proven directly against
  * bunny_core_sync_search in libs/core/tests/test_sync.c
- * (test_sync_search_forces_a_non_due_search_to_sync) -- the sync_worker job
+ * (test_sync_search_forces_a_non_due_search_to_sync) -- the task_queue job
  * this route enqueues always calls bunny_core_sync_search, never the
  * due-checking bunny_core_sync_due_searches, so that guarantee holds by
  * construction here too. This test instead covers what's specific to the
@@ -894,9 +894,9 @@ static double elapsed_ms(struct timespec start)
  * libs/core/tests/test_concurrency.c for that half of the fix) -- and on top
  * of that, POST /searches/{id}/sync no longer even calls bunny_core_sync_
  * search from this request's own thread at all: it just enqueues onto
- * sync_worker and returns 202 immediately, so the slow network call now
- * happens entirely on sync_worker's own dedicated thread, never occupying
- * one of civetweb's worker threads for its duration (see sync_worker.h).
+ * task_queue and returns 202 immediately, so the slow network call now
+ * happens entirely on task_queue's own dedicated thread, never occupying
+ * one of civetweb's worker threads for its duration (see task_queue.h).
  * Both assertions below would have failed against the pre-M19 bug; the
  * first one (the sync POST itself returning fast) would ALSO have failed
  * against a version of this server that still called bunny_core_sync_search
@@ -1012,6 +1012,108 @@ void test_sync_all_reports_progress_and_rejects_duplicate_while_running(void)
     TEST_ASSERT_TRUE(poll_until_response_contains("GET", "/sync/status", "\"active\":false"));
 }
 
+/* GET /tasks (M24) -- the live task_queue snapshot, as opposed to /sync/
+ * status's single "what's running right now" view. Two HIGH-priority
+ * single-search syncs enqueued back-to-back (with the e621 transport
+ * slowed down so the first stays visible while running) come back with the
+ * expected fields and in enqueue order -- their timestamps can tie within
+ * the same second, so this also exercises the id tiebreak in task_queue.c's
+ * compare_entries, not just the priority ordering. */
+void test_tasks_endpoint_lists_pending_and_running_jobs_in_fifo_order(void)
+{
+    response_buffer_t response = {0};
+
+    long status = do_request("POST", "/searches", "{\"site\":\"e621\",\"label\":\"wolves\",\"query\":\"wolf\",\"interval_hours\":24}", &response, true, NULL);
+    TEST_ASSERT_EQUAL(201, status);
+    free(response.data);
+    memset(&response, 0, sizeof(response));
+
+    status = do_request("POST", "/searches", "{\"site\":\"e621\",\"label\":\"foxes\",\"query\":\"fox\",\"interval_hours\":24}", &response, true, NULL);
+    TEST_ASSERT_EQUAL(201, status);
+    free(response.data);
+    memset(&response, 0, sizeof(response));
+
+    g_e621_transport.send = slow_fake_e621_send;
+
+    status = do_request("POST", "/searches/1/sync", NULL, &response, true, NULL);
+    TEST_ASSERT_EQUAL(202, status);
+    free(response.data);
+    memset(&response, 0, sizeof(response));
+
+    status = do_request("POST", "/searches/2/sync", NULL, &response, true, NULL);
+    TEST_ASSERT_EQUAL(202, status);
+    free(response.data);
+    memset(&response, 0, sizeof(response));
+
+    usleep(200000); /* give the worker time to pick up the first job */
+
+    status = do_request("GET", "/tasks", NULL, &response, true, NULL);
+    TEST_ASSERT_EQUAL(200, status);
+    TEST_ASSERT_NOT_NULL(strstr(response.data, "\"priority\":\"high\""));
+    TEST_ASSERT_NOT_NULL(strstr(response.data, "\"status\":\"running\""));
+    TEST_ASSERT_NOT_NULL(strstr(response.data, "\"status\":\"pending\""));
+    TEST_ASSERT_NOT_NULL(strstr(response.data, "\"type\":\"sync_search\""));
+
+    const char *wolves_pos = strstr(response.data, "\"label\":\"Sync: wolves\"");
+    const char *foxes_pos = strstr(response.data, "\"label\":\"Sync: foxes\"");
+    TEST_ASSERT_NOT_NULL(wolves_pos);
+    TEST_ASSERT_NOT_NULL(foxes_pos);
+    TEST_ASSERT_TRUE(wolves_pos < foxes_pos);
+
+    free(response.data);
+}
+
+/* The scheduler's own background due-search pass is LOW priority (M24) --
+ * when a user explicitly asks for the same work via POST /sync (HIGH)
+ * while the background pass is already pending/running, task_queue merges
+ * them (promoting the existing slot) instead of queuing a redundant second
+ * copy, and still reports success rather than the 409 a genuine duplicate
+ * HIGH-priority request gets (see
+ * test_sync_all_reports_progress_and_rejects_duplicate_while_running). */
+void test_user_triggered_due_sync_promotes_a_pending_background_one_instead_of_duplicating(void)
+{
+    server_app_stop(g_app);
+
+    g_e621_transport.send = slow_fake_e621_send;
+
+    bunny_core_config_t core_config;
+    memset(&core_config, 0, sizeof(core_config));
+    core_config.db_path = ":memory:";
+    core_config.user_agent = "bunny-tests/1.0 (integration)";
+    core_config.e621_transport = &g_e621_transport;
+    core_config.min_request_interval_sec = 0.001;
+
+    g_app = server_app_start(&core_config, g_data_dir, TEST_PORT, 1);
+    TEST_ASSERT_NOT_NULL(g_app);
+    usleep(100000);
+
+    response_buffer_t response = {0};
+    long status = do_request("POST", "/searches", "{\"site\":\"e621\",\"label\":\"wolves\",\"query\":\"wolf\",\"interval_hours\":24}", &response, true, NULL);
+    TEST_ASSERT_EQUAL(201, status);
+    free(response.data);
+    memset(&response, 0, sizeof(response));
+
+    /* Wait for the scheduler's first tick to enqueue its LOW-priority
+     * due-sync (the new search is due immediately) -- slowed down above so
+     * it's still pending/running when the HIGH-priority request below
+     * arrives. */
+    TEST_ASSERT_TRUE(poll_until_response_contains("GET", "/tasks", "\"type\":\"sync_due\""));
+
+    status = do_request("POST", "/sync", NULL, &response, true, NULL);
+    TEST_ASSERT_EQUAL(202, status);
+    TEST_ASSERT_NOT_NULL(strstr(response.data, "\"enqueued\":true"));
+    free(response.data);
+    memset(&response, 0, sizeof(response));
+
+    status = do_request("GET", "/tasks", NULL, &response, true, NULL);
+    TEST_ASSERT_EQUAL(200, status);
+    const char *first_sync_due = strstr(response.data, "\"type\":\"sync_due\"");
+    TEST_ASSERT_NOT_NULL(first_sync_due);
+    TEST_ASSERT_NULL(strstr(first_sync_due + 1, "\"type\":\"sync_due\"")); /* merged, not duplicated */
+    TEST_ASSERT_NOT_NULL(strstr(response.data, "\"priority\":\"high\""));  /* promoted from low */
+    free(response.data);
+}
+
 int main(void)
 {
     curl_global_init(CURL_GLOBAL_DEFAULT);
@@ -1035,6 +1137,8 @@ int main(void)
     RUN_TEST(test_settings_get_and_put_default_sync_interval_hours);
     RUN_TEST(test_sync_status_is_inactive_when_nothing_is_running);
     RUN_TEST(test_sync_all_reports_progress_and_rejects_duplicate_while_running);
+    RUN_TEST(test_tasks_endpoint_lists_pending_and_running_jobs_in_fifo_order);
+    RUN_TEST(test_user_triggered_due_sync_promotes_a_pending_background_one_instead_of_duplicating);
     int result = UNITY_END();
     curl_global_cleanup();
     return result;

@@ -18,6 +18,7 @@
 #include "routes_settings.h"
 #include "routes_sync.h"
 #include "routes_tags.h"
+#include "routes_tasks.h"
 #include "tls.h"
 
 /* civetweb's own per-request/error logging -- wiring these in gives us
@@ -108,8 +109,8 @@ server_app_t *server_app_start(const bunny_core_config_t *core_config, const cha
         return NULL;
     }
 
-    app->sync_worker = sync_worker_start(app->core, app->sync_status);
-    if (!app->sync_worker) {
+    app->task_queue = task_queue_start(app->core, app->sync_status);
+    if (!app->task_queue) {
         server_sync_status_destroy(app->sync_status);
         bunny_core_close(app->core);
         free(app->cert_path);
@@ -120,7 +121,7 @@ server_app_t *server_app_start(const bunny_core_config_t *core_config, const cha
 
     app->ctx.core = app->core;
     app->ctx.auth = app->auth;
-    app->ctx.sync_worker = app->sync_worker;
+    app->ctx.task_queue = app->task_queue;
     app->ctx.sync_status = app->sync_status;
 
     char port_option[32];
@@ -136,7 +137,7 @@ server_app_t *server_app_start(const bunny_core_config_t *core_config, const cha
 
     app->mg_ctx = mg_start(&callbacks, NULL, options);
     if (!app->mg_ctx) {
-        sync_worker_stop(app->sync_worker);
+        task_queue_stop(app->task_queue);
         server_sync_status_destroy(app->sync_status);
         bunny_core_close(app->core);
         free(app->cert_path);
@@ -157,10 +158,11 @@ server_app_t *server_app_start(const bunny_core_config_t *core_config, const cha
     server_routes_register_sync(app->mg_ctx, &app->ctx);
     server_routes_register_settings(app->mg_ctx, &app->ctx);
     server_routes_register_groups(app->mg_ctx, &app->ctx);
+    server_routes_register_tasks(app->mg_ctx, &app->ctx);
 
-    if (!server_scheduler_start(&app->scheduler, &app->ctx, app->sync_status, data_dir, poll_interval_sec, core_config->user_agent)) {
+    if (!server_scheduler_start(&app->scheduler, &app->ctx, data_dir, poll_interval_sec, core_config->user_agent)) {
         mg_stop(app->mg_ctx);
-        sync_worker_stop(app->sync_worker);
+        task_queue_stop(app->task_queue);
         server_sync_status_destroy(app->sync_status);
         bunny_core_close(app->core);
         free(app->cert_path);
@@ -182,11 +184,11 @@ void server_app_stop(server_app_t *app)
     if (!app) {
         return;
     }
-    /* Stop the scheduler and sync worker first so both are done issuing
+    /* Stop the scheduler and task queue first so both are done issuing
      * bunny_core_* calls before civetweb's workers and the core itself get
      * torn down. */
     server_scheduler_stop(&app->scheduler);
-    sync_worker_stop(app->sync_worker);
+    task_queue_stop(app->task_queue);
     server_sync_status_destroy(app->sync_status);
     mg_stop(app->mg_ctx);
     bunny_core_close(app->core);
