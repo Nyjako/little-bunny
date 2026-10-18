@@ -46,11 +46,11 @@ jobs:
           flutter pub get
           flutter build linux --release
       - working-directory: app/build/linux/x64/release
-        run: zip -r "${{ github.workspace }}/little-bunny-app-linux-x64.zip" bundle
+        run: tar -czf "${{ github.workspace }}/little-bunny-app-linux-x64.tar.gz" bundle
       - uses: actions/upload-artifact@v4
         with:
           name: little-bunny-app-linux-x64
-          path: little-bunny-app-linux-x64.zip
+          path: little-bunny-app-linux-x64.tar.gz
 
   build-app-android:
     needs: test
@@ -96,14 +96,18 @@ jobs:
           flutter pub get
           flutter build windows --release
       # Server and app are separate downloads -- someone grabbing one
-      # shouldn't be forced to also download the other.
+      # shouldn't be forced to also download the other. Both zipped, for
+      # consistency with every other platform's app archive.
+      - name: Package server
+        working-directory: build-windows/server/Release
+        run: Compress-Archive -Path bunny_server.exe -DestinationPath "${{ github.workspace }}/bunny-server-windows-x64.zip"
       - name: Package app
         working-directory: app/build/windows/x64/runner/Release
         run: Compress-Archive -Path * -DestinationPath "${{ github.workspace }}/little-bunny-app-windows-x64.zip"
       - uses: actions/upload-artifact@v4
         with:
           name: bunny-server-windows-x64
-          path: build-windows/server/Release/bunny_server.exe
+          path: bunny-server-windows-x64.zip
       - uses: actions/upload-artifact@v4
         with:
           name: little-bunny-app-windows-x64

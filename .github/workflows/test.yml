@@ -21,10 +21,17 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y --no-install-recommends build-essential cmake libssl-dev clang-format
 
+      # make test-c, not make test -- the latter also runs bunny_core_ffi's/
+      # app's Flutter tests (for local dev convenience), but Flutter/fvm
+      # isn't installed on this runner until the subosito/flutter-action
+      # step below, and this job already covers that layer itself via its
+      # own pub get/analyze/build/test steps further down, with the exact
+      # LD_LIBRARY_PATH setup those need -- running it again here would
+      # both fail (fvm: not found) and duplicate work even if reordered.
       - name: C build + test + format-check
         run: |
           make build
-          make test
+          make test-c
           make format-check
 
       - uses: subosito/flutter-action@v2
