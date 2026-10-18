@@ -283,5 +283,14 @@
   "postDetailDownloadTooltip": "Download",
   "postDetailDownloadVerified": "Downloaded and checksum verified",
   "postDetailDownloadMismatch": "Downloaded, but the checksum didn't match",
-  "postDetailDownloadFailed": "Download failed"
+  "postDetailDownloadFailed": "Download failed",
+
+  "updateAvailableTitle": "Update available ({tagName})",
+  "@updateAvailableTitle": {
+    "placeholders": {"tagName": {"type": "String"}}
+  },
+  "updateDownloadingMessage": "Downloading update...",
+  "updateFailedMessage": "Update failed. Try again later, or update manually from the project's GitHub releases page.",
+  "updateLaterAction": "Later",
+  "updateNowAction": "Update"
 }
