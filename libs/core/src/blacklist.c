@@ -7,9 +7,10 @@ bunny_core_result_t bunny_core_blacklist_list(bunny_core_t *core, bunny_db_site_
     if (!core) {
         return BUNNY_CORE_ERR_INVALID_ARG;
     }
-    bunny_core_db_lock(core);
-    bunny_db_result_t result = bunny_db_blacklist_list(core->db, site, out_list);
-    bunny_core_db_unlock(core);
+    size_t slot;
+    bunny_db_t *read_db = bunny_core_db_read_lock(core, &slot);
+    bunny_db_result_t result = bunny_db_blacklist_list(read_db, site, out_list);
+    bunny_core_db_read_unlock(core, slot);
     return bunny_core_map_db_result(result);
 }
 

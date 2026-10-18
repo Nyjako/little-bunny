@@ -13,9 +13,10 @@ e621_client_t *bunny_core_build_e621_client(bunny_core_t *core)
 {
     bunny_db_account_t account;
     memset(&account, 0, sizeof(account));
-    bunny_core_db_lock(core);
-    bool have_account = bunny_db_account_get(core->db, BUNNY_DB_SITE_E621, &account) == BUNNY_DB_OK;
-    bunny_core_db_unlock(core);
+    size_t slot;
+    bunny_db_t *read_db = bunny_core_db_read_lock(core, &slot);
+    bool have_account = bunny_db_account_get(read_db, BUNNY_DB_SITE_E621, &account) == BUNNY_DB_OK;
+    bunny_core_db_read_unlock(core, slot);
 
     /* e621's API etiquette requires a contact identifier in the User-Agent
      * (e.g. "LittleBunny/1.0.0 (by someuser on e621)") -- formatted here,
@@ -50,9 +51,10 @@ inkbunny_client_t *bunny_core_build_inkbunny_client(bunny_core_t *core)
 {
     bunny_db_account_t account;
     memset(&account, 0, sizeof(account));
-    bunny_core_db_lock(core);
-    bool have_account = bunny_db_account_get(core->db, BUNNY_DB_SITE_INKBUNNY, &account) == BUNNY_DB_OK;
-    bunny_core_db_unlock(core);
+    size_t slot;
+    bunny_db_t *read_db = bunny_core_db_read_lock(core, &slot);
+    bool have_account = bunny_db_account_get(read_db, BUNNY_DB_SITE_INKBUNNY, &account) == BUNNY_DB_OK;
+    bunny_core_db_read_unlock(core, slot);
 
     inkbunny_config_t config;
     memset(&config, 0, sizeof(config));

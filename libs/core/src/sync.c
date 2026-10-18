@@ -811,9 +811,10 @@ bunny_core_result_t bunny_core_list_comments(bunny_core_t *core, int64_t post_id
 
     bunny_db_post_t post;
     memset(&post, 0, sizeof(post));
-    bunny_core_db_lock(core);
-    bunny_db_result_t post_result = bunny_db_post_get_by_id(core->db, post_id, &post);
-    bunny_core_db_unlock(core);
+    size_t slot;
+    bunny_db_t *read_db = bunny_core_db_read_lock(core, &slot);
+    bunny_db_result_t post_result = bunny_db_post_get_by_id(read_db, post_id, &post);
+    bunny_core_db_read_unlock(core, slot);
     bunny_core_result_t lookup_result = bunny_core_map_db_result(post_result);
     if (lookup_result != BUNNY_CORE_OK) {
         return lookup_result;
