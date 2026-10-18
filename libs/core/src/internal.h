@@ -7,6 +7,8 @@
 
 #include <stdarg.h>
 #include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 
 #include "bunny_core/core.h"
 #include "bunny_core/error.h"
@@ -164,6 +166,25 @@ static inline bunny_core_result_t bunny_core_map_db_result(bunny_db_result_t res
         default:
             return BUNNY_CORE_ERR_DB;
     }
+}
+
+/* "pool:<id>" is the literal query string every pool search is created with
+ * (bunny_core_search_create, see the app's BunnySearch.isPool) -- true only
+ * when `query` is exactly that shape, writing the numeric id to
+ * *out_pool_id. Shared by sync.c (which pool to sync the order of) and
+ * searches.c (which pool to order a search's posts by, M26). */
+static inline bool bunny_core_parse_pool_id_from_query(const char *query, int64_t *out_pool_id)
+{
+    if (strncmp(query, "pool:", 5) != 0) {
+        return false;
+    }
+    char *endptr = NULL;
+    long long value = strtoll(query + 5, &endptr, 10);
+    if (endptr == query + 5 || *endptr != '\0') {
+        return false;
+    }
+    *out_pool_id = (int64_t)value;
+    return true;
 }
 
 /* Shared by sync.c and queue.c (libs/core/src/site_clients.c). Both build a

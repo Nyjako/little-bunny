@@ -161,7 +161,26 @@ bunny_core_result_t bunny_core_search_list_posts(bunny_core_t *core, int64_t sea
     }
     size_t slot;
     bunny_db_t *read_db = bunny_core_db_read_lock(core, &slot);
-    bunny_db_result_t result = bunny_db_search_list_posts(read_db, search_id, unseen_only, out_list);
+
+    /* A pool search (M26) orders by e621's own post_ids order instead of
+     * the normal newest-first-by-creation-date -- same connection/lock as
+     * the actual post listing below, so this doesn't cost a second round
+     * trip through the pool. */
+    bunny_db_search_list_t searches;
+    bunny_db_result_t search_list_result = bunny_db_search_list(read_db, &searches);
+    int64_t pool_id = 0;
+    bool is_pool = false;
+    if (search_list_result == BUNNY_DB_OK) {
+        for (size_t i = 0; i < searches.count; i++) {
+            if (searches.items[i].id == search_id) {
+                is_pool = bunny_core_parse_pool_id_from_query(searches.items[i].query, &pool_id);
+                break;
+            }
+        }
+        bunny_db_search_list_free(&searches);
+    }
+
+    bunny_db_result_t result = is_pool ? bunny_db_pool_search_list_posts(read_db, search_id, pool_id, unseen_only, out_list) : bunny_db_search_list_posts(read_db, search_id, unseen_only, out_list);
     bunny_core_db_read_unlock(core, slot);
     return bunny_core_map_db_result(result);
 }
