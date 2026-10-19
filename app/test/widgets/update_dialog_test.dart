@@ -45,6 +45,7 @@ void main() {
   testWidgets('shows the release tag and notes when an update is available', (tester) async {
     final assetSuffix = UpdateCheckService.assetSuffixForPlatform();
     final checkService = UpdateCheckService(
+      currentBuildNumber: 10,
       client: MockClient(
         (_) async => http.Response('{"tag_name":"build-42","body":"Fixed things","assets":[{"name":"little-bunny-$assetSuffix","browser_download_url":"https://example.invalid/asset"}]}', 200),
       ),
@@ -62,6 +63,7 @@ void main() {
   testWidgets('"Later" dismisses the dialog without downloading', (tester) async {
     final assetSuffix = UpdateCheckService.assetSuffixForPlatform();
     final checkService = UpdateCheckService(
+      currentBuildNumber: 10,
       client: MockClient((_) async => http.Response('{"tag_name":"build-42","assets":[{"name":"little-bunny-$assetSuffix","browser_download_url":"https://example.invalid/asset"}]}', 200)),
     );
     var downloadAttempted = false;
@@ -86,6 +88,7 @@ void main() {
   testWidgets('tapping "Update" and having the download fail shows an error and keeps the dialog open', (tester) async {
     final assetSuffix = UpdateCheckService.assetSuffixForPlatform();
     final checkService = UpdateCheckService(
+      currentBuildNumber: 10,
       client: MockClient((_) async => http.Response('{"tag_name":"build-42","assets":[{"name":"little-bunny-$assetSuffix","browser_download_url":"https://example.invalid/asset"}]}', 200)),
     );
     final applyService = UpdateApplyService(client: MockClient((_) async => http.Response('', 404)));

@@ -358,6 +358,23 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String get postGridPoolInfoTooltip => 'Pool info';
+
+  @override
+  String get postGridPoolInfoTitle => 'Pool information';
+
+  @override
+  String postGridPoolInfoPostCount(int count) {
+    return '$count posts';
+  }
+
+  @override
+  String get postGridPoolInfoNoDescription => 'No description.';
+
+  @override
+  String get postGridPoolInfoCloseButton => 'Close';
+
+  @override
   String get postDetailScreenTitle => 'Post';
 
   @override

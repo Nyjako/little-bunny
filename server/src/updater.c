@@ -62,7 +62,11 @@ bool bunny_updater_parse_latest_release(const char *json, size_t json_len, int c
     int latest_build_number = atoi(tag + strlen(prefix));
     out_result->tag_name = goblin_copy_cstr(tag);
     out_result->latest_build_number = latest_build_number;
-    out_result->update_available = latest_build_number > current_build_number;
+    /* current_build_number is 0 for a local/dev build (CMakeLists.txt
+     * defaults BUNNY_BUILD_NUMBER to "0") -- never treated as outdated
+     * relative to any real release, same sentinel convention as the
+     * Flutter app's own appBuildNumber (app_version.dart). */
+    out_result->update_available = current_build_number > 0 && latest_build_number > current_build_number;
 
     cJSON *body_item = cJSON_GetObjectItemCaseSensitive(root, "body");
     if (cJSON_IsString(body_item) && body_item->valuestring && body_item->valuestring[0] != '\0') {

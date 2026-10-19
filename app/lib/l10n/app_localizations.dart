@@ -724,6 +724,36 @@ abstract class AppLocalizations {
   /// **'Pool #{poolId}'**
   String tagBrowseRelatedPoolChip(int poolId);
 
+  /// No description provided for @postGridPoolInfoTooltip.
+  ///
+  /// In en, this message translates to:
+  /// **'Pool info'**
+  String get postGridPoolInfoTooltip;
+
+  /// No description provided for @postGridPoolInfoTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Pool information'**
+  String get postGridPoolInfoTitle;
+
+  /// No description provided for @postGridPoolInfoPostCount.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} posts'**
+  String postGridPoolInfoPostCount(int count);
+
+  /// No description provided for @postGridPoolInfoNoDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'No description.'**
+  String get postGridPoolInfoNoDescription;
+
+  /// No description provided for @postGridPoolInfoCloseButton.
+  ///
+  /// In en, this message translates to:
+  /// **'Close'**
+  String get postGridPoolInfoCloseButton;
+
   /// No description provided for @postDetailScreenTitle.
   ///
   /// In en, this message translates to:
