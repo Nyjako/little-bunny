@@ -25,6 +25,7 @@ add_library(bunny_server_lib STATIC
     src/routes_groups.c
     src/routes_tasks.c
     src/updater.c
+    src/qr.c
 )
 
 target_compile_definitions(bunny_server_lib PUBLIC BUNNY_BUILD_NUMBER=${BUNNY_BUILD_NUMBER})
@@ -39,6 +40,7 @@ target_link_libraries(bunny_server_lib
         bunny_core
         civetweb-c-library
         OpenSSL::Crypto
+        qrcodegen
 )
 
 add_executable(bunny_server src/main.c)
