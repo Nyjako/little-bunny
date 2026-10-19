@@ -324,6 +324,17 @@ typedef struct
     int searches_checked; /* how many saved searches bunny_core_sync_due_searches looked at */
     int searches_synced;  /* how many were due and synced successfully */
     int posts_upserted;   /* total posts cached/updated across all synced searches */
+
+    /* Seconds until the soonest not-yet-due search (across every search
+     * bunny_core_sync_due_searches looked at) actually becomes due, or -1 if
+     * there were no searches to check at all (M28) -- diagnoses "0 synced"
+     * from the logs alone: confirms whether that's simply because nothing's
+     * due yet (a large positive value here) versus a potential scheduling
+     * bug (a value near/below 0 despite 0 synced would be a contradiction
+     * worth investigating). Always 0 from bunny_core_sync_search, which
+     * forces a sync regardless of due-ness -- "time until due" doesn't apply
+     * there. */
+    double seconds_until_next_due;
 } bunny_core_sync_stats_t;
 
 /* Runs every saved search whose last run is NULL or older than its
