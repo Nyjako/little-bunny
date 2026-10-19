@@ -588,6 +588,33 @@ class AppLocalizationsEn extends AppLocalizations {
   String get settingsAppLockEntry => 'Manage app lock';
 
   @override
+  String get settingsAboutSection => 'About';
+
+  @override
+  String get settingsAboutEntry => 'About LittleBunny';
+
+  @override
+  String get aboutScreenTitle => 'About';
+
+  @override
+  String get aboutAppDescription =>
+      'An e621 + Inkbunny viewer and manager: saved searches that update on a schedule, mark unseen posts, mass like/favorite/download, comment, and keep everything in sync across devices -- with a fully offline standalone mode too.';
+
+  @override
+  String aboutBuildNumber(int buildNumber) {
+    return 'Build $buildNumber';
+  }
+
+  @override
+  String get aboutLocalBuild => 'Local build';
+
+  @override
+  String get aboutSourceLink => 'View source on GitHub';
+
+  @override
+  String get aboutLicensesEntry => 'Open source licenses';
+
+  @override
   String get settingsSyncSection => 'Sync';
 
   @override

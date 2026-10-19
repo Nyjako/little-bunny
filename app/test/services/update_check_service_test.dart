@@ -26,7 +26,19 @@ void main() {
   test('reports an update when the latest build number is higher, with the matching asset URL', () async {
     final service = UpdateCheckService(
       currentBuildNumber: 10,
-      client: MockClient((_) async => http.Response(releaseJson(tag: 'build-999999', assets: [{'name': 'little-bunny-$assetSuffix', 'url': 'https://example.invalid/asset'}], body: 'Notes here'), 200)),
+      client: MockClient(
+        (_) async => http.Response(
+          releaseJson(
+            tag: 'build-999999',
+            assets: [
+              {'name': 'little-bunny-$assetSuffix', 'url': 'https://example.invalid/asset'},
+              {'name': 'SHA256SUMS.txt', 'url': 'https://example.invalid/SHA256SUMS.txt'},
+            ],
+            body: 'Notes here',
+          ),
+          200,
+        ),
+      ),
     );
 
     final result = await service.check();
@@ -35,7 +47,19 @@ void main() {
     expect(result.latestBuildNumber, 999999);
     expect(result.tagName, 'build-999999');
     expect(result.downloadUrl, 'https://example.invalid/asset');
+    expect(result.sha256SumsUrl, 'https://example.invalid/SHA256SUMS.txt');
     expect(result.releaseNotes, 'Notes here');
+  });
+
+  test('leaves sha256SumsUrl null when the release has no SHA256SUMS.txt asset', () async {
+    final service = UpdateCheckService(
+      currentBuildNumber: 10,
+      client: MockClient((_) async => http.Response(releaseJson(tag: 'build-999999', assets: [{'name': 'little-bunny-$assetSuffix', 'url': 'https://example.invalid/asset'}]), 200)),
+    );
+
+    final result = await service.check();
+
+    expect(result.sha256SumsUrl, isNull);
   });
 
   test('reports no update when the latest build is not newer than this one', () async {

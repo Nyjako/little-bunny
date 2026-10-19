@@ -25,11 +25,33 @@ android {
         versionName = flutter.versionName
     }
 
+    // A stable release signing key (env-var-driven, see below) so one
+    // release's .apk can upgrade-install over the previous one -- without
+    // this, every CI run signs with a freshly auto-generated debug
+    // keystore (a new one each time, since none is committed/cached), so
+    // every release has a DIFFERENT signing certificate and Android
+    // refuses to install it over whatever's already on the phone ("App not
+    // installed as package appears to be invalid"/conflicts with an
+    // existing package), which looks like the autoupdate silently doing
+    // nothing. Falls back to the debug keystore when the env vars aren't
+    // set (every local/dev build, `flutter run --release` included) --
+    // only release.yml's CI build ever sets them, via a keystore stored as
+    // a GitHub secret.
+    val releaseKeystorePath = System.getenv("BUNNY_ANDROID_KEYSTORE_PATH")
+    signingConfigs {
+        if (releaseKeystorePath != null) {
+            create("release") {
+                storeFile = file(releaseKeystorePath)
+                storePassword = System.getenv("BUNNY_ANDROID_KEYSTORE_PASSWORD")
+                keyAlias = System.getenv("BUNNY_ANDROID_KEY_ALIAS")
+                keyPassword = System.getenv("BUNNY_ANDROID_KEY_PASSWORD")
+            }
+        }
+    }
+
     buildTypes {
         release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = signingConfigs.getByName(if (releaseKeystorePath != null) "release" else "debug")
         }
     }
 }

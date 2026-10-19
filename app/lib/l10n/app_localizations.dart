@@ -1162,6 +1162,54 @@ abstract class AppLocalizations {
   /// **'Manage app lock'**
   String get settingsAppLockEntry;
 
+  /// No description provided for @settingsAboutSection.
+  ///
+  /// In en, this message translates to:
+  /// **'About'**
+  String get settingsAboutSection;
+
+  /// No description provided for @settingsAboutEntry.
+  ///
+  /// In en, this message translates to:
+  /// **'About LittleBunny'**
+  String get settingsAboutEntry;
+
+  /// No description provided for @aboutScreenTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'About'**
+  String get aboutScreenTitle;
+
+  /// No description provided for @aboutAppDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'An e621 + Inkbunny viewer and manager: saved searches that update on a schedule, mark unseen posts, mass like/favorite/download, comment, and keep everything in sync across devices -- with a fully offline standalone mode too.'**
+  String get aboutAppDescription;
+
+  /// No description provided for @aboutBuildNumber.
+  ///
+  /// In en, this message translates to:
+  /// **'Build {buildNumber}'**
+  String aboutBuildNumber(int buildNumber);
+
+  /// No description provided for @aboutLocalBuild.
+  ///
+  /// In en, this message translates to:
+  /// **'Local build'**
+  String get aboutLocalBuild;
+
+  /// No description provided for @aboutSourceLink.
+  ///
+  /// In en, this message translates to:
+  /// **'View source on GitHub'**
+  String get aboutSourceLink;
+
+  /// No description provided for @aboutLicensesEntry.
+  ///
+  /// In en, this message translates to:
+  /// **'Open source licenses'**
+  String get aboutLicensesEntry;
+
   /// No description provided for @settingsSyncSection.
   ///
   /// In en, this message translates to:

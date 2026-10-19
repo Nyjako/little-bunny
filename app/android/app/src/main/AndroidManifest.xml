@@ -8,6 +8,12 @@
          this permission at the kernel level via app UID group membership,
          not just at the Dalvik/ART layer. -->
     <uses-permission android:name="android.permission.INTERNET"/>
+    <!-- Required to launch the system package installer for a downloaded
+         update .apk (UpdateApplyService._applyAndroid, M23) -- without this,
+         Android 8.0+ (API 26+) blocks the install intent outright instead
+         of showing the installer, which looks exactly like "nothing
+         happened" after tapping the downloaded file. -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES"/>
     <application
         android:label="little_bunny"
         android:name="${applicationName}"

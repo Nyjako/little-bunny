@@ -101,6 +101,36 @@ void main() {
     expect(find.text('App lock'), findsOneWidget);
   });
 
+  testWidgets('tapping the about entry opens AboutScreen (M27)', (WidgetTester tester) async {
+    await tester.pumpWidget(
+      wrapWithLocalization(
+        SettingsScreen(
+          repository: FakeBunnyRepository(),
+          themeSettingsStore: const ThemeSettingsStore(),
+          lockService: AppLockService(FakeSecretStore()),
+          downloadSettingsStore: const DownloadSettingsStore(),
+          displaySettingsStore: const DisplaySettingsStore(),
+          settingsStore: settingsStore(),
+          onThemeModeChanged: (_) {},
+          onRepositoryConfigured: (_) {},
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.dragUntilVisible(find.text('About LittleBunny'), find.byType(ListView), const Offset(0, -300));
+    await tester.tap(find.text('About LittleBunny'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('LittleBunny'), findsOneWidget);
+    expect(find.text('Open source licenses'), findsOneWidget);
+
+    await tester.tap(find.text('Open source licenses'));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(LicensePage), findsOneWidget);
+  });
+
   testWidgets('shows the persisted default sync interval', (WidgetTester tester) async {
     final repository = FakeBunnyRepository()..defaultSyncIntervalHours = 48;
 
