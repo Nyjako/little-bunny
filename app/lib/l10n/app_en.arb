@@ -172,6 +172,15 @@
     "placeholders": {"poolId": {"type": "int"}}
   },
 
+  "postGridPoolInfoTooltip": "Pool info",
+  "postGridPoolInfoTitle": "Pool information",
+  "postGridPoolInfoPostCount": "{count} posts",
+  "@postGridPoolInfoPostCount": {
+    "placeholders": {"count": {"type": "int"}}
+  },
+  "postGridPoolInfoNoDescription": "No description.",
+  "postGridPoolInfoCloseButton": "Close",
+
   "postDetailScreenTitle": "Post",
   "postDetailUnsupportedFormat": "This file format ({extension}) isn't supported yet",
   "@postDetailUnsupportedFormat": {

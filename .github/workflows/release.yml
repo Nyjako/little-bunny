@@ -34,6 +34,26 @@ jobs:
           name: bunny-server-linux-x64
           path: bunny-server-linux-x64.tar.gz
 
+  # ubuntu-latest's glibc is newer than Ubuntu 22.04's -- a binary built
+  # there won't run on a 22.04 server (undefined GLIBC_2.3x symbol errors).
+  # This is a separate, older-glibc build for that case; named so it does
+  # NOT end in "linux-x64.tar.gz" (bunny_updater_scheduler_tick's own
+  # asset-suffix match, server/src/updater.c) -- the self-updater must keep
+  # matching only the ubuntu-latest asset above, never silently switch a
+  # 22.04 server onto the newer-glibc build via autoupdate.
+  build-server-linux-ubuntu2204:
+    needs: test
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - run: sudo apt-get update -qq && sudo apt-get install -y --no-install-recommends build-essential cmake libssl-dev
+      - run: make release BUNNY_BUILD_NUMBER=${{ github.run_number }}
+      - run: tar -C build-release/server -czf bunny-server-linux-x64-ubuntu22.tar.gz bunny_server
+      - uses: actions/upload-artifact@v4
+        with:
+          name: bunny-server-linux-x64-ubuntu22
+          path: bunny-server-linux-x64-ubuntu22.tar.gz
+
   build-app-linux:
     needs: test
     runs-on: ubuntu-latest
@@ -153,6 +173,7 @@ jobs:
     needs:
       [
         build-server-linux,
+        build-server-linux-ubuntu2204,
         build-app-linux,
         build-app-android,
         build-windows,

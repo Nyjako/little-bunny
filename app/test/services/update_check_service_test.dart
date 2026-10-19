@@ -25,6 +25,7 @@ void main() {
 
   test('reports an update when the latest build number is higher, with the matching asset URL', () async {
     final service = UpdateCheckService(
+      currentBuildNumber: 10,
       client: MockClient((_) async => http.Response(releaseJson(tag: 'build-999999', assets: [{'name': 'little-bunny-$assetSuffix', 'url': 'https://example.invalid/asset'}], body: 'Notes here'), 200)),
     );
 
@@ -38,9 +39,18 @@ void main() {
   });
 
   test('reports no update when the latest build is not newer than this one', () async {
-    // appBuildNumber is 0 in a test run (no --dart-define) -- build-0 is
-    // "equal", never "newer".
-    final service = UpdateCheckService(client: MockClient((_) async => http.Response(releaseJson(tag: 'build-0'), 200)));
+    final service = UpdateCheckService(currentBuildNumber: 10, client: MockClient((_) async => http.Response(releaseJson(tag: 'build-10'), 200)));
+
+    final result = await service.check();
+
+    expect(result.updateAvailable, isFalse);
+  });
+
+  test('reports no update for a local/dev build (currentBuildNumber 0) no matter how high the latest release is', () async {
+    // appBuildNumber defaults to 0 in a test run (no --dart-define) -- a
+    // local/dev build is never treated as "outdated" relative to any real
+    // release, see app_version.dart.
+    final service = UpdateCheckService(client: MockClient((_) async => http.Response(releaseJson(tag: 'build-999999'), 200)));
 
     final result = await service.check();
 
