@@ -169,6 +169,13 @@ abstract interface class BunnyRepository {
 
   Future<void> removeBlacklistTag(BunnySite site, String tag);
 
+  /// Pulls the configured e621 account's own blacklist (My Account ->
+  /// Blacklisted Tags on e621.net) and imports every single-tag entry not
+  /// already present locally (M27). Read-only on e621's side. Requires an
+  /// e621 account to already be configured -- throws [BunnyRepositoryException]
+  /// otherwise, same as any other e621 call with no usable account.
+  Future<BunnyBlacklistSyncStats> syncE621Blacklist();
+
   /// Fetches a single post live from its site and caches it, without
   /// requiring it to already be linked to any saved search -- used when a
   /// parent/child/pool chip points at a post that was never independently

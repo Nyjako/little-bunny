@@ -36,6 +36,12 @@ static const char *E621_POOL_FIXTURE = "{\"id\":5,\"name\":\"a_test_pool\",\"des
 
 static const char *E621_COMMENTS_LIST_FIXTURE = "[{\"id\":1,\"post_id\":42,\"creator_name\":\"someone\",\"body\":\"Nice pic!\",\"created_at\":\"2024-01-02T00:00:00.000-05:00\"}]";
 
+/* One entry already locally blacklisted ("young"), one brand new
+ * ("brand_new"), and one multi-tag "AND" line the local blacklist can't
+ * represent yet ("rating:e young") -- exercises all three outcomes of
+ * bunny_core_sync_e621_blacklist in a single fetch. */
+static const char *E621_USER_PROFILE_FIXTURE = "{\"id\":1,\"name\":\"tester\",\"blacklisted_tags\":\"young\\nbrand_new\\nrating:e young\"}";
+
 static bunny_http_result_t fake_e621_send(void *user_data, const bunny_http_request_t *request, bunny_http_response_t *out_response)
 {
     (void)user_data;
@@ -44,6 +50,8 @@ static bunny_http_result_t fake_e621_send(void *user_data, const bunny_http_requ
         body = E621_SINGLE_POST_FIXTURE;
     } else if (strstr(request->url, "/pools/5.json")) {
         body = E621_POOL_FIXTURE;
+    } else if (strstr(request->url, "/users/tester.json")) {
+        body = E621_USER_PROFILE_FIXTURE;
     } else if (strstr(request->url, "/comments.json") && request->method == BUNNY_HTTP_GET) {
         body = E621_COMMENTS_LIST_FIXTURE;
     }
@@ -583,6 +591,36 @@ void test_blacklist_add_list_remove(void)
     status = do_request("GET", "/blacklist?site=e621", NULL, &response, true, NULL);
     TEST_ASSERT_EQUAL(200, status);
     TEST_ASSERT_EQUAL_STRING("[]", response.data);
+    free(response.data);
+}
+
+void test_blacklist_e621_sync_imports_new_tags_and_skips_multi_tag_lines(void)
+{
+    response_buffer_t response = {0};
+
+    long status = do_request("POST", "/accounts", "{\"site\":\"e621\",\"username\":\"tester\",\"secret\":\"testkey\"}", &response, true, NULL);
+    TEST_ASSERT_EQUAL(200, status);
+    free(response.data);
+    memset(&response, 0, sizeof(response));
+
+    status = do_request("POST", "/blacklist", "{\"site\":\"e621\",\"tag\":\"young\"}", &response, true, NULL);
+    TEST_ASSERT_EQUAL(200, status);
+    free(response.data);
+    memset(&response, 0, sizeof(response));
+
+    status = do_request("POST", "/blacklist/e621/sync", NULL, &response, true, NULL);
+    TEST_ASSERT_EQUAL(200, status);
+    TEST_ASSERT_NOT_NULL(strstr(response.data, "\"added\":1"));
+    TEST_ASSERT_NOT_NULL(strstr(response.data, "\"already_present\":1"));
+    TEST_ASSERT_NOT_NULL(strstr(response.data, "\"skipped_multi_tag\":1"));
+    free(response.data);
+    memset(&response, 0, sizeof(response));
+
+    status = do_request("GET", "/blacklist?site=e621", NULL, &response, true, NULL);
+    TEST_ASSERT_EQUAL(200, status);
+    TEST_ASSERT_NOT_NULL(strstr(response.data, "\"young\""));
+    TEST_ASSERT_NOT_NULL(strstr(response.data, "\"brand_new\""));
+    TEST_ASSERT_NULL(strstr(response.data, "rating:e young"));
     free(response.data);
 }
 
@@ -1127,6 +1165,7 @@ int main(void)
     RUN_TEST(test_full_account_search_sync_favorite_flow);
     RUN_TEST(test_sync_single_search_forces_even_when_not_due);
     RUN_TEST(test_blacklist_add_list_remove);
+    RUN_TEST(test_blacklist_e621_sync_imports_new_tags_and_skips_multi_tag_lines);
     RUN_TEST(test_search_pin_and_unpin);
     RUN_TEST(test_group_crud_and_assign_search);
     RUN_TEST(test_search_touch_viewed);

@@ -195,6 +195,28 @@ bunny_core_result_t bunny_core_blacklist_list(bunny_core_t *core, bunny_db_site_
 bunny_core_result_t bunny_core_blacklist_add(bunny_core_t *core, bunny_db_site_t site, const char *tag);
 bunny_core_result_t bunny_core_blacklist_remove(bunny_core_t *core, bunny_db_site_t site, const char *tag);
 
+typedef struct
+{
+    int added;             /* new single-tag entries imported */
+    int already_present;   /* entries that matched an existing local tag */
+    int skipped_multi_tag; /* e621 "AND" lines (e.g. "rating:e young") -- not yet a local blacklist concept */
+} bunny_core_blacklist_sync_stats_t;
+
+/* Pulls the e621 account's own blacklist (My Account -> Blacklisted Tags on
+ * e621.net, see tools/e621_blacklist_experiment/e621_blacklist.py for the
+ * API this mirrors) and imports every single-tag line that isn't already
+ * present locally. Read-only on e621's side -- never writes anything back
+ * to the site. Requires an e621 account to already be configured
+ * (bunny_core_account_set), since e621 only returns blacklisted_tags when
+ * authenticated as that same account -- returns BUNNY_CORE_ERR_SITE
+ * otherwise (same as any other e621 call with no usable client). Lines with
+ * more than one space-separated tag are e621's "AND" groups (match only
+ * when every tag on that line matches a post); the local blacklist has no
+ * such concept yet, so those are skipped and counted separately in
+ * out_stats rather than silently dropped or misinterpreted as one literal
+ * (space-containing) tag. */
+bunny_core_result_t bunny_core_sync_e621_blacklist(bunny_core_t *core, bunny_core_blacklist_sync_stats_t *out_stats);
+
 /* Fetches a single post live from its site and caches it (upserting into the
  * local post cache exactly like a sync pass would for one post), without
  * requiring it to already be linked to any saved search. Used when a

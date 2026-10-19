@@ -373,3 +373,19 @@ class BunnyQueueStats {
     required this.actionsFailed,
   });
 }
+
+/// Mirrors `bunny_core_blacklist_sync_stats_t` -- the result of pulling the
+/// configured e621 account's own blacklist and importing new single-tag
+/// entries (M27). [skippedMultiTag] counts e621 "AND" lines (e.g.
+/// "rating:e young") the local blacklist has no concept of yet.
+class BunnyBlacklistSyncStats {
+  final int added;
+  final int alreadyPresent;
+  final int skippedMultiTag;
+
+  const BunnyBlacklistSyncStats({
+    required this.added,
+    required this.alreadyPresent,
+    required this.skippedMultiTag,
+  });
+}

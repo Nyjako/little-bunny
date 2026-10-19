@@ -1444,6 +1444,28 @@ abstract class AppLocalizations {
   /// **'Add tag'**
   String get settingsBlacklistAddLabel;
 
+  /// No description provided for @settingsBlacklistSyncE621Button.
+  ///
+  /// In en, this message translates to:
+  /// **'Sync from e621'**
+  String get settingsBlacklistSyncE621Button;
+
+  /// No description provided for @settingsBlacklistSyncE621Result.
+  ///
+  /// In en, this message translates to:
+  /// **'Added {added}, {alreadyPresent} already present, skipped {skippedMultiTag} multi-tag rule(s)'**
+  String settingsBlacklistSyncE621Result(
+    int added,
+    int alreadyPresent,
+    int skippedMultiTag,
+  );
+
+  /// No description provided for @settingsBlacklistSyncE621Failed.
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t sync from e621 -- check that an e621 account is configured'**
+  String get settingsBlacklistSyncE621Failed;
+
   /// No description provided for @postDetailDownloadTooltip.
   ///
   /// In en, this message translates to:

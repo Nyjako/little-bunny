@@ -407,6 +407,70 @@ void main() {
     expect(await repository.getBlacklist(BunnySite.inkbunny), isEmpty);
   });
 
+  testWidgets('"Sync from e621" pulls the blacklist and shows a result snackbar (M27)', (WidgetTester tester) async {
+    final repository = FakeBunnyRepository();
+    repository.syncE621BlacklistResult = const BunnyBlacklistSyncStats(added: 2, alreadyPresent: 1, skippedMultiTag: 1);
+    repository.blacklistBySite[BunnySite.e621] = {'brand_new', 'another_new'};
+
+    await tester.pumpWidget(
+      wrapWithLocalization(
+        SettingsScreen(
+          repository: repository,
+          themeSettingsStore: const ThemeSettingsStore(),
+          lockService: AppLockService(FakeSecretStore()),
+          downloadSettingsStore: const DownloadSettingsStore(),
+          displaySettingsStore: const DisplaySettingsStore(),
+          settingsStore: settingsStore(),
+          onThemeModeChanged: (_) {},
+          onThemeColorChanged: (_) {},
+          onAmoledChanged: (_) {},
+          onRepositoryConfigured: (_) {},
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.dragUntilVisible(find.text('Sync from e621'), find.byType(ListView), const Offset(0, -200));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Sync from e621'));
+    await tester.pumpAndSettle();
+
+    expect(repository.syncE621BlacklistCallCount, 1);
+    expect(find.text('Added 2, 1 already present, skipped 1 multi-tag rule(s)'), findsOneWidget);
+    expect(find.text('brand_new'), findsOneWidget);
+    expect(find.text('another_new'), findsOneWidget);
+  });
+
+  testWidgets('"Sync from e621" is hidden on the Inkbunny blacklist tab', (WidgetTester tester) async {
+    final repository = FakeBunnyRepository();
+
+    await tester.pumpWidget(
+      wrapWithLocalization(
+        SettingsScreen(
+          repository: repository,
+          themeSettingsStore: const ThemeSettingsStore(),
+          lockService: AppLockService(FakeSecretStore()),
+          downloadSettingsStore: const DownloadSettingsStore(),
+          displaySettingsStore: const DisplaySettingsStore(),
+          settingsStore: settingsStore(),
+          onThemeModeChanged: (_) {},
+          onThemeColorChanged: (_) {},
+          onAmoledChanged: (_) {},
+          onRepositoryConfigured: (_) {},
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.dragUntilVisible(find.text('Add tag'), find.byType(ListView), const Offset(0, -200));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Inkbunny').last);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Sync from e621'), findsNothing);
+  });
+
   testWidgets('Connection section shows the persisted mode (M15)', (WidgetTester tester) async {
     final store = settingsStore();
     await store.saveStandalone();

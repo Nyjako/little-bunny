@@ -79,6 +79,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   BunnySite _blacklistSite = BunnySite.e621;
   List<String> _blacklistTags = [];
   final _blacklistTagController = TextEditingController();
+  bool _syncingE621Blacklist = false;
 
   @override
   void initState() {
@@ -227,6 +228,28 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Future<void> _removeBlacklistTag(String tag) async {
     await widget.repository.removeBlacklistTag(_blacklistSite, tag);
     await _loadBlacklist();
+  }
+
+  Future<void> _syncE621Blacklist(AppLocalizations l10n) async {
+    setState(() => _syncingE621Blacklist = true);
+    try {
+      final stats = await widget.repository.syncE621Blacklist();
+      await _loadBlacklist();
+      if (!mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(l10n.settingsBlacklistSyncE621Result(stats.added, stats.alreadyPresent, stats.skippedMultiTag))));
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(l10n.settingsBlacklistSyncE621Failed)));
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _syncingE621Blacklist = false);
+      }
+    }
   }
 
   Future<void> _exportSearches(AppLocalizations l10n) async {
@@ -474,6 +497,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
             selected: {_blacklistSite},
             onSelectionChanged: (selection) => _setBlacklistSite(selection.first),
           ),
+          if (_blacklistSite == BunnySite.e621) ...[
+            const SizedBox(height: 8),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: TextButton.icon(
+                onPressed: _syncingE621Blacklist ? null : () => _syncE621Blacklist(l10n),
+                icon: _syncingE621Blacklist ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.sync),
+                label: Text(l10n.settingsBlacklistSyncE621Button),
+              ),
+            ),
+          ],
           const SizedBox(height: 8),
           if (_blacklistTags.isEmpty)
             Padding(padding: const EdgeInsets.symmetric(vertical: 4), child: Text(l10n.settingsBlacklistEmpty))

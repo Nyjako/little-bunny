@@ -317,6 +317,23 @@ class FakeBunnyRepository implements BunnyRepository {
     blacklistBySite[site]?.remove(tag);
   }
 
+  int syncE621BlacklistCallCount = 0;
+
+  /// Result returned by [syncE621Blacklist]; set this to simulate a sync
+  /// outcome. Throws [syncE621BlacklistError] instead, if set (simulates no
+  /// e621 account configured).
+  BunnyBlacklistSyncStats syncE621BlacklistResult = const BunnyBlacklistSyncStats(added: 0, alreadyPresent: 0, skippedMultiTag: 0);
+  Object? syncE621BlacklistError;
+
+  @override
+  Future<BunnyBlacklistSyncStats> syncE621Blacklist() async {
+    syncE621BlacklistCallCount++;
+    if (syncE621BlacklistError != null) {
+      throw syncE621BlacklistError!;
+    }
+    return syncE621BlacklistResult;
+  }
+
   @override
   Future<int> fetchPost(BunnySite site, int externalId) async {
     final key = '${site.toWireString()}:$externalId';

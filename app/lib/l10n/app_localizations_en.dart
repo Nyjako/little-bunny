@@ -747,6 +747,22 @@ class AppLocalizationsEn extends AppLocalizations {
   String get settingsBlacklistAddLabel => 'Add tag';
 
   @override
+  String get settingsBlacklistSyncE621Button => 'Sync from e621';
+
+  @override
+  String settingsBlacklistSyncE621Result(
+    int added,
+    int alreadyPresent,
+    int skippedMultiTag,
+  ) {
+    return 'Added $added, $alreadyPresent already present, skipped $skippedMultiTag multi-tag rule(s)';
+  }
+
+  @override
+  String get settingsBlacklistSyncE621Failed =>
+      'Couldn\'t sync from e621 -- check that an e621 account is configured';
+
+  @override
   String get postDetailDownloadTooltip => 'Download';
 
   @override
