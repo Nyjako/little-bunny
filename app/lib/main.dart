@@ -66,15 +66,18 @@ class _LittleBunnyAppState extends State<LittleBunnyApp> {
   BunnyRepository? _repository;
   bool _loading = true;
   bool _locked = false;
-  // Instant, sensible default (matches ThemeSettingsStore's own default) so
-  // the very first frame doesn't flash light before the real value loads.
+  // Instant, sensible defaults (match ThemeSettingsStore's own defaults) so
+  // the very first frame doesn't flash the wrong theme before the real
+  // values load.
   ThemeMode _themeMode = ThemeMode.dark;
+  ThemeColorOption _themeColor = ThemeColorOption.purple;
+  bool _amoled = false;
 
   @override
   void initState() {
     super.initState();
     _loadPersistedConfig();
-    _loadThemeMode();
+    _loadThemeSettings();
   }
 
   Future<void> _loadPersistedConfig() async {
@@ -97,12 +100,18 @@ class _LittleBunnyAppState extends State<LittleBunnyApp> {
     });
   }
 
-  Future<void> _loadThemeMode() async {
+  Future<void> _loadThemeSettings() async {
     final mode = await widget.themeSettingsStore.load();
+    final color = await widget.themeSettingsStore.loadColor();
+    final amoled = await widget.themeSettingsStore.loadAmoled();
     if (!mounted) {
       return;
     }
-    setState(() => _themeMode = mode);
+    setState(() {
+      _themeMode = mode;
+      _themeColor = color;
+      _amoled = amoled;
+    });
   }
 
   Future<void> _onConfigured(BunnyRepository repository) async {
@@ -145,8 +154,27 @@ class _LittleBunnyAppState extends State<LittleBunnyApp> {
           downloadSettingsStore: widget.downloadSettingsStore,
           settingsStore: widget.settingsStore,
           onThemeModeChanged: (mode) => setState(() => _themeMode = mode),
+          onThemeColorChanged: (color) => setState(() => _themeColor = color),
+          onAmoledChanged: (amoled) => setState(() => _amoled = amoled),
           onRepositoryConfigured: _onConfigured,
         ),
+      );
+    }
+
+    var darkColorScheme = ColorScheme.fromSeed(seedColor: _themeColor.seedColor, brightness: Brightness.dark);
+    if (_amoled) {
+      // "True black" (AMOLED) dark mode: every surface level flattened to
+      // pure black, which actually saves power on OLED/AMOLED screens
+      // (unlike Material 3's default dark surfaces, which are dark grey,
+      // not black) -- scaffoldBackgroundColor below covers the one surface
+      // ColorScheme itself doesn't drive.
+      darkColorScheme = darkColorScheme.copyWith(
+        surface: Colors.black,
+        surfaceContainerLowest: Colors.black,
+        surfaceContainerLow: Colors.black,
+        surfaceContainer: Colors.black,
+        surfaceContainerHigh: Colors.black,
+        surfaceContainerHighest: Colors.black,
       );
     }
 
@@ -154,8 +182,8 @@ class _LittleBunnyAppState extends State<LittleBunnyApp> {
       onGenerateTitle: (context) => AppLocalizations.of(context)!.appTitle,
       localizationsDelegates: const [AppLocalizations.delegate, GlobalMaterialLocalizations.delegate, GlobalWidgetsLocalizations.delegate, GlobalCupertinoLocalizations.delegate],
       supportedLocales: AppLocalizations.supportedLocales,
-      theme: ThemeData(colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple, brightness: Brightness.light)),
-      darkTheme: ThemeData(colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple, brightness: Brightness.dark)),
+      theme: ThemeData(colorScheme: ColorScheme.fromSeed(seedColor: _themeColor.seedColor, brightness: Brightness.light)),
+      darkTheme: ThemeData(colorScheme: darkColorScheme, scaffoldBackgroundColor: _amoled ? Colors.black : null),
       themeMode: _themeMode,
       home: home,
     );

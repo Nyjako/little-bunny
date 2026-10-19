@@ -37,6 +37,8 @@ void main() {
           displaySettingsStore: const DisplaySettingsStore(),
           settingsStore: settingsStore(),
           onThemeModeChanged: (_) {},
+          onThemeColorChanged: (_) {},
+          onAmoledChanged: (_) {},
           onRepositoryConfigured: (_) {},
         ),
       ),
@@ -61,6 +63,8 @@ void main() {
           displaySettingsStore: const DisplaySettingsStore(),
           settingsStore: settingsStore(),
           onThemeModeChanged: (mode) => notified = mode,
+          onThemeColorChanged: (_) {},
+          onAmoledChanged: (_) {},
           onRepositoryConfigured: (_) {},
         ),
       ),
@@ -74,6 +78,40 @@ void main() {
     expect(await themeStore.load(), ThemeMode.light);
   });
 
+  testWidgets('picking a theme color and toggling AMOLED persists both and notifies the callbacks (M27)', (WidgetTester tester) async {
+    const themeStore = ThemeSettingsStore();
+    ThemeColorOption? notifiedColor;
+    bool? notifiedAmoled;
+
+    await tester.pumpWidget(
+      wrapWithLocalization(
+        SettingsScreen(
+          repository: FakeBunnyRepository(),
+          themeSettingsStore: themeStore,
+          lockService: AppLockService(FakeSecretStore()),
+          downloadSettingsStore: const DownloadSettingsStore(),
+          displaySettingsStore: const DisplaySettingsStore(),
+          settingsStore: settingsStore(),
+          onThemeModeChanged: (_) {},
+          onThemeColorChanged: (color) => notifiedColor = color,
+          onAmoledChanged: (amoled) => notifiedAmoled = amoled,
+          onRepositoryConfigured: (_) {},
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byTooltip('Blue'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('AMOLED (true black) dark mode'));
+    await tester.pumpAndSettle();
+
+    expect(notifiedColor, ThemeColorOption.blue);
+    expect(notifiedAmoled, isTrue);
+    expect(await themeStore.loadColor(), ThemeColorOption.blue);
+    expect(await themeStore.loadAmoled(), isTrue);
+  });
+
   testWidgets('tapping the app lock entry opens LockSetupScreen', (WidgetTester tester) async {
     await tester.pumpWidget(
       wrapWithLocalization(
@@ -85,6 +123,8 @@ void main() {
           displaySettingsStore: const DisplaySettingsStore(),
           settingsStore: settingsStore(),
           onThemeModeChanged: (_) {},
+          onThemeColorChanged: (_) {},
+          onAmoledChanged: (_) {},
           onRepositoryConfigured: (_) {},
         ),
       ),
@@ -112,6 +152,8 @@ void main() {
           displaySettingsStore: const DisplaySettingsStore(),
           settingsStore: settingsStore(),
           onThemeModeChanged: (_) {},
+          onThemeColorChanged: (_) {},
+          onAmoledChanged: (_) {},
           onRepositoryConfigured: (_) {},
         ),
       ),
@@ -144,6 +186,8 @@ void main() {
           displaySettingsStore: const DisplaySettingsStore(),
           settingsStore: settingsStore(),
           onThemeModeChanged: (_) {},
+          onThemeColorChanged: (_) {},
+          onAmoledChanged: (_) {},
           onRepositoryConfigured: (_) {},
         ),
       ),
@@ -166,6 +210,8 @@ void main() {
           downloadSettingsStore: const DownloadSettingsStore(),
           settingsStore: settingsStore(),
           onThemeModeChanged: (_) {},
+          onThemeColorChanged: (_) {},
+          onAmoledChanged: (_) {},
           onRepositoryConfigured: (_) {},
         ),
       ),
@@ -191,6 +237,8 @@ void main() {
           displaySettingsStore: const DisplaySettingsStore(),
           settingsStore: settingsStore(),
           onThemeModeChanged: (_) {},
+          onThemeColorChanged: (_) {},
+          onAmoledChanged: (_) {},
           onRepositoryConfigured: (_) {},
         ),
       ),
@@ -199,6 +247,10 @@ void main() {
 
     final button = tester.widget<SegmentedButton<PreviewQuality>>(find.byType(SegmentedButton<PreviewQuality>));
     expect(button.selected, {PreviewQuality.medium});
+    // The new color swatches + AMOLED switch (M27) push "Grid columns" past
+    // the initial render cache extent -- scroll it into view first, same
+    // reasoning as the About entry's own dragUntilVisible further up.
+    await tester.dragUntilVisible(find.widgetWithText(TextField, 'Grid columns'), find.byType(ListView), const Offset(0, -100));
     expect(tester.widget<TextField>(find.widgetWithText(TextField, 'Grid columns')).controller!.text, '4');
     expect(tester.widget<TextField>(find.widgetWithText(TextField, 'Images to preload (each direction)')).controller!.text, '5');
   });
@@ -216,6 +268,8 @@ void main() {
           displaySettingsStore: const DisplaySettingsStore(),
           settingsStore: settingsStore(),
           onThemeModeChanged: (_) {},
+          onThemeColorChanged: (_) {},
+          onAmoledChanged: (_) {},
           onRepositoryConfigured: (_) {},
         ),
       ),
@@ -250,6 +304,8 @@ void main() {
           displaySettingsStore: const DisplaySettingsStore(),
           settingsStore: settingsStore(),
           onThemeModeChanged: (_) {},
+          onThemeColorChanged: (_) {},
+          onAmoledChanged: (_) {},
           onRepositoryConfigured: (_) {},
         ),
       ),
@@ -278,6 +334,8 @@ void main() {
           displaySettingsStore: displayStore,
           settingsStore: settingsStore(),
           onThemeModeChanged: (_) {},
+          onThemeColorChanged: (_) {},
+          onAmoledChanged: (_) {},
           onRepositoryConfigured: (_) {},
         ),
       ),
@@ -286,6 +344,10 @@ void main() {
 
     await tester.tap(find.text('Medium'));
     await tester.pumpAndSettle();
+    // The new color swatches + AMOLED switch (M27) push "Grid columns" past
+    // the initial render cache extent -- scroll it into view first, same
+    // reasoning as the About entry's own dragUntilVisible further up.
+    await tester.dragUntilVisible(find.widgetWithText(TextField, 'Grid columns'), find.byType(ListView), const Offset(0, -100));
     await tester.enterText(find.widgetWithText(TextField, 'Grid columns'), '5');
     await tester.pump();
     await tester.enterText(find.widgetWithText(TextField, 'Images to preload (each direction)'), '7');
@@ -310,6 +372,8 @@ void main() {
           displaySettingsStore: const DisplaySettingsStore(),
           settingsStore: settingsStore(),
           onThemeModeChanged: (_) {},
+          onThemeColorChanged: (_) {},
+          onAmoledChanged: (_) {},
           onRepositoryConfigured: (_) {},
         ),
       ),
@@ -357,6 +421,8 @@ void main() {
           displaySettingsStore: const DisplaySettingsStore(),
           settingsStore: store,
           onThemeModeChanged: (_) {},
+          onThemeColorChanged: (_) {},
+          onAmoledChanged: (_) {},
           onRepositoryConfigured: (_) {},
         ),
       ),
@@ -380,6 +446,8 @@ void main() {
           displaySettingsStore: const DisplaySettingsStore(),
           settingsStore: store,
           onThemeModeChanged: (_) {},
+          onThemeColorChanged: (_) {},
+          onAmoledChanged: (_) {},
           onRepositoryConfigured: (_) {},
         ),
       ),

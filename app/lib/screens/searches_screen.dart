@@ -31,6 +31,8 @@ class SearchesScreen extends StatefulWidget {
   final DownloadSettingsStore downloadSettingsStore;
   final RepositorySettingsStore settingsStore;
   final ValueChanged<ThemeMode> onThemeModeChanged;
+  final ValueChanged<ThemeColorOption> onThemeColorChanged;
+  final ValueChanged<bool> onAmoledChanged;
   final ValueChanged<BunnyRepository> onRepositoryConfigured;
 
   const SearchesScreen({
@@ -41,6 +43,8 @@ class SearchesScreen extends StatefulWidget {
     required this.downloadSettingsStore,
     required this.settingsStore,
     required this.onThemeModeChanged,
+    required this.onThemeColorChanged,
+    required this.onAmoledChanged,
     required this.onRepositoryConfigured,
   });
 
@@ -600,6 +604,8 @@ class _SearchesScreenState extends State<SearchesScreen> with SingleTickerProvid
                     downloadSettingsStore: widget.downloadSettingsStore,
                     settingsStore: widget.settingsStore,
                     onThemeModeChanged: widget.onThemeModeChanged,
+                    onThemeColorChanged: widget.onThemeColorChanged,
+                    onAmoledChanged: widget.onAmoledChanged,
                     onRepositoryConfigured: widget.onRepositoryConfigured,
                   ),
                 ),

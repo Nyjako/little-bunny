@@ -582,6 +582,33 @@ class AppLocalizationsEn extends AppLocalizations {
   String get settingsThemeSystem => 'System';
 
   @override
+  String get settingsThemeColorLabel => 'Color';
+
+  @override
+  String get settingsThemeColorPurple => 'Purple';
+
+  @override
+  String get settingsThemeColorBlue => 'Blue';
+
+  @override
+  String get settingsThemeColorGreen => 'Green';
+
+  @override
+  String get settingsThemeColorOrange => 'Orange';
+
+  @override
+  String get settingsThemeColorRed => 'Red';
+
+  @override
+  String get settingsThemeColorTeal => 'Teal';
+
+  @override
+  String get settingsThemeColorPink => 'Pink';
+
+  @override
+  String get settingsAmoledLabel => 'AMOLED (true black) dark mode';
+
+  @override
   String get settingsAppLockSection => 'App lock';
 
   @override

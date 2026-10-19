@@ -1150,6 +1150,60 @@ abstract class AppLocalizations {
   /// **'System'**
   String get settingsThemeSystem;
 
+  /// No description provided for @settingsThemeColorLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Color'**
+  String get settingsThemeColorLabel;
+
+  /// No description provided for @settingsThemeColorPurple.
+  ///
+  /// In en, this message translates to:
+  /// **'Purple'**
+  String get settingsThemeColorPurple;
+
+  /// No description provided for @settingsThemeColorBlue.
+  ///
+  /// In en, this message translates to:
+  /// **'Blue'**
+  String get settingsThemeColorBlue;
+
+  /// No description provided for @settingsThemeColorGreen.
+  ///
+  /// In en, this message translates to:
+  /// **'Green'**
+  String get settingsThemeColorGreen;
+
+  /// No description provided for @settingsThemeColorOrange.
+  ///
+  /// In en, this message translates to:
+  /// **'Orange'**
+  String get settingsThemeColorOrange;
+
+  /// No description provided for @settingsThemeColorRed.
+  ///
+  /// In en, this message translates to:
+  /// **'Red'**
+  String get settingsThemeColorRed;
+
+  /// No description provided for @settingsThemeColorTeal.
+  ///
+  /// In en, this message translates to:
+  /// **'Teal'**
+  String get settingsThemeColorTeal;
+
+  /// No description provided for @settingsThemeColorPink.
+  ///
+  /// In en, this message translates to:
+  /// **'Pink'**
+  String get settingsThemeColorPink;
+
+  /// No description provided for @settingsAmoledLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'AMOLED (true black) dark mode'**
+  String get settingsAmoledLabel;
+
   /// No description provided for @settingsAppLockSection.
   ///
   /// In en, this message translates to:

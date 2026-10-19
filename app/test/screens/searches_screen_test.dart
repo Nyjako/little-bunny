@@ -28,6 +28,8 @@ Widget _wrap(FakeBunnyRepository repository) => wrapWithLocalization(
       downloadSettingsStore: const DownloadSettingsStore(),
       settingsStore: RepositorySettingsStore(FakeSecretStore()),
       onThemeModeChanged: (_) {},
+      onThemeColorChanged: (_) {},
+      onAmoledChanged: (_) {},
       onRepositoryConfigured: (_) {},
     ),
   ),
