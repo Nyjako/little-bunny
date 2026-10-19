@@ -801,8 +801,17 @@ this file is the single source of truth for "what's done" across sessions.
   cover: tapping favorite (queues the right action, drains the queue, flips the icon, bumps
   `favCount`), tapping up/down vote (queues the vote, bumps `score`), and vote buttons being
   disabled -- but not hidden -- on an Inkbunny post. This was the last **M8.5** sub-milestone
-  that didn't need the user present; only **M8.5.2** (the Inkbunny search 403, a live-debugging
-  step against a real account) remains before M8.5 as a whole is done.
+  that didn't need the user present; only **M8.5.2** (below) remains before M8.5 as a whole
+  is done.
+
+- [ ] **M8.5.2 — Inkbunny search 403s (live-debugging step, requires a real account)**
+  The one M8.5 sub-item that couldn't be resolved without the user present to test against
+  a real logged-in Inkbunny account -- until a 2026-10-19 roadmap/PR audit this only
+  existed as a dangling prose reference inside M8.5.14's own entry above, with no heading
+  of its own. Inkbunny's search endpoint 403s under some as-yet-unconfirmed condition,
+  distinct from the already-fixed thumbnail 403 (M8.5.1). Confirmed still outstanding as of
+  that audit (no later PR addresses an Inkbunny search 403 specifically) -- **M8.5 stays
+  unchecked** until this is actually resolved, not because anything else in it is incomplete.
 
 - [x] **M9 — Actions & downloads**
   Single + mass favorite/download, commenting, and a download manager with checksum
@@ -1672,6 +1681,26 @@ this file is the single source of truth for "what's done" across sessions.
     `setSearchPinned` after `createSearch`, since creation itself has no `pinned`/`groupId`
     parameters.
 
+- [x] **M22 — Gallery-style post navigation + pool reading order (added retroactively)**
+  Only ever referenced in passing by later milestones' own text/code comments (e.g. M26's
+  "the old heuristic (M22) is gone") -- added as its own entry in the same 2026-10-19
+  roadmap/PR audit that found M26.5's gap.
+  - **Gallery navigation** (PR #98, 2026-10-18): `PostDetailScreen` split into a thin outer
+    shell (owns a `PageController` over `siblingPosts`) and the actual per-post content
+    (`_PostDetailPage`) -- swipe, mouse-drag, or left/right arrow keys now move between
+    posts in the current search without leaving the detail view, same pattern
+    `FullScreenPostViewerScreen` (M8.5.9) already used between images; that screen gained
+    the same arrow-key handling. Mark-post-seen moved from per-post `initState` to the
+    outer shell's `initState` (once) + `onPageChanged` (thereafter), so `PageView`
+    pre-building the next page no longer marks it seen before the user actually swipes to
+    it. New shared `mouse_drag_scroll_behavior.dart` -- Flutter's default `ScrollBehavior`
+    excludes mouse from `dragDevices`, so click-drag did nothing on desktop before this.
+  - **Pool reading order** (PR #99, 2026-10-18): pools displayed oldest-to-newest ("reads
+    like a comic") instead of newest-first, via a client-side heuristic (reverse the list)
+    -- later found wrong whenever a pool's pages were uploaded out of sequence, and
+    replaced by M26's real server-side ordering from e621's own authoritative `post_ids`
+    array.
+
 - [x] **M23 — Autoupdates (server + app)**
   The server checks GitHub's own Releases API (not libgit2 -- release binaries live in
   GitHub's separate release-asset storage, never reachable via the git object database)
@@ -1804,20 +1833,72 @@ this file is the single source of truth for "what's done" across sessions.
     contention this same round of testing surfaced, which could make a concurrent
     markPostSeen call more likely to fail under load.
 
-- [ ] **M12 — Cross-platform polish**
+- [x] **M26.5 — Autoupdate hardening, About page, image preloading (retroactive)**
+  Added in a 2026-10-19 roadmap/PR audit -- real shipped work from the same session as
+  M26/M27 that had no roadmap entry at all. Chronologically sits between them.
+  - **Autoupdate fixes** (PR #105, #107, #109, 2026-10-19): local/dev builds (build
+    number 0) no longer falsely report an update available; a separate
+    `bunny-server-linux-x64-ubuntu22.tar.gz` release asset for older-glibc hosts; SHA256
+    checksum verification added to both the server's extractor and the app's apply flow;
+    changelog links in the update dialog are now tappable/copyable; Linux/macOS "Update
+    failed" fixed (the apply step was overwriting its own running executable via
+    `File.copy()`, which the kernel rejects with `ETXTBSY` -- fixed via copy-to-temp-then-
+    rename); Android fixed two bugs, a missing `REQUEST_INSTALL_PACKAGES` permission and a
+    release-signing mismatch (PR #109 fixed an invalid XML comment inside PR #107's own
+    manifest change that had broken the Android release build in between).
+  - **About page** (PR #107): new `AboutScreen` -- version, short description, GitHub
+    link, and `showLicensePage` for every vendored library's license.
+  - **Critical: Android fresh-install hang** (PR #111/#113, 2026-10-19): build #22 hung
+    forever on a clean install, never reaching setup. Root cause:
+    `shared_preferences_android` 2.5.0's Pigeon JNI rewrite (flutter/flutter#153075) --
+    pinned back to 2.4.28 via `dependency_overrides`.
+  - **Changelog text readability** (PR #111): the update dialog's changelog body was
+    rendering at Flutter's internal debug-fallback text style (48px, "missing Material
+    ancestor") because `DefaultTextStyle.of(context)` was resolved against the wrong
+    (outer) `BuildContext` -- fixed by removing the manual style override entirely.
+  - **Image preloading** (PR #111): post detail and full-screen viewer both precache the
+    next/previous N images (`DisplaySettingsStore`-backed setting, default 3) via
+    `precacheImage`, so swiping doesn't wait on a fresh network fetch.
+  - **Inkbunny post-detail refresh** (PR #111): a different, earlier bug than M27's
+    `file_ext` fix -- Inkbunny's *search/listing* endpoint never returns
+    tags/dimensions/comment count at all (only a full per-submission fetch does), so
+    opening an Inkbunny post via a saved search showed almost nothing. Fixed by having
+    `PostDetailScreen` do a live `fetchPost`+`getPost` refresh on open for every post
+    (e621 posts already had full data from their search sync, so this is a no-op
+    improvement for them -- just keeps favorite/vote counts current, per the same
+    "update counts on view" ask M10 already covers).
+
+- [x] **M12 — Cross-platform polish**
   Responsive desktop/mobile layout, consistent theming pass, Windows app build, packaging.
+  Retroactively closed in a 2026-10-19 roadmap/PR audit -- originally left open-ended and
+  revisited piecemeal across many later milestones rather than as its own dedicated push,
+  so none of the PRs below mention "M12" by name; this entry collects them after the fact.
   - [x] **M12.1 — Android client build.** `fvm flutter build apk` now succeeds end-to-end
     (see M6.2/M7.4 entries above for the fix); `make app-android`/`make app-linux` added as
     convenience wrappers around the Flutter build commands.
-  - Still outstanding: a Windows build of the Flutter *app* itself, cross-compiled from
-    Linux — explicitly deferred, not attempted, after research found Flutter has no
-    official Linux→Windows cross-build support (even Dart's AOT `gen_snapshot.exe` can't
-    cross-compile for Windows from Linux — open `flutter/flutter` issue #110585 — and
-    dockcross has no x86_64 LLVM-MinGW Windows image to fit the only known third-party
-    workaround); responsive layout; theming pass; packaging. The separate Windows
-    cross-build of the *C server/libraries* via dockcross (`make windows`) is unrelated and
-    tracked by the `architecture.md` "Cross-compilation" section's own known gap, not by
-    this milestone.
+  - [x] **Windows app build.** The originally-stated blocker -- no official Flutter
+    Linux→Windows *cross*-compile path (`flutter/flutter` issue #110585; no dockcross
+    LLVM-MinGW Windows image) -- was sidestepped rather than solved as scoped: PRs #89-#95
+    (2026-10-15/16) fixed a run of MSVC-portability issues (the rate limiter, `bunny_core`'s
+    mutexes, remaining POSIX-only server symbols, a coroutine deprecation warning, FFI
+    link-order/WHOLEARCHIVE/missing-symbol issues) so the app and its native dependencies
+    compile natively on a real Windows toolchain/CI runner instead of cross-compiling from
+    Linux; PR #96 (2026-10-16) split out `little-bunny-app-windows-x64.zip` as its own
+    release asset, confirming a working build. If a Linux-hosted cross-build is ever
+    specifically wanted later, that's still a distinct, unsolved problem from what shipped
+    here.
+  - [x] **Responsive layout.** PR #51 (M9.6.6, "Desktop app bar compactness," 2026-10-05)
+    and PR #54 (M9.6.5's post detail screen redesign, wide/narrow split, 2026-10-06).
+  - [x] **Theming pass.** PR #22 ("Add dark-by-default theming and localization
+    scaffolding," 2026-09-29, previously missing its own roadmap entry entirely) and M27's
+    theme color picker + AMOLED true-black mode (PR #112, 2026-10-19).
+  - [x] **Packaging.** PR #78 (`make release-portable` for cross-distro deploys,
+    2026-10-13), PR #87 (GitHub Actions build+release automation, 2026-10-15), PR #96
+    (expanded release platform matrix, 2026-10-16), PR #100 (release packaging
+    consistency + `release-portable` ownership/clean fixes, 2026-10-18).
+  - The separate Windows cross-build of the *C server/libraries* via dockcross (`make
+    windows`) predates and is unrelated to this milestone either way -- tracked by
+    `architecture.md`'s own "Cross-compilation" section, not here.
 
 - [x] **M27 — Server pairing, Inkbunny image fix, heart favorites, favorites caching, blacklist sync**
   A batch of smaller features and fixes from a single session's worth of user feedback.
