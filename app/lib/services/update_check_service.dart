@@ -19,9 +19,14 @@ class UpdateCheckResult {
   /// asset; a release missing one (e.g. a still-in-progress CI run) is
   /// treated the same as no update at all.
   final String? downloadUrl;
+
+  /// The release's "SHA256SUMS.txt" asset URL, for verifying [downloadUrl]'s
+  /// integrity after downloading (UpdateApplyService) -- null for a release
+  /// built before this existed, in which case verification is skipped.
+  final String? sha256SumsUrl;
   final String? releaseNotes;
 
-  const UpdateCheckResult({required this.updateAvailable, required this.latestBuildNumber, this.tagName, this.downloadUrl, this.releaseNotes});
+  const UpdateCheckResult({required this.updateAvailable, required this.latestBuildNumber, this.tagName, this.downloadUrl, this.sha256SumsUrl, this.releaseNotes});
 
   static const none = UpdateCheckResult(updateAvailable: false, latestBuildNumber: 0);
 }
@@ -87,18 +92,30 @@ class UpdateCheckService {
 
       final assets = (json['assets'] as List<dynamic>?) ?? const [];
       String? downloadUrl;
+      String? sha256SumsUrl;
       for (final asset in assets) {
         final name = asset['name'] as String?;
-        if (name != null && name.endsWith(assetSuffix)) {
+        if (name == null) {
+          continue;
+        }
+        if (name.endsWith(assetSuffix)) {
           downloadUrl = asset['browser_download_url'] as String?;
-          break;
+        } else if (name == 'SHA256SUMS.txt') {
+          sha256SumsUrl = asset['browser_download_url'] as String?;
         }
       }
       if (downloadUrl == null) {
         return UpdateCheckResult.none;
       }
 
-      return UpdateCheckResult(updateAvailable: true, latestBuildNumber: latestBuildNumber, tagName: tagName, downloadUrl: downloadUrl, releaseNotes: json['body'] as String?);
+      return UpdateCheckResult(
+        updateAvailable: true,
+        latestBuildNumber: latestBuildNumber,
+        tagName: tagName,
+        downloadUrl: downloadUrl,
+        sha256SumsUrl: sha256SumsUrl,
+        releaseNotes: json['body'] as String?,
+      );
     } catch (_) {
       return UpdateCheckResult.none;
     } finally {

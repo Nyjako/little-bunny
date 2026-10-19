@@ -261,6 +261,18 @@
   "settingsThemeSystem": "System",
   "settingsAppLockSection": "App lock",
   "settingsAppLockEntry": "Manage app lock",
+  "settingsAboutSection": "About",
+  "settingsAboutEntry": "About LittleBunny",
+
+  "aboutScreenTitle": "About",
+  "aboutAppDescription": "An e621 + Inkbunny viewer and manager: saved searches that update on a schedule, mark unseen posts, mass like/favorite/download, comment, and keep everything in sync across devices -- with a fully offline standalone mode too.",
+  "aboutBuildNumber": "Build {buildNumber}",
+  "@aboutBuildNumber": {
+    "placeholders": {"buildNumber": {"type": "int"}}
+  },
+  "aboutLocalBuild": "Local build",
+  "aboutSourceLink": "View source on GitHub",
+  "aboutLicensesEntry": "Open source licenses",
   "settingsSyncSection": "Sync",
   "settingsDefaultIntervalLabel": "Default sync interval (hours)",
   "settingsDisplaySection": "Display",

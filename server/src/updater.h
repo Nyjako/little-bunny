@@ -21,10 +21,14 @@ typedef struct
 {
     bool update_available;
     int latest_build_number;
-    char *tag_name;      /* owned; e.g. "build-42" */
-    char *download_url;  /* owned; NULL if update_available is false, or the
-                           * release has no asset matching asset_name_suffix */
-    char *release_notes; /* owned; may be NULL (empty release body) */
+    char *tag_name;        /* owned; e.g. "build-42" */
+    char *download_url;    /* owned; NULL if update_available is false, or
+                             * the release has no asset matching
+                             * asset_name_suffix */
+    char *sha256_sums_url; /* owned; the release's "SHA256SUMS.txt" asset's
+                             * download URL, NULL if the release has none
+                             * (e.g. a release built before this existed) */
+    char *release_notes;   /* owned; may be NULL (empty release body) */
 } bunny_updater_check_result_t;
 
 void bunny_updater_check_result_free(bunny_updater_check_result_t *result);
@@ -50,6 +54,22 @@ bunny_http_result_t bunny_updater_check(const bunny_http_transport_t *transport,
  * body_len, not strlen) -- works for the .tar.gz asset itself, not just
  * JSON. */
 bunny_http_result_t bunny_updater_download_file(const bunny_http_transport_t *transport, const char *url, const char *user_agent, const char *dest_path);
+
+/* Downloads url's body as a NUL-terminated string (owned, caller frees) --
+ * for small text assets like SHA256SUMS.txt, never the multi-megabyte
+ * archive itself (see bunny_updater_download_file for that). NULL on any
+ * failure (network error or non-200 status). */
+char *bunny_updater_download_text(const bunny_http_transport_t *transport, const char *url, const char *user_agent);
+
+/* Hashes the file at path with SHA-256, writing the lowercase hex digest
+ * (64 chars + NUL) into out_hex. */
+bool bunny_updater_sha256_hex(const char *path, char out_hex[65]);
+
+/* Finds filename's expected digest in sums_text (the contents of a
+ * `sha256sum`-format file: lines of "<hex>  <filename>", optionally with a
+ * "*" before the filename for binary mode) and writes it (lowercase,
+ * 64 chars + NUL) into out_hex. False if filename isn't listed. */
+bool bunny_updater_find_sha256(const char *sums_text, const char *filename, char out_hex[65]);
 
 /* Extracts a .tar.gz archive into dest_dir (created if missing) by shelling
  * out to the system `tar` binary via fork/exec (never through a shell --

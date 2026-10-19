@@ -4,7 +4,9 @@
 #include <goblin/appdirs.h>
 #include <goblin/cstr.h>
 #include <goblin/fileio.h>
+#include <openssl/evp.h>
 
+#include <ctype.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -20,6 +22,7 @@
 
 #define BUNNY_UPDATE_CHECK_INTERVAL_SEC (24 * 60 * 60)
 #define BUNNY_RELEASE_TAG_PREFIX "build-"
+#define BUNNY_SHA256_SUMS_ASSET_NAME "SHA256SUMS.txt"
 
 void bunny_updater_check_result_free(bunny_updater_check_result_t *result)
 {
@@ -28,6 +31,7 @@ void bunny_updater_check_result_free(bunny_updater_check_result_t *result)
     }
     free(result->tag_name);
     free(result->download_url);
+    free(result->sha256_sums_url);
     free(result->release_notes);
     memset(result, 0, sizeof(*result));
 }
@@ -83,15 +87,16 @@ bool bunny_updater_parse_latest_release(const char *json, size_t json_len, int c
             if (!cJSON_IsString(name_item) || !name_item->valuestring) {
                 continue;
             }
-            size_t name_len = strlen(name_item->valuestring);
-            if (name_len < suffix_len || strcmp(name_item->valuestring + (name_len - suffix_len), asset_name_suffix) != 0) {
+            cJSON *url_item = cJSON_GetObjectItemCaseSensitive(asset, "browser_download_url");
+            if (!cJSON_IsString(url_item) || !url_item->valuestring) {
                 continue;
             }
-            cJSON *url_item = cJSON_GetObjectItemCaseSensitive(asset, "browser_download_url");
-            if (cJSON_IsString(url_item) && url_item->valuestring) {
+            size_t name_len = strlen(name_item->valuestring);
+            if (name_len >= suffix_len && strcmp(name_item->valuestring + (name_len - suffix_len), asset_name_suffix) == 0) {
                 out_result->download_url = goblin_copy_cstr(url_item->valuestring);
+            } else if (strcmp(name_item->valuestring, BUNNY_SHA256_SUMS_ASSET_NAME) == 0) {
+                out_result->sha256_sums_url = goblin_copy_cstr(url_item->valuestring);
             }
-            break;
         }
     }
 
@@ -177,6 +182,117 @@ bunny_http_result_t bunny_updater_download_file(const bunny_http_transport_t *tr
     fclose(f);
     bunny_http_response_free(&response);
     return written == expected_len ? BUNNY_HTTP_OK : BUNNY_HTTP_ERR_NETWORK;
+}
+
+char *bunny_updater_download_text(const bunny_http_transport_t *transport, const char *url, const char *user_agent)
+{
+    if (!transport || !url || !user_agent) {
+        return NULL;
+    }
+
+    bunny_http_header_t headers[] = {{"User-Agent", user_agent}};
+    bunny_http_request_t request = {
+        .method = BUNNY_HTTP_GET,
+        .url = url,
+        .headers = headers,
+        .header_count = 1,
+        .body = NULL,
+        .body_len = 0,
+    };
+
+    bunny_http_response_t response;
+    if (bunny_http_send(transport, &request, &response) != BUNNY_HTTP_OK) {
+        return NULL;
+    }
+    if (response.status != 200) {
+        bunny_http_response_free(&response);
+        return NULL;
+    }
+
+    char *text = malloc(response.body_len + 1);
+    if (!text) {
+        bunny_http_response_free(&response);
+        return NULL;
+    }
+    memcpy(text, response.body, response.body_len);
+    text[response.body_len] = '\0';
+    bunny_http_response_free(&response);
+    return text;
+}
+
+bool bunny_updater_sha256_hex(const char *path, char out_hex[65])
+{
+    if (!path || !out_hex) {
+        return false;
+    }
+
+    FILE *f = fopen(path, "rb");
+    if (!f) {
+        return false;
+    }
+
+    EVP_MD_CTX *ctx = EVP_MD_CTX_new();
+    bool ok = ctx && EVP_DigestInit_ex(ctx, EVP_sha256(), NULL) == 1;
+
+    unsigned char buf[65536];
+    size_t n;
+    while (ok && (n = fread(buf, 1, sizeof(buf), f)) > 0) {
+        ok = EVP_DigestUpdate(ctx, buf, n) == 1;
+    }
+    ok = ok && !ferror(f);
+
+    unsigned char digest[EVP_MAX_MD_SIZE];
+    unsigned int digest_len = 0;
+    ok = ok && EVP_DigestFinal_ex(ctx, digest, &digest_len) == 1 && digest_len == 32;
+
+    if (ctx) {
+        EVP_MD_CTX_free(ctx);
+    }
+    fclose(f);
+
+    if (!ok) {
+        return false;
+    }
+    for (unsigned int i = 0; i < digest_len; i++) {
+        snprintf(out_hex + i * 2, 3, "%02x", digest[i]);
+    }
+    return true;
+}
+
+bool bunny_updater_find_sha256(const char *sums_text, const char *filename, char out_hex[65])
+{
+    if (!sums_text || !filename || !out_hex) {
+        return false;
+    }
+
+    size_t filename_len = strlen(filename);
+    const char *line = sums_text;
+    while (*line) {
+        const char *line_end = strchr(line, '\n');
+        size_t line_len = line_end ? (size_t)(line_end - line) : strlen(line);
+
+        /* Standard `sha256sum` output: a 64-char lowercase hex digest, then
+         * whitespace, then the filename (optionally prefixed with '*' for
+         * binary mode). */
+        if (line_len > 64 && isspace((unsigned char)line[64])) {
+            const char *name_start = line + 64;
+            while (*name_start == ' ' || *name_start == '*') {
+                name_start++;
+            }
+            size_t name_len = (size_t)(line_len - (name_start - line));
+            if (name_len == filename_len && strncmp(name_start, filename, filename_len) == 0) {
+                memcpy(out_hex, line, 64);
+                out_hex[64] = '\0';
+                return true;
+            }
+        }
+
+        if (!line_end) {
+            break;
+        }
+        line = line_end + 1;
+    }
+    return false;
 }
 
 #ifdef _WIN32
@@ -279,6 +395,37 @@ void bunny_updater_scheduler_tick(const bunny_http_transport_t *transport, const
     char *archive_path = goblin_appdir_join(staging_dir, "bunny-server-linux-x64.tar.gz");
     if (!archive_path || bunny_updater_download_file(transport, check.download_url, user_agent, archive_path) != BUNNY_HTTP_OK) {
         server_log("ERROR", "updater: download of %s failed", check.tag_name);
+        bunny_updater_check_result_free(&check);
+        free(archive_path);
+        free(staging_dir);
+        return;
+    }
+
+    /* Mandatory, not best-effort -- a corrupted/truncated download (the
+     * realistic risk here, not tampering: this is already plain HTTPS from
+     * GitHub) must never get extracted and staged as if it were good. */
+    bool checksum_ok = false;
+    if (!check.sha256_sums_url) {
+        server_log("ERROR", "updater: release %s has no SHA256SUMS.txt asset", check.tag_name);
+    } else {
+        char *sums_text = bunny_updater_download_text(transport, check.sha256_sums_url, user_agent);
+        char expected_hex[65];
+        char actual_hex[65];
+        if (!sums_text) {
+            server_log("ERROR", "updater: failed to download SHA256SUMS.txt for %s", check.tag_name);
+        } else if (!bunny_updater_find_sha256(sums_text, "bunny-server-linux-x64.tar.gz", expected_hex)) {
+            server_log("ERROR", "updater: SHA256SUMS.txt for %s has no entry for bunny-server-linux-x64.tar.gz", check.tag_name);
+        } else if (!bunny_updater_sha256_hex(archive_path, actual_hex)) {
+            server_log("ERROR", "updater: failed to hash the downloaded archive for %s", check.tag_name);
+        } else if (strcmp(expected_hex, actual_hex) != 0) {
+            server_log("ERROR", "updater: checksum mismatch for %s (expected %s, got %s)", check.tag_name, expected_hex, actual_hex);
+        } else {
+            checksum_ok = true;
+        }
+        free(sums_text);
+    }
+    if (!checksum_ok) {
+        remove(archive_path);
         bunny_updater_check_result_free(&check);
         free(archive_path);
         free(staging_dir);

@@ -93,6 +93,7 @@ class _UpdateDialogState extends State<_UpdateDialog> {
     try {
       ok = await widget.applyService.downloadAndApply(
         widget.result.downloadUrl!,
+        sha256SumsUrl: widget.result.sha256SumsUrl,
         onProgress: (progress) {
           if (mounted) {
             setState(() => _progress = progress);

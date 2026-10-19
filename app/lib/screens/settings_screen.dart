@@ -15,6 +15,7 @@ import '../settings/display_settings_store.dart';
 import '../settings/download_settings_store.dart';
 import '../settings/repository_settings_store.dart';
 import '../settings/theme_settings_store.dart';
+import 'about_screen.dart';
 import 'lock_setup_screen.dart';
 import 'server_logs_screen.dart';
 import 'setup_screen.dart';
@@ -413,6 +414,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
             title: Text(l10n.settingsAppLockEntry),
             trailing: const Icon(Icons.chevron_right),
             onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => LockSetupScreen(lockService: widget.lockService))),
+          ),
+          const SizedBox(height: 24),
+          Text(l10n.settingsAboutSection, style: Theme.of(context).textTheme.titleMedium),
+          ListTile(
+            contentPadding: EdgeInsets.zero,
+            title: Text(l10n.settingsAboutEntry),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const AboutScreen())),
           ),
         ],
       ),
