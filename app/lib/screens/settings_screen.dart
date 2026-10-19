@@ -34,6 +34,8 @@ class SettingsScreen extends StatefulWidget {
   final DownloadSettingsStore downloadSettingsStore;
   final RepositorySettingsStore settingsStore;
   final ValueChanged<ThemeMode> onThemeModeChanged;
+  final ValueChanged<ThemeColorOption> onThemeColorChanged;
+  final ValueChanged<bool> onAmoledChanged;
   final ValueChanged<BunnyRepository> onRepositoryConfigured;
 
   const SettingsScreen({
@@ -45,6 +47,8 @@ class SettingsScreen extends StatefulWidget {
     required this.downloadSettingsStore,
     required this.settingsStore,
     required this.onThemeModeChanged,
+    required this.onThemeColorChanged,
+    required this.onAmoledChanged,
     required this.onRepositoryConfigured,
   });
 
@@ -55,6 +59,8 @@ class SettingsScreen extends StatefulWidget {
 class _SettingsScreenState extends State<SettingsScreen> {
   BunnyRepositoryConfig? _repositoryConfig;
   ThemeMode? _themeMode;
+  ThemeColorOption? _themeColor;
+  bool _amoled = false;
   PreviewQuality? _previewQuality;
   String? _downloadFolder;
   bool _autoFavoriteOnDownload = false;
@@ -93,6 +99,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Future<void> _load() async {
     final repositoryConfig = await widget.settingsStore.load();
     final mode = await widget.themeSettingsStore.load();
+    final themeColor = await widget.themeSettingsStore.loadColor();
+    final amoled = await widget.themeSettingsStore.loadAmoled();
     final intervalHours = await widget.repository.getDefaultSyncIntervalHours();
     final previewQuality = await widget.displaySettingsStore.loadPreviewQuality();
     final gridColumns = await widget.displaySettingsStore.loadGridColumns();
@@ -106,6 +114,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
     setState(() {
       _repositoryConfig = repositoryConfig;
       _themeMode = mode;
+      _themeColor = themeColor;
+      _amoled = amoled;
       _intervalController.text = '$intervalHours';
       _previewQuality = previewQuality;
       _gridColumnsController.text = '$gridColumns';
@@ -121,6 +131,28 @@ class _SettingsScreenState extends State<SettingsScreen> {
     await widget.themeSettingsStore.save(mode);
     widget.onThemeModeChanged(mode);
   }
+
+  Future<void> _setThemeColor(ThemeColorOption color) async {
+    setState(() => _themeColor = color);
+    await widget.themeSettingsStore.saveColor(color);
+    widget.onThemeColorChanged(color);
+  }
+
+  Future<void> _setAmoled(bool amoled) async {
+    setState(() => _amoled = amoled);
+    await widget.themeSettingsStore.saveAmoled(amoled);
+    widget.onAmoledChanged(amoled);
+  }
+
+  String _themeColorLabel(AppLocalizations l10n, ThemeColorOption color) => switch (color) {
+    ThemeColorOption.purple => l10n.settingsThemeColorPurple,
+    ThemeColorOption.blue => l10n.settingsThemeColorBlue,
+    ThemeColorOption.green => l10n.settingsThemeColorGreen,
+    ThemeColorOption.orange => l10n.settingsThemeColorOrange,
+    ThemeColorOption.red => l10n.settingsThemeColorRed,
+    ThemeColorOption.teal => l10n.settingsThemeColorTeal,
+    ThemeColorOption.pink => l10n.settingsThemeColorPink,
+  };
 
   Future<void> _setDefaultIntervalHours(String value) async {
     final hours = int.tryParse(value);
@@ -287,6 +319,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
     final themeMode = _themeMode;
+    final themeColor = _themeColor;
     final previewQuality = _previewQuality;
     final repositoryConfig = _repositoryConfig;
     final httpRepository = widget.repository;
@@ -337,6 +370,33 @@ class _SettingsScreenState extends State<SettingsScreen> {
               selected: {themeMode},
               onSelectionChanged: (selection) => _setThemeMode(selection.first),
             ),
+          const SizedBox(height: 8),
+          if (themeColor != null)
+            Wrap(
+              spacing: 8,
+              children: ThemeColorOption.values
+                  .map(
+                    (color) => Tooltip(
+                      message: _themeColorLabel(l10n, color),
+                      child: InkWell(
+                        onTap: () => _setThemeColor(color),
+                        customBorder: const CircleBorder(),
+                        child: CircleAvatar(
+                          backgroundColor: color.seedColor,
+                          child: color == themeColor ? const Icon(Icons.check, color: Colors.white) : null,
+                        ),
+                      ),
+                    ),
+                  )
+                  .toList(),
+            ),
+          const SizedBox(height: 8),
+          SwitchListTile(
+            contentPadding: EdgeInsets.zero,
+            title: Text(l10n.settingsAmoledLabel),
+            value: _amoled,
+            onChanged: _setAmoled,
+          ),
           const SizedBox(height: 24),
           Text(l10n.settingsSyncSection, style: Theme.of(context).textTheme.titleMedium),
           const SizedBox(height: 8),
