@@ -365,6 +365,55 @@ void test_get_pool_not_found(void)
     e621_client_destroy(client);
 }
 
+void test_get_blacklisted_tags_requires_credentials(void)
+{
+    e621_client_t *client = make_test_client(false);
+
+    char *tags = NULL;
+    e621_result_t result = e621_get_blacklisted_tags(client, &tags);
+
+    TEST_ASSERT_EQUAL(E621_ERR_AUTH, result);
+    TEST_ASSERT_NULL(tags);
+
+    e621_client_destroy(client);
+}
+
+void test_get_blacklisted_tags_requests_the_authenticated_username(void)
+{
+    e621_client_t *client = make_test_client(true);
+    g_state.response_status = 200;
+    g_state.response_body = "{\"id\":42,\"name\":\"tester\",\"blacklisted_tags\":\"young\\nrating:e young\"}";
+    g_state.response_body_len = strlen(g_state.response_body);
+
+    char *tags = NULL;
+    e621_result_t result = e621_get_blacklisted_tags(client, &tags);
+
+    TEST_ASSERT_EQUAL(E621_OK, result);
+    TEST_ASSERT_EQUAL_STRING("young\nrating:e young", tags);
+    TEST_ASSERT_NOT_NULL(strstr(g_state.last_url, "/users/tester.json"));
+    TEST_ASSERT_TRUE(g_state.last_had_auth_header);
+
+    free(tags);
+    e621_client_destroy(client);
+}
+
+void test_get_blacklisted_tags_returns_empty_string_when_unset(void)
+{
+    e621_client_t *client = make_test_client(true);
+    g_state.response_status = 200;
+    g_state.response_body = "{\"id\":42,\"name\":\"tester\"}";
+    g_state.response_body_len = strlen(g_state.response_body);
+
+    char *tags = NULL;
+    e621_result_t result = e621_get_blacklisted_tags(client, &tags);
+
+    TEST_ASSERT_EQUAL(E621_OK, result);
+    TEST_ASSERT_EQUAL_STRING("", tags);
+
+    free(tags);
+    e621_client_destroy(client);
+}
+
 int main(void)
 {
     UNITY_BEGIN();
@@ -383,5 +432,8 @@ int main(void)
     RUN_TEST(test_comment_list_success);
     RUN_TEST(test_get_pool_success);
     RUN_TEST(test_get_pool_not_found);
+    RUN_TEST(test_get_blacklisted_tags_requires_credentials);
+    RUN_TEST(test_get_blacklisted_tags_requests_the_authenticated_username);
+    RUN_TEST(test_get_blacklisted_tags_returns_empty_string_when_unset);
     return UNITY_END();
 }

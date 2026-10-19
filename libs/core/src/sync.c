@@ -1,7 +1,7 @@
 /* timegm isn't standard C11 -- glibc only declares it when a sufficiently
  * permissive feature-test macro is requested. Must be defined before any
  * system header pulls in <features.h>. (strptime used to need _XOPEN_SOURCE
- * too, but search_is_due() below parses last_run_at with sscanf instead now
+ * too, but seconds_until_due() below parses last_run_at with sscanf instead now
  * -- that format is always exactly "%Y-%m-%dT%H:%M:%S" (this app's own
  * output), so there's no real parsing to delegate to strptime for, and
  * sscanf is standard C with no glibc extension or feature-test-macro
@@ -61,19 +61,25 @@ GOBLIN_DYN_ARRAY_DECL(bunny_core_int64, int64_t)
 #define bunny_timegm timegm
 #endif
 
-/* default_interval_hours is only consulted when search->uses_default_interval
+/* <= 0 means due right now; otherwise the number of seconds remaining until
+ * `search` becomes due. Feeds both search_is_due (the yes/no check every
+ * sync pass actually needs) and bunny_core_sync_due_searches' own
+ * "seconds_until_next_due" diagnostic stat (M28) -- computed once per search
+ * either way, rather than duplicating this parsing in two places.
+ *
+ * default_interval_hours is only consulted when search->uses_default_interval
  * is set -- resolved once per bunny_core_sync_due_searches call (not once per
  * search) and passed down, since it's the same single row read regardless of
  * how many searches are being checked. */
-static bool search_is_due(const bunny_db_search_t *search, int default_interval_hours)
+static double seconds_until_due(const bunny_db_search_t *search, int default_interval_hours)
 {
     if (!search->last_run_at) {
-        return true;
+        return 0;
     }
 
     int year, month, day, hour, min, sec;
     if (sscanf(search->last_run_at, "%d-%d-%dT%d:%d:%d", &year, &month, &day, &hour, &min, &sec) != 6) {
-        return true; /* unparseable timestamp -- treat as due rather than getting stuck */
+        return 0; /* unparseable timestamp -- treat as due rather than getting stuck */
     }
 
     struct tm tm_last;
@@ -86,9 +92,8 @@ static bool search_is_due(const bunny_db_search_t *search, int default_interval_
     tm_last.tm_sec = sec;
 
     time_t last_run = bunny_timegm(&tm_last);
-    double hours_elapsed = difftime(time(NULL), last_run) / 3600.0;
     int effective_interval_hours = search->uses_default_interval ? default_interval_hours : search->interval_hours;
-    return hours_elapsed >= effective_interval_hours;
+    return difftime(last_run, time(NULL)) + effective_interval_hours * 3600.0;
 }
 
 static char *join_string_list(const e621_string_list_t *list)
@@ -248,10 +253,33 @@ static bunny_core_result_t upsert_e621_post(bunny_db_t *db, const e621_post_t *p
     return bunny_core_map_db_result(result);
 }
 
+/* Inkbunny's API has no e621-style bare "ext" field -- derive one from the
+ * real file name's suffix (e.g. "full_12345_user_title.jpg" -> "jpg") so the
+ * app's fileExt-gated media widget (post_detail_screen.dart's _buildMedia)
+ * has something to key off of, same as e621's post->file.ext does. Returns
+ * NULL (not a malloc'd empty string) when there's no '.' to split on, so
+ * callers can free() unconditionally without a NULL check. */
+static char *inkbunny_file_ext(const char *file_name)
+{
+    if (!file_name) {
+        return NULL;
+    }
+    const char *dot = strrchr(file_name, '.');
+    if (!dot || !dot[1]) {
+        return NULL;
+    }
+    char *ext = goblin_copy_cstr(dot + 1);
+    if (ext) {
+        goblin_to_lower_cstr(ext);
+    }
+    return ext;
+}
+
 static bunny_core_result_t upsert_inkbunny_submission(bunny_db_t *db, const inkbunny_submission_t *submission, int64_t *out_post_id)
 {
     flat_tag_list_t tags = flatten_inkbunny_keywords(submission);
     const inkbunny_file_t *file = submission->files.count > 0 ? &submission->files.items[0] : NULL;
+    char *file_ext = file ? inkbunny_file_ext(file->file_name) : NULL;
 
     bunny_db_post_upsert_t upsert;
     memset(&upsert, 0, sizeof(upsert));
@@ -264,6 +292,7 @@ static bunny_core_result_t upsert_inkbunny_submission(bunny_db_t *db, const inkb
     upsert.fav_count = submission->favorites_count;
     upsert.comment_count = submission->comments_count;
     upsert.file_url = file ? file->url_full : NULL;
+    upsert.file_ext = file_ext;
     upsert.file_md5 = file ? file->md5 : NULL;
     upsert.preview_url = submission->thumbnail_url;
     upsert.width = file ? file->full_width : 0;
@@ -280,6 +309,7 @@ static bunny_core_result_t upsert_inkbunny_submission(bunny_db_t *db, const inkb
     }
 
     free((void *)tags.items);
+    free(file_ext);
 
     return bunny_core_map_db_result(result);
 }
@@ -504,6 +534,22 @@ static bunny_core_result_t sync_inkbunny_search(bunny_core_t *core, const bunny_
     int found_count = 0;
     int new_count = 0;
 
+    /* A favorites search is just a search whose query happens to be this
+     * exact sentinel (M27) -- same idea as e621's "pool:<id>" searches,
+     * except the sentinel is a fixed literal rather than carrying data,
+     * since it's always created by the app itself (never user-typed) once
+     * an Inkbunny account exists. Inkbunny's search API has no
+     * username-based equivalent of e621's "fav:<username>" tag --
+     * favorited_by_user_id needs the numeric id of whoever's *currently
+     * logged in*, resolved fresh here rather than baked into the query at
+     * creation time, since re-resolving on every sync is cheap and avoids
+     * ever going stale if the account changes. */
+    char favorited_by_user_id[32];
+    bool is_favorites_search = strcmp(search->query, "favorited_by:me") == 0;
+    if (is_favorites_search) {
+        snprintf(favorited_by_user_id, sizeof(favorited_by_user_id), "%lld", (long long)inkbunny_client_get_user_id(client));
+    }
+
     /* Inkbunny has no confirmed id-cursor pagination like e621's a<ID>/b<ID>,
      * so this still walks plain numeric pages (newest first, since nothing
      * in this codebase sets a custom Inkbunny sort order) -- but stops as
@@ -516,7 +562,11 @@ static bunny_core_result_t sync_inkbunny_search(bunny_core_t *core, const bunny_
     for (int page = 1;; page++) {
         inkbunny_search_params_t params;
         memset(&params, 0, sizeof(params));
-        params.text = search->query;
+        if (is_favorites_search) {
+            params.favorited_by_user_id = favorited_by_user_id;
+        } else {
+            params.text = search->query;
+        }
         params.page = page;
 
         inkbunny_submission_list_t submissions;
@@ -996,10 +1046,15 @@ bunny_core_result_t bunny_core_sync_due_searches(bunny_core_t *core, bunny_core_
         return bunny_core_map_db_result(list_result);
     }
 
+    stats.seconds_until_next_due = -1;
     for (size_t i = 0; i < searches.count; i++) {
         const bunny_db_search_t *search = &searches.items[i]; /* searches is this call's own heap snapshot, safe to read lock-free across the sync call below */
         stats.searches_checked++;
-        if (!search_is_due(search, default_interval_hours)) {
+        double remaining = seconds_until_due(search, default_interval_hours);
+        if (remaining > 0) {
+            if (stats.seconds_until_next_due < 0 || remaining < stats.seconds_until_next_due) {
+                stats.seconds_until_next_due = remaining;
+            }
             continue;
         }
 

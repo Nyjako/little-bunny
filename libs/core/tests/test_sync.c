@@ -392,6 +392,16 @@ void test_fetch_and_cache_post_upserts_live_inkbunny_submission(void)
      * would need its own guest-login fixture, since bunny_core_build_
      * inkbunny_client logs in fresh every call, unlike e621's anonymous GETs. */
 
+    /* file_ext must be derived from the file's real name (Inkbunny has no
+     * bare "ext" field the way e621 does) -- without it the app's
+     * fileExt-gated media widget renders nothing at all, even though
+     * file_url above is already a perfectly good image URL. */
+    bunny_db_post_t post;
+    result = bunny_core_post_get_by_id(g_core, post_id, &post);
+    TEST_ASSERT_EQUAL(BUNNY_CORE_OK, result);
+    TEST_ASSERT_EQUAL_STRING("jpg", post.file_ext);
+    bunny_db_post_free(&post);
+
     free(login_fixture);
     free(submission_fixture);
 }
@@ -1012,6 +1022,38 @@ void test_sync_inkbunny_search_upserts_post(void)
     free(empty_fixture);
 }
 
+void test_sync_inkbunny_favorites_search_requests_the_logged_in_users_own_favorites(void)
+{
+    /* A search whose query is exactly "favorited_by:me" (M27) is the
+     * auto-created "cache my favorites like a search" entry -- it must
+     * resolve the *currently logged in* account's numeric user id and send
+     * that as favs_user_id, never treating the sentinel as literal
+     * free-text keywords. */
+    g_inkbunny_transport.send = capturing_fake_send;
+
+    char *login_fixture = read_fixture("inkbunny_login_success_authenticated.json");
+    char *empty_fixture = read_fixture("inkbunny_search_response_empty.json");
+    TEST_ASSERT_NOT_NULL(login_fixture);
+    TEST_ASSERT_NOT_NULL(empty_fixture);
+    g_inkbunny_state.bodies[0] = login_fixture;
+    g_inkbunny_state.bodies[1] = empty_fixture;
+    g_inkbunny_state.body_count = 2;
+
+    int64_t search_id = 0;
+    bunny_core_result_t result = bunny_core_search_create(g_core, BUNNY_DB_SITE_INKBUNNY, "Favorites", "favorited_by:me", 24, NULL, &search_id);
+    TEST_ASSERT_EQUAL(BUNNY_CORE_OK, result);
+
+    bunny_core_sync_stats_t stats;
+    result = bunny_core_sync_due_searches(g_core, &stats);
+    TEST_ASSERT_EQUAL(BUNNY_CORE_OK, result);
+    TEST_ASSERT_EQUAL(1, stats.searches_synced);
+
+    TEST_ASSERT_NOT_NULL(strstr(g_captured_url, "favs_user_id=628881"));
+
+    free(login_fixture);
+    free(empty_fixture);
+}
+
 void test_sync_inkbunny_search_marks_a_favorited_submission_locally(void)
 {
     /* M10.3: same mirroring as the e621 test above, but for Inkbunny's own
@@ -1161,8 +1203,23 @@ void test_sync_skips_search_not_due_yet(void)
     TEST_ASSERT_EQUAL(1, stats.searches_checked);
     TEST_ASSERT_EQUAL(0, stats.searches_synced);
     TEST_ASSERT_EQUAL(0, stats.posts_upserted);
+    /* Just touched with a 24h interval -- due again in ~24h, give or take
+     * test execution time (M28's "why was 0 synced" diagnostic). */
+    TEST_ASSERT_TRUE(stats.seconds_until_next_due > 23.0 * 3600.0);
+    TEST_ASSERT_TRUE(stats.seconds_until_next_due <= 24.0 * 3600.0);
 
     free(fixture);
+}
+
+void test_sync_due_searches_reports_minus_one_when_there_are_no_searches_at_all(void)
+{
+    bunny_core_sync_stats_t stats;
+    bunny_core_result_t result = bunny_core_sync_due_searches(g_core, &stats);
+
+    TEST_ASSERT_EQUAL(BUNNY_CORE_OK, result);
+    TEST_ASSERT_EQUAL(0, stats.searches_checked);
+    TEST_ASSERT_EQUAL(0, stats.searches_synced);
+    TEST_ASSERT_TRUE(stats.seconds_until_next_due == -1.0); /* Unity's double-precision asserts are disabled in this build */
 }
 
 void test_default_sync_interval_hours_round_trips(void)
@@ -1321,6 +1378,49 @@ void test_verify_inkbunny_rejects_invalid_credentials(void)
     free(fixture);
 }
 
+void test_sync_e621_blacklist_requires_a_configured_account(void)
+{
+    /* bunny_core_build_e621_client still returns a valid (anonymous) client
+     * with no account configured -- e621_get_blacklisted_tags is what
+     * actually rejects it (E621_ERR_AUTH, no username/api_key to ask
+     * about), mapped the same blunt way every other e621 call failure is. */
+    bunny_core_result_t result = bunny_core_sync_e621_blacklist(g_core, NULL);
+    TEST_ASSERT_EQUAL(BUNNY_CORE_ERR_SITE, result);
+}
+
+void test_sync_e621_blacklist_imports_new_tags_and_skips_multi_tag_lines(void)
+{
+    bunny_core_account_set(g_core, BUNNY_DB_SITE_E621, "someuser", "someapikey");
+    bunny_core_blacklist_add(g_core, BUNNY_DB_SITE_E621, "already_here");
+
+    const char *profile_json = "{\"id\":1,\"name\":\"someuser\",\"blacklisted_tags\":\"already_here\\nbrand_new\\nrating:e young\\n\"}";
+    g_e621_state.bodies[0] = profile_json;
+    g_e621_state.body_count = 1;
+
+    bunny_core_blacklist_sync_stats_t stats;
+    memset(&stats, 0, sizeof(stats));
+    bunny_core_result_t result = bunny_core_sync_e621_blacklist(g_core, &stats);
+
+    TEST_ASSERT_EQUAL(BUNNY_CORE_OK, result);
+    TEST_ASSERT_EQUAL(1, stats.added);
+    TEST_ASSERT_EQUAL(1, stats.already_present);
+    TEST_ASSERT_EQUAL(1, stats.skipped_multi_tag);
+
+    bunny_db_string_list_t blacklist;
+    result = bunny_core_blacklist_list(g_core, BUNNY_DB_SITE_E621, &blacklist);
+    TEST_ASSERT_EQUAL(BUNNY_CORE_OK, result);
+    TEST_ASSERT_EQUAL(2, (int)blacklist.count); /* already_here + brand_new -- never "rating:e young" */
+    bool found_new = false;
+    for (size_t i = 0; i < blacklist.count; i++) {
+        if (strcmp(blacklist.items[i], "brand_new") == 0) {
+            found_new = true;
+        }
+        TEST_ASSERT_NOT_EQUAL(0, strcmp(blacklist.items[i], "rating:e young"));
+    }
+    TEST_ASSERT_TRUE(found_new);
+    bunny_db_string_list_free(&blacklist);
+}
+
 int main(void)
 {
     UNITY_BEGIN();
@@ -1356,10 +1456,12 @@ int main(void)
     RUN_TEST(test_mark_seen_flips_is_seen_on_a_synced_post);
     RUN_TEST(test_mark_seen_rejects_a_nonexistent_post);
     RUN_TEST(test_sync_inkbunny_search_upserts_post);
+    RUN_TEST(test_sync_inkbunny_favorites_search_requests_the_logged_in_users_own_favorites);
     RUN_TEST(test_sync_inkbunny_search_marks_a_favorited_submission_locally);
     RUN_TEST(test_sync_inkbunny_search_second_sync_stops_at_already_synced_submission);
     RUN_TEST(test_sync_inkbunny_search_second_sync_upserts_only_the_new_submission);
     RUN_TEST(test_sync_skips_search_not_due_yet);
+    RUN_TEST(test_sync_due_searches_reports_minus_one_when_there_are_no_searches_at_all);
     RUN_TEST(test_default_sync_interval_hours_round_trips);
     RUN_TEST(test_search_create_and_update_round_trip_uses_default_interval);
     RUN_TEST(test_group_create_list_update_delete_round_trip);
@@ -1370,5 +1472,7 @@ int main(void)
     RUN_TEST(test_verify_e621_rejects_when_site_call_fails);
     RUN_TEST(test_verify_inkbunny_accepts_valid_credentials);
     RUN_TEST(test_verify_inkbunny_rejects_invalid_credentials);
+    RUN_TEST(test_sync_e621_blacklist_requires_a_configured_account);
+    RUN_TEST(test_sync_e621_blacklist_imports_new_tags_and_skips_multi_tag_lines);
     return UNITY_END();
 }

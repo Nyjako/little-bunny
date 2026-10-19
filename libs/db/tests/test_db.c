@@ -663,6 +663,9 @@ void test_favorite_add_remove_list(void)
     bunny_db_post_t fetched;
     bunny_db_post_get(g_db, BUNNY_DB_SITE_E621, 401, &fetched);
     TEST_ASSERT_TRUE(fetched.is_favorited);
+    /* Inkbunny's 1-3 heart tier (M27) -- must round-trip through
+     * BUNNY_DB_POST_SELECT_COLUMNS the same as any other post field. */
+    TEST_ASSERT_EQUAL(2, fetched.favorite_stars);
     bunny_db_post_free(&fetched);
 
     bunny_db_post_list_t favorites;
@@ -670,6 +673,7 @@ void test_favorite_add_remove_list(void)
     TEST_ASSERT_EQUAL(BUNNY_DB_OK, result);
     TEST_ASSERT_EQUAL(1, (int)favorites.count);
     TEST_ASSERT_EQUAL(id, favorites.items[0].id);
+    TEST_ASSERT_EQUAL(2, favorites.items[0].favorite_stars);
     bunny_db_post_list_free(&favorites);
 
     result = bunny_db_favorite_remove(g_db, id);
@@ -678,6 +682,28 @@ void test_favorite_add_remove_list(void)
     bunny_db_favorite_list(g_db, &favorites);
     TEST_ASSERT_EQUAL(0, (int)favorites.count);
     bunny_db_post_list_free(&favorites);
+}
+
+void test_favorite_add_with_negative_stars_leaves_favorite_stars_at_zero(void)
+{
+    /* e621's plain favorite has no star tier -- bunny_db_favorite_add's own
+     * convention is a negative `stars` arg for "not applicable" (binds SQL
+     * NULL), and COALESCE(fav.stars, 0) in BUNNY_DB_POST_SELECT_COLUMNS must
+     * turn that NULL back into 0, not leave it NULL (favorite_stars is a
+     * plain `int` field, not nullable). */
+    bunny_db_post_upsert_t post;
+    make_test_post(&post, 402, 1);
+    int64_t id = 0;
+    bunny_db_post_upsert(g_db, &post, &id);
+
+    bunny_db_result_t result = bunny_db_favorite_add(g_db, id, -1);
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, result);
+
+    bunny_db_post_t fetched;
+    bunny_db_post_get(g_db, BUNNY_DB_SITE_E621, 402, &fetched);
+    TEST_ASSERT_TRUE(fetched.is_favorited);
+    TEST_ASSERT_EQUAL(0, fetched.favorite_stars);
+    bunny_db_post_free(&fetched);
 }
 
 void test_vote_set_upserts_and_is_read_back(void)
@@ -1868,6 +1894,7 @@ int main(void)
     RUN_TEST(test_seen_state);
     RUN_TEST(test_search_mark_all_seen_only_affects_that_searchs_posts);
     RUN_TEST(test_favorite_add_remove_list);
+    RUN_TEST(test_favorite_add_with_negative_stars_leaves_favorite_stars_at_zero);
     RUN_TEST(test_vote_set_upserts_and_is_read_back);
     RUN_TEST(test_vote_set_rejects_an_invalid_score);
     RUN_TEST(test_blacklist_add_remove_list);

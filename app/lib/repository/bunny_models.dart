@@ -83,6 +83,16 @@ class BunnySearch {
   /// order, M22 -- pools read like comics, oldest page first).
   bool get isPool => site == BunnySite.e621 && query.startsWith('pool:');
 
+  /// Same "just a search with a recognizable query" trick as [isPool] (M27)
+  /// -- auto-created once per configured account (SearchesScreen) so a
+  /// user's favorites get cached/paginated/synced through the exact same
+  /// machinery as any other saved search, instead of a parallel fetch-on-
+  /// demand path. e621's query is a real `fav:<username>` tag search (no
+  /// backend support needed at all); Inkbunny's is the fixed literal
+  /// `favorited_by:me`, resolved to the logged-in account's numeric id at
+  /// sync time (see sync_inkbunny_search's own doc comment for why).
+  bool get isFavorites => (site == BunnySite.e621 && query.startsWith('fav:')) || (site == BunnySite.inkbunny && query == 'favorited_by:me');
+
   const BunnySearch({
     required this.id,
     required this.site,
@@ -146,6 +156,8 @@ class BunnyPost {
   /// -1, 0 (no vote), or 1 -- the caller's own most recently successfully
   /// sent vote direction (M9.7.1). Always 0 for Inkbunny (no vote API).
   final int userVote;
+  /// Inkbunny's 1-3 favorite rating; 0 if not favorited or e621's plain favorite.
+  final int favoriteStars;
 
   const BunnyPost({
     required this.id,
@@ -172,6 +184,7 @@ class BunnyPost {
     required this.isFavorited,
     this.sampleUrl,
     this.userVote = 0,
+    this.favoriteStars = 0,
   });
 }
 
@@ -358,5 +371,21 @@ class BunnyQueueStats {
     required this.actionsProcessed,
     required this.actionsSucceeded,
     required this.actionsFailed,
+  });
+}
+
+/// Mirrors `bunny_core_blacklist_sync_stats_t` -- the result of pulling the
+/// configured e621 account's own blacklist and importing new single-tag
+/// entries (M27). [skippedMultiTag] counts e621 "AND" lines (e.g.
+/// "rating:e young") the local blacklist has no concept of yet.
+class BunnyBlacklistSyncStats {
+  final int added;
+  final int alreadyPresent;
+  final int skippedMultiTag;
+
+  const BunnyBlacklistSyncStats({
+    required this.added,
+    required this.alreadyPresent,
+    required this.skippedMultiTag,
   });
 }

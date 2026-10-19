@@ -59,6 +59,17 @@ e621_result_t e621_list_favorites(e621_client_t *client, const char *user_id, in
 /* Requires username/api_key on the client config unless anonymous is true. */
 e621_result_t e621_comment_create(e621_client_t *client, int64_t post_id, const char *body, bool anonymous, e621_comment_t *out_comment);
 
+/* Requires username/api_key on the client config -- e621's profile JSON only
+ * includes blacklisted_tags when authenticated as that same account, so this
+ * always asks about `client`'s own configured username, not an arbitrary one.
+ * *out_blacklisted_tags receives the raw multi-line field verbatim (one
+ * blacklist entry per line, some lines possibly multi-tag "AND" groups like
+ * "rating:e young"), or an empty string if the account has none set -- never
+ * NULL on E621_OK. Splitting/validating lines is the caller's job, not this
+ * client's (matches tools/e621_blacklist_experiment/e621_blacklist.py's own
+ * get_blacklisted_tags(), which this mirrors). Caller frees. */
+e621_result_t e621_get_blacklisted_tags(e621_client_t *client, char **out_blacklisted_tags);
+
 e621_result_t e621_comment_list(e621_client_t *client, int64_t post_id, e621_comment_list_t *out_comments);
 
 /* A post's e621_post_t.pool_ids / e621_post_t.relationships give you the ids to pass here. */

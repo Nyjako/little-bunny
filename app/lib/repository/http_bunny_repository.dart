@@ -62,6 +62,7 @@ BunnyPost _postFromJson(Map<String, Object?> j) => BunnyPost(
   isFavorited: j['is_favorited'] as bool,
   sampleUrl: j['sample_url'] as String?,
   userVote: (j['user_vote'] as num).toInt(),
+  favoriteStars: (j['favorite_stars'] as num).toInt(),
 );
 
 BunnyTagStat _tagStatFromJson(Map<String, Object?> j) => BunnyTagStat(name: j['name'] as String, count: (j['count'] as num).toInt());
@@ -99,6 +100,12 @@ BunnyQueueStats _queueStatsFromJson(Map<String, Object?> j) => BunnyQueueStats(
   actionsProcessed: (j['actions_processed'] as num).toInt(),
   actionsSucceeded: (j['actions_succeeded'] as num).toInt(),
   actionsFailed: (j['actions_failed'] as num).toInt(),
+);
+
+BunnyBlacklistSyncStats _blacklistSyncStatsFromJson(Map<String, Object?> j) => BunnyBlacklistSyncStats(
+  added: (j['added'] as num).toInt(),
+  alreadyPresent: (j['already_present'] as num).toInt(),
+  skippedMultiTag: (j['skipped_multi_tag'] as num).toInt(),
 );
 
 /// True if [certificateDerBytes]' SHA-256 hash matches
@@ -481,6 +488,15 @@ class HttpBunnyRepository implements BunnyRepository {
     if (response.statusCode != 200) {
       _throwError(response);
     }
+  }
+
+  @override
+  Future<BunnyBlacklistSyncStats> syncE621Blacklist() async {
+    final response = await _client.post(_uri('/blacklist/e621/sync'), headers: _headers);
+    if (response.statusCode != 200) {
+      _throwError(response);
+    }
+    return _blacklistSyncStatsFromJson(_decodeObject(response));
   }
 
   @override

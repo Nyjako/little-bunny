@@ -1339,6 +1339,46 @@ class BunnyCoreFfiBindings {
         int Function(ffi.Pointer<bunny_core_t>, int, ffi.Pointer<ffi.Char>)
       >();
 
+  /// Pulls the e621 account's own blacklist (My Account -> Blacklisted Tags on
+  /// e621.net, see tools/e621_blacklist_experiment/e621_blacklist.py for the
+  /// API this mirrors) and imports every single-tag line that isn't already
+  /// present locally. Read-only on e621's side -- never writes anything back
+  /// to the site. Requires an e621 account to already be configured
+  /// (bunny_core_account_set), since e621 only returns blacklisted_tags when
+  /// authenticated as that same account -- returns BUNNY_CORE_ERR_SITE
+  /// otherwise (same as any other e621 call with no usable client). Lines with
+  /// more than one space-separated tag are e621's "AND" groups (match only
+  /// when every tag on that line matches a post); the local blacklist has no
+  /// such concept yet, so those are skipped and counted separately in
+  /// out_stats rather than silently dropped or misinterpreted as one literal
+  /// (space-containing) tag.
+  bunny_core_result_t bunny_core_sync_e621_blacklist(
+    ffi.Pointer<bunny_core_t> core,
+    ffi.Pointer<bunny_core_blacklist_sync_stats_t> out_stats,
+  ) {
+    return bunny_core_result_t.fromValue(
+      _bunny_core_sync_e621_blacklist(core, out_stats),
+    );
+  }
+
+  late final _bunny_core_sync_e621_blacklistPtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.UnsignedInt Function(
+            ffi.Pointer<bunny_core_t>,
+            ffi.Pointer<bunny_core_blacklist_sync_stats_t>,
+          )
+        >
+      >('bunny_core_sync_e621_blacklist');
+  late final _bunny_core_sync_e621_blacklist =
+      _bunny_core_sync_e621_blacklistPtr
+          .asFunction<
+            int Function(
+              ffi.Pointer<bunny_core_t>,
+              ffi.Pointer<bunny_core_blacklist_sync_stats_t>,
+            )
+          >();
+
   /// Fetches a single post live from its site and caches it (upserting into the
   /// local post cache exactly like a sync pass would for one post), without
   /// requiring it to already be linked to any saved search. Used when a
@@ -2084,6 +2124,10 @@ final class bunny_db_post_t extends ffi.Struct {
   /// -1, 0 (no vote), or 1 -- always 0 for Inkbunny (M9.7.1)
   @ffi.Int()
   external int user_vote;
+
+  /// Inkbunny's 1-3 favorite rating; 0 if not favorited or e621's plain favorite
+  @ffi.Int()
+  external int favorite_stars;
 }
 
 final class bunny_db_post_list_t extends ffi.Struct {
@@ -2407,6 +2451,20 @@ final class bunny_core_config_t extends ffi.Struct {
   external bunny_core_log_fn log_callback;
 
   external ffi.Pointer<ffi.Void> log_user_data;
+}
+
+final class bunny_core_blacklist_sync_stats_t extends ffi.Struct {
+  /// new single-tag entries imported
+  @ffi.Int()
+  external int added;
+
+  /// entries that matched an existing local tag
+  @ffi.Int()
+  external int already_present;
+
+  /// e621 "AND" lines (e.g. "rating:e young") -- not yet a local blacklist concept
+  @ffi.Int()
+  external int skipped_multi_tag;
 }
 
 /// A pool's own metadata, fetched live (e621 only -- no persistence, no

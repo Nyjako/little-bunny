@@ -10,6 +10,7 @@
 #include "app.h"
 #include "config.h"
 #include "log.h"
+#include "qr.h"
 #include "updater.h"
 
 static volatile sig_atomic_t g_shutdown_requested = 0;
@@ -29,6 +30,23 @@ int main(int argc, char **argv)
     if (argc > 1 && (strcmp(argv[1], "--version") == 0 || strcmp(argv[1], "-v") == 0)) {
         printf("%d\n", BUNNY_BUILD_NUMBER);
         return 0;
+    }
+
+    /* Prints a QR code (+ the raw JSON, for manual copy-paste) encoding this
+     * server's own connection info -- scannable by the app's "Networked"
+     * setup screen instead of typing the server URL/bearer token/cert
+     * fingerprint in by hand. Doesn't start the server itself (see qr.c's
+     * own doc comment for why that's fine even on a never-before-run data
+     * dir). */
+    if (argc > 1 && strcmp(argv[1], "--qr") == 0) {
+        server_config_t *qr_config = server_config_load();
+        if (!qr_config) {
+            fprintf(stderr, "failed to load server config\n");
+            return 1;
+        }
+        bool ok = server_print_connection_qr(qr_config);
+        server_config_free(qr_config);
+        return ok ? 0 : 1;
     }
 
     server_config_t *config = server_config_load();

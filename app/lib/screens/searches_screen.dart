@@ -31,6 +31,8 @@ class SearchesScreen extends StatefulWidget {
   final DownloadSettingsStore downloadSettingsStore;
   final RepositorySettingsStore settingsStore;
   final ValueChanged<ThemeMode> onThemeModeChanged;
+  final ValueChanged<ThemeColorOption> onThemeColorChanged;
+  final ValueChanged<bool> onAmoledChanged;
   final ValueChanged<BunnyRepository> onRepositoryConfigured;
 
   const SearchesScreen({
@@ -41,6 +43,8 @@ class SearchesScreen extends StatefulWidget {
     required this.downloadSettingsStore,
     required this.settingsStore,
     required this.onThemeModeChanged,
+    required this.onThemeColorChanged,
+    required this.onAmoledChanged,
     required this.onRepositoryConfigured,
   });
 
@@ -104,7 +108,7 @@ class _SearchesScreenState extends State<SearchesScreen> with SingleTickerProvid
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 2, vsync: this)..addListener(() => setState(() {}));
+    _tabController = TabController(length: 3, vsync: this)..addListener(() => setState(() {}));
     _loadSortOrder();
     _pollSyncStatusOnce();
     _syncStatusPollTimer = Timer.periodic(const Duration(seconds: 2), (_) => _pollSyncStatusOnce());
@@ -207,9 +211,44 @@ class _SearchesScreenState extends State<SearchesScreen> with SingleTickerProvid
   }
 
   Future<({List<BunnySearch> searches, List<BunnyGroup> groups})> _loadData() async {
-    final searches = await _repository!.listSearches();
+    var searches = await _repository!.listSearches();
     final groups = await _repository!.listGroups();
+    if (await _ensureFavoritesSearches(searches)) {
+      searches = await _repository!.listSearches();
+    }
     return (searches: searches, groups: groups);
+  }
+
+  /// Auto-creates a "Favorites" search (M27) for every configured account
+  /// that doesn't already have one -- same `pool:<id>`-style sentinel-query
+  /// trick [BunnySearch.isFavorites] already documents, so an account's
+  /// favorites get cached/paginated/synced through the exact same machinery
+  /// as any other saved search, with no dedicated favorites-fetching code
+  /// anywhere else in the app. Runs on every load (cheap: one [getAccount]
+  /// call per site plus a skip-if-present check) rather than only right
+  /// after account setup, so it's self-healing if the search is ever
+  /// deleted and so it retroactively covers accounts configured before this
+  /// feature existed. Returns true if anything was created, so the caller
+  /// knows to reload [listSearches] to pick it up.
+  Future<bool> _ensureFavoritesSearches(List<BunnySearch> existing) async {
+    // Read before the first `await` below -- this runs from didChangeDependencies
+    // (before the widget is necessarily mounted) as well as from a later
+    // setState, so `context` can't be trusted to still be valid afterward.
+    final label = AppLocalizations.of(context)!.searchesFavoritesLabel;
+    var created = false;
+    for (final site in BunnySite.values) {
+      if (existing.any((search) => search.site == site && search.isFavorites)) {
+        continue;
+      }
+      final account = await _repository!.getAccount(site);
+      if (account == null) {
+        continue;
+      }
+      final query = site == BunnySite.e621 ? 'fav:${account.username}' : 'favorited_by:me';
+      await _repository!.createSearch(site, label, query);
+      created = true;
+    }
+    return created;
   }
 
   @override
@@ -540,6 +579,9 @@ class _SearchesScreenState extends State<SearchesScreen> with SingleTickerProvid
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
     final onPoolsTab = _tabController.index == 1;
+    // No manual "add favorites" concept -- the Favorites tab is entirely
+    // auto-managed by _ensureFavoritesSearches (M27), so its FAB is hidden.
+    final onFavoritesTab = _tabController.index == 2;
     final wide = isWideScreen(context);
     return Scaffold(
       appBar: AppBar(
@@ -600,6 +642,8 @@ class _SearchesScreenState extends State<SearchesScreen> with SingleTickerProvid
                     downloadSettingsStore: widget.downloadSettingsStore,
                     settingsStore: widget.settingsStore,
                     onThemeModeChanged: widget.onThemeModeChanged,
+                    onThemeColorChanged: widget.onThemeColorChanged,
+                    onAmoledChanged: widget.onAmoledChanged,
                     onRepositoryConfigured: widget.onRepositoryConfigured,
                   ),
                 ),
@@ -628,7 +672,7 @@ class _SearchesScreenState extends State<SearchesScreen> with SingleTickerProvid
         bottom: TabBar(
           controller: _tabController,
           labelPadding: wide ? const EdgeInsets.symmetric(horizontal: 16, vertical: 4) : null,
-          tabs: [Tab(text: l10n.searchesTabSearches), Tab(text: l10n.searchesTabPools)],
+          tabs: [Tab(text: l10n.searchesTabSearches), Tab(text: l10n.searchesTabPools), Tab(text: l10n.searchesTabFavorites)],
         ),
       ),
       body: FutureBuilder<({List<BunnySearch> searches, List<BunnyGroup> groups})>(
@@ -639,16 +683,22 @@ class _SearchesScreenState extends State<SearchesScreen> with SingleTickerProvid
           }
           final all = snapshot.data!.searches;
           final groups = snapshot.data!.groups;
-          final searches = _sortedEntries(_buildEntries(all.where((search) => !search.isPool).toList(), groups));
+          final searches = _sortedEntries(_buildEntries(all.where((search) => !search.isPool && !search.isFavorites).toList(), groups));
           final pools = _sortedEntries(_buildEntries(all.where((search) => search.isPool).toList(), groups));
-          return TabBarView(controller: _tabController, children: [_searchList(searches, l10n.searchesEmptyState), _searchList(pools, l10n.searchesPoolsEmptyState)]);
+          final favorites = _sortedEntries(_buildEntries(all.where((search) => search.isFavorites).toList(), groups));
+          return TabBarView(
+            controller: _tabController,
+            children: [_searchList(searches, l10n.searchesEmptyState), _searchList(pools, l10n.searchesPoolsEmptyState), _searchList(favorites, l10n.searchesFavoritesEmptyState)],
+          );
         },
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: onPoolsTab ? _createPoolSearch : _createSearch,
-        tooltip: onPoolsTab ? l10n.searchesNewPoolTooltip : l10n.searchesNewSearchTooltip,
-        child: const Icon(Icons.add),
-      ),
+      floatingActionButton: onFavoritesTab
+          ? null
+          : FloatingActionButton(
+              onPressed: onPoolsTab ? _createPoolSearch : _createSearch,
+              tooltip: onPoolsTab ? l10n.searchesNewPoolTooltip : l10n.searchesNewSearchTooltip,
+              child: const Icon(Icons.add),
+            ),
     );
   }
 }

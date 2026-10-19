@@ -358,11 +358,29 @@ abstract class AppLocalizations {
   /// **'Pools'**
   String get searchesTabPools;
 
+  /// No description provided for @searchesTabFavorites.
+  ///
+  /// In en, this message translates to:
+  /// **'Favorites'**
+  String get searchesTabFavorites;
+
   /// No description provided for @searchesPoolsEmptyState.
   ///
   /// In en, this message translates to:
   /// **'No saved pools yet. Tap + to add one.'**
   String get searchesPoolsEmptyState;
+
+  /// No description provided for @searchesFavoritesEmptyState.
+  ///
+  /// In en, this message translates to:
+  /// **'No account configured yet -- add one in Accounts to see your favorites here.'**
+  String get searchesFavoritesEmptyState;
+
+  /// No description provided for @searchesFavoritesLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Favorites'**
+  String get searchesFavoritesLabel;
 
   /// No description provided for @searchesNewPoolTooltip.
   ///
@@ -898,6 +916,18 @@ abstract class AppLocalizations {
   /// **'Downvote'**
   String get postDetailDownvoteTooltip;
 
+  /// No description provided for @postDetailFavoriteStarsTooltip.
+  ///
+  /// In en, this message translates to:
+  /// **'Favorite ({stars}/3 hearts)'**
+  String postDetailFavoriteStarsTooltip(int stars);
+
+  /// No description provided for @postDetailFavoriteStarsRemoveTooltip.
+  ///
+  /// In en, this message translates to:
+  /// **'Remove favorite'**
+  String get postDetailFavoriteStarsRemoveTooltip;
+
   /// No description provided for @postDetailCommentsSectionLabel.
   ///
   /// In en, this message translates to:
@@ -1150,6 +1180,60 @@ abstract class AppLocalizations {
   /// **'System'**
   String get settingsThemeSystem;
 
+  /// No description provided for @settingsThemeColorLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Color'**
+  String get settingsThemeColorLabel;
+
+  /// No description provided for @settingsThemeColorPurple.
+  ///
+  /// In en, this message translates to:
+  /// **'Purple'**
+  String get settingsThemeColorPurple;
+
+  /// No description provided for @settingsThemeColorBlue.
+  ///
+  /// In en, this message translates to:
+  /// **'Blue'**
+  String get settingsThemeColorBlue;
+
+  /// No description provided for @settingsThemeColorGreen.
+  ///
+  /// In en, this message translates to:
+  /// **'Green'**
+  String get settingsThemeColorGreen;
+
+  /// No description provided for @settingsThemeColorOrange.
+  ///
+  /// In en, this message translates to:
+  /// **'Orange'**
+  String get settingsThemeColorOrange;
+
+  /// No description provided for @settingsThemeColorRed.
+  ///
+  /// In en, this message translates to:
+  /// **'Red'**
+  String get settingsThemeColorRed;
+
+  /// No description provided for @settingsThemeColorTeal.
+  ///
+  /// In en, this message translates to:
+  /// **'Teal'**
+  String get settingsThemeColorTeal;
+
+  /// No description provided for @settingsThemeColorPink.
+  ///
+  /// In en, this message translates to:
+  /// **'Pink'**
+  String get settingsThemeColorPink;
+
+  /// No description provided for @settingsAmoledLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'AMOLED (true black) dark mode'**
+  String get settingsAmoledLabel;
+
   /// No description provided for @settingsAppLockSection.
   ///
   /// In en, this message translates to:
@@ -1359,6 +1443,28 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Add tag'**
   String get settingsBlacklistAddLabel;
+
+  /// No description provided for @settingsBlacklistSyncE621Button.
+  ///
+  /// In en, this message translates to:
+  /// **'Sync from e621'**
+  String get settingsBlacklistSyncE621Button;
+
+  /// No description provided for @settingsBlacklistSyncE621Result.
+  ///
+  /// In en, this message translates to:
+  /// **'Added {added}, {alreadyPresent} already present, skipped {skippedMultiTag} multi-tag rule(s)'**
+  String settingsBlacklistSyncE621Result(
+    int added,
+    int alreadyPresent,
+    int skippedMultiTag,
+  );
+
+  /// No description provided for @settingsBlacklistSyncE621Failed.
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t sync from e621 -- check that an e621 account is configured'**
+  String get settingsBlacklistSyncE621Failed;
 
   /// No description provided for @postDetailDownloadTooltip.
   ///

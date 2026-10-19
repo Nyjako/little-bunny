@@ -153,7 +153,17 @@ class AppLocalizationsEn extends AppLocalizations {
   String get searchesTabPools => 'Pools';
 
   @override
+  String get searchesTabFavorites => 'Favorites';
+
+  @override
   String get searchesPoolsEmptyState => 'No saved pools yet. Tap + to add one.';
+
+  @override
+  String get searchesFavoritesEmptyState =>
+      'No account configured yet -- add one in Accounts to see your favorites here.';
+
+  @override
+  String get searchesFavoritesLabel => 'Favorites';
 
   @override
   String get searchesNewPoolTooltip => 'Add pool';
@@ -452,6 +462,14 @@ class AppLocalizationsEn extends AppLocalizations {
   String get postDetailDownvoteTooltip => 'Downvote';
 
   @override
+  String postDetailFavoriteStarsTooltip(int stars) {
+    return 'Favorite ($stars/3 hearts)';
+  }
+
+  @override
+  String get postDetailFavoriteStarsRemoveTooltip => 'Remove favorite';
+
+  @override
   String get postDetailCommentsSectionLabel => 'Discussion';
 
   @override
@@ -582,6 +600,33 @@ class AppLocalizationsEn extends AppLocalizations {
   String get settingsThemeSystem => 'System';
 
   @override
+  String get settingsThemeColorLabel => 'Color';
+
+  @override
+  String get settingsThemeColorPurple => 'Purple';
+
+  @override
+  String get settingsThemeColorBlue => 'Blue';
+
+  @override
+  String get settingsThemeColorGreen => 'Green';
+
+  @override
+  String get settingsThemeColorOrange => 'Orange';
+
+  @override
+  String get settingsThemeColorRed => 'Red';
+
+  @override
+  String get settingsThemeColorTeal => 'Teal';
+
+  @override
+  String get settingsThemeColorPink => 'Pink';
+
+  @override
+  String get settingsAmoledLabel => 'AMOLED (true black) dark mode';
+
+  @override
   String get settingsAppLockSection => 'App lock';
 
   @override
@@ -700,6 +745,22 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get settingsBlacklistAddLabel => 'Add tag';
+
+  @override
+  String get settingsBlacklistSyncE621Button => 'Sync from e621';
+
+  @override
+  String settingsBlacklistSyncE621Result(
+    int added,
+    int alreadyPresent,
+    int skippedMultiTag,
+  ) {
+    return 'Added $added, $alreadyPresent already present, skipped $skippedMultiTag multi-tag rule(s)';
+  }
+
+  @override
+  String get settingsBlacklistSyncE621Failed =>
+      'Couldn\'t sync from e621 -- check that an e621 account is configured';
 
   @override
   String get postDetailDownloadTooltip => 'Download';
