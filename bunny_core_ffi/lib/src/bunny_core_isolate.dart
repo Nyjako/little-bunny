@@ -103,6 +103,8 @@ Map<String, Object?> _postTagToMap(bunny_db_post_tag_t tag) => {'name': _readNul
 
 Map<String, Object?> _syncStatsToMap(bunny_core_sync_stats_t stats) => {'searchesChecked': stats.searches_checked, 'searchesSynced': stats.searches_synced, 'postsUpserted': stats.posts_upserted};
 
+Map<String, Object?> _blacklistSyncStatsToMap(bunny_core_blacklist_sync_stats_t stats) => {'added': stats.added, 'alreadyPresent': stats.already_present, 'skippedMultiTag': stats.skipped_multi_tag};
+
 Map<String, Object?> _queueStatsToMap(bunny_core_queue_stats_t stats) => {'actionsProcessed': stats.actions_processed, 'actionsSucceeded': stats.actions_succeeded, 'actionsFailed': stats.actions_failed};
 
 // --- Isolate request protocol ----------------------------------------------
@@ -342,6 +344,10 @@ class _BlacklistRemoveRequest extends _Request {
   final String tag;
 
   const _BlacklistRemoveRequest(this.site, this.tag);
+}
+
+class _SyncE621BlacklistRequest extends _Request {
+  const _SyncE621BlacklistRequest();
 }
 
 class _GetPostPoolIdsRequest extends _Request {
@@ -841,6 +847,10 @@ Object? _dispatch(Pointer<bunny_core_t>? core, _Request request, void Function(P
       case _BlacklistRemoveRequest r:
         _check(_bindings.bunny_core_blacklist_remove(c, _siteFromWire(r.site), r.tag.toNativeUtf8(allocator: arena).cast()));
         return null;
+      case _SyncE621BlacklistRequest():
+        final outStats = arena<bunny_core_blacklist_sync_stats_t>();
+        _check(_bindings.bunny_core_sync_e621_blacklist(c, outStats));
+        return _blacklistSyncStatsToMap(outStats.ref);
       case _GetPostPoolIdsRequest r:
         return _handleGetPostPoolIds(c, r);
       case _FetchAndCachePostRequest r:
@@ -1023,6 +1033,8 @@ class BunnyCoreNative {
   Future<void> blacklistAdd(String site, String tag) => _send<void>(_BlacklistAddRequest(site, tag));
 
   Future<void> blacklistRemove(String site, String tag) => _send<void>(_BlacklistRemoveRequest(site, tag));
+
+  Future<Map<String, Object?>> syncE621Blacklist() => _send<Map<String, Object?>>(const _SyncE621BlacklistRequest());
 
   Future<Map<String, Object?>> getPostRelationships(int postId) => _send<Map<String, Object?>>(_GetPostRelationshipsRequest(postId));
 

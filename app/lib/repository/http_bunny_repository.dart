@@ -102,6 +102,12 @@ BunnyQueueStats _queueStatsFromJson(Map<String, Object?> j) => BunnyQueueStats(
   actionsFailed: (j['actions_failed'] as num).toInt(),
 );
 
+BunnyBlacklistSyncStats _blacklistSyncStatsFromJson(Map<String, Object?> j) => BunnyBlacklistSyncStats(
+  added: (j['added'] as num).toInt(),
+  alreadyPresent: (j['already_present'] as num).toInt(),
+  skippedMultiTag: (j['skipped_multi_tag'] as num).toInt(),
+);
+
 /// True if [certificateDerBytes]' SHA-256 hash matches
 /// [expectedSha256Fingerprint] (hex, colons optional, case-insensitive). A
 /// pure function separate from the `X509Certificate`-accepting callback
@@ -482,6 +488,15 @@ class HttpBunnyRepository implements BunnyRepository {
     if (response.statusCode != 200) {
       _throwError(response);
     }
+  }
+
+  @override
+  Future<BunnyBlacklistSyncStats> syncE621Blacklist() async {
+    final response = await _client.post(_uri('/blacklist/e621/sync'), headers: _headers);
+    if (response.statusCode != 200) {
+      _throwError(response);
+    }
+    return _blacklistSyncStatsFromJson(_decodeObject(response));
   }
 
   @override

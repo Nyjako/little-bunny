@@ -488,3 +488,34 @@ e621_result_t e621_get_pool(e621_client_t *client, int64_t pool_id, e621_pool_t 
     cJSON_Delete(json);
     return result;
 }
+
+e621_result_t e621_get_blacklisted_tags(e621_client_t *client, char **out_blacklisted_tags)
+{
+    if (!client || !out_blacklisted_tags) {
+        return E621_ERR_INVALID_ARG;
+    }
+    if (!client->username || !client->api_key) {
+        return E621_ERR_AUTH;
+    }
+
+    char path[160];
+    snprintf(path, sizeof(path), "/users/%s.json", client->username);
+
+    cJSON *json = NULL;
+    e621_result_t result = perform_request(client, BUNNY_HTTP_GET, path, NULL, NULL, &json);
+    if (result != E621_OK) {
+        return result;
+    }
+
+    /* The user object is returned directly, same as /pools/{id}.json above --
+     * not wrapped in {"user": ...}. blacklisted_tags is absent (not merely
+     * empty) when e621 doesn't consider this request "self", so its absence
+     * here would be a sign of an auth mismatch rather than a genuinely empty
+     * blacklist -- but since e621 also uses "" for a genuinely empty one,
+     * there's no way to tell those two cases apart from this field alone,
+     * so both are treated the same (empty string back). */
+    cJSON *field = cJSON_GetObjectItemCaseSensitive(json, "blacklisted_tags");
+    *out_blacklisted_tags = goblin_copy_cstr(cJSON_IsString(field) ? field->valuestring : "");
+    cJSON_Delete(json);
+    return *out_blacklisted_tags ? E621_OK : E621_ERR_UNKNOWN;
+}

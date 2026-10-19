@@ -95,6 +95,12 @@ BunnyQueueStats _queueStatsFromMap(Map<String, Object?> m) => BunnyQueueStats(
   actionsFailed: m['actionsFailed'] as int,
 );
 
+BunnyBlacklistSyncStats _blacklistSyncStatsFromMap(Map<String, Object?> m) => BunnyBlacklistSyncStats(
+  added: m['added'] as int,
+  alreadyPresent: m['alreadyPresent'] as int,
+  skippedMultiTag: m['skippedMultiTag'] as int,
+);
+
 Future<T> _wrapped<T>(Future<T> Function() call) async {
   try {
     return await call();
@@ -291,6 +297,9 @@ class FfiBunnyRepository implements BunnyRepository {
 
   @override
   Future<void> removeBlacklistTag(BunnySite site, String tag) => _wrapped(() => _native.blacklistRemove(site.toWireString(), tag));
+
+  @override
+  Future<BunnyBlacklistSyncStats> syncE621Blacklist() async => _blacklistSyncStatsFromMap(await _wrapped(() => _native.syncE621Blacklist()));
 
   @override
   Future<BunnyPoolInfo> fetchPool(int poolId) async {

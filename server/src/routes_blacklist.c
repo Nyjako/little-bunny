@@ -117,7 +117,48 @@ static int blacklist_handler(struct mg_connection *conn, void *cbdata)
     return server_json_respond_error(conn, BUNNY_CORE_ERR_NOT_FOUND);
 }
 
+/* Read-only on e621's side -- pulls the configured e621 account's own
+ * blacklist and imports every single-tag line not already present locally
+ * (see bunny_core_sync_e621_blacklist's own doc comment for the multi-tag
+ * "AND" group caveat). No request body: there's nothing to configure, this
+ * either works against the one already-configured e621 account or it
+ * doesn't. */
+static int handle_post_blacklist_e621_sync(struct mg_connection *conn, server_context_t *ctx)
+{
+    bunny_core_blacklist_sync_stats_t stats;
+    memset(&stats, 0, sizeof(stats));
+    bunny_core_result_t result = bunny_core_sync_e621_blacklist(ctx->core, &stats);
+
+    if (result != BUNNY_CORE_OK) {
+        return server_json_respond_error(conn, result);
+    }
+
+    cJSON *response = cJSON_CreateObject();
+    cJSON_AddNumberToObject(response, "added", stats.added);
+    cJSON_AddNumberToObject(response, "already_present", stats.already_present);
+    cJSON_AddNumberToObject(response, "skipped_multi_tag", stats.skipped_multi_tag);
+    int status = server_json_respond(conn, 200, response);
+    cJSON_Delete(response);
+    return status;
+}
+
+static int blacklist_e621_sync_handler(struct mg_connection *conn, void *cbdata)
+{
+    server_context_t *ctx = (server_context_t *)cbdata;
+    if (!server_auth_check_request(ctx->auth, conn)) {
+        return 401;
+    }
+
+    const struct mg_request_info *info = mg_get_request_info(conn);
+    if (strcmp(info->request_method, "POST") != 0) {
+        return server_json_respond_error(conn, BUNNY_CORE_ERR_NOT_FOUND);
+    }
+
+    return handle_post_blacklist_e621_sync(conn, ctx);
+}
+
 void server_routes_register_blacklist(struct mg_context *mg_ctx, server_context_t *ctx)
 {
     mg_set_request_handler(mg_ctx, "/blacklist", blacklist_handler, ctx);
+    mg_set_request_handler(mg_ctx, "/blacklist/e621/sync", blacklist_e621_sync_handler, ctx);
 }

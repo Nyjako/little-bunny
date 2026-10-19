@@ -1363,6 +1363,49 @@ void test_verify_inkbunny_rejects_invalid_credentials(void)
     free(fixture);
 }
 
+void test_sync_e621_blacklist_requires_a_configured_account(void)
+{
+    /* bunny_core_build_e621_client still returns a valid (anonymous) client
+     * with no account configured -- e621_get_blacklisted_tags is what
+     * actually rejects it (E621_ERR_AUTH, no username/api_key to ask
+     * about), mapped the same blunt way every other e621 call failure is. */
+    bunny_core_result_t result = bunny_core_sync_e621_blacklist(g_core, NULL);
+    TEST_ASSERT_EQUAL(BUNNY_CORE_ERR_SITE, result);
+}
+
+void test_sync_e621_blacklist_imports_new_tags_and_skips_multi_tag_lines(void)
+{
+    bunny_core_account_set(g_core, BUNNY_DB_SITE_E621, "someuser", "someapikey");
+    bunny_core_blacklist_add(g_core, BUNNY_DB_SITE_E621, "already_here");
+
+    const char *profile_json = "{\"id\":1,\"name\":\"someuser\",\"blacklisted_tags\":\"already_here\\nbrand_new\\nrating:e young\\n\"}";
+    g_e621_state.bodies[0] = profile_json;
+    g_e621_state.body_count = 1;
+
+    bunny_core_blacklist_sync_stats_t stats;
+    memset(&stats, 0, sizeof(stats));
+    bunny_core_result_t result = bunny_core_sync_e621_blacklist(g_core, &stats);
+
+    TEST_ASSERT_EQUAL(BUNNY_CORE_OK, result);
+    TEST_ASSERT_EQUAL(1, stats.added);
+    TEST_ASSERT_EQUAL(1, stats.already_present);
+    TEST_ASSERT_EQUAL(1, stats.skipped_multi_tag);
+
+    bunny_db_string_list_t blacklist;
+    result = bunny_core_blacklist_list(g_core, BUNNY_DB_SITE_E621, &blacklist);
+    TEST_ASSERT_EQUAL(BUNNY_CORE_OK, result);
+    TEST_ASSERT_EQUAL(2, (int)blacklist.count); /* already_here + brand_new -- never "rating:e young" */
+    bool found_new = false;
+    for (size_t i = 0; i < blacklist.count; i++) {
+        if (strcmp(blacklist.items[i], "brand_new") == 0) {
+            found_new = true;
+        }
+        TEST_ASSERT_NOT_EQUAL(0, strcmp(blacklist.items[i], "rating:e young"));
+    }
+    TEST_ASSERT_TRUE(found_new);
+    bunny_db_string_list_free(&blacklist);
+}
+
 int main(void)
 {
     UNITY_BEGIN();
@@ -1413,5 +1456,7 @@ int main(void)
     RUN_TEST(test_verify_e621_rejects_when_site_call_fails);
     RUN_TEST(test_verify_inkbunny_accepts_valid_credentials);
     RUN_TEST(test_verify_inkbunny_rejects_invalid_credentials);
+    RUN_TEST(test_sync_e621_blacklist_requires_a_configured_account);
+    RUN_TEST(test_sync_e621_blacklist_imports_new_tags_and_skips_multi_tag_lines);
     return UNITY_END();
 }
