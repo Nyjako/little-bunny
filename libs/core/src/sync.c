@@ -529,6 +529,22 @@ static bunny_core_result_t sync_inkbunny_search(bunny_core_t *core, const bunny_
     int found_count = 0;
     int new_count = 0;
 
+    /* A favorites search is just a search whose query happens to be this
+     * exact sentinel (M27) -- same idea as e621's "pool:<id>" searches,
+     * except the sentinel is a fixed literal rather than carrying data,
+     * since it's always created by the app itself (never user-typed) once
+     * an Inkbunny account exists. Inkbunny's search API has no
+     * username-based equivalent of e621's "fav:<username>" tag --
+     * favorited_by_user_id needs the numeric id of whoever's *currently
+     * logged in*, resolved fresh here rather than baked into the query at
+     * creation time, since re-resolving on every sync is cheap and avoids
+     * ever going stale if the account changes. */
+    char favorited_by_user_id[32];
+    bool is_favorites_search = strcmp(search->query, "favorited_by:me") == 0;
+    if (is_favorites_search) {
+        snprintf(favorited_by_user_id, sizeof(favorited_by_user_id), "%lld", (long long)inkbunny_client_get_user_id(client));
+    }
+
     /* Inkbunny has no confirmed id-cursor pagination like e621's a<ID>/b<ID>,
      * so this still walks plain numeric pages (newest first, since nothing
      * in this codebase sets a custom Inkbunny sort order) -- but stops as
@@ -541,7 +557,11 @@ static bunny_core_result_t sync_inkbunny_search(bunny_core_t *core, const bunny_
     for (int page = 1;; page++) {
         inkbunny_search_params_t params;
         memset(&params, 0, sizeof(params));
-        params.text = search->query;
+        if (is_favorites_search) {
+            params.favorited_by_user_id = favorited_by_user_id;
+        } else {
+            params.text = search->query;
+        }
         params.page = page;
 
         inkbunny_submission_list_t submissions;

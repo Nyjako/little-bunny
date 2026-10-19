@@ -83,6 +83,16 @@ class BunnySearch {
   /// order, M22 -- pools read like comics, oldest page first).
   bool get isPool => site == BunnySite.e621 && query.startsWith('pool:');
 
+  /// Same "just a search with a recognizable query" trick as [isPool] (M27)
+  /// -- auto-created once per configured account (SearchesScreen) so a
+  /// user's favorites get cached/paginated/synced through the exact same
+  /// machinery as any other saved search, instead of a parallel fetch-on-
+  /// demand path. e621's query is a real `fav:<username>` tag search (no
+  /// backend support needed at all); Inkbunny's is the fixed literal
+  /// `favorited_by:me`, resolved to the logged-in account's numeric id at
+  /// sync time (see sync_inkbunny_search's own doc comment for why).
+  bool get isFavorites => (site == BunnySite.e621 && query.startsWith('fav:')) || (site == BunnySite.inkbunny && query == 'favorited_by:me');
+
   const BunnySearch({
     required this.id,
     required this.site,
