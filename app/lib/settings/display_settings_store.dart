@@ -22,6 +22,7 @@ class DisplaySettingsStore {
   static const _qualityKey = 'preview_quality';
   static const _columnsKey = 'grid_columns';
   static const _searchSortOrderKey = 'search_sort_order';
+  static const _preloadCountKey = 'image_preload_count';
 
   const DisplaySettingsStore();
 
@@ -55,5 +56,20 @@ class DisplaySettingsStore {
   Future<void> saveSearchSortOrder(SearchSortOrder order) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_searchSortOrderKey, order.name);
+  }
+
+  /// How many images [PostDetailScreen]/[FullScreenPostViewerScreen]
+  /// precache in each direction (next/previous) from whichever post is
+  /// currently shown -- 3 by default, so up to 7 images (3 behind, the
+  /// current one, 3 ahead) sit decoded in memory at once, trading some
+  /// memory for swiping through a gallery feeling instant either direction.
+  Future<int> loadImagePreloadCount() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getInt(_preloadCountKey) ?? 3;
+  }
+
+  Future<void> saveImagePreloadCount(int count) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(_preloadCountKey, count);
   }
 }
