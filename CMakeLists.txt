@@ -229,6 +229,22 @@ if(BUNNY_BUILD_SERVER)
       "CIVETWEB_ENABLE_ASAN OFF" # civetweb's own on-by-default-in-Debug sanitizer; our BUNNY_ENABLE_ASAN covers our own code
       "BUILD_SHARED_LIBS OFF"
   )
+
+  # QR code generation for `bunny_server --qr` (server/src/qr.c, M27) --
+  # single C file with no build system of its own (just a Makefile for its
+  # own demo/test binaries), so DOWNLOAD_ONLY + our own static library
+  # target, same pattern as sqlite3 above. Pinned to a commit since the repo
+  # tags releases per-language, not as a whole.
+  CPMAddPackage(
+    NAME qrcodegen
+    GITHUB_REPOSITORY nayuki/QR-Code-generator
+    GIT_TAG 3c6d0b3cefb4e049dc337e82237c9644399716a8
+    DOWNLOAD_ONLY YES
+  )
+  if(qrcodegen_ADDED)
+    add_library(qrcodegen STATIC ${qrcodegen_SOURCE_DIR}/c/qrcodegen.c)
+    target_include_directories(qrcodegen PUBLIC ${qrcodegen_SOURCE_DIR}/c)
+  endif()
 endif()
 
 if(BUNNY_BUILD_TESTS)
