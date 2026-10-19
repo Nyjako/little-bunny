@@ -81,7 +81,16 @@ class _UpdateDialogState extends State<_UpdateDialog> {
     if (last < text.length) {
       spans.add(TextSpan(text: text.substring(last)));
     }
-    return _releaseNotesSpan = TextSpan(style: DefaultTextStyle.of(context).style, children: spans);
+    // No explicit root style -- SelectableText.rich (like Text/Text.rich)
+    // resolves the ambient DefaultTextStyle itself, using its own correctly-
+    // nested context once it's actually built inside AlertDialog's content
+    // Material wrapper. Pre-resolving DefaultTextStyle.of(context) here and
+    // baking it in instead used _UpdateDialogState.build()'s own context --
+    // the one *constructing* the AlertDialog descriptor, not yet inside its
+    // content wrapper -- which fell back to Flutter's intentional "missing
+    // Material ancestor" debug style (48px, black weight, red/yellow
+    // double-underline): exactly the "massive, unreadable" text reported.
+    return _releaseNotesSpan = TextSpan(children: spans);
   }
 
   Future<void> _update() async {
