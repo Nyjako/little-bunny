@@ -179,7 +179,7 @@ void main() {
   });
 
   testWidgets('shows the persisted preview quality and grid columns', (WidgetTester tester) async {
-    SharedPreferences.setMockInitialValues({'preview_quality': 'medium', 'grid_columns': 4});
+    SharedPreferences.setMockInitialValues({'preview_quality': 'medium', 'grid_columns': 4, 'image_preload_count': 5});
 
     await tester.pumpWidget(
       wrapWithLocalization(
@@ -200,6 +200,7 @@ void main() {
     final button = tester.widget<SegmentedButton<PreviewQuality>>(find.byType(SegmentedButton<PreviewQuality>));
     expect(button.selected, {PreviewQuality.medium});
     expect(tester.widget<TextField>(find.widgetWithText(TextField, 'Grid columns')).controller!.text, '4');
+    expect(tester.widget<TextField>(find.widgetWithText(TextField, 'Images to preload (each direction)')).controller!.text, '5');
   });
 
   testWidgets('toggling auto-favorite on download persists it (M10.1)', (WidgetTester tester) async {
@@ -264,7 +265,7 @@ void main() {
     expect(await downloadStore.loadAutoUpvoteOnDownload(), isTrue);
   });
 
-  testWidgets('picking a preview quality and editing grid columns persists both', (WidgetTester tester) async {
+  testWidgets('picking a preview quality and editing grid columns/image preload count persists all three', (WidgetTester tester) async {
     const displayStore = DisplaySettingsStore();
 
     await tester.pumpWidget(
@@ -287,9 +288,12 @@ void main() {
     await tester.pumpAndSettle();
     await tester.enterText(find.widgetWithText(TextField, 'Grid columns'), '5');
     await tester.pump();
+    await tester.enterText(find.widgetWithText(TextField, 'Images to preload (each direction)'), '7');
+    await tester.pump();
 
     expect(await displayStore.loadPreviewQuality(), PreviewQuality.medium);
     expect(await displayStore.loadGridColumns(), 5);
+    expect(await displayStore.loadImagePreloadCount(), 7);
   });
 
   testWidgets('blacklist editor adds/removes tags per site (M13.3)', (WidgetTester tester) async {

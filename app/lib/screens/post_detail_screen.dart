@@ -110,6 +110,12 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
   late final int _initialIndex;
   late final PageController _pageController;
 
+  /// How many images on each side of the current page to [_preloadAround] --
+  /// loaded async (settings live in SharedPreferences) so it starts at the
+  /// settings' own default (3) and updates once the real saved value
+  /// arrives, rather than blocking the first frame on it.
+  int _preloadCount = 3;
+
   @override
   void initState() {
     super.initState();
@@ -122,6 +128,41 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
     // timing (only when a page actually becomes active, never just because
     // PageView pre-built it as the next/previous page).
     _markSeenWithRetry(_posts[_initialIndex].id);
+    _loadPreloadCountThenPreload();
+  }
+
+  /// [precacheImage] needs a [BuildContext] -- by the time this resolves
+  /// (SharedPreferences is async), the first frame has already built, so
+  /// `context` is valid, same reasoning as every other post-initState async
+  /// load on this screen.
+  Future<void> _loadPreloadCountThenPreload() async {
+    final count = await widget.displaySettingsStore.loadImagePreloadCount();
+    if (!mounted) {
+      return;
+    }
+    setState(() => _preloadCount = count);
+    _preloadAround(_initialIndex);
+  }
+
+  /// Precaches up to [_preloadCount] images on each side of [index] (image
+  /// posts only -- video posts stream rather than precache) so swiping
+  /// either direction shows an already-decoded image instead of a spinner.
+  void _preloadAround(int index) {
+    for (var offset = 1; offset <= _preloadCount; offset++) {
+      _preloadAt(index - offset);
+      _preloadAt(index + offset);
+    }
+  }
+
+  void _preloadAt(int index) {
+    if (index < 0 || index >= _posts.length) {
+      return;
+    }
+    final post = _posts[index];
+    if (!_isImage(post) || post.fileUrl == null) {
+      return;
+    }
+    precacheImage(CachedNetworkImageProvider(post.fileUrl!, headers: imageHeadersFor(post.site)), context);
   }
 
   @override
@@ -152,6 +193,7 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
 
   void _onPageChanged(int index) {
     _markSeenWithRetry(_posts[index].id);
+    _preloadAround(index);
   }
 
   void _goToDelta(int delta) {
@@ -269,8 +311,19 @@ class _PostDetailPageState extends State<_PostDetailPage> {
     // here, since PageView can build this widget for a page it's only
     // pre-rendering ahead of time, before the user actually swipes to it.
 
-    _tagsFuture = widget.repository.getPostTagsByCategory(widget.post.id);
-    _sourcesFuture = widget.repository.getPostSources(widget.post.id);
+    // _refreshedPost gates tags/sources (not downloads/relationships/pools/
+    // comments -- those are either user-owned or e621-only, where sync
+    // already returns full data) behind a fresh live fetch: a sync pass only
+    // ever stores what the *search/listing* endpoint returned, which for
+    // Inkbunny specifically omits tags, full file dimensions, and comment
+    // count entirely (only present on a full per-submission fetch) -- the
+    // detail page otherwise showed literally nothing for a Inkbunny post,
+    // tags included. For e621 (whose search endpoint already returns
+    // everything) this just keeps vote/favorite counts current, matching the
+    // "update counts on view" ask directly.
+    final refreshedPost = _refreshPost();
+    _tagsFuture = refreshedPost.then((_) => widget.repository.getPostTagsByCategory(widget.post.id));
+    _sourcesFuture = refreshedPost.then((_) => widget.repository.getPostSources(widget.post.id));
     _downloadsFuture = widget.repository.listDownloadsForPost(widget.post.id);
     if (widget.post.site == BunnySite.e621) {
       _relationshipsFuture = widget.repository.getPostRelationships(widget.post.id);
@@ -278,32 +331,65 @@ class _PostDetailPageState extends State<_PostDetailPage> {
       _commentsFuture = widget.repository.getPostComments(widget.post.id);
     }
 
-    final ext = widget.post.fileExt?.toLowerCase();
-    final url = widget.post.fileUrl;
-    if (isVideoExt(ext) && url != null) {
-      final controller = VideoPlayerController.networkUrl(Uri.parse(url), httpHeaders: imageHeadersFor(widget.post.site) ?? const {});
-      // Muted by default -- setVolume takes effect on the controller's value
-      // immediately (synchronously, before the first await inside it), so
-      // this reaches the platform side once initialize() completes below
-      // without a separate "apply volume after init" step.
-      controller.setVolume(0);
-      _videoController = controller;
-      final post = widget.post;
-      final aspectRatio = (post.width > 0 && post.height > 0) ? post.width / post.height : 16 / 9;
-      _videoInitFuture = controller.initialize().then((_) {
-        if (!mounted) {
-          return;
-        }
-        setState(() {
-          // Pass the post-metadata aspect ratio rather than letting Chewie
-          // fall back to the decoded video's own reported value -- fixes
-          // stretching for sources whose reported aspect ratio is wrong,
-          // mirroring the fix already applied to the full-screen image
-          // viewer (M9.6.1) for the same class of bug.
-          _chewieController = ChewieController(videoPlayerController: controller, aspectRatio: aspectRatio, autoPlay: true, looping: true, allowFullScreen: true, allowMuting: true);
-        });
-      });
+    _maybeInitVideo(widget.post);
+  }
+
+  /// Refetches this post live from its site and updates [_post] before
+  /// [_tagsFuture]/[_sourcesFuture] (and, via [_maybeInitVideo], a
+  /// not-yet-known-to-be-a-video post) load -- see the call site's doc
+  /// comment for why. Best-effort: falls back to showing whatever was
+  /// already cached if this fails (e.g. offline), same as every other
+  /// network call on this page.
+  Future<BunnyPost> _refreshPost() async {
+    try {
+      await widget.repository.fetchPost(widget.post.site, widget.post.externalId);
+      final fresh = await widget.repository.getPost(widget.post.id);
+      if (mounted) {
+        setState(() => _post = fresh);
+        _maybeInitVideo(fresh);
+      }
+      return fresh;
+    } catch (_) {
+      return widget.post;
     }
+  }
+
+  /// No-op if a video controller already exists (either this is the second
+  /// call, from [_refreshPost] after [initState] already found a video via
+  /// cached data, or [post] still isn't a video) -- [initState] calls this
+  /// with the cached (possibly fileExt/fileUrl-less, for Inkbunny) post
+  /// first, and [_refreshPost] calls it again once fresh data arrives, so a
+  /// video that only becomes knowable post-refresh still gets a player.
+  void _maybeInitVideo(BunnyPost post) {
+    if (_videoController != null) {
+      return;
+    }
+    final ext = post.fileExt?.toLowerCase();
+    final url = post.fileUrl;
+    if (!isVideoExt(ext) || url == null) {
+      return;
+    }
+    final controller = VideoPlayerController.networkUrl(Uri.parse(url), httpHeaders: imageHeadersFor(post.site) ?? const {});
+    // Muted by default -- setVolume takes effect on the controller's value
+    // immediately (synchronously, before the first await inside it), so
+    // this reaches the platform side once initialize() completes below
+    // without a separate "apply volume after init" step.
+    controller.setVolume(0);
+    _videoController = controller;
+    final aspectRatio = (post.width > 0 && post.height > 0) ? post.width / post.height : 16 / 9;
+    _videoInitFuture = controller.initialize().then((_) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        // Pass the post-metadata aspect ratio rather than letting Chewie
+        // fall back to the decoded video's own reported value -- fixes
+        // stretching for sources whose reported aspect ratio is wrong,
+        // mirroring the fix already applied to the full-screen image
+        // viewer (M9.6.1) for the same class of bug.
+        _chewieController = ChewieController(videoPlayerController: controller, aspectRatio: aspectRatio, autoPlay: true, looping: true, allowFullScreen: true, allowMuting: true);
+      });
+    });
   }
 
   @override
@@ -497,11 +583,14 @@ class _PostDetailPageState extends State<_PostDetailPage> {
     if (index == -1) {
       return;
     }
-    Navigator.push(context, MaterialPageRoute(builder: (context) => FullScreenPostViewerScreen(posts: images, initialIndex: index, repository: widget.repository)));
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (context) => FullScreenPostViewerScreen(posts: images, initialIndex: index, repository: widget.repository, displaySettingsStore: widget.displaySettingsStore)),
+    );
   }
 
   Widget _buildMedia(AppLocalizations l10n) {
-    final post = widget.post;
+    final post = _post;
     final ext = post.fileExt?.toLowerCase();
     if (ext == null || post.fileUrl == null) {
       return const SizedBox(height: 200);

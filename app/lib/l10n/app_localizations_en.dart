@@ -633,6 +633,10 @@ class AppLocalizationsEn extends AppLocalizations {
   String get settingsGridColumnsLabel => 'Grid columns';
 
   @override
+  String get settingsImagePreloadCountLabel =>
+      'Images to preload (each direction)';
+
+  @override
   String get settingsDownloadsSection => 'Downloads';
 
   @override

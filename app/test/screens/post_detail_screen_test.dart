@@ -19,7 +19,19 @@ import '../fakes/fake_bunny_repository.dart';
 import '../fakes/fake_video_player_platform.dart';
 import '../fakes/test_app.dart';
 
-BunnyPost _post({String? fileExt, String? fileUrl, bool noFileUrl = false, String? fileMd5, BunnySite site = BunnySite.e621, int id = 1, int externalId = 1, String title = 'A title'}) => BunnyPost(
+BunnyPost _post({
+  String? fileExt,
+  String? fileUrl,
+  bool noFileUrl = false,
+  String? fileMd5,
+  BunnySite site = BunnySite.e621,
+  int id = 1,
+  int externalId = 1,
+  String title = 'A title',
+  int commentCount = 3,
+  int width = 640,
+  int height = 480,
+}) => BunnyPost(
   id: id,
   site: site,
   externalId: externalId,
@@ -31,12 +43,12 @@ BunnyPost _post({String? fileExt, String? fileUrl, bool noFileUrl = false, Strin
   scoreUp: 15,
   scoreDown: 4,
   favCount: 10,
-  commentCount: 3,
+  commentCount: commentCount,
   fileUrl: noFileUrl ? null : (fileUrl ?? 'https://example.invalid/file.$fileExt'),
   fileExt: fileExt,
   fileMd5: fileMd5,
-  width: 640,
-  height: 480,
+  width: width,
+  height: height,
   createdAtSite: '2026-01-01T00:00:00Z',
   cachedAt: '2026-01-01T00:00:00Z',
   isSeen: false,
@@ -186,6 +198,33 @@ void main() {
     await scrollToEnd(tester);
     expect(find.text('3'), findsOneWidget); // commentCount, in the post-details column
     expect(find.text('640x480'), findsOneWidget);
+  });
+
+  // A sync pass only ever stores what Inkbunny's own search/listing endpoint
+  // returns, which omits tags, full file dimensions, and comment count
+  // entirely (only present on a full per-submission fetch) -- opening a post
+  // first synced that way previously showed no image, 0x0 dimensions, 0
+  // comments, and no tags at all, despite the thumbnail working fine in the
+  // grid. The page now does a live fetchPost+getPost refresh on open before
+  // showing tags/dimensions/comment-count/media, fixing this for Inkbunny and
+  // keeping e621's own counts current at the same time (M27).
+  testWidgets('refreshes a thin/stale cached post (M27) -- fills in dimensions, comment count, tags, and media', (WidgetTester tester) async {
+    final repository = FakeBunnyRepository();
+    final stalePost = _post(site: BunnySite.inkbunny, noFileUrl: true, commentCount: 0, width: 0, height: 0);
+    final freshPost = _post(site: BunnySite.inkbunny, fileExt: 'jpg', commentCount: 7, width: 1200, height: 900);
+    repository.postsBySearchId[1] = [stalePost];
+    repository.fetchPostResults['inkbunny:1'] = 1;
+    repository.postsById[1] = freshPost;
+    repository.tagsByPostId[1] = const [BunnyPostTag(name: 'freshly_loaded_tag', category: 'general')];
+
+    await tester.pumpWidget(wrapWithLocalization(PostDetailScreen(post: stalePost, repository: repository, displaySettingsStore: const DisplaySettingsStore(), downloadSettingsStore: const DownloadSettingsStore())));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(CachedNetworkImage), findsOneWidget);
+    await scrollToEnd(tester);
+    expect(find.text('7'), findsOneWidget); // refreshed commentCount
+    expect(find.text('1200x900'), findsOneWidget); // refreshed dimensions
+    expect(find.text('freshly_loaded_tag'), findsOneWidget);
   });
 
   for (final ext in ['jpg', 'png', 'gif', 'webp']) {
