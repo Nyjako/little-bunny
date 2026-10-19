@@ -56,6 +56,7 @@ BunnyPost _postFromMap(Map<String, Object?> m) => BunnyPost(
   isFavorited: m['isFavorited'] as bool,
   sampleUrl: m['sampleUrl'] as String?,
   userVote: m['userVote'] as int,
+  favoriteStars: m['favoriteStars'] as int,
 );
 
 BunnyTagStat _tagStatFromMap(Map<String, Object?> m) => BunnyTagStat(name: m['name'] as String, count: m['count'] as int);

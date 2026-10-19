@@ -470,6 +470,10 @@ class FakeBunnyRepository implements BunnyRepository {
   /// Each entry is the `postId` passed to [queueFavoriteAdd].
   final List<int> favoriteAddCalls = [];
 
+  /// Each entry is the `stars` passed to [queueFavoriteAdd], parallel-indexed
+  /// with [favoriteAddCalls] (M27's Inkbunny heart-tier favorites).
+  final List<int?> favoriteAddStarsCalls = [];
+
   /// Each entry is the `postId` passed to [queueFavoriteRemove].
   final List<int> favoriteRemoveCalls = [];
 
@@ -489,6 +493,7 @@ class FakeBunnyRepository implements BunnyRepository {
   @override
   Future<void> queueFavoriteAdd(int postId, {int? stars}) async {
     favoriteAddCalls.add(postId);
+    favoriteAddStarsCalls.add(stars);
   }
 
   @override

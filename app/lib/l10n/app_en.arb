@@ -211,6 +211,11 @@
   "postDetailFavoriteRemoveTooltip": "Remove from favorites",
   "postDetailUpvoteTooltip": "Upvote",
   "postDetailDownvoteTooltip": "Downvote",
+  "postDetailFavoriteStarsTooltip": "Favorite ({stars}/3 hearts)",
+  "@postDetailFavoriteStarsTooltip": {
+    "placeholders": {"stars": {"type": "int"}}
+  },
+  "postDetailFavoriteStarsRemoveTooltip": "Remove favorite",
   "postDetailCommentsSectionLabel": "Discussion",
   "postDetailNoCommentsYet": "No comments yet.",
   "postDetailCommentFieldLabel": "Add a comment",

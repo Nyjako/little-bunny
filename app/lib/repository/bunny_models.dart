@@ -146,6 +146,8 @@ class BunnyPost {
   /// -1, 0 (no vote), or 1 -- the caller's own most recently successfully
   /// sent vote direction (M9.7.1). Always 0 for Inkbunny (no vote API).
   final int userVote;
+  /// Inkbunny's 1-3 favorite rating; 0 if not favorited or e621's plain favorite.
+  final int favoriteStars;
 
   const BunnyPost({
     required this.id,
@@ -172,6 +174,7 @@ class BunnyPost {
     required this.isFavorited,
     this.sampleUrl,
     this.userVote = 0,
+    this.favoriteStars = 0,
   });
 }
 

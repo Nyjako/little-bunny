@@ -115,6 +115,7 @@ typedef struct
     bool is_favorited;
     char *sample_url; /* medium-quality variant (e621's "sample", Inkbunny's "screen"); may be NULL */
     int user_vote;    /* -1, 0 (no vote), or 1 -- always 0 for Inkbunny (M9.7.1) */
+    int favorite_stars; /* Inkbunny's 1-3 favorite rating; 0 if not favorited or e621's plain favorite */
 } bunny_db_post_t;
 
 typedef struct

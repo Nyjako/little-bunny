@@ -69,6 +69,7 @@ static cJSON *post_to_json(const bunny_db_post_t *post)
     cJSON_AddBoolToObject(json, "is_seen", post->is_seen);
     cJSON_AddBoolToObject(json, "is_favorited", post->is_favorited);
     cJSON_AddNumberToObject(json, "user_vote", post->user_vote);
+    cJSON_AddNumberToObject(json, "favorite_stars", post->favorite_stars);
     return json;
 }
 

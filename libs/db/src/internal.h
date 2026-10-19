@@ -90,7 +90,7 @@ static inline void bunny_db_bind_text_or_null(sqlite3_stmt *stmt, int idx, const
     "p.comment_count, p.file_url, p.file_ext, p.file_md5, p.preview_url, p.width, p.height, "         \
     "p.created_at_site, p.cached_at, (seen.post_id IS NOT NULL) AS is_seen, "                         \
     "(fav.post_id IS NOT NULL) AS is_favorited, p.score_up, p.score_down, pmv.sample_url, "           \
-    "COALESCE(vt.score, 0) AS user_vote "
+    "COALESCE(vt.score, 0) AS user_vote, COALESCE(fav.stars, 0) AS favorite_stars "
 
 #define BUNNY_DB_POST_SELECT_FROM_JOIN                         \
     "FROM posts p "                                            \

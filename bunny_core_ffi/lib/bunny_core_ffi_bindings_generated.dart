@@ -2084,6 +2084,10 @@ final class bunny_db_post_t extends ffi.Struct {
   /// -1, 0 (no vote), or 1 -- always 0 for Inkbunny (M9.7.1)
   @ffi.Int()
   external int user_vote;
+
+  /// Inkbunny's 1-3 favorite rating; 0 if not favorited or e621's plain favorite
+  @ffi.Int()
+  external int favorite_stars;
 }
 
 final class bunny_db_post_list_t extends ffi.Struct {
