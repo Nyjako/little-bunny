@@ -39,7 +39,13 @@ class UpdateCheckService {
   /// real one per call -- same pattern as [DownloadManager.client].
   final http.Client? client;
 
-  const UpdateCheckService({this.client});
+  /// Defaults to this build's own [appBuildNumber]; overridable for tests
+  /// that need to exercise the "update available" path without a
+  /// `--dart-define` (see `check()` below for why 0 itself is never treated
+  /// as newer than anything).
+  final int currentBuildNumber;
+
+  const UpdateCheckService({this.client, this.currentBuildNumber = appBuildNumber});
 
   /// The suffix identifying this platform's own release asset (every
   /// platform's filename is namespaced consistently, see release.yml) --
@@ -75,7 +81,7 @@ class UpdateCheckService {
         return UpdateCheckResult.none;
       }
       final latestBuildNumber = int.tryParse(tagName.substring('build-'.length));
-      if (latestBuildNumber == null || latestBuildNumber <= appBuildNumber) {
+      if (currentBuildNumber <= 0 || latestBuildNumber == null || latestBuildNumber <= currentBuildNumber) {
         return UpdateCheckResult.none;
       }
 

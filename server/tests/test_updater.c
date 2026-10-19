@@ -120,6 +120,21 @@ void test_parse_reports_no_update_when_current_build_is_newer(void)
     bunny_updater_check_result_free(&result);
 }
 
+void test_parse_reports_no_update_for_local_dev_build(void)
+{
+    /* current_build_number 0 is the local/dev-build sentinel (CMakeLists.txt
+     * defaults BUNNY_BUILD_NUMBER to "0") -- must never be treated as
+     * outdated relative to any real release, no matter how high. */
+    const char *json = "{\"tag_name\":\"build-999999\",\"assets\":[]}";
+
+    bunny_updater_check_result_t result;
+    bunny_updater_parse_latest_release(json, strlen(json), 0, "linux-x64.tar.gz", &result);
+
+    TEST_ASSERT_FALSE(result.update_available);
+
+    bunny_updater_check_result_free(&result);
+}
+
 void test_parse_update_available_but_no_matching_asset(void)
 {
     const char *json = "{\"tag_name\":\"build-42\",\"assets\":["
@@ -262,6 +277,7 @@ int main(void)
     RUN_TEST(test_parse_reports_update_available_with_matching_asset);
     RUN_TEST(test_parse_reports_no_update_when_current_build_is_latest);
     RUN_TEST(test_parse_reports_no_update_when_current_build_is_newer);
+    RUN_TEST(test_parse_reports_no_update_for_local_dev_build);
     RUN_TEST(test_parse_update_available_but_no_matching_asset);
     RUN_TEST(test_parse_ignores_a_tag_not_matching_this_projects_own_scheme);
     RUN_TEST(test_parse_rejects_malformed_json);
