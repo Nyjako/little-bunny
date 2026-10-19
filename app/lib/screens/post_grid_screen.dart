@@ -9,6 +9,7 @@ import '../settings/download_settings_store.dart';
 import '../util/responsive.dart';
 import '../widgets/post_grid_tile.dart';
 import 'post_detail_screen.dart';
+import 'tag_browse_screen.dart';
 
 /// Shows a [BunnySearch]'s cached posts as a thumbnail grid, with an unseen
 /// marker overlay and an "unseen only" filter (M8.3). Tapping a post opens
@@ -61,11 +62,103 @@ class _PostGridScreenState extends State<PostGridScreen> {
   /// no parallel download queue, see the M9 plan's reasoning).
   (int done, int total)? _massDownloadProgress;
 
+  /// Non-null only when this search is itself a pool browse ("pool:`<id>`"),
+  /// same convention as [TagBrowseScreen._poolId] -- parsed once up front
+  /// rather than re-parsed on every build.
+  int? get _poolId {
+    if (!widget.search.query.startsWith('pool:')) {
+      return null;
+    }
+    return int.tryParse(widget.search.query.substring(5));
+  }
+
+  /// The pool's own metadata (description + cross-referenced pools, M26) --
+  /// fetched best-effort alongside the post grid; a failure here just means
+  /// the info button's dialog falls back to "no description" (see below).
+  BunnyPoolInfo? _poolInfo;
+
   @override
   void initState() {
     super.initState();
     _postsFuture = _loadPosts();
     _loadDisplaySettings();
+    _loadPoolInfo();
+  }
+
+  Future<void> _loadPoolInfo() async {
+    final poolId = _poolId;
+    if (poolId == null) {
+      return;
+    }
+    try {
+      final info = await widget.repository.fetchPool(poolId);
+      if (mounted) {
+        setState(() => _poolInfo = info);
+      }
+    } catch (_) {
+      // Best-effort, see _poolInfo's doc comment.
+    }
+  }
+
+  void _openRelatedPool(int poolId) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => TagBrowseScreen(
+          site: widget.search.site,
+          query: 'pool:$poolId',
+          repository: widget.repository,
+          displaySettingsStore: widget.displaySettingsStore,
+          downloadSettingsStore: widget.downloadSettingsStore,
+        ),
+      ),
+    );
+  }
+
+  void _showPoolInfo(AppLocalizations l10n) {
+    final info = _poolInfo;
+    if (info == null) {
+      return;
+    }
+    final description = info.description;
+    final hasDescription = description != null && description.isNotEmpty;
+    showDialog<void>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(info.name ?? l10n.postGridPoolInfoTitle),
+        content: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(l10n.postGridPoolInfoPostCount(info.postCount), style: Theme.of(context).textTheme.labelMedium),
+              const SizedBox(height: 8),
+              Text(hasDescription ? description : l10n.postGridPoolInfoNoDescription),
+              if (info.referencedPoolIds.isNotEmpty) ...[
+                const SizedBox(height: 12),
+                Text(l10n.tagBrowseRelatedPoolsLabel, style: Theme.of(context).textTheme.labelMedium),
+                const SizedBox(height: 4),
+                Wrap(
+                  spacing: 4,
+                  children: info.referencedPoolIds
+                      .map(
+                        (poolId) => ActionChip(
+                          label: Text(l10n.tagBrowseRelatedPoolChip(poolId)),
+                          onPressed: () {
+                            Navigator.pop(context);
+                            _openRelatedPool(poolId);
+                          },
+                        ),
+                      )
+                      .toList(),
+                ),
+              ],
+            ],
+          ),
+        ),
+        actions: [TextButton(onPressed: () => Navigator.pop(context), child: Text(l10n.postGridPoolInfoCloseButton))],
+      ),
+    );
   }
 
   Future<void> _loadDisplaySettings() async {
@@ -290,6 +383,7 @@ class _PostGridScreenState extends State<PostGridScreen> {
       toolbarHeight: toolbarHeight,
       title: Text(widget.search.label),
       actions: [
+        if (_poolInfo != null) IconButton(icon: const Icon(Icons.info_outline), tooltip: l10n.postGridPoolInfoTooltip, onPressed: () => _showPoolInfo(l10n)),
         IconButton(icon: Icon(_unseenOnly ? Icons.visibility_off : Icons.visibility), tooltip: l10n.postGridUnseenOnlyTooltip, onPressed: _toggleUnseenOnly),
         IconButton(
           icon: _syncing ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.refresh),
