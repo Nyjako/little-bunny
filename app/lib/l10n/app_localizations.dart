@@ -358,11 +358,29 @@ abstract class AppLocalizations {
   /// **'Pools'**
   String get searchesTabPools;
 
+  /// No description provided for @searchesTabFavorites.
+  ///
+  /// In en, this message translates to:
+  /// **'Favorites'**
+  String get searchesTabFavorites;
+
   /// No description provided for @searchesPoolsEmptyState.
   ///
   /// In en, this message translates to:
   /// **'No saved pools yet. Tap + to add one.'**
   String get searchesPoolsEmptyState;
+
+  /// No description provided for @searchesFavoritesEmptyState.
+  ///
+  /// In en, this message translates to:
+  /// **'No account configured yet -- add one in Accounts to see your favorites here.'**
+  String get searchesFavoritesEmptyState;
+
+  /// No description provided for @searchesFavoritesLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Favorites'**
+  String get searchesFavoritesLabel;
 
   /// No description provided for @searchesNewPoolTooltip.
   ///

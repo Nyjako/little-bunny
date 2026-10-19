@@ -153,7 +153,17 @@ class AppLocalizationsEn extends AppLocalizations {
   String get searchesTabPools => 'Pools';
 
   @override
+  String get searchesTabFavorites => 'Favorites';
+
+  @override
   String get searchesPoolsEmptyState => 'No saved pools yet. Tap + to add one.';
+
+  @override
+  String get searchesFavoritesEmptyState =>
+      'No account configured yet -- add one in Accounts to see your favorites here.';
+
+  @override
+  String get searchesFavoritesLabel => 'Favorites';
 
   @override
   String get searchesNewPoolTooltip => 'Add pool';

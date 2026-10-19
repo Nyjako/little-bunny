@@ -1022,6 +1022,38 @@ void test_sync_inkbunny_search_upserts_post(void)
     free(empty_fixture);
 }
 
+void test_sync_inkbunny_favorites_search_requests_the_logged_in_users_own_favorites(void)
+{
+    /* A search whose query is exactly "favorited_by:me" (M27) is the
+     * auto-created "cache my favorites like a search" entry -- it must
+     * resolve the *currently logged in* account's numeric user id and send
+     * that as favs_user_id, never treating the sentinel as literal
+     * free-text keywords. */
+    g_inkbunny_transport.send = capturing_fake_send;
+
+    char *login_fixture = read_fixture("inkbunny_login_success_authenticated.json");
+    char *empty_fixture = read_fixture("inkbunny_search_response_empty.json");
+    TEST_ASSERT_NOT_NULL(login_fixture);
+    TEST_ASSERT_NOT_NULL(empty_fixture);
+    g_inkbunny_state.bodies[0] = login_fixture;
+    g_inkbunny_state.bodies[1] = empty_fixture;
+    g_inkbunny_state.body_count = 2;
+
+    int64_t search_id = 0;
+    bunny_core_result_t result = bunny_core_search_create(g_core, BUNNY_DB_SITE_INKBUNNY, "Favorites", "favorited_by:me", 24, NULL, &search_id);
+    TEST_ASSERT_EQUAL(BUNNY_CORE_OK, result);
+
+    bunny_core_sync_stats_t stats;
+    result = bunny_core_sync_due_searches(g_core, &stats);
+    TEST_ASSERT_EQUAL(BUNNY_CORE_OK, result);
+    TEST_ASSERT_EQUAL(1, stats.searches_synced);
+
+    TEST_ASSERT_NOT_NULL(strstr(g_captured_url, "favs_user_id=628881"));
+
+    free(login_fixture);
+    free(empty_fixture);
+}
+
 void test_sync_inkbunny_search_marks_a_favorited_submission_locally(void)
 {
     /* M10.3: same mirroring as the e621 test above, but for Inkbunny's own
@@ -1366,6 +1398,7 @@ int main(void)
     RUN_TEST(test_mark_seen_flips_is_seen_on_a_synced_post);
     RUN_TEST(test_mark_seen_rejects_a_nonexistent_post);
     RUN_TEST(test_sync_inkbunny_search_upserts_post);
+    RUN_TEST(test_sync_inkbunny_favorites_search_requests_the_logged_in_users_own_favorites);
     RUN_TEST(test_sync_inkbunny_search_marks_a_favorited_submission_locally);
     RUN_TEST(test_sync_inkbunny_search_second_sync_stops_at_already_synced_submission);
     RUN_TEST(test_sync_inkbunny_search_second_sync_upserts_only_the_new_submission);
