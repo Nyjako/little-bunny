@@ -1,4 +1,6 @@
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../l10n/app_localizations.dart';
 import '../services/update_apply_service.dart';
@@ -29,6 +31,58 @@ class _UpdateDialogState extends State<_UpdateDialog> {
   bool _updating = false;
   double? _progress;
   String? _error;
+
+  /// GitHub's auto-generated release notes (release.yml's
+  /// `generate_release_notes: true`) are plain text with bare PR/compare
+  /// URLs, not markdown links -- these recognizers make those URLs tappable
+  /// while [_releaseNotesSpan] still renders via [SelectableText.rich] so
+  /// the rest of the text stays copyable. Built once and cached rather than
+  /// per-build, since recreating a [TapGestureRecognizer] on every rebuild
+  /// without disposing the old one leaks them.
+  final List<TapGestureRecognizer> _linkRecognizers = [];
+  TextSpan? _releaseNotesSpan;
+
+  static final _urlPattern = RegExp(r'https?://\S+');
+
+  @override
+  void dispose() {
+    for (final recognizer in _linkRecognizers) {
+      recognizer.dispose();
+    }
+    super.dispose();
+  }
+
+  Future<void> _openLink(String url) async {
+    final uri = Uri.tryParse(url);
+    if (uri == null) {
+      return;
+    }
+    await launchUrl(uri, mode: LaunchMode.externalApplication);
+  }
+
+  TextSpan _linkifiedReleaseNotes(BuildContext context, String text) {
+    final cached = _releaseNotesSpan;
+    if (cached != null) {
+      return cached;
+    }
+    final linkStyle = TextStyle(color: Theme.of(context).colorScheme.primary, decoration: TextDecoration.underline);
+    final spans = <InlineSpan>[];
+    var last = 0;
+    for (final match in _urlPattern.allMatches(text)) {
+      if (match.start > last) {
+        spans.add(TextSpan(text: text.substring(last, match.start)));
+      }
+      final url = match.group(0)!;
+      final recognizer = TapGestureRecognizer()..onTap = () => _openLink(url);
+      _linkRecognizers.add(recognizer);
+      spans.add(TextSpan(text: url, style: linkStyle, recognizer: recognizer));
+      last = match.end;
+    }
+    if (last < text.length) {
+      spans.add(TextSpan(text: text.substring(last)));
+    }
+    return _releaseNotesSpan = TextSpan(style: DefaultTextStyle.of(context).style, children: spans);
+  }
 
   Future<void> _update() async {
     setState(() {
@@ -80,7 +134,7 @@ class _UpdateDialogState extends State<_UpdateDialog> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  if ((widget.result.releaseNotes ?? '').isNotEmpty) Text(widget.result.releaseNotes!),
+                  if ((widget.result.releaseNotes ?? '').isNotEmpty) SelectableText.rich(_linkifiedReleaseNotes(context, widget.result.releaseNotes!)),
                   if (_error != null) Padding(padding: const EdgeInsets.only(top: 8), child: Text(_error!, style: TextStyle(color: Theme.of(context).colorScheme.error))),
                 ],
               ),
