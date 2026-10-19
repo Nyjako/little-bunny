@@ -1818,3 +1818,80 @@ this file is the single source of truth for "what's done" across sessions.
     cross-build of the *C server/libraries* via dockcross (`make windows`) is unrelated and
     tracked by the `architecture.md` "Cross-compilation" section's own known gap, not by
     this milestone.
+
+- [x] **M27 — Server pairing, Inkbunny image fix, heart favorites, favorites caching, blacklist sync**
+  A batch of smaller features and fixes from a single session's worth of user feedback.
+  - **QR code pairing** (PR #114): new `bunny_server --qr` CLI flag prints a terminal QR
+    code (+ raw JSON fallback for manual copy-paste) encoding `server_url`/`bearer_token`/
+    `cert_sha256`, for the app's "Networked" setup screen to scan instead of typing all
+    three in by hand. Vendors nayuki/QR-Code-generator (MIT, single C file) via CPM
+    `DOWNLOAD_ONLY`. Android-side QR *scanning* UI is still backlog (see M28).
+  - **Fix: missing images on Inkbunny posts** (PR #115): `upsert_inkbunny_submission`
+    never populated `file_ext` (Inkbunny's API has no bare `ext` field like e621's) --
+    the Flutter media widget treats a null `fileExt` as "nothing to render," hiding an
+    otherwise-correct `fileUrl` entirely. Fixed by deriving the extension from the real
+    file name's suffix.
+  - **Inkbunny 1-3 heart favorites** (PR #116): replaced the greyed-out e621-style
+    up/downvote buttons (Inkbunny has no vote API at all) with three tappable hearts
+    matching Inkbunny's actual favorite model, filled left-to-right up to the post's
+    current tier. Threaded `favorite_stars` through `bunny_db_post_t`, the HTTP JSON
+    routes, and both FFI/HTTP Dart repositories -- the write-side plumbing
+    (`bunny_core_queue_favorite_add(post_id, stars)`) already existed from an earlier
+    milestone.
+  - **Favorites cached and synced like searches, with a post count** (PR #117): a
+    favorites search is just a saved search whose `query` carries a recognizable
+    sentinel, the same trick already used for e621 pool searches (`pool:<id>`). e621
+    gets a real `fav:<username>` tag search (zero backend changes needed -- e621
+    already understands this natively); Inkbunny gets the fixed literal
+    `favorited_by:me`, resolved to the logged-in account's numeric id at sync time
+    (`sync_inkbunny_search`), since Inkbunny's search API needs a numeric id, not a
+    username. Both get the existing search sync/pagination/caching machinery and the
+    searches list's existing "N posts" count display for free. `SearchesScreen`
+    auto-creates one favorites search per configured account on load (self-healing if
+    deleted; retroactive for accounts configured before this existed) and surfaces them
+    in a new "Favorites" tab alongside Searches/Pools.
+  - **e621 blacklist sync** (PR #118): a "Sync from e621" button (Settings, blacklist
+    section's e621 tab) pulls the configured e621 account's own blacklist (My Account ->
+    Blacklisted Tags on e621.net, same API `tools/e621_blacklist_experiment/
+    e621_blacklist.py` prototyped) and imports every single-tag entry not already
+    present locally. Read-only on e621's side. e621 allows multi-tag "AND" lines (e.g.
+    `rating:e young`) the local blacklist has no concept of yet -- those are skipped and
+    counted separately rather than silently dropped or misinterpreted as one literal
+    (space-containing) tag; full AND-group support is backlog (see M28).
+
+- [ ] **M28 — Search filters, Inkbunny type coverage, and diagnostics (planned, not started)**
+  Backlog from the same round of feedback that produced M27, roughly in the order the
+  user asked to tackle them.
+  - [ ] **Rating + media-type filters.** Post-grid filtering by rating (safe/
+    questionable/explicit, color-coded the same as the existing `RatingBadge`) and by
+    media type (image/video/gif). No existing filter infrastructure at all yet --
+    greenfield across the DB query layer, core, FFI, HTTP routes, and `PostGridScreen`.
+  - [ ] **Inkbunny submission-type coverage.** `inkbunny_submission_t.submission_type_id`/
+    `.type_name` are already parsed by the Inkbunny client but discarded before reaching
+    the database -- same shape of gap M27's `file_ext` fix addressed. Needs auditing
+    against the user's own 14 example submission ids (one per Inkbunny submission type)
+    to confirm what actually renders correctly today. Flash submissions (Shockwave/Flash
+    - Animation, Shockwave/Flash - Interactive) are to be **permanently dropped/filtered
+    out**, not supported, once this is scoped.
+  - [ ] **Blacklist "AND" groups.** M27's e621 blacklist sync only imports single-tag
+    lines; multi-tag space-separated lines (e621's "AND" semantics -- a post is
+    blacklisted only when *every* tag on that line matches) are skipped and merely
+    counted. Extending the local blacklist's matching logic (currently a flat
+    `List<String>` of exact-match tags, see `post_detail_screen.dart`'s
+    `tags.where(blacklist.contains)`) to support these is a separate, larger change.
+  - [ ] **Confirm Inkbunny private-submission access.** Reported as broken (submission
+    726100, a private/friends-only post, 404s under a guest-session test). Investigation
+    found the single-post fetch path (`bunny_core_fetch_and_cache_post` ->
+    `bunny_core_build_inkbunny_client`, `libs/core/src/site_clients.c`) already
+    authenticates with the real configured account (username *and* password, already
+    stored server-side the same way e621's account is) whenever one exists -- so this
+    may already work with no further changes. Needs the user to confirm a real Inkbunny
+    account (not guest) is actually configured in the app before concluding anything is
+    genuinely broken.
+  - [ ] **Scheduler "N due searches" log diagnostic.** Production logs showed "synced
+    0/689 due searches" unchanged across several consecutive 15-minute scheduler ticks.
+    Mechanically consistent with ordinary behavior (searches on longer sync intervals
+    simply not due yet within that window) but unconfirmed without direct DB access.
+    Add a log line reporting the next-due timestamp (or how many hours until the
+    soonest-due search) whenever 0 searches sync, so this is self-diagnosing from the
+    logs alone going forward, without needing to SSH in and query `searches` directly.

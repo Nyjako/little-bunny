@@ -1,7 +1,7 @@
 /* timegm isn't standard C11 -- glibc only declares it when a sufficiently
  * permissive feature-test macro is requested. Must be defined before any
  * system header pulls in <features.h>. (strptime used to need _XOPEN_SOURCE
- * too, but search_is_due() below parses last_run_at with sscanf instead now
+ * too, but seconds_until_due() below parses last_run_at with sscanf instead now
  * -- that format is always exactly "%Y-%m-%dT%H:%M:%S" (this app's own
  * output), so there's no real parsing to delegate to strptime for, and
  * sscanf is standard C with no glibc extension or feature-test-macro
@@ -61,19 +61,25 @@ GOBLIN_DYN_ARRAY_DECL(bunny_core_int64, int64_t)
 #define bunny_timegm timegm
 #endif
 
-/* default_interval_hours is only consulted when search->uses_default_interval
+/* <= 0 means due right now; otherwise the number of seconds remaining until
+ * `search` becomes due. Feeds both search_is_due (the yes/no check every
+ * sync pass actually needs) and bunny_core_sync_due_searches' own
+ * "seconds_until_next_due" diagnostic stat (M28) -- computed once per search
+ * either way, rather than duplicating this parsing in two places.
+ *
+ * default_interval_hours is only consulted when search->uses_default_interval
  * is set -- resolved once per bunny_core_sync_due_searches call (not once per
  * search) and passed down, since it's the same single row read regardless of
  * how many searches are being checked. */
-static bool search_is_due(const bunny_db_search_t *search, int default_interval_hours)
+static double seconds_until_due(const bunny_db_search_t *search, int default_interval_hours)
 {
     if (!search->last_run_at) {
-        return true;
+        return 0;
     }
 
     int year, month, day, hour, min, sec;
     if (sscanf(search->last_run_at, "%d-%d-%dT%d:%d:%d", &year, &month, &day, &hour, &min, &sec) != 6) {
-        return true; /* unparseable timestamp -- treat as due rather than getting stuck */
+        return 0; /* unparseable timestamp -- treat as due rather than getting stuck */
     }
 
     struct tm tm_last;
@@ -86,9 +92,8 @@ static bool search_is_due(const bunny_db_search_t *search, int default_interval_
     tm_last.tm_sec = sec;
 
     time_t last_run = bunny_timegm(&tm_last);
-    double hours_elapsed = difftime(time(NULL), last_run) / 3600.0;
     int effective_interval_hours = search->uses_default_interval ? default_interval_hours : search->interval_hours;
-    return hours_elapsed >= effective_interval_hours;
+    return difftime(last_run, time(NULL)) + effective_interval_hours * 3600.0;
 }
 
 static char *join_string_list(const e621_string_list_t *list)
@@ -1041,10 +1046,15 @@ bunny_core_result_t bunny_core_sync_due_searches(bunny_core_t *core, bunny_core_
         return bunny_core_map_db_result(list_result);
     }
 
+    stats.seconds_until_next_due = -1;
     for (size_t i = 0; i < searches.count; i++) {
         const bunny_db_search_t *search = &searches.items[i]; /* searches is this call's own heap snapshot, safe to read lock-free across the sync call below */
         stats.searches_checked++;
-        if (!search_is_due(search, default_interval_hours)) {
+        double remaining = seconds_until_due(search, default_interval_hours);
+        if (remaining > 0) {
+            if (stats.seconds_until_next_due < 0 || remaining < stats.seconds_until_next_due) {
+                stats.seconds_until_next_due = remaining;
+            }
             continue;
         }
 

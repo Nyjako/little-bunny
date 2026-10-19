@@ -1203,8 +1203,23 @@ void test_sync_skips_search_not_due_yet(void)
     TEST_ASSERT_EQUAL(1, stats.searches_checked);
     TEST_ASSERT_EQUAL(0, stats.searches_synced);
     TEST_ASSERT_EQUAL(0, stats.posts_upserted);
+    /* Just touched with a 24h interval -- due again in ~24h, give or take
+     * test execution time (M28's "why was 0 synced" diagnostic). */
+    TEST_ASSERT_TRUE(stats.seconds_until_next_due > 23.0 * 3600.0);
+    TEST_ASSERT_TRUE(stats.seconds_until_next_due <= 24.0 * 3600.0);
 
     free(fixture);
+}
+
+void test_sync_due_searches_reports_minus_one_when_there_are_no_searches_at_all(void)
+{
+    bunny_core_sync_stats_t stats;
+    bunny_core_result_t result = bunny_core_sync_due_searches(g_core, &stats);
+
+    TEST_ASSERT_EQUAL(BUNNY_CORE_OK, result);
+    TEST_ASSERT_EQUAL(0, stats.searches_checked);
+    TEST_ASSERT_EQUAL(0, stats.searches_synced);
+    TEST_ASSERT_TRUE(stats.seconds_until_next_due == -1.0); /* Unity's double-precision asserts are disabled in this build */
 }
 
 void test_default_sync_interval_hours_round_trips(void)
@@ -1446,6 +1461,7 @@ int main(void)
     RUN_TEST(test_sync_inkbunny_search_second_sync_stops_at_already_synced_submission);
     RUN_TEST(test_sync_inkbunny_search_second_sync_upserts_only_the_new_submission);
     RUN_TEST(test_sync_skips_search_not_due_yet);
+    RUN_TEST(test_sync_due_searches_reports_minus_one_when_there_are_no_searches_at_all);
     RUN_TEST(test_default_sync_interval_hours_round_trips);
     RUN_TEST(test_search_create_and_update_round_trip_uses_default_interval);
     RUN_TEST(test_group_create_list_update_delete_round_trip);

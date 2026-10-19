@@ -175,6 +175,14 @@ static void run_slot(task_queue_t *queue, const task_slot_t *slot)
             bunny_core_sync_stats_t stats;
             bunny_core_sync_due_searches(queue->core, &stats);
             server_log("INFO", "task queue: synced %d/%d due searches (%d posts upserted)", stats.searches_synced, stats.searches_checked, stats.posts_upserted);
+            /* "0 synced" is unremarkable by itself (every search just has a
+             * longer interval than the gap between ticks) -- this makes that
+             * self-diagnosing from the logs alone, without needing to query
+             * the searches table directly, by saying exactly how long until
+             * the next one is actually due. */
+            if (stats.searches_synced == 0 && stats.seconds_until_next_due >= 0) {
+                server_log("INFO", "task queue: next due search in %.0f minute(s)", stats.seconds_until_next_due / 60.0);
+            }
             server_sync_status_clear(queue->status);
             break;
         }
