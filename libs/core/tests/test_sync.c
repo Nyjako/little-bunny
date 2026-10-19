@@ -392,6 +392,16 @@ void test_fetch_and_cache_post_upserts_live_inkbunny_submission(void)
      * would need its own guest-login fixture, since bunny_core_build_
      * inkbunny_client logs in fresh every call, unlike e621's anonymous GETs. */
 
+    /* file_ext must be derived from the file's real name (Inkbunny has no
+     * bare "ext" field the way e621 does) -- without it the app's
+     * fileExt-gated media widget renders nothing at all, even though
+     * file_url above is already a perfectly good image URL. */
+    bunny_db_post_t post;
+    result = bunny_core_post_get_by_id(g_core, post_id, &post);
+    TEST_ASSERT_EQUAL(BUNNY_CORE_OK, result);
+    TEST_ASSERT_EQUAL_STRING("jpg", post.file_ext);
+    bunny_db_post_free(&post);
+
     free(login_fixture);
     free(submission_fixture);
 }

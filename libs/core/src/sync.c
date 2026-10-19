@@ -248,10 +248,33 @@ static bunny_core_result_t upsert_e621_post(bunny_db_t *db, const e621_post_t *p
     return bunny_core_map_db_result(result);
 }
 
+/* Inkbunny's API has no e621-style bare "ext" field -- derive one from the
+ * real file name's suffix (e.g. "full_12345_user_title.jpg" -> "jpg") so the
+ * app's fileExt-gated media widget (post_detail_screen.dart's _buildMedia)
+ * has something to key off of, same as e621's post->file.ext does. Returns
+ * NULL (not a malloc'd empty string) when there's no '.' to split on, so
+ * callers can free() unconditionally without a NULL check. */
+static char *inkbunny_file_ext(const char *file_name)
+{
+    if (!file_name) {
+        return NULL;
+    }
+    const char *dot = strrchr(file_name, '.');
+    if (!dot || !dot[1]) {
+        return NULL;
+    }
+    char *ext = goblin_copy_cstr(dot + 1);
+    if (ext) {
+        goblin_to_lower_cstr(ext);
+    }
+    return ext;
+}
+
 static bunny_core_result_t upsert_inkbunny_submission(bunny_db_t *db, const inkbunny_submission_t *submission, int64_t *out_post_id)
 {
     flat_tag_list_t tags = flatten_inkbunny_keywords(submission);
     const inkbunny_file_t *file = submission->files.count > 0 ? &submission->files.items[0] : NULL;
+    char *file_ext = file ? inkbunny_file_ext(file->file_name) : NULL;
 
     bunny_db_post_upsert_t upsert;
     memset(&upsert, 0, sizeof(upsert));
@@ -264,6 +287,7 @@ static bunny_core_result_t upsert_inkbunny_submission(bunny_db_t *db, const inkb
     upsert.fav_count = submission->favorites_count;
     upsert.comment_count = submission->comments_count;
     upsert.file_url = file ? file->url_full : NULL;
+    upsert.file_ext = file_ext;
     upsert.file_md5 = file ? file->md5 : NULL;
     upsert.preview_url = submission->thumbnail_url;
     upsert.width = file ? file->full_width : 0;
@@ -280,6 +304,7 @@ static bunny_core_result_t upsert_inkbunny_submission(bunny_db_t *db, const inkb
     }
 
     free((void *)tags.items);
+    free(file_ext);
 
     return bunny_core_map_db_result(result);
 }
