@@ -84,7 +84,25 @@ jobs:
         with:
           flutter-version: ${{ env.FLUTTER_VERSION }}
           channel: stable
+      # A stable signing key (app/android/app/build.gradle.kts reads these
+      # env vars) so this release's .apk can upgrade-install over the
+      # previous one -- without it, every CI run falls back to a freshly
+      # auto-generated debug keystore, a different signing certificate each
+      # time, which Android refuses to install over whatever's already on
+      # the phone. The keystore itself never touches the filesystem outside
+      # this ephemeral runner.
+      - name: Decode Android release keystore
+        working-directory: app/android/app
+        run: echo "${{ secrets.BUNNY_ANDROID_KEYSTORE_B64 }}" | base64 -d > release.keystore
       - working-directory: app
+        env:
+          # Resolved by Gradle's file() relative to the :app module's own
+          # projectDir (app/android/app/), where the decode step above wrote
+          # it -- NOT relative to this step's own working-directory (app/).
+          BUNNY_ANDROID_KEYSTORE_PATH: release.keystore
+          BUNNY_ANDROID_KEYSTORE_PASSWORD: ${{ secrets.BUNNY_ANDROID_KEYSTORE_PASSWORD }}
+          BUNNY_ANDROID_KEY_ALIAS: ${{ secrets.BUNNY_ANDROID_KEY_ALIAS }}
+          BUNNY_ANDROID_KEY_PASSWORD: ${{ secrets.BUNNY_ANDROID_KEY_PASSWORD }}
         run: |
           flutter pub get
           # --target-platform restricts the native (curl/sqlite3/cJSON/bunny_*)
