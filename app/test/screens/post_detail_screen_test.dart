@@ -687,22 +687,45 @@ void main() {
     expect(upvoteIcon().color, Colors.green);
   });
 
-  testWidgets('vote buttons are disabled for Inkbunny posts, favorite stays enabled', (WidgetTester tester) async {
+  testWidgets('Inkbunny posts show 3 favorite hearts instead of vote buttons (M27)', (WidgetTester tester) async {
     final repository = FakeBunnyRepository();
     final post = _post(fileExt: 'jpg', site: BunnySite.inkbunny);
 
     await tester.pumpWidget(wrapWithLocalization(PostDetailScreen(post: post, repository: repository, displaySettingsStore: const DisplaySettingsStore(), downloadSettingsStore: const DownloadSettingsStore())));
     await tester.pumpAndSettle();
 
-    // The upvote/downvote/favorite stat actions (M9.6.5) are a Tooltip
-    // wrapping a TextButton.icon -- the reverse nesting of IconButton's own
-    // internal tooltip (where the IconButton is the ancestor), so this looks
-    // for a TextButton *descendant* of the tooltip rather than an ancestor.
-    Finder statActionFor(String tooltip) => find.descendant(of: find.byTooltip(tooltip), matching: find.byType(TextButton));
+    expect(find.byTooltip('Upvote'), findsNothing);
+    expect(find.byTooltip('Downvote'), findsNothing);
+    expect(find.byTooltip('Favorite (1/3 hearts)'), findsOneWidget);
+    expect(find.byTooltip('Favorite (2/3 hearts)'), findsOneWidget);
+    expect(find.byTooltip('Favorite (3/3 hearts)'), findsOneWidget);
+  });
 
-    expect(tester.widget<TextButton>(statActionFor('Upvote')).onPressed, isNull);
-    expect(tester.widget<TextButton>(statActionFor('Downvote')).onPressed, isNull);
-    expect(tester.widget<TextButton>(statActionFor('Add to favorites')).onPressed, isNotNull);
+  testWidgets('tapping an Inkbunny heart queues a favorite at that tier and fills the hearts up to it (M27)', (WidgetTester tester) async {
+    final repository = FakeBunnyRepository();
+    final post = _post(fileExt: 'jpg', site: BunnySite.inkbunny);
+
+    await tester.pumpWidget(wrapWithLocalization(PostDetailScreen(post: post, repository: repository, displaySettingsStore: const DisplaySettingsStore(), downloadSettingsStore: const DownloadSettingsStore())));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byTooltip('Favorite (2/3 hearts)'));
+    await tester.pumpAndSettle();
+
+    expect(repository.favoriteAddCalls, [1]);
+    expect(repository.favoriteAddStarsCalls, [2]);
+    expect(repository.processQueueCallCount, 1);
+    expect(find.text('11'), findsOneWidget); // favCount optimistically bumped from 10
+
+    // Tapping the already-selected top tier again removes the favorite
+    // entirely -- Inkbunny's hearts are a single tier, not a cumulative
+    // rating, so re-tapping the same heart is the "unfavorite" gesture.
+    expect(find.byTooltip('Remove favorite'), findsOneWidget);
+    await tester.tap(find.byTooltip('Remove favorite'));
+    await tester.pumpAndSettle();
+
+    expect(repository.favoriteRemoveCalls, [1]);
+    expect(find.text('10'), findsOneWidget); // favCount back to its original value
+    expect(find.byTooltip('Favorite (2/3 hearts)'), findsOneWidget);
   });
 
   group('download button (M9.4)', () {

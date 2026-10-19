@@ -34,7 +34,7 @@ bool _isImage(BunnyPost post) => post.fileExt != null && _imageExtensions.contai
 /// waiting for a resync. No `copyWith` exists on [BunnyPost] (nothing else
 /// needed one), so this just lists every field once, same manual-
 /// reconstruction approach `FakeBunnyRepository._markedSeen` already uses.
-BunnyPost _applyOptimisticUpdate(BunnyPost post, {bool? isFavorited, int favCountDelta = 0, int scoreDelta = 0, int scoreUpDelta = 0, int scoreDownDelta = 0, int? userVote}) => BunnyPost(
+BunnyPost _applyOptimisticUpdate(BunnyPost post, {bool? isFavorited, int favCountDelta = 0, int scoreDelta = 0, int scoreUpDelta = 0, int scoreDownDelta = 0, int? userVote, int? favoriteStars}) => BunnyPost(
   id: post.id,
   site: post.site,
   externalId: post.externalId,
@@ -59,6 +59,7 @@ BunnyPost _applyOptimisticUpdate(BunnyPost post, {bool? isFavorited, int favCoun
   isFavorited: isFavorited ?? post.isFavorited,
   sampleUrl: post.sampleUrl,
   userVote: userVote ?? post.userVote,
+  favoriteStars: favoriteStars ?? post.favoriteStars,
 );
 
 /// Full read-only metadata + media viewer for a single post (M8.4, redesigned
@@ -436,6 +437,44 @@ class _PostDetailPageState extends State<_PostDetailPage> {
     });
   }
 
+  /// Inkbunny's favorite is a single 1-3 star tier (not e621's plain
+  /// favorite/unfavorite toggle) -- tapping the already-selected tier's heart
+  /// removes the favorite entirely, same as tapping [_toggleFavorite]'s heart
+  /// a second time would; tapping any other heart re-favorites at that tier
+  /// (Inkbunny's API only has "favorite at level N", not "change level", so
+  /// this always goes through queueFavoriteAdd even when already favorited).
+  Future<void> _setInkbunnyFavoriteStars(AppLocalizations l10n, int stars) async {
+    final wasFavorited = _post.isFavorited;
+    final removing = wasFavorited && _post.favoriteStars == stars;
+    bool succeeded;
+    try {
+      if (removing) {
+        await widget.repository.queueFavoriteRemove(_post.id);
+      } else {
+        await widget.repository.queueFavoriteAdd(_post.id, stars: stars);
+      }
+      final stats = await widget.repository.processQueue();
+      succeeded = stats.actionsFailed == 0;
+    } catch (_) {
+      succeeded = false;
+    }
+    if (!mounted) {
+      return;
+    }
+    if (!succeeded) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(l10n.postDetailActionFailed)));
+      return;
+    }
+    setState(() {
+      _post = _applyOptimisticUpdate(
+        _post,
+        isFavorited: !removing,
+        favCountDelta: removing ? -1 : (wasFavorited ? 0 : 1),
+        favoriteStars: removing ? 0 : stars,
+      );
+    });
+  }
+
   Future<void> _vote(AppLocalizations l10n, int score) async {
     bool succeeded;
     try {
@@ -518,6 +557,31 @@ class _PostDetailPageState extends State<_PostDetailPage> {
     child: TextButton.icon(onPressed: onPressed, icon: Icon(icon, size: 18, color: onPressed != null ? color : null), label: Text('$count')),
   );
 
+  /// Inkbunny's favorite is a single 1-3 heart tier, not e621's plain
+  /// favorite/vote pair -- three small heart `IconButton`s, filled from the
+  /// left up to [BunnyPost.favoriteStars] (classic star-rating-row look),
+  /// each one tappable independently rather than one combined widget, so
+  /// each heart's own tooltip can say exactly which tier tapping it selects.
+  Widget _inkbunnyFavoriteHearts(AppLocalizations l10n) {
+    final post = _post;
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        for (final tier in [1, 2, 3])
+          Tooltip(
+            message: post.isFavorited && post.favoriteStars == tier ? l10n.postDetailFavoriteStarsRemoveTooltip : l10n.postDetailFavoriteStarsTooltip(tier),
+            child: IconButton(
+              iconSize: 20,
+              visualDensity: VisualDensity.compact,
+              icon: Icon(tier <= post.favoriteStars ? Icons.favorite : Icons.favorite_border, color: tier <= post.favoriteStars ? Colors.red : null),
+              onPressed: () => _setInkbunnyFavoriteStars(l10n, tier),
+            ),
+          ),
+        Text('${post.favCount}'),
+      ],
+    );
+  }
+
   /// The thick author/rating/stats bar (M9.6.5) replacing the old bare
   /// favorite/vote `IconButton` row -- a tinted `Container` directly under
   /// the title acting as a bold visual separator, with the artist name on
@@ -526,11 +590,7 @@ class _PostDetailPageState extends State<_PostDetailPage> {
   Widget _infoBar(AppLocalizations l10n) {
     final post = _post;
     final hasArtist = post.artist != null && post.artist!.isNotEmpty;
-    // Inkbunny has no vote API at all (unlike favorites, which M2.2's
-    // unofficial route covers for both sites) -- greyed out rather than
-    // hidden or silently failing, same principle the roadmap already states
-    // for comments.
-    final votingEnabled = post.site != BunnySite.inkbunny;
+    final isInkbunny = post.site == BunnySite.inkbunny;
     return Container(
       width: double.infinity,
       color: Theme.of(context).colorScheme.surfaceContainerHighest,
@@ -547,27 +607,31 @@ class _PostDetailPageState extends State<_PostDetailPage> {
             children: [
               RatingBadge(site: post.site, rating: post.rating),
               const SizedBox(width: 8),
-              _statAction(
-                icon: Icons.arrow_upward,
-                count: post.scoreUp,
-                tooltip: l10n.postDetailUpvoteTooltip,
-                onPressed: votingEnabled ? () => _vote(l10n, 1) : null,
-                color: post.userVote == 1 ? Colors.green : null,
-              ),
-              _statAction(
-                icon: Icons.arrow_downward,
-                count: post.scoreDown,
-                tooltip: l10n.postDetailDownvoteTooltip,
-                onPressed: votingEnabled ? () => _vote(l10n, -1) : null,
-                color: post.userVote == -1 ? Colors.orange : null,
-              ),
-              _statAction(
-                icon: post.isFavorited ? Icons.favorite : Icons.favorite_border,
-                count: post.favCount,
-                tooltip: post.isFavorited ? l10n.postDetailFavoriteRemoveTooltip : l10n.postDetailFavoriteAddTooltip,
-                onPressed: () => _toggleFavorite(l10n),
-                color: post.isFavorited ? Colors.red : null,
-              ),
+              if (isInkbunny)
+                _inkbunnyFavoriteHearts(l10n)
+              else ...[
+                _statAction(
+                  icon: Icons.arrow_upward,
+                  count: post.scoreUp,
+                  tooltip: l10n.postDetailUpvoteTooltip,
+                  onPressed: () => _vote(l10n, 1),
+                  color: post.userVote == 1 ? Colors.green : null,
+                ),
+                _statAction(
+                  icon: Icons.arrow_downward,
+                  count: post.scoreDown,
+                  tooltip: l10n.postDetailDownvoteTooltip,
+                  onPressed: () => _vote(l10n, -1),
+                  color: post.userVote == -1 ? Colors.orange : null,
+                ),
+                _statAction(
+                  icon: post.isFavorited ? Icons.favorite : Icons.favorite_border,
+                  count: post.favCount,
+                  tooltip: post.isFavorited ? l10n.postDetailFavoriteRemoveTooltip : l10n.postDetailFavoriteAddTooltip,
+                  onPressed: () => _toggleFavorite(l10n),
+                  color: post.isFavorited ? Colors.red : null,
+                ),
+              ],
               const Spacer(),
               _downloadButton(l10n),
             ],

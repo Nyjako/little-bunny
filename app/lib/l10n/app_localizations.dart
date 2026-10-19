@@ -898,6 +898,18 @@ abstract class AppLocalizations {
   /// **'Downvote'**
   String get postDetailDownvoteTooltip;
 
+  /// No description provided for @postDetailFavoriteStarsTooltip.
+  ///
+  /// In en, this message translates to:
+  /// **'Favorite ({stars}/3 hearts)'**
+  String postDetailFavoriteStarsTooltip(int stars);
+
+  /// No description provided for @postDetailFavoriteStarsRemoveTooltip.
+  ///
+  /// In en, this message translates to:
+  /// **'Remove favorite'**
+  String get postDetailFavoriteStarsRemoveTooltip;
+
   /// No description provided for @postDetailCommentsSectionLabel.
   ///
   /// In en, this message translates to:

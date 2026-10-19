@@ -94,6 +94,7 @@ Map<String, Object?> _postToMap(bunny_db_post_t post) => {
   'isFavorited': post.is_favorited,
   'sampleUrl': _readNullableString(post.sample_url),
   'userVote': post.user_vote,
+  'favoriteStars': post.favorite_stars,
 };
 
 Map<String, Object?> _tagStatToMap(bunny_db_tag_stat_t stat) => {'name': _readNullableString(stat.name), 'count': stat.count};

@@ -452,6 +452,14 @@ class AppLocalizationsEn extends AppLocalizations {
   String get postDetailDownvoteTooltip => 'Downvote';
 
   @override
+  String postDetailFavoriteStarsTooltip(int stars) {
+    return 'Favorite ($stars/3 hearts)';
+  }
+
+  @override
+  String get postDetailFavoriteStarsRemoveTooltip => 'Remove favorite';
+
+  @override
   String get postDetailCommentsSectionLabel => 'Discussion';
 
   @override
