@@ -1246,6 +1246,12 @@ abstract class AppLocalizations {
   /// **'Grid columns'**
   String get settingsGridColumnsLabel;
 
+  /// No description provided for @settingsImagePreloadCountLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Images to preload (each direction)'**
+  String get settingsImagePreloadCountLabel;
+
   /// No description provided for @settingsDownloadsSection.
   ///
   /// In en, this message translates to:

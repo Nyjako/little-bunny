@@ -6,6 +6,7 @@ import 'package:photo_view/photo_view_gallery.dart';
 
 import '../repository/bunny_models.dart';
 import '../repository/bunny_repository.dart';
+import '../settings/display_settings_store.dart';
 import '../util/image_headers.dart';
 import '../util/mouse_drag_scroll_behavior.dart';
 
@@ -18,8 +19,9 @@ class FullScreenPostViewerScreen extends StatefulWidget {
   final List<BunnyPost> posts;
   final int initialIndex;
   final BunnyRepository repository;
+  final DisplaySettingsStore displaySettingsStore;
 
-  const FullScreenPostViewerScreen({super.key, required this.posts, required this.initialIndex, required this.repository});
+  const FullScreenPostViewerScreen({super.key, required this.posts, required this.initialIndex, required this.repository, this.displaySettingsStore = const DisplaySettingsStore()});
 
   @override
   State<FullScreenPostViewerScreen> createState() => _FullScreenPostViewerScreenState();
@@ -27,6 +29,39 @@ class FullScreenPostViewerScreen extends StatefulWidget {
 
 class _FullScreenPostViewerScreenState extends State<FullScreenPostViewerScreen> {
   late final PageController _controller = PageController(initialPage: widget.initialIndex);
+
+  /// See `PostDetailScreen._preloadCount`'s doc comment -- same shape here.
+  int _preloadCount = 3;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadPreloadCountThenPreload();
+  }
+
+  Future<void> _loadPreloadCountThenPreload() async {
+    final count = await widget.displaySettingsStore.loadImagePreloadCount();
+    if (!mounted) {
+      return;
+    }
+    setState(() => _preloadCount = count);
+    _preloadAround(widget.initialIndex);
+  }
+
+  void _preloadAround(int index) {
+    for (var offset = 1; offset <= _preloadCount; offset++) {
+      _preloadAt(index - offset);
+      _preloadAt(index + offset);
+    }
+  }
+
+  void _preloadAt(int index) {
+    if (index < 0 || index >= widget.posts.length) {
+      return;
+    }
+    final post = widget.posts[index];
+    precacheImage(CachedNetworkImageProvider(post.fileUrl!, headers: imageHeadersFor(post.site)), context);
+  }
 
   @override
   void dispose() {
@@ -36,6 +71,7 @@ class _FullScreenPostViewerScreenState extends State<FullScreenPostViewerScreen>
 
   void _onPageChanged(int index) {
     widget.repository.markPostSeen(widget.posts[index].id);
+    _preloadAround(index);
   }
 
   void _goToDelta(int delta) {

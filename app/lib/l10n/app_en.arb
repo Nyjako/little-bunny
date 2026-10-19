@@ -279,6 +279,7 @@
   "settingsPreviewQualityThumbnail": "Thumbnail",
   "settingsPreviewQualityMedium": "Medium",
   "settingsGridColumnsLabel": "Grid columns",
+  "settingsImagePreloadCountLabel": "Images to preload (each direction)",
   "settingsDownloadsSection": "Downloads",
   "settingsDownloadsFolderLabel": "Destination folder",
   "settingsDownloadsFolderUnset": "Not set",

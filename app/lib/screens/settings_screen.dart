@@ -61,6 +61,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _autoUpvoteOnDownload = false;
   final _intervalController = TextEditingController();
   final _gridColumnsController = TextEditingController();
+  final _preloadCountController = TextEditingController();
 
   static const _backupService = SearchBackupService();
 
@@ -84,6 +85,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   void dispose() {
     _intervalController.dispose();
     _gridColumnsController.dispose();
+    _preloadCountController.dispose();
     _blacklistTagController.dispose();
     super.dispose();
   }
@@ -94,6 +96,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final intervalHours = await widget.repository.getDefaultSyncIntervalHours();
     final previewQuality = await widget.displaySettingsStore.loadPreviewQuality();
     final gridColumns = await widget.displaySettingsStore.loadGridColumns();
+    final preloadCount = await widget.displaySettingsStore.loadImagePreloadCount();
     final downloadFolder = await widget.downloadSettingsStore.loadDestinationFolder();
     final autoFavoriteOnDownload = await widget.downloadSettingsStore.loadAutoFavoriteOnDownload();
     final autoUpvoteOnDownload = await widget.downloadSettingsStore.loadAutoUpvoteOnDownload();
@@ -106,6 +109,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       _intervalController.text = '$intervalHours';
       _previewQuality = previewQuality;
       _gridColumnsController.text = '$gridColumns';
+      _preloadCountController.text = '$preloadCount';
       _downloadFolder = downloadFolder;
       _autoFavoriteOnDownload = autoFavoriteOnDownload;
       _autoUpvoteOnDownload = autoUpvoteOnDownload;
@@ -137,6 +141,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
       return;
     }
     await widget.displaySettingsStore.saveGridColumns(columns);
+  }
+
+  Future<void> _setImagePreloadCount(String value) async {
+    final count = int.tryParse(value);
+    if (count == null || count < 0) {
+      return;
+    }
+    await widget.displaySettingsStore.saveImagePreloadCount(count);
   }
 
   Future<void> _chooseDownloadFolder() async {
@@ -352,6 +364,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
             keyboardType: TextInputType.number,
             decoration: InputDecoration(labelText: l10n.settingsGridColumnsLabel),
             onChanged: _setGridColumns,
+          ),
+          const SizedBox(height: 8),
+          TextField(
+            controller: _preloadCountController,
+            keyboardType: TextInputType.number,
+            decoration: InputDecoration(labelText: l10n.settingsImagePreloadCountLabel),
+            onChanged: _setImagePreloadCount,
           ),
           const SizedBox(height: 24),
           Text(l10n.settingsDownloadsSection, style: Theme.of(context).textTheme.titleMedium),
