@@ -803,14 +803,14 @@ void test_search_list_posts_excludes_blacklisted_tags(void)
     bunny_db_search_add_result(g_db, search_id, id2, NULL);
 
     bunny_db_post_list_t before;
-    bunny_db_search_list_posts(g_db, search_id, false, &before);
+    bunny_db_search_list_posts(g_db, search_id, false, 1, &before);
     TEST_ASSERT_EQUAL(2, (int)before.count);
     bunny_db_post_list_free(&before);
 
     bunny_db_blacklist_add(g_db, BUNNY_DB_SITE_E621, "young");
 
     bunny_db_post_list_t after;
-    bunny_db_result_t result = bunny_db_search_list_posts(g_db, search_id, false, &after);
+    bunny_db_result_t result = bunny_db_search_list_posts(g_db, search_id, false, 1, &after);
     TEST_ASSERT_EQUAL(BUNNY_DB_OK, result);
     TEST_ASSERT_EQUAL(1, (int)after.count);
     TEST_ASSERT_EQUAL(id1, after.items[0].id);
@@ -819,7 +819,7 @@ void test_search_list_posts_excludes_blacklisted_tags(void)
     /* A blacklist entry for a different site never affects this search. */
     bunny_db_blacklist_add(g_db, BUNNY_DB_SITE_INKBUNNY, "forest");
     bunny_db_post_list_t still_one;
-    bunny_db_search_list_posts(g_db, search_id, false, &still_one);
+    bunny_db_search_list_posts(g_db, search_id, false, 1, &still_one);
     TEST_ASSERT_EQUAL(1, (int)still_one.count);
     bunny_db_post_list_free(&still_one);
 }
@@ -845,7 +845,7 @@ void test_search_results_and_list_posts(void)
     TEST_ASSERT_EQUAL(BUNNY_DB_OK, result);
 
     bunny_db_post_list_t all_results;
-    result = bunny_db_search_list_posts(g_db, search_id, false, &all_results);
+    result = bunny_db_search_list_posts(g_db, search_id, false, 1, &all_results);
     TEST_ASSERT_EQUAL(BUNNY_DB_OK, result);
     TEST_ASSERT_EQUAL(2, (int)all_results.count);
     bunny_db_post_list_free(&all_results);
@@ -853,7 +853,7 @@ void test_search_results_and_list_posts(void)
     bunny_db_post_mark_seen(g_db, id1);
 
     bunny_db_post_list_t unseen_results;
-    result = bunny_db_search_list_posts(g_db, search_id, true, &unseen_results);
+    result = bunny_db_search_list_posts(g_db, search_id, true, 1, &unseen_results);
     TEST_ASSERT_EQUAL(BUNNY_DB_OK, result);
     TEST_ASSERT_EQUAL(1, (int)unseen_results.count);
     TEST_ASSERT_EQUAL(id2, unseen_results.items[0].id);
@@ -884,12 +884,53 @@ void test_search_list_posts_orders_newest_first_by_site_date(void)
     bunny_db_search_add_result(g_db, search_id, newer_id, NULL);
 
     bunny_db_post_list_t results;
-    bunny_db_result_t result = bunny_db_search_list_posts(g_db, search_id, false, &results);
+    bunny_db_result_t result = bunny_db_search_list_posts(g_db, search_id, false, 1, &results);
     TEST_ASSERT_EQUAL(BUNNY_DB_OK, result);
     TEST_ASSERT_EQUAL(2, (int)results.count);
     TEST_ASSERT_EQUAL(newer_id, results.items[0].id);
     TEST_ASSERT_EQUAL(older_id, results.items[1].id);
     bunny_db_post_list_free(&results);
+}
+
+void test_search_list_posts_paginates(void)
+{
+    int64_t search_id = 0;
+    bunny_db_search_create(g_db, BUNNY_DB_SITE_E621, "wolves", "wolf", 24, NULL, &search_id);
+
+    /* 205 posts -- one more page than BUNNY_DB_SEARCH_POSTS_PAGE_SIZE (200,
+     * posts.c) needs to exist to exercise the page boundary. Distinct
+     * created_at_site per post (minutes/seconds encode insertion order) so
+     * the newest-first ordering this query already guarantees is also
+     * deterministic across pages. */
+    for (int i = 0; i < 205; i++) {
+        bunny_db_post_upsert_t post;
+        make_test_post(&post, 3000 + i, 1);
+        char created_at[32];
+        snprintf(created_at, sizeof(created_at), "2026-01-01T%02d:%02d:00Z", i / 60, i % 60);
+        post.created_at_site = created_at;
+        int64_t post_id = 0;
+        bunny_db_post_upsert(g_db, &post, &post_id);
+        bunny_db_search_add_result(g_db, search_id, post_id, NULL);
+    }
+
+    bunny_db_post_list_t page1;
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, bunny_db_search_list_posts(g_db, search_id, false, 1, &page1));
+    TEST_ASSERT_EQUAL(200, (int)page1.count);
+    TEST_ASSERT_EQUAL(3000 + 204, page1.items[0].external_id); /* newest first */
+    TEST_ASSERT_EQUAL(3000 + 5, page1.items[199].external_id);
+    bunny_db_post_list_free(&page1);
+
+    bunny_db_post_list_t page2;
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, bunny_db_search_list_posts(g_db, search_id, false, 2, &page2));
+    TEST_ASSERT_EQUAL(5, (int)page2.count);
+    TEST_ASSERT_EQUAL(3000 + 4, page2.items[0].external_id);
+    TEST_ASSERT_EQUAL(3000 + 0, page2.items[4].external_id);
+    bunny_db_post_list_free(&page2);
+
+    bunny_db_post_list_t page3;
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, bunny_db_search_list_posts(g_db, search_id, false, 3, &page3));
+    TEST_ASSERT_EQUAL(0, (int)page3.count);
+    bunny_db_post_list_free(&page3);
 }
 
 void test_search_mark_all_seen_only_affects_that_searchs_posts(void)
@@ -1628,12 +1669,51 @@ void test_pool_search_list_posts_sorts_unknown_positions_after_known_ones(void)
     TEST_ASSERT_EQUAL(BUNNY_DB_OK, bunny_db_pool_set_post_positions(g_db, 5, known_post_ids, 1));
 
     bunny_db_post_list_t list;
-    TEST_ASSERT_EQUAL(BUNNY_DB_OK, bunny_db_pool_search_list_posts(g_db, search_id, 5, false, &list));
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, bunny_db_pool_search_list_posts(g_db, search_id, 5, false, 1, &list));
     TEST_ASSERT_EQUAL(3, list.count);
     TEST_ASSERT_EQUAL(801, list.items[0].external_id); /* known position sorts first regardless of creation date */
     TEST_ASSERT_EQUAL(802, list.items[1].external_id); /* unknowns fall back to creation date ascending */
     TEST_ASSERT_EQUAL(803, list.items[2].external_id);
     bunny_db_post_list_free(&list);
+}
+
+/* Same LIMIT/OFFSET fix as test_search_list_posts_paginates, but for the
+ * pool-ordered query -- separately maintained SQL (its own LIMIT/OFFSET
+ * binding), so a regression here wouldn't be caught by that test alone. */
+void test_pool_search_list_posts_paginates(void)
+{
+    int64_t search_id = 0;
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, bunny_db_search_create(g_db, BUNNY_DB_SITE_E621, "my pool", "pool:7", 24, NULL, &search_id));
+
+    int64_t pool_ids[] = {7};
+    for (int i = 0; i < 205; i++) {
+        bunny_db_post_upsert_t post;
+        make_test_post(&post, 4000 + i, 1);
+        post.pool_ids = pool_ids;
+        post.pool_count = 1;
+        int64_t post_id = 0;
+        bunny_db_post_upsert(g_db, &post, &post_id);
+        bunny_db_search_add_result(g_db, search_id, post_id, NULL);
+    }
+    int64_t known_post_ids[205];
+    for (int i = 0; i < 205; i++) {
+        known_post_ids[i] = 4000 + i;
+    }
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, bunny_db_pool_set_post_positions(g_db, 7, known_post_ids, 205));
+
+    bunny_db_post_list_t page1;
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, bunny_db_pool_search_list_posts(g_db, search_id, 7, false, 1, &page1));
+    TEST_ASSERT_EQUAL(200, (int)page1.count);
+    TEST_ASSERT_EQUAL(4000, page1.items[0].external_id); /* ascending by pool position */
+    TEST_ASSERT_EQUAL(4000 + 199, page1.items[199].external_id);
+    bunny_db_post_list_free(&page1);
+
+    bunny_db_post_list_t page2;
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, bunny_db_pool_search_list_posts(g_db, search_id, 7, false, 2, &page2));
+    TEST_ASSERT_EQUAL(5, (int)page2.count);
+    TEST_ASSERT_EQUAL(4000 + 200, page2.items[0].external_id);
+    TEST_ASSERT_EQUAL(4000 + 204, page2.items[4].external_id);
+    bunny_db_post_list_free(&page2);
 }
 
 /* The actual fix (M26): bunny_db_pool_set_post_positions resolves e621's
@@ -1665,7 +1745,7 @@ void test_pool_search_list_posts_orders_by_position_not_creation_date(void)
     TEST_ASSERT_EQUAL(BUNNY_DB_OK, bunny_db_pool_set_post_positions(g_db, 5, pool_post_ids, 3));
 
     bunny_db_post_list_t list;
-    TEST_ASSERT_EQUAL(BUNNY_DB_OK, bunny_db_pool_search_list_posts(g_db, search_id, 5, false, &list));
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, bunny_db_pool_search_list_posts(g_db, search_id, 5, false, 1, &list));
     TEST_ASSERT_EQUAL(3, list.count);
     TEST_ASSERT_EQUAL(1, list.items[0].external_id);
     TEST_ASSERT_EQUAL(2, list.items[1].external_id);
@@ -1700,7 +1780,7 @@ void test_resyncing_a_post_preserves_its_existing_pool_position(void)
     TEST_ASSERT_EQUAL(BUNNY_DB_OK, bunny_db_search_add_result(g_db, search_id, post_id, NULL));
 
     bunny_db_post_list_t list;
-    TEST_ASSERT_EQUAL(BUNNY_DB_OK, bunny_db_pool_search_list_posts(g_db, search_id, 5, false, &list));
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, bunny_db_pool_search_list_posts(g_db, search_id, 5, false, 1, &list));
     TEST_ASSERT_EQUAL(1, list.count);
     /* Position 0 (known) sorts before any -1 (unknown) placeholder would --
      * the whole point is this post's position is NOT back to -1 after the
@@ -1901,6 +1981,7 @@ int main(void)
     RUN_TEST(test_search_list_posts_excludes_blacklisted_tags);
     RUN_TEST(test_search_results_and_list_posts);
     RUN_TEST(test_search_list_posts_orders_newest_first_by_site_date);
+    RUN_TEST(test_search_list_posts_paginates);
     RUN_TEST(test_download_record_and_list);
     RUN_TEST(test_post_get_by_id);
     RUN_TEST(test_post_get_by_id_not_found);
@@ -1938,6 +2019,7 @@ int main(void)
     RUN_TEST(test_post_get_pool_ids_empty_when_none);
     RUN_TEST(test_post_get_pool_ids_returns_pools);
     RUN_TEST(test_pool_search_list_posts_sorts_unknown_positions_after_known_ones);
+    RUN_TEST(test_pool_search_list_posts_paginates);
     RUN_TEST(test_pool_search_list_posts_orders_by_position_not_creation_date);
     RUN_TEST(test_resyncing_a_post_preserves_its_existing_pool_position);
     RUN_TEST(test_distinct_pool_ids_lists_every_pool_referenced_by_any_post);

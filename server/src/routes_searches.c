@@ -156,8 +156,14 @@ static int handle_get_search_posts(struct mg_connection *conn, server_context_t 
         }
     }
 
+    char page_value[16];
+    int64_t page = 1;
+    if (query_string && mg_get_var(query_string, strlen(query_string), "page", page_value, sizeof(page_value)) > 0 && !server_route_parse_id(page_value, &page)) {
+        return server_json_respond_error(conn, BUNNY_CORE_ERR_INVALID_ARG);
+    }
+
     bunny_db_post_list_t list;
-    bunny_core_result_t result = bunny_core_search_list_posts(ctx->core, search_id, unseen_only, &list);
+    bunny_core_result_t result = bunny_core_search_list_posts(ctx->core, search_id, unseen_only, (int)page, &list);
 
     if (result != BUNNY_CORE_OK) {
         return server_json_respond_error(conn, result);
