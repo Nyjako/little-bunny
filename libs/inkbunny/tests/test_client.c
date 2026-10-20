@@ -207,6 +207,37 @@ void test_search_success(void)
     inkbunny_client_destroy(client);
 }
 
+void test_search_by_pool_id_sends_pool_id_param(void)
+{
+    /* Undocumented in Inkbunny's official API docs, but confirmed live
+     * against the real API -- works identically to e621's own "pool:<id>"
+     * search tag. */
+    inkbunny_client_t *client = make_test_client();
+    char *login_fixture = NULL;
+    login_test_client(client, &login_fixture);
+    free(login_fixture);
+
+    char *fixture = read_fixture("search_response.json");
+    TEST_ASSERT_NOT_NULL(fixture);
+    g_state.response_status = 200;
+    g_state.response_body = fixture;
+    g_state.response_body_len = strlen(fixture);
+
+    inkbunny_search_params_t params;
+    memset(&params, 0, sizeof(params));
+    params.pool_id = 108216;
+
+    inkbunny_submission_list_t list;
+    inkbunny_result_t result = inkbunny_search(client, &params, &list);
+
+    TEST_ASSERT_EQUAL(INKBUNNY_OK, result);
+    TEST_ASSERT_NOT_NULL(strstr(g_state.last_url, "pool_id=108216"));
+
+    inkbunny_submission_list_free(&list);
+    free(fixture);
+    inkbunny_client_destroy(client);
+}
+
 void test_get_submission_success(void)
 {
     inkbunny_client_t *client = make_test_client();
@@ -364,6 +395,7 @@ int main(void)
     RUN_TEST(test_login_failure);
     RUN_TEST(test_search_requires_login);
     RUN_TEST(test_search_success);
+    RUN_TEST(test_search_by_pool_id_sends_pool_id_param);
     RUN_TEST(test_get_submission_success);
     RUN_TEST(test_get_submission_not_found);
     RUN_TEST(test_get_submissions_too_many_ids);

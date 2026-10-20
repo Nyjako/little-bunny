@@ -24,15 +24,15 @@ BunnySearch _searchFromJson(Map<String, Object?> j) => BunnySearch(
   intervalHours: (j['interval_hours'] as num).toInt(),
   createdAt: j['created_at'] as String,
   lastRunAt: j['last_run_at'] as String?,
-  unseenCount: (j['unseen_count'] as num).toInt(),
-  totalCount: (j['total_count'] as num).toInt(),
-  autoFavorite: j['auto_favorite'] as bool,
-  autoFavoriteStars: (j['auto_favorite_stars'] as num).toInt(),
-  autoUpvote: j['auto_upvote'] as bool,
-  pinned: j['pinned'] as bool,
+  unseenCount: (j['unseen_count'] as num?)?.toInt() ?? 0,
+  totalCount: (j['total_count'] as num?)?.toInt() ?? 0,
+  autoFavorite: j['auto_favorite'] as bool? ?? false,
+  autoFavoriteStars: (j['auto_favorite_stars'] as num?)?.toInt() ?? 1,
+  autoUpvote: j['auto_upvote'] as bool? ?? false,
+  pinned: j['pinned'] as bool? ?? false,
   lastViewedAt: j['last_viewed_at'] as String?,
-  usesDefaultInterval: j['uses_default_interval'] as bool,
-  groupId: (j['group_id'] as num).toInt(),
+  usesDefaultInterval: j['uses_default_interval'] as bool? ?? false,
+  groupId: (j['group_id'] as num?)?.toInt() ?? 0,
 );
 
 BunnyGroup _groupFromJson(Map<String, Object?> j) => BunnyGroup(id: (j['id'] as num).toInt(), name: j['name'] as String, pinned: j['pinned'] as bool, createdAt: j['created_at'] as String);
@@ -46,8 +46,8 @@ BunnyPost _postFromJson(Map<String, Object?> j) => BunnyPost(
   description: j['description'] as String?,
   rating: j['rating'] as String?,
   score: (j['score'] as num).toInt(),
-  scoreUp: (j['score_up'] as num).toInt(),
-  scoreDown: (j['score_down'] as num).toInt(),
+  scoreUp: (j['score_up'] as num?)?.toInt() ?? 0,
+  scoreDown: (j['score_down'] as num?)?.toInt() ?? 0,
   favCount: (j['fav_count'] as num).toInt(),
   commentCount: (j['comment_count'] as num).toInt(),
   fileUrl: j['file_url'] as String?,
@@ -60,9 +60,16 @@ BunnyPost _postFromJson(Map<String, Object?> j) => BunnyPost(
   cachedAt: j['cached_at'] as String,
   isSeen: j['is_seen'] as bool,
   isFavorited: j['is_favorited'] as bool,
+  // sample_url (M8.5.5a), user_vote (M9.7.1), favorite_stars (M27) were all
+  // added to the server's post JSON well after this app's initial release --
+  // a server a version or two behind the app simply won't send them yet.
+  // Defaulting instead of crashing means an outdated server degrades to
+  // "this one feature's data is momentarily unavailable" rather than taking
+  // down every single post view (every BunnyPost parse goes through this one
+  // function) until the server catches up.
   sampleUrl: j['sample_url'] as String?,
-  userVote: (j['user_vote'] as num).toInt(),
-  favoriteStars: (j['favorite_stars'] as num).toInt(),
+  userVote: (j['user_vote'] as num?)?.toInt() ?? 0,
+  favoriteStars: (j['favorite_stars'] as num?)?.toInt() ?? 0,
 );
 
 BunnyTagStat _tagStatFromJson(Map<String, Object?> j) => BunnyTagStat(name: j['name'] as String, count: (j['count'] as num).toInt());

@@ -344,8 +344,11 @@ class FakeBunnyRepository implements BunnyRepository {
     return postId;
   }
 
+  int fetchPoolCallCount = 0;
+
   @override
   Future<BunnyPoolInfo> fetchPool(int poolId) async {
+    fetchPoolCallCount++;
     final info = poolInfoById[poolId];
     if (info == null) {
       throw BunnyRepositoryException('no fake pool registered for $poolId');

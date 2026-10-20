@@ -214,6 +214,9 @@ inkbunny_result_t inkbunny_search(inkbunny_client_t *client, const inkbunny_sear
         if (params->favorited_by_user_id && params->favorited_by_user_id[0]) {
             offset += (size_t)snprintf(query + offset, sizeof(query) - offset, "&favs_user_id=%s", params->favorited_by_user_id);
         }
+        if (params->pool_id > 0) {
+            offset += (size_t)snprintf(query + offset, sizeof(query) - offset, "&pool_id=%lld", (long long)params->pool_id);
+        }
         if (params->page > 0) {
             offset += (size_t)snprintf(query + offset, sizeof(query) - offset, "&page=%d", params->page);
         }

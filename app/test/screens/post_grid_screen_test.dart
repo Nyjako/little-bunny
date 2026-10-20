@@ -105,6 +105,21 @@ void main() {
     expect(find.byIcon(Icons.info_outline), findsNothing);
   });
 
+  testWidgets('no pool info button for an Inkbunny pool search -- the lookup is e621-only (M28)', (WidgetTester tester) async {
+    final repository = FakeBunnyRepository();
+    final inkbunnyPoolSearch = const BunnySearch(id: 4, site: BunnySite.inkbunny, label: 'a pool', query: 'pool:108216', intervalHours: 24, createdAt: '2026-01-01T00:00:00Z');
+    repository.postsBySearchId[4] = [_post(id: 1, isSeen: false)];
+    // Seeded under the same id a real e621 pool might coincidentally
+    // share -- must never surface for an Inkbunny pool search.
+    repository.poolInfoById[108216] = const BunnyPoolInfo(id: 108216, name: 'unrelated e621 pool', postCount: 1);
+
+    await tester.pumpWidget(wrapWithLocalization(PostGridScreen(search: inkbunnyPoolSearch, repository: repository, displaySettingsStore: const DisplaySettingsStore(), downloadSettingsStore: const DownloadSettingsStore())));
+    await tester.pumpAndSettle();
+
+    expect(repository.fetchPoolCallCount, 0);
+    expect(find.byIcon(Icons.info_outline), findsNothing);
+  });
+
   testWidgets('a regular (non-pool) search keeps the repository\'s own order', (WidgetTester tester) async {
     final repository = FakeBunnyRepository();
     repository.postsBySearchId[1] = [_post(id: 3, isSeen: false), _post(id: 2, isSeen: false), _post(id: 1, isSeen: false)];
