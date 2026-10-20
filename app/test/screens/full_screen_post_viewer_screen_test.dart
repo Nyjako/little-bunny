@@ -4,19 +4,22 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:little_bunny/repository/bunny_models.dart';
 import 'package:little_bunny/screens/full_screen_post_viewer_screen.dart';
 import 'package:photo_view/photo_view_gallery.dart';
+import 'package:video_player/video_player.dart';
+import 'package:video_player_platform_interface/video_player_platform_interface.dart';
 
 import '../fakes/fake_bunny_repository.dart';
+import '../fakes/fake_video_player_platform.dart';
 import '../fakes/test_app.dart';
 
-BunnyPost _post(int id) => BunnyPost(
+BunnyPost _post(int id, {String fileExt = 'jpg'}) => BunnyPost(
   id: id,
   site: BunnySite.e621,
   externalId: id,
   score: 0,
   favCount: 0,
   commentCount: 0,
-  fileUrl: 'https://example.invalid/$id.jpg',
-  fileExt: 'jpg',
+  fileUrl: 'https://example.invalid/$id.$fileExt',
+  fileExt: fileExt,
   width: 640,
   height: 480,
   cachedAt: '2026-01-01T00:00:00Z',
@@ -25,6 +28,10 @@ BunnyPost _post(int id) => BunnyPost(
 );
 
 void main() {
+  setUpAll(() {
+    VideoPlayerPlatform.instance = FakeVideoPlayerPlatform();
+  });
+
   testWidgets('opens at the given initial index', (WidgetTester tester) async {
     final repository = FakeBunnyRepository();
     final posts = [_post(1), _post(2), _post(3)];
@@ -52,6 +59,22 @@ void main() {
     expect(repository.postsBySearchId[1]![1].isSeen, isTrue);
     expect(repository.postsBySearchId[1]![0].isSeen, isFalse);
     expect(repository.postsBySearchId[1]![2].isSeen, isFalse);
+  });
+
+  testWidgets('a video post is not skipped -- swiping to it plays it in place (M35)', (WidgetTester tester) async {
+    final repository = FakeBunnyRepository();
+    final posts = [_post(1), _post(2, fileExt: 'mp4'), _post(3)];
+    repository.postsBySearchId[1] = posts;
+
+    await tester.pumpWidget(wrapWithLocalization(FullScreenPostViewerScreen(posts: posts, initialIndex: 0, repository: repository)));
+    await tester.pumpAndSettle();
+    expect(find.byType(VideoPlayer), findsNothing);
+
+    await tester.drag(find.byType(PhotoViewGallery), const Offset(-800, 0));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(VideoPlayer), findsOneWidget);
+    expect(repository.postsBySearchId[1]![1].isSeen, isTrue);
   });
 
   testWidgets('right/left arrow keys move to the next/previous post and stay in fullscreen', (WidgetTester tester) async {
