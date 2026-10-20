@@ -87,7 +87,12 @@ class _PostGridScreenState extends State<PostGridScreen> {
 
   Future<void> _loadPoolInfo() async {
     final poolId = _poolId;
-    if (poolId == null) {
+    // fetchPool always hits e621's GET /pools/{id} -- Inkbunny has no
+    // equivalent pool-metadata endpoint at all (M28), and pool ids aren't
+    // shared/comparable across sites, so calling it for an Inkbunny pool
+    // search would risk silently showing an unrelated e621 pool's
+    // description if the numeric id happens to collide.
+    if (poolId == null || widget.search.site != BunnySite.e621) {
       return;
     }
     try {

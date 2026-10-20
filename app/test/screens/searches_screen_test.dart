@@ -539,6 +539,36 @@ void main() {
     expect(repository.searches, hasLength(1));
   });
 
+  testWidgets('add-pool dialog can create an Inkbunny pool search, skipping the e621-only name lookup (M28)', (WidgetTester tester) async {
+    final repository = FakeBunnyRepository();
+    repository.poolInfoById[108216] = const BunnyPoolInfo(id: 108216, name: 'should never be used', postCount: 20);
+
+    await tester.pumpWidget(_wrap(repository));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Pools'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byType(FloatingActionButton));
+    await tester.pumpAndSettle();
+    expect(find.text('Add pool'), findsOneWidget);
+
+    await tester.tap(find.descendant(of: find.byType(AlertDialog), matching: find.text('Inkbunny')));
+    await tester.pumpAndSettle();
+
+    await tester.enterText(find.widgetWithText(TextField, 'Pool ID'), '108216');
+    await tester.tap(find.text('Add'));
+    await tester.pumpAndSettle();
+
+    // Never attempted the e621-only lookup -- it would risk showing an
+    // unrelated e621 pool's name if the numeric id happened to collide.
+    expect(repository.fetchPoolCallCount, 0);
+    expect(find.text('pool:108216'), findsOneWidget);
+    expect(repository.searches, hasLength(1));
+    expect(repository.searches.single.site, BunnySite.inkbunny);
+    expect(repository.searches.single.query, 'pool:108216');
+  });
+
   testWidgets('assigning a search to a group nests it under an expandable group row (M21)', (WidgetTester tester) async {
     final repository = FakeBunnyRepository();
     await repository.createSearch(BunnySite.e621, 'Alpha', 'alpha');
