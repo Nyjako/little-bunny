@@ -72,6 +72,7 @@ class _LittleBunnyAppState extends State<LittleBunnyApp> {
   ThemeMode _themeMode = ThemeMode.dark;
   ThemeColorOption _themeColor = ThemeColorOption.purple;
   bool _amoled = false;
+  String? _languageCode;
 
   @override
   void initState() {
@@ -104,6 +105,7 @@ class _LittleBunnyAppState extends State<LittleBunnyApp> {
     final mode = await widget.themeSettingsStore.load();
     final color = await widget.themeSettingsStore.loadColor();
     final amoled = await widget.themeSettingsStore.loadAmoled();
+    final languageCode = await widget.themeSettingsStore.loadLanguageCode();
     if (!mounted) {
       return;
     }
@@ -111,6 +113,7 @@ class _LittleBunnyAppState extends State<LittleBunnyApp> {
       _themeMode = mode;
       _themeColor = color;
       _amoled = amoled;
+      _languageCode = languageCode;
     });
   }
 
@@ -156,6 +159,7 @@ class _LittleBunnyAppState extends State<LittleBunnyApp> {
           onThemeModeChanged: (mode) => setState(() => _themeMode = mode),
           onThemeColorChanged: (color) => setState(() => _themeColor = color),
           onAmoledChanged: (amoled) => setState(() => _amoled = amoled),
+          onLanguageCodeChanged: (languageCode) => setState(() => _languageCode = languageCode),
           onRepositoryConfigured: _onConfigured,
         ),
       );
@@ -182,6 +186,12 @@ class _LittleBunnyAppState extends State<LittleBunnyApp> {
       onGenerateTitle: (context) => AppLocalizations.of(context)!.appTitle,
       localizationsDelegates: const [AppLocalizations.delegate, GlobalMaterialLocalizations.delegate, GlobalWidgetsLocalizations.delegate, GlobalCupertinoLocalizations.delegate],
       supportedLocales: AppLocalizations.supportedLocales,
+      // Leaving `locale` unset lets Flutter's own resolution run (device
+      // locale, falling back to supportedLocales' first entry/English if
+      // the device's language isn't shipped yet) -- a manual override
+      // (M30) is the only tier that needs explicit code, since it's the
+      // only one that doesn't already happen on its own.
+      locale: _languageCode == null ? null : Locale(_languageCode!),
       theme: ThemeData(colorScheme: ColorScheme.fromSeed(seedColor: _themeColor.seedColor, brightness: Brightness.light)),
       darkTheme: ThemeData(colorScheme: darkColorScheme, scaffoldBackgroundColor: _amoled ? Colors.black : null),
       themeMode: _themeMode,
