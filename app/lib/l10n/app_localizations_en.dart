@@ -628,6 +628,15 @@ class AppLocalizationsEn extends AppLocalizations {
   String get settingsAmoledLabel => 'AMOLED (true black) dark mode';
 
   @override
+  String get settingsLanguageSection => 'Language';
+
+  @override
+  String get settingsLanguageLabel => 'Language';
+
+  @override
+  String get settingsLanguageSystemDefault => 'System default';
+
+  @override
   String get settingsAppLockSection => 'App lock';
 
   @override

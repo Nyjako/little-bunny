@@ -1234,6 +1234,24 @@ abstract class AppLocalizations {
   /// **'AMOLED (true black) dark mode'**
   String get settingsAmoledLabel;
 
+  /// No description provided for @settingsLanguageSection.
+  ///
+  /// In en, this message translates to:
+  /// **'Language'**
+  String get settingsLanguageSection;
+
+  /// No description provided for @settingsLanguageLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Language'**
+  String get settingsLanguageLabel;
+
+  /// No description provided for @settingsLanguageSystemDefault.
+  ///
+  /// In en, this message translates to:
+  /// **'System default'**
+  String get settingsLanguageSystemDefault;
+
   /// No description provided for @settingsAppLockSection.
   ///
   /// In en, this message translates to:

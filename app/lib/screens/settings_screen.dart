@@ -36,6 +36,7 @@ class SettingsScreen extends StatefulWidget {
   final ValueChanged<ThemeMode> onThemeModeChanged;
   final ValueChanged<ThemeColorOption> onThemeColorChanged;
   final ValueChanged<bool> onAmoledChanged;
+  final ValueChanged<String?> onLanguageCodeChanged;
   final ValueChanged<BunnyRepository> onRepositoryConfigured;
 
   const SettingsScreen({
@@ -49,6 +50,7 @@ class SettingsScreen extends StatefulWidget {
     required this.onThemeModeChanged,
     required this.onThemeColorChanged,
     required this.onAmoledChanged,
+    required this.onLanguageCodeChanged,
     required this.onRepositoryConfigured,
   });
 
@@ -61,6 +63,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   ThemeMode? _themeMode;
   ThemeColorOption? _themeColor;
   bool _amoled = false;
+  String? _languageCode;
   PreviewQuality? _previewQuality;
   String? _downloadFolder;
   bool _autoFavoriteOnDownload = false;
@@ -102,6 +105,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final mode = await widget.themeSettingsStore.load();
     final themeColor = await widget.themeSettingsStore.loadColor();
     final amoled = await widget.themeSettingsStore.loadAmoled();
+    final languageCode = await widget.themeSettingsStore.loadLanguageCode();
     final intervalHours = await widget.repository.getDefaultSyncIntervalHours();
     final previewQuality = await widget.displaySettingsStore.loadPreviewQuality();
     final gridColumns = await widget.displaySettingsStore.loadGridColumns();
@@ -117,6 +121,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       _themeMode = mode;
       _themeColor = themeColor;
       _amoled = amoled;
+      _languageCode = languageCode;
       _intervalController.text = '$intervalHours';
       _previewQuality = previewQuality;
       _gridColumnsController.text = '$gridColumns';
@@ -145,6 +150,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
     widget.onAmoledChanged(amoled);
   }
 
+  Future<void> _setLanguageCode(String? languageCode) async {
+    setState(() => _languageCode = languageCode);
+    await widget.themeSettingsStore.saveLanguageCode(languageCode);
+    widget.onLanguageCodeChanged(languageCode);
+  }
+
   String _themeColorLabel(AppLocalizations l10n, ThemeColorOption color) => switch (color) {
     ThemeColorOption.purple => l10n.settingsThemeColorPurple,
     ThemeColorOption.blue => l10n.settingsThemeColorBlue,
@@ -153,6 +164,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
     ThemeColorOption.red => l10n.settingsThemeColorRed,
     ThemeColorOption.teal => l10n.settingsThemeColorTeal,
     ThemeColorOption.pink => l10n.settingsThemeColorPink,
+  };
+
+  /// Each supported locale's own name, in that language (not translated --
+  /// "English" stays "English" regardless of which language is currently
+  /// active, same convention most apps' own language pickers use so a user
+  /// who doesn't read the current language can still find their own in the
+  /// list). Falls back to the bare language code for anything not listed
+  /// here yet, rather than crashing, when a new locale is added to
+  /// AppLocalizations.supportedLocales before this map catches up.
+  String _languageLabel(Locale locale) => switch (locale.languageCode) {
+    'en' => 'English',
+    _ => locale.languageCode,
   };
 
   Future<void> _setDefaultIntervalHours(String value) async {
@@ -419,6 +442,26 @@ class _SettingsScreenState extends State<SettingsScreen> {
             title: Text(l10n.settingsAmoledLabel),
             value: _amoled,
             onChanged: _setAmoled,
+          ),
+          const SizedBox(height: 24),
+          Text(l10n.settingsLanguageSection, style: Theme.of(context).textTheme.titleMedium),
+          const SizedBox(height: 8),
+          // Only English ships today, but the resolution order (manual
+          // setting here > device language > English) is already real --
+          // "System default" leaves MaterialApp's own `locale` unset, which
+          // is exactly how the latter two tiers already work with zero
+          // extra code (M30). Adding a language later is just one more
+          // entry in AppLocalizations.supportedLocales plus a label here.
+          DropdownButtonFormField<String?>(
+            initialValue: _languageCode,
+            decoration: InputDecoration(labelText: l10n.settingsLanguageLabel),
+            items: [
+              DropdownMenuItem(value: null, child: Text(l10n.settingsLanguageSystemDefault)),
+              ...AppLocalizations.supportedLocales.map(
+                (locale) => DropdownMenuItem(value: locale.languageCode, child: Text(_languageLabel(locale))),
+              ),
+            ],
+            onChanged: (value) => _setLanguageCode(value),
           ),
           const SizedBox(height: 24),
           Text(l10n.settingsSyncSection, style: Theme.of(context).textTheme.titleMedium),

@@ -2031,6 +2031,21 @@ this file is the single source of truth for "what's done" across sessions.
     added to `.gitignore` -- kept locally for development reference only, never
     committed.
 
+- [x] **M30 — Manual language switching, default-interval-checked new searches**
+  - [x] **Language switching in Settings.** A new "Language" section with a dropdown
+    of `AppLocalizations.supportedLocales` plus a "System default" option
+    (`ThemeSettingsStore.loadLanguageCode`/`saveLanguageCode`, null means follow the
+    device). Priority order requested by the user: manual setting > device language >
+    default (English) -- implemented by leaving `MaterialApp.locale` unset (letting
+    Flutter's own device-locale resolution run) unless a manual override is stored, in
+    which case it's forced via `Locale(_languageCode!)`. Only English exists today, but
+    the picker is in place for future translations.
+  - [x] **"Use default interval" checked by default.** Both the regular create-search
+    dialog (`create_search_screen.dart`) and the pool-add dialog
+    (`searches_screen.dart`, see the `feature/inkbunny-pool-search` branch's follow-up
+    commit) now start with this checkbox checked, rather than requiring the user to
+    opt in every time.
+
 - [x] **M31 — Favorites moved from its own tab to an Accounts-screen count + sync button**
   User feedback: a dedicated "Favorites" tab in `SearchesScreen` (M27) wasn't worth a
   whole tab, since it was entirely auto-managed (no manual add, no per-row editing

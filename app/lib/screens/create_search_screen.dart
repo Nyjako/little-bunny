@@ -55,7 +55,7 @@ class _CreateSearchScreenState extends State<CreateSearchScreen> {
   bool _mirroringLabel = false;
   bool _autoFavorite = false;
   bool _autoUpvote = false;
-  bool _usesDefaultInterval = false;
+  bool _usesDefaultInterval = true;
   List<BunnyGroup> _groups = [];
   int _groupId = 0;
 

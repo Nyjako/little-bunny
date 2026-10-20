@@ -39,6 +39,7 @@ void main() {
           onThemeModeChanged: (_) {},
           onThemeColorChanged: (_) {},
           onAmoledChanged: (_) {},
+          onLanguageCodeChanged: (_) {},
           onRepositoryConfigured: (_) {},
         ),
       ),
@@ -65,6 +66,7 @@ void main() {
           onThemeModeChanged: (mode) => notified = mode,
           onThemeColorChanged: (_) {},
           onAmoledChanged: (_) {},
+          onLanguageCodeChanged: (_) {},
           onRepositoryConfigured: (_) {},
         ),
       ),
@@ -95,6 +97,7 @@ void main() {
           onThemeModeChanged: (_) {},
           onThemeColorChanged: (color) => notifiedColor = color,
           onAmoledChanged: (amoled) => notifiedAmoled = amoled,
+          onLanguageCodeChanged: (_) {},
           onRepositoryConfigured: (_) {},
         ),
       ),
@@ -112,6 +115,44 @@ void main() {
     expect(await themeStore.loadAmoled(), isTrue);
   });
 
+  testWidgets('picking a language persists it and notifies the callback, defaulting to "System default" (M30)', (WidgetTester tester) async {
+    const themeStore = ThemeSettingsStore();
+    String? notified = 'not called yet';
+
+    await tester.pumpWidget(
+      wrapWithLocalization(
+        SettingsScreen(
+          repository: FakeBunnyRepository(),
+          themeSettingsStore: themeStore,
+          lockService: AppLockService(FakeSecretStore()),
+          downloadSettingsStore: const DownloadSettingsStore(),
+          displaySettingsStore: const DisplaySettingsStore(),
+          settingsStore: settingsStore(),
+          onThemeModeChanged: (_) {},
+          onThemeColorChanged: (_) {},
+          onAmoledChanged: (_) {},
+          onLanguageCodeChanged: (languageCode) => notified = languageCode,
+          onRepositoryConfigured: (_) {},
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    // Color swatches + AMOLED switch (M27) push the language picker itself
+    // past the initial render cache extent -- scroll it into view first,
+    // same reasoning as the About entry's own dragUntilVisible further up.
+    await tester.dragUntilVisible(find.byType(DropdownButtonFormField<String?>), find.byType(ListView), const Offset(0, -100));
+    expect(find.text('System default'), findsOneWidget);
+
+    await tester.tap(find.byType(DropdownButtonFormField<String?>));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('English').last);
+    await tester.pumpAndSettle();
+
+    expect(notified, 'en');
+    expect(await themeStore.loadLanguageCode(), 'en');
+  });
+
   testWidgets('tapping the app lock entry opens LockSetupScreen', (WidgetTester tester) async {
     await tester.pumpWidget(
       wrapWithLocalization(
@@ -125,6 +166,7 @@ void main() {
           onThemeModeChanged: (_) {},
           onThemeColorChanged: (_) {},
           onAmoledChanged: (_) {},
+          onLanguageCodeChanged: (_) {},
           onRepositoryConfigured: (_) {},
         ),
       ),
@@ -154,6 +196,7 @@ void main() {
           onThemeModeChanged: (_) {},
           onThemeColorChanged: (_) {},
           onAmoledChanged: (_) {},
+          onLanguageCodeChanged: (_) {},
           onRepositoryConfigured: (_) {},
         ),
       ),
@@ -188,6 +231,7 @@ void main() {
           onThemeModeChanged: (_) {},
           onThemeColorChanged: (_) {},
           onAmoledChanged: (_) {},
+          onLanguageCodeChanged: (_) {},
           onRepositoryConfigured: (_) {},
         ),
       ),
@@ -212,6 +256,7 @@ void main() {
           onThemeModeChanged: (_) {},
           onThemeColorChanged: (_) {},
           onAmoledChanged: (_) {},
+          onLanguageCodeChanged: (_) {},
           onRepositoryConfigured: (_) {},
         ),
       ),
@@ -239,17 +284,21 @@ void main() {
           onThemeModeChanged: (_) {},
           onThemeColorChanged: (_) {},
           onAmoledChanged: (_) {},
+          onLanguageCodeChanged: (_) {},
           onRepositoryConfigured: (_) {},
         ),
       ),
     );
     await tester.pumpAndSettle();
 
+    // The color swatches/AMOLED switch (M27) and the language picker (M30)
+    // push the Preview Quality section itself past the initial render cache
+    // extent now, not just "Grid columns" within it -- scroll before even
+    // reading the SegmentedButton, same reasoning as the About entry's own
+    // dragUntilVisible further up.
+    await tester.dragUntilVisible(find.byType(SegmentedButton<PreviewQuality>), find.byType(ListView), const Offset(0, -100));
     final button = tester.widget<SegmentedButton<PreviewQuality>>(find.byType(SegmentedButton<PreviewQuality>));
     expect(button.selected, {PreviewQuality.medium});
-    // The new color swatches + AMOLED switch (M27) push "Grid columns" past
-    // the initial render cache extent -- scroll it into view first, same
-    // reasoning as the About entry's own dragUntilVisible further up.
     await tester.dragUntilVisible(find.widgetWithText(TextField, 'Grid columns'), find.byType(ListView), const Offset(0, -100));
     expect(tester.widget<TextField>(find.widgetWithText(TextField, 'Grid columns')).controller!.text, '4');
     expect(tester.widget<TextField>(find.widgetWithText(TextField, 'Images to preload (each direction)')).controller!.text, '5');
@@ -270,6 +319,7 @@ void main() {
           onThemeModeChanged: (_) {},
           onThemeColorChanged: (_) {},
           onAmoledChanged: (_) {},
+          onLanguageCodeChanged: (_) {},
           onRepositoryConfigured: (_) {},
         ),
       ),
@@ -282,8 +332,9 @@ void main() {
     // to barely exist" stopping point) so the switch lands solidly inside
     // the test viewport rather than clipped at its edge, where a tap can
     // silently miss (M15 added a Connection section above this one, pushing
-    // it further down than when this test was first written).
-    await tester.drag(find.byType(ListView), const Offset(0, -400));
+    // it further down than when this test was first written; M30's language
+    // picker pushed it down again).
+    await tester.drag(find.byType(ListView), const Offset(0, -500));
     await tester.pumpAndSettle();
     await tester.tap(find.widgetWithText(SwitchListTile, 'Auto-favorite on download'));
     await tester.pumpAndSettle();
@@ -306,6 +357,7 @@ void main() {
           onThemeModeChanged: (_) {},
           onThemeColorChanged: (_) {},
           onAmoledChanged: (_) {},
+          onLanguageCodeChanged: (_) {},
           onRepositoryConfigured: (_) {},
         ),
       ),
@@ -336,17 +388,20 @@ void main() {
           onThemeModeChanged: (_) {},
           onThemeColorChanged: (_) {},
           onAmoledChanged: (_) {},
+          onLanguageCodeChanged: (_) {},
           onRepositoryConfigured: (_) {},
         ),
       ),
     );
     await tester.pumpAndSettle();
 
+    // The color swatches/AMOLED switch (M27) and the language picker (M30)
+    // push "Medium" itself past the initial render cache extent now --
+    // scroll before tapping it, same reasoning as the About entry's own
+    // dragUntilVisible further up.
+    await tester.dragUntilVisible(find.text('Medium'), find.byType(ListView), const Offset(0, -100));
     await tester.tap(find.text('Medium'));
     await tester.pumpAndSettle();
-    // The new color swatches + AMOLED switch (M27) push "Grid columns" past
-    // the initial render cache extent -- scroll it into view first, same
-    // reasoning as the About entry's own dragUntilVisible further up.
     await tester.dragUntilVisible(find.widgetWithText(TextField, 'Grid columns'), find.byType(ListView), const Offset(0, -100));
     await tester.enterText(find.widgetWithText(TextField, 'Grid columns'), '5');
     await tester.pump();
@@ -374,6 +429,7 @@ void main() {
           onThemeModeChanged: (_) {},
           onThemeColorChanged: (_) {},
           onAmoledChanged: (_) {},
+          onLanguageCodeChanged: (_) {},
           onRepositoryConfigured: (_) {},
         ),
       ),
@@ -424,6 +480,7 @@ void main() {
           onThemeModeChanged: (_) {},
           onThemeColorChanged: (_) {},
           onAmoledChanged: (_) {},
+          onLanguageCodeChanged: (_) {},
           onRepositoryConfigured: (_) {},
         ),
       ),
@@ -457,6 +514,7 @@ void main() {
           onThemeModeChanged: (_) {},
           onThemeColorChanged: (_) {},
           onAmoledChanged: (_) {},
+          onLanguageCodeChanged: (_) {},
           onRepositoryConfigured: (_) {},
         ),
       ),
@@ -487,6 +545,7 @@ void main() {
           onThemeModeChanged: (_) {},
           onThemeColorChanged: (_) {},
           onAmoledChanged: (_) {},
+          onLanguageCodeChanged: (_) {},
           onRepositoryConfigured: (_) {},
         ),
       ),
@@ -512,6 +571,7 @@ void main() {
           onThemeModeChanged: (_) {},
           onThemeColorChanged: (_) {},
           onAmoledChanged: (_) {},
+          onLanguageCodeChanged: (_) {},
           onRepositoryConfigured: (_) {},
         ),
       ),

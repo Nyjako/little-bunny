@@ -17,16 +17,18 @@ enum ThemeColorOption {
   const ThemeColorOption(this.seedColor);
 }
 
-/// Persists the chosen [ThemeMode], [ThemeColorOption], and AMOLED
-/// ("true black" dark backgrounds, M27) setting across restarts
-/// (`shared_preferences`, same shape as [RepositorySettingsStore]/
-/// [AppLockService] in this directory) -- defaults to [ThemeMode.dark] (per
-/// the user's stated preference), [ThemeColorOption.purple], and AMOLED off
-/// when nothing has been chosen yet.
+/// Persists the chosen [ThemeMode], [ThemeColorOption], AMOLED
+/// ("true black" dark backgrounds, M27) setting, and language override
+/// (M30) across restarts (`shared_preferences`, same shape as
+/// [RepositorySettingsStore]/[AppLockService] in this directory) -- defaults
+/// to [ThemeMode.dark] (per the user's stated preference),
+/// [ThemeColorOption.purple], AMOLED off, and no language override (follow
+/// the device's own locale) when nothing has been chosen yet.
 class ThemeSettingsStore {
   static const _key = 'theme_mode';
   static const _colorKey = 'theme_color';
   static const _amoledKey = 'theme_amoled';
+  static const _languageCodeKey = 'language_code';
 
   const ThemeSettingsStore();
 
@@ -62,5 +64,28 @@ class ThemeSettingsStore {
   Future<void> saveAmoled(bool amoled) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_amoledKey, amoled);
+  }
+
+  /// Null means "no manual override -- follow the device's own locale,
+  /// falling back to [AppLocalizations.supportedLocales]'s first entry
+  /// (English) if the device's language isn't one this app ships yet."
+  /// That fallback chain is Flutter's own built-in locale resolution
+  /// (MaterialApp's `locale` param left unset); a manual override here is
+  /// the one case that takes priority over it (M30) -- "manual setting >
+  /// device language > default language" is the full resolution order the
+  /// user asked for, and only this first tier needs any code at all, since
+  /// the other two are what `locale: null` already does.
+  Future<String?> loadLanguageCode() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(_languageCodeKey);
+  }
+
+  Future<void> saveLanguageCode(String? languageCode) async {
+    final prefs = await SharedPreferences.getInstance();
+    if (languageCode == null) {
+      await prefs.remove(_languageCodeKey);
+    } else {
+      await prefs.setString(_languageCodeKey, languageCode);
+    }
   }
 }
