@@ -547,14 +547,24 @@ class BunnyCoreFfiBindings {
         )
       >();
 
+  /// page is 1-indexed -- see bunny_db_search_list_posts' own doc comment for
+  /// why this is paginated at all (an unbounded response for a search with
+  /// thousands of posts routinely timed out client-side).
   bunny_core_result_t bunny_core_search_list_posts(
     ffi.Pointer<bunny_core_t> core,
     int search_id,
     bool unseen_only,
+    int page,
     ffi.Pointer<bunny_db_post_list_t> out_list,
   ) {
     return bunny_core_result_t.fromValue(
-      _bunny_core_search_list_posts(core, search_id, unseen_only, out_list),
+      _bunny_core_search_list_posts(
+        core,
+        search_id,
+        unseen_only,
+        page,
+        out_list,
+      ),
     );
   }
 
@@ -565,6 +575,7 @@ class BunnyCoreFfiBindings {
             ffi.Pointer<bunny_core_t>,
             ffi.Int64,
             ffi.Bool,
+            ffi.Int,
             ffi.Pointer<bunny_db_post_list_t>,
           )
         >
@@ -575,6 +586,7 @@ class BunnyCoreFfiBindings {
           ffi.Pointer<bunny_core_t>,
           int,
           bool,
+          int,
           ffi.Pointer<bunny_db_post_list_t>,
         )
       >();
@@ -2531,6 +2543,18 @@ final class bunny_core_sync_stats_t extends ffi.Struct {
   /// total posts cached/updated across all synced searches
   @ffi.Int()
   external int posts_upserted;
+
+  /// Seconds until the soonest not-yet-due search (across every search
+  /// bunny_core_sync_due_searches looked at) actually becomes due, or -1 if
+  /// there were no searches to check at all (M28) -- diagnoses "0 synced"
+  /// from the logs alone: confirms whether that's simply because nothing's
+  /// due yet (a large positive value here) versus a potential scheduling
+  /// bug (a value near/below 0 despite 0 synced would be a contradiction
+  /// worth investigating). Always 0 from bunny_core_sync_search, which
+  /// forces a sync regardless of due-ness -- "time until due" doesn't apply
+  /// there.
+  @ffi.Double()
+  external double seconds_until_next_due;
 }
 
 final class bunny_core_queue_stats_t extends ffi.Struct {

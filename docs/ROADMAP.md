@@ -2112,3 +2112,31 @@ this file is the single source of truth for "what's done" across sessions.
   fullscreen rather than only once on exit -- so `PostDetailScreen`'s own `PageController`
   (`_jumpToPost`) is already on the right page by the time fullscreen closes, regardless
   of how the user leaves it (close button vs. back gesture both just pop either way).
+
+- [x] **M34 — Paginate `listSearchPosts` (opening a search with thousands of cached
+  posts was effectively impossible)**
+  Reported by the user: their e621 favorites search (18,503 cached posts) took a very
+  long time to open and left errors in the server logs afterward. `bunny_db_search_
+  list_posts`/`bunny_db_pool_search_list_posts` had no `LIMIT`/`OFFSET` at all -- a
+  single call returned every matching post in one response, serialized into one giant
+  JSON array. Confirmed live: a `POST /search/preview`-shaped request for this exact
+  search measured at over two minutes with a "200, 0 bytes" result (the client had
+  already given up and disconnected) -- civetweb logs showed a burst of
+  `SSL routines::unexpected eof while reading` from repeated client retries.
+  - **DB**: both functions gained a 1-indexed `page` param and `LIMIT ? OFFSET ?`
+    (`BUNNY_DB_SEARCH_POSTS_PAGE_SIZE`, posts.c, 200 -- a local listing page size, not
+    tied to any site API limit). `bunny_core_search_list_posts`/the FFI binding/
+    `GET /searches/<id>/posts`'s `page` query param (same parsing style as `/search/
+    preview`'s) thread it straight through.
+  - **App**: `listSearchPosts` gained a `{int page = 1}` param across the abstract
+    interface and both the HTTP and FFI implementations. `PostGridScreen` converted
+    from one single unbounded fetch to infinite scroll, the same shape as
+    `TagBrowseScreen`'s own (`_loadInitial`/`_loadMore`/`_maybeLoadMore`). Actions that
+    only change already-loaded posts' own fields (mark-seen, mark-all-seen, a mass
+    vote/favorite/download) re-fetch just the pages already loaded in place
+    (`_refreshLoadedPages`) rather than resetting to page 1, so scroll position isn't
+    lost; actions that change the matching post *set* itself (the unseen filter, a
+    manual sync) do reset to page 1 (`_resetAndReload`). "Select all" is now scoped to
+    posts loaded so far rather than every post matching the search -- fetching every
+    remaining page first to support it would reintroduce the exact problem this
+    milestone exists to fix.

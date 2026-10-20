@@ -104,9 +104,15 @@ abstract interface class BunnyRepository {
 
   Future<void> setDefaultSyncIntervalHours(int hours);
 
+  /// Paginated (1-indexed [page]) -- a search can accumulate thousands of
+  /// cached posts (e.g. a long-running favorites search), and returning them
+  /// all in one unbounded response routinely timed out client-side. Callers
+  /// needing every post (e.g. an infinite-scrolling grid) page through this
+  /// the same way [previewSearch] already works.
   Future<List<BunnyPost>> listSearchPosts(
     int searchId, {
     bool unseenOnly = false,
+    int page = 1,
   });
 
   /// Ranks cached tags starting with [prefix] by usage count, for a search

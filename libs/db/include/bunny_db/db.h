@@ -178,7 +178,12 @@ bunny_db_result_t bunny_db_search_add_result(bunny_db_t *db, int64_t search_id, 
  * everything after it was already synced last time. */
 bunny_db_result_t bunny_db_search_has_result(bunny_db_t *db, int64_t search_id, int64_t post_id, bool *out_has_result);
 
-bunny_db_result_t bunny_db_search_list_posts(bunny_db_t *db, int64_t search_id, bool unseen_only, bunny_db_post_list_t *out_list);
+/* page is 1-indexed; BUNNY_DB_SEARCH_POSTS_PAGE_SIZE (posts.c) posts per
+ * page -- a search with thousands of cached posts (e.g. a long-running
+ * favorites search) was otherwise returned in a single unbounded response,
+ * which could take minutes to query/serialize/transfer and routinely timed
+ * out client-side. */
+bunny_db_result_t bunny_db_search_list_posts(bunny_db_t *db, int64_t search_id, bool unseen_only, int page, bunny_db_post_list_t *out_list);
 
 /* A post's tags with their categories, for a post detail view's sectioned
  * tag display (Artists/Characters/Copyrights/Species/General/Meta for e621;
@@ -222,7 +227,7 @@ bunny_db_result_t bunny_db_list_distinct_pool_ids(bunny_db_t *db, bunny_db_int64
  * first by creation date, falling back to creation date (ascending, so a
  * still-undetermined tail at least reads oldest-first like the rest of the
  * pool) for any post whose position isn't known yet. */
-bunny_db_result_t bunny_db_pool_search_list_posts(bunny_db_t *db, int64_t search_id, int64_t pool_id, bool unseen_only, bunny_db_post_list_t *out_list);
+bunny_db_result_t bunny_db_pool_search_list_posts(bunny_db_t *db, int64_t search_id, int64_t pool_id, bool unseen_only, int page, bunny_db_post_list_t *out_list);
 
 /* --- Seen state (global per post, not per search) ------------------------- */
 

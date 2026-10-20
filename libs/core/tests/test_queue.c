@@ -110,7 +110,7 @@ static int64_t seed_e621_post(int64_t *out_search_id)
     TEST_ASSERT_EQUAL(1, sync_stats.posts_upserted);
 
     bunny_db_post_list_t posts;
-    bunny_core_search_list_posts(g_core, search_id, false, &posts);
+    bunny_core_search_list_posts(g_core, search_id, false, 1, &posts);
     TEST_ASSERT_EQUAL(1, (int)posts.count);
     int64_t post_id = posts.items[0].id;
     bunny_db_post_list_free(&posts);
@@ -139,7 +139,7 @@ static int64_t seed_inkbunny_post(void)
     TEST_ASSERT_EQUAL(1, sync_stats.posts_upserted);
 
     bunny_db_post_list_t posts;
-    bunny_core_search_list_posts(g_core, search_id, false, &posts);
+    bunny_core_search_list_posts(g_core, search_id, false, 1, &posts);
     TEST_ASSERT_EQUAL(1, (int)posts.count);
     int64_t post_id = posts.items[0].id;
     bunny_db_post_list_free(&posts);
@@ -179,7 +179,7 @@ void test_queue_e621_favorite_add_succeeds_and_updates_mirror(void)
     TEST_ASSERT_EQUAL(0, stats.actions_failed);
 
     bunny_db_post_list_t posts;
-    bunny_core_search_list_posts(g_core, search_id, false, &posts);
+    bunny_core_search_list_posts(g_core, search_id, false, 1, &posts);
     TEST_ASSERT_EQUAL(1, (int)posts.count);
     TEST_ASSERT_TRUE(posts.items[0].is_favorited);
     bunny_db_post_list_free(&posts);
@@ -336,7 +336,7 @@ void test_sync_e621_search_with_auto_favorite_queues_a_favorite(void)
     TEST_ASSERT_EQUAL(1, queue_stats.actions_succeeded);
 
     bunny_db_post_list_t posts;
-    bunny_core_search_list_posts(g_core, search_id, false, &posts);
+    bunny_core_search_list_posts(g_core, search_id, false, 1, &posts);
     TEST_ASSERT_EQUAL(1, (int)posts.count);
     TEST_ASSERT_TRUE(posts.items[0].is_favorited);
     bunny_db_post_list_free(&posts);
@@ -369,7 +369,7 @@ void test_sync_e621_search_with_auto_upvote_queues_a_vote(void)
     TEST_ASSERT_EQUAL(1, queue_stats.actions_succeeded);
 
     bunny_db_post_list_t posts;
-    bunny_core_search_list_posts(g_core, search_id, false, &posts);
+    bunny_core_search_list_posts(g_core, search_id, false, 1, &posts);
     TEST_ASSERT_EQUAL(1, (int)posts.count);
     TEST_ASSERT_EQUAL(1, posts.items[0].user_vote);
     bunny_db_post_list_free(&posts);

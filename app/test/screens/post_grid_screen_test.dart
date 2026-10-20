@@ -161,6 +161,43 @@ void main() {
     expect(find.byKey(const ValueKey(2)), findsOneWidget);
   });
 
+  testWidgets('scrolling near the bottom requests and appends the next page (M34)', (WidgetTester tester) async {
+    final repository = FakeBunnyRepository();
+    repository.searchPostsPageSize = 30;
+    repository.postsBySearchId[1] = [...List.generate(30, (i) => _post(id: i + 1, isSeen: false)), _post(id: 31, isSeen: false), _post(id: 32, isSeen: false)];
+
+    await tester.pumpWidget(wrapWithLocalization(PostGridScreen(search: search, repository: repository, displaySettingsStore: const DisplaySettingsStore(), downloadSettingsStore: const DownloadSettingsStore())));
+    await tester.pumpAndSettle();
+
+    expect(repository.listSearchPostsCalls, [(1, false, 1)]);
+
+    // A bounded drag (rather than an enormous one) keeps the scroll position
+    // at the grid's real bottom without overshooting past it -- same
+    // reasoning as TagBrowseScreen's own equivalent test.
+    await tester.drag(find.byType(GridView), const Offset(0, -5000));
+    await tester.pumpAndSettle();
+
+    expect(repository.listSearchPostsCalls, contains((1, false, 2)));
+  });
+
+  testWidgets('a short/empty page stops further loading (M34)', (WidgetTester tester) async {
+    final repository = FakeBunnyRepository();
+    repository.searchPostsPageSize = 30;
+    repository.postsBySearchId[1] = List.generate(30, (i) => _post(id: i + 1, isSeen: false));
+
+    await tester.pumpWidget(wrapWithLocalization(PostGridScreen(search: search, repository: repository, displaySettingsStore: const DisplaySettingsStore(), downloadSettingsStore: const DownloadSettingsStore())));
+    await tester.pumpAndSettle();
+
+    await tester.drag(find.byType(GridView), const Offset(0, -5000));
+    await tester.pumpAndSettle();
+    await tester.drag(find.byType(GridView), const Offset(0, -5000));
+    await tester.pumpAndSettle();
+
+    // Only ever asked for page 2 once -- an empty page flips _hasMore to
+    // false, so further scroll-triggered loads are skipped entirely.
+    expect(repository.listSearchPostsCalls.where((call) => call.$3 == 2), hasLength(1));
+  });
+
   testWidgets('toggling unseen-only filters out seen posts', (WidgetTester tester) async {
     final repository = FakeBunnyRepository();
     repository.postsBySearchId[1] = [_post(id: 1, isSeen: false), _post(id: 2, isSeen: true)];

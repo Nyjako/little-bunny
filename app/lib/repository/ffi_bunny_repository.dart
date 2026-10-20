@@ -239,8 +239,8 @@ class FfiBunnyRepository implements BunnyRepository {
   Future<void> setDefaultSyncIntervalHours(int hours) => _wrapped(() => _native.setDefaultSyncIntervalHours(hours));
 
   @override
-  Future<List<BunnyPost>> listSearchPosts(int searchId, {bool unseenOnly = false}) async {
-    final items = await _wrapped(() => _native.listSearchPosts(searchId, unseenOnly));
+  Future<List<BunnyPost>> listSearchPosts(int searchId, {bool unseenOnly = false, int page = 1}) async {
+    final items = await _wrapped(() => _native.listSearchPosts(searchId, unseenOnly, page));
     return items.map(_postFromMap).toList();
   }
 
