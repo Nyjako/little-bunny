@@ -2030,3 +2030,21 @@ this file is the single source of truth for "what's done" across sessions.
   - `docs/API - Inkbunny.pdf` (Inkbunny's official API reference, provided by the user)
     added to `.gitignore` -- kept locally for development reference only, never
     committed.
+
+- [x] **M31 — Favorites moved from its own tab to an Accounts-screen count + sync button**
+  User feedback: a dedicated "Favorites" tab in `SearchesScreen` (M27) wasn't worth a
+  whole tab, since it was entirely auto-managed (no manual add, no per-row editing
+  users would actually use) -- just a per-account total count and a way to sync it.
+  - `SearchesScreen`'s `TabController` dropped from 3 tabs to 2 (Searches/Pools);
+    `_ensureFavoritesSearches` (the per-account sentinel-search auto-creation, same
+    `fav:<username>`/`favorited_by:me` trick as before) moved to `AccountsScreen`,
+    which is now the sole owner of this feature. The Searches tab still filters out
+    `isFavorites` searches (same as before) since the sentinel search is still a real
+    row in the `searches` table, synced via the exact same scheduler/due-interval
+    machinery as any other search -- nothing server-side needed to change.
+  - `AccountsScreen`: each configured account's subtitle now also shows its favorites
+    search's live `totalCount` (e.g. "Logged in as foo · 128 favorites"), plus a sync
+    icon button next to the existing "view my favorites" heart icon that calls
+    `syncSearch` on that account's sentinel search and polls `getSyncStatus` the same
+    way `SearchesScreen`'s own per-row sync button already did. No rename/pin/interval
+    UI -- intentionally, per the user's explicit "no need to have even editing there."
