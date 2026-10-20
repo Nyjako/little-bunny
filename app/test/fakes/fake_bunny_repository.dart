@@ -210,10 +210,28 @@ class FakeBunnyRepository implements BunnyRepository {
     );
   }
 
+  /// Posts per page for [listSearchPosts] -- defaults large enough that
+  /// every existing test registering a full post list via [postsBySearchId]
+  /// still gets it all back on page 1 without having to know this exists.
+  /// Narrow this in a test to exercise `PostGridScreen`'s own infinite
+  /// scroll with a manageable post count, instead of constructing hundreds
+  /// of posts to hit a realistic page size.
+  int searchPostsPageSize = 1000000;
+
+  /// Each entry is the `(searchId, unseenOnly, page)` passed to [listSearchPosts].
+  final List<(int, bool, int)> listSearchPostsCalls = [];
+
   @override
-  Future<List<BunnyPost>> listSearchPosts(int searchId, {bool unseenOnly = false}) async {
+  Future<List<BunnyPost>> listSearchPosts(int searchId, {bool unseenOnly = false, int page = 1}) async {
+    listSearchPostsCalls.add((searchId, unseenOnly, page));
     final posts = postsBySearchId[searchId] ?? const [];
-    return unseenOnly ? posts.where((post) => !post.isSeen).toList() : List.of(posts);
+    final filtered = unseenOnly ? posts.where((post) => !post.isSeen).toList() : List.of(posts);
+    final start = (page - 1) * searchPostsPageSize;
+    if (start >= filtered.length) {
+      return [];
+    }
+    final end = (start + searchPostsPageSize < filtered.length) ? start + searchPostsPageSize : filtered.length;
+    return filtered.sublist(start, end);
   }
 
   @override
