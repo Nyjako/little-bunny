@@ -2154,3 +2154,31 @@ this file is the single source of truth for "what's done" across sessions.
   (`minScale == maxScale`) so it doesn't compete with Chewie's scrub/tap controls for the
   same gestures. Image preloading (`_preloadAt`) skips video posts -- nothing to
   precache there.
+
+- [x] **M36 — Fix Android downloads failing to a custom (non-default) destination folder**
+  Reported by the user: downloads worked on Linux desktop but silently failed on
+  Android once a custom destination folder had been picked (the default folder worked
+  fine). Root cause: Android's Storage Access Framework -- `file_picker`'s directory
+  picker returns a `content://` URI there, not a real filesystem path, and `file_picker`
+  dropped its old SAF-write support in a rewrite (12.x had `AndroidSAFOptions`/
+  `AndroidSAFHandle`; 13.0 removed them with no replacement). `DownloadManager`'s
+  `dart:io` `File`/`Directory` calls can't write to a `content://` URI at all, so every
+  download to a custom folder failed (caught by the existing blanket `try`/`catch`,
+  surfacing as a generic "failed" result with no specific error).
+  - `SettingsScreen._chooseDownloadFolder` now uses `saf_util`'s `SafUtil().
+    pickDirectory(writePermission: true, persistablePermission: true)` on Android
+    instead of `file_picker`, requesting a *persistable* grant so the folder stays
+    writable across app restarts (`file_picker` is unchanged everywhere else --
+    backup export/import still use its `saveFile`/`pickFile`, which work fine for a
+    single-shot dialog, unlike a path that needs repeated writes later).
+  - `DownloadManager.downloadPost` branches on whether the saved destination starts
+    with `content://`: that path now creates the artist subfolder via `SafUtil().
+    mkdirp` and writes via `SafStream().writeFileBytes` (with `overwrite: true`, to
+    match the existing deterministic-path/always-overwrite semantics of the
+    `dart:io` branch) instead of `Directory.create`/`File.writeAsBytes`.
+  - Tested via `FakeSafUtilPlatform`/`FakeSafStreamPlatform` (same pattern as
+    `FakeVideoPlayerPlatform`) registered against `saf_util`/`saf_stream`'s own
+    platform-interface classes -- verifies this app's own glue code (right methods,
+    right arguments, right handling of the result) without a device, but the
+    `saf_util`/`saf_stream` plugins' actual native Android behavior still needs
+    verification on a real device, which this environment has no way to do.

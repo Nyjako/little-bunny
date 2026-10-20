@@ -2,10 +2,29 @@ import 'dart:io';
 
 import 'package:crypto/crypto.dart';
 import 'package:http/http.dart' as http;
+import 'package:saf_stream/saf_stream.dart';
+import 'package:saf_util/saf_util.dart';
 
 import '../repository/bunny_models.dart';
 import '../repository/bunny_repository.dart';
 import '../util/image_headers.dart';
+
+/// Best-effort extension-to-MIME-type mapping, only needed for the SAF write
+/// path below (`saf_stream`'s `writeFileBytes` requires one; `dart:io`'s
+/// plain `File.writeAsBytes` needs no such thing). Falls back to a generic
+/// binary type for anything not covered -- SAF doesn't refuse an unknown
+/// MIME type, it just can't give the resulting file a more specific one.
+const _mimeTypesByExt = {
+  'jpg': 'image/jpeg',
+  'jpeg': 'image/jpeg',
+  'png': 'image/png',
+  'gif': 'image/gif',
+  'webp': 'image/webp',
+  'mp4': 'video/mp4',
+  'webm': 'video/webm',
+};
+
+String _mimeTypeFor(String ext) => _mimeTypesByExt[ext.toLowerCase()] ?? 'application/octet-stream';
 
 /// The result of a single [DownloadManager.downloadPost] call. [noFileUrl]
 /// covers an Inkbunny post that was only ever synced via a search (M8.5.6's
@@ -71,10 +90,25 @@ class DownloadManager {
 
       final artistFolder = _sanitizeArtist(post.artist);
       final ext = post.fileExt ?? 'bin';
-      final directory = Directory('$destinationFolder/$artistFolder');
-      await directory.create(recursive: true);
-      final filePath = '${directory.path}/${post.externalId}.$ext';
-      await File(filePath).writeAsBytes(bytes);
+      final String filePath;
+      if (destinationFolder.startsWith('content://')) {
+        // A `content://` destination means the user picked a folder via
+        // Android's Storage Access Framework (see SettingsScreen's own doc
+        // comment on _chooseDownloadFolder) -- dart:io's File/Directory
+        // can't write there at all, so this goes through saf_util/saf_stream
+        // instead: create (or reuse) the artist subfolder under the picked
+        // tree, then write the file into it. overwrite: true matches the
+        // plain-path branch below, which always overwrites at the same
+        // deterministic path rather than generating a new name each time.
+        final artistDir = await SafUtil().mkdirp(destinationFolder, [artistFolder]);
+        final newFile = await SafStream().writeFileBytes(artistDir.uri, '${post.externalId}.$ext', _mimeTypeFor(ext), bytes, overwrite: true);
+        filePath = newFile.uri.toString();
+      } else {
+        final directory = Directory('$destinationFolder/$artistFolder');
+        await directory.create(recursive: true);
+        filePath = '${directory.path}/${post.externalId}.$ext';
+        await File(filePath).writeAsBytes(bytes);
+      }
 
       final checksum = md5.convert(bytes).toString();
       final expected = post.fileMd5;

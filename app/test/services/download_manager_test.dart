@@ -6,8 +6,11 @@ import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:little_bunny/repository/bunny_models.dart';
 import 'package:little_bunny/services/download_manager.dart';
+import 'package:saf_stream/saf_stream_platform_interface.dart';
+import 'package:saf_util/saf_util_platform_interface.dart';
 
 import '../fakes/fake_bunny_repository.dart';
+import '../fakes/fake_saf_platform.dart';
 
 BunnyPost _post({BunnySite site = BunnySite.e621, String? artist, String? fileUrl = 'https://static1.e621.net/data/1.png', String? fileExt = 'png', String? fileMd5}) => BunnyPost(
   id: 1,
@@ -111,6 +114,30 @@ void main() {
     await manager.downloadPost(_post(artist: 'wolf'), repository, nestedDir.path);
 
     expect(await File('${nestedDir.path}/wolf/42.png').exists(), isTrue);
+  });
+
+  group('SAF write path (Android content:// destination, M36)', () {
+    late FakeSafUtilPlatform fakeSafUtil;
+    late FakeSafStreamPlatform fakeSafStream;
+
+    setUp(() {
+      fakeSafUtil = FakeSafUtilPlatform();
+      fakeSafStream = FakeSafStreamPlatform();
+      SafUtilPlatform.instance = fakeSafUtil;
+      SafStreamPlatform.instance = fakeSafStream;
+    });
+
+    test('a content:// destination creates the artist subfolder and writes via SafStream instead of dart:io', () async {
+      final manager = DownloadManager(client: MockClient((_) async => http.Response.bytes([1, 2, 3], 200)));
+      final repository = FakeBunnyRepository();
+
+      final result = await manager.downloadPost(_post(artist: 'some/bad:artist'), repository, 'content://com.android.externalstorage.documents/tree/primary%3ADownload');
+
+      expect(result.outcome, DownloadOutcome.verified);
+      expect(fakeSafUtil.mkdirpCalls, [('content://com.android.externalstorage.documents/tree/primary%3ADownload', 'some_bad_artist')]);
+      expect(fakeSafStream.writeFileBytesCalls, [('content://com.android.externalstorage.documents/tree/primary%3ADownload/some_bad_artist', '42.png', 'image/png')]);
+      expect(result.filePath, 'content://com.android.externalstorage.documents/tree/primary%3ADownload/some_bad_artist/42.png');
+    });
   });
 
   group('autoFavorite (M10.1)', () {
