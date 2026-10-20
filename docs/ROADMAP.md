@@ -2140,3 +2140,17 @@ this file is the single source of truth for "what's done" across sessions.
     posts loaded so far rather than every post matching the search -- fetching every
     remaining page first to support it would reintroduce the exact problem this
     milestone exists to fix.
+
+- [x] **M35 — Fix fullscreen gallery skipping video posts when browsing left/right**
+  Reported by the user: swiping through the fullscreen image gallery silently skipped
+  over video posts entirely. `FullScreenPostViewerScreen` (M8.5.9) filtered its post list
+  to images only by design -- video posts kept using `PostDetailScreen`'s own in-place
+  player, and tapping a video never opened fullscreen in the first place, so the gallery
+  had no way to show one. `_openFullScreenViewer` (`post_detail_screen.dart`) now passes
+  the full sibling list instead of an image-only filter; `FullScreenPostViewerScreen`
+  gained a `_FullScreenVideoPage` (same `Chewie`/`VideoPlayerController` setup as
+  `PostDetailScreen`'s own video branch -- muted by default, looping, post-metadata
+  aspect ratio) for any video post swiped to, with `PhotoView`'s own pan/zoom locked
+  (`minScale == maxScale`) so it doesn't compete with Chewie's scrub/tap controls for the
+  same gestures. Image preloading (`_preloadAt`) skips video posts -- nothing to
+  precache there.

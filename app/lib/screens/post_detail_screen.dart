@@ -663,9 +663,12 @@ class _PostDetailPageState extends State<_PostDetailPage> {
     );
   }
 
+  /// Includes video posts too (M35) -- used to filter to images only, which
+  /// meant swiping past a video while browsing fullscreen silently skipped
+  /// over it instead of showing/playing it.
   void _openFullScreenViewer() {
-    final images = (widget.siblingPosts ?? [widget.post]).where(_isImage).toList();
-    final index = images.indexWhere((p) => p.id == widget.post.id);
+    final posts = widget.siblingPosts ?? [widget.post];
+    final index = posts.indexWhere((p) => p.id == widget.post.id);
     if (index == -1) {
       return;
     }
@@ -673,7 +676,7 @@ class _PostDetailPageState extends State<_PostDetailPage> {
       context,
       MaterialPageRoute(
         builder: (context) => FullScreenPostViewerScreen(
-          posts: images,
+          posts: posts,
           initialIndex: index,
           repository: widget.repository,
           displaySettingsStore: widget.displaySettingsStore,
