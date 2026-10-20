@@ -429,58 +429,16 @@ void main() {
     expect(find.text('Foxes'), findsNothing);
   });
 
-  testWidgets('auto-creates a favorites search per configured account, shown only in the Favorites tab (M27)', (WidgetTester tester) async {
+  testWidgets('a favorites search (the AccountsScreen-managed sentinel, M30) is hidden from the Searches tab', (WidgetTester tester) async {
     final repository = FakeBunnyRepository();
     await repository.createSearch(BunnySite.e621, 'Foxes', 'fox');
-    await repository.setAccount(BunnySite.e621, 'someuser', 'apikey');
-    await repository.setAccount(BunnySite.inkbunny, 'someinkbunnyuser', 'password');
+    await repository.createSearch(BunnySite.e621, 'Favorites', 'fav:someuser');
 
     await tester.pumpWidget(_wrap(repository));
     await tester.pumpAndSettle();
 
-    // Auto-created, but not shown in the Searches tab alongside the regular
-    // "Foxes" search -- it's the Favorites tab's own slice (same reasoning
-    // as pool searches being hidden from the Searches tab above). The lone
-    // "Favorites" match here is the tab bar's own label -- its TabBarView
-    // page isn't built until selected, so this doesn't yet see its entries.
     expect(find.text('Foxes'), findsOneWidget);
-    expect(find.text('Favorites'), findsOneWidget);
-
-    await tester.tap(find.text('Favorites'));
-    await tester.pumpAndSettle();
-
-    // The tab bar's own label, plus one entry per configured account (e621
-    // + Inkbunny), both labeled "Favorites".
-    expect(find.text('Favorites'), findsNWidgets(3));
-    expect(find.text('Foxes'), findsNothing);
-    expect(repository.searches.where((s) => s.isFavorites && s.site == BunnySite.e621).single.query, 'fav:someuser');
-    expect(repository.searches.where((s) => s.isFavorites && s.site == BunnySite.inkbunny).single.query, 'favorited_by:me');
-  });
-
-  testWidgets('shows the Favorites empty state when no account is configured', (WidgetTester tester) async {
-    final repository = FakeBunnyRepository();
-
-    await tester.pumpWidget(_wrap(repository));
-    await tester.pumpAndSettle();
-
-    await tester.tap(find.text('Favorites'));
-    await tester.pumpAndSettle();
-
-    expect(find.text('No account configured yet -- add one in Accounts to see your favorites here.'), findsOneWidget);
-    expect(repository.searches, isEmpty);
-  });
-
-  testWidgets('the Favorites tab has no FAB -- it is entirely auto-managed (M27)', (WidgetTester tester) async {
-    final repository = FakeBunnyRepository();
-    await repository.setAccount(BunnySite.e621, 'someuser', 'apikey');
-
-    await tester.pumpWidget(_wrap(repository));
-    await tester.pumpAndSettle();
-
-    await tester.tap(find.text('Favorites'));
-    await tester.pumpAndSettle();
-
-    expect(find.byType(FloatingActionButton), findsNothing);
+    expect(find.text('Favorites'), findsNothing);
   });
 
   testWidgets('shows the pools empty state on the Pools tab when there are no pool searches', (WidgetTester tester) async {

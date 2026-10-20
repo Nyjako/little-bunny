@@ -29,8 +29,58 @@ void main() {
     await tester.pumpWidget(_wrap(repository));
     await tester.pumpAndSettle();
 
-    expect(find.text('Logged in as someuser'), findsOneWidget);
+    expect(find.text('Logged in as someuser · 0 favorites'), findsOneWidget);
     expect(find.byIcon(Icons.delete), findsOneWidget);
+  });
+
+  group('favorites count + sync (M30)', () {
+    testWidgets('auto-creates a favorites search per configured account and shows its count', (WidgetTester tester) async {
+      final repository = FakeBunnyRepository();
+      await repository.setAccount(BunnySite.e621, 'someuser', 'apikey');
+      await repository.setAccount(BunnySite.inkbunny, 'someinkbunnyuser', 'password');
+
+      await tester.pumpWidget(_wrap(repository));
+      await tester.pumpAndSettle();
+
+      expect(repository.searches.where((s) => s.isFavorites && s.site == BunnySite.e621).single.query, 'fav:someuser');
+      expect(repository.searches.where((s) => s.isFavorites && s.site == BunnySite.inkbunny).single.query, 'favorited_by:me');
+      expect(find.text('Logged in as someuser · 0 favorites'), findsOneWidget);
+      expect(find.text('Logged in as someinkbunnyuser · 0 favorites'), findsOneWidget);
+      // No per-search editing/pinning UI for the sentinel search -- just the
+      // count (above) and a sync button (below).
+      expect(find.byIcon(Icons.sync), findsNWidgets(2));
+    });
+
+    testWidgets('tapping sync triggers syncSearch and refreshes the shown count', (WidgetTester tester) async {
+      final repository = FakeBunnyRepository();
+      await repository.setAccount(BunnySite.e621, 'someuser', 'apikey');
+
+      await tester.pumpWidget(_wrap(repository));
+      await tester.pumpAndSettle();
+
+      final favoritesSearch = repository.searches.where((s) => s.isFavorites).single;
+      repository.syncSearchNewPosts[favoritesSearch.id] = [
+        BunnyPost(
+          id: 1,
+          site: BunnySite.e621,
+          externalId: 1,
+          score: 0,
+          favCount: 0,
+          commentCount: 0,
+          width: 1,
+          height: 1,
+          cachedAt: '2024-01-01T00:00:00Z',
+          isSeen: false,
+          isFavorited: false,
+        ),
+      ];
+
+      await tester.tap(find.byIcon(Icons.sync));
+      await tester.pumpAndSettle();
+
+      expect(repository.syncSearchCalls, contains(favoritesSearch.id));
+      expect(find.text('Logged in as someuser · 1 favorites'), findsOneWidget);
+    });
   });
 
   testWidgets('tapping remove then confirming deletes the account', (WidgetTester tester) async {
