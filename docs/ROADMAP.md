@@ -2099,3 +2099,16 @@ this file is the single source of truth for "what's done" across sessions.
     minutes and returning 0 bytes (the client had already given up and disconnected).
     Fixed by wrapping each page's upsert loop in one `bunny_db_begin_transaction`/
     `commit_transaction` pair, same as the sync path.
+
+- [x] **M33 — Fix fullscreen image viewer snapping back to the original post on exit**
+  Reported by the user: swipe to a different post while in `FullScreenPostViewerScreen`,
+  then leave fullscreen -- `PostDetailScreen` showed the post fullscreen was *opened*
+  from, not the one swiped to. `FullScreenPostViewerScreen` tracked its own swiped-to
+  page internally but never told the screen that opened it, and a plain
+  `Navigator.pop(context)` (both the close button and the system back gesture) carries
+  no return value by default. Fixed by threading a `ValueChanged<BunnyPost>?
+  onPageChanged` callback down (`_PostDetailPage.onFullScreenPostChanged` ->
+  `FullScreenPostViewerScreen.onPageChanged`), invoked live on every swipe inside
+  fullscreen rather than only once on exit -- so `PostDetailScreen`'s own `PageController`
+  (`_jumpToPost`) is already on the right page by the time fullscreen closes, regardless
+  of how the user leaves it (close button vs. back gesture both just pop either way).

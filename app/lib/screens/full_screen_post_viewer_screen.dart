@@ -21,7 +21,20 @@ class FullScreenPostViewerScreen extends StatefulWidget {
   final BunnyRepository repository;
   final DisplaySettingsStore displaySettingsStore;
 
-  const FullScreenPostViewerScreen({super.key, required this.posts, required this.initialIndex, required this.repository, this.displaySettingsStore = const DisplaySettingsStore()});
+  /// Called live on every swipe here (not just once on exit), so whatever
+  /// opened this screen can keep its own notion of "the current post" in
+  /// sync without depending on how this screen eventually closes (close
+  /// button vs. system back gesture both just pop, with no custom result).
+  final ValueChanged<BunnyPost>? onPageChanged;
+
+  const FullScreenPostViewerScreen({
+    super.key,
+    required this.posts,
+    required this.initialIndex,
+    required this.repository,
+    this.displaySettingsStore = const DisplaySettingsStore(),
+    this.onPageChanged,
+  });
 
   @override
   State<FullScreenPostViewerScreen> createState() => _FullScreenPostViewerScreenState();
@@ -72,6 +85,7 @@ class _FullScreenPostViewerScreenState extends State<FullScreenPostViewerScreen>
   void _onPageChanged(int index) {
     widget.repository.markPostSeen(widget.posts[index].id);
     _preloadAround(index);
+    widget.onPageChanged?.call(widget.posts[index]);
   }
 
   void _goToDelta(int delta) {

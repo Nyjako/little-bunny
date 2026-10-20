@@ -92,6 +92,25 @@ void main() {
     expect(gallery.pageController!.page, 0);
   });
 
+  testWidgets('calls onPageChanged with the new post on swipe, live (not just once on exit)', (WidgetTester tester) async {
+    final repository = FakeBunnyRepository();
+    final posts = [_post(1), _post(2), _post(3)];
+    final changed = <int>[];
+
+    await tester.pumpWidget(
+      wrapWithLocalization(FullScreenPostViewerScreen(posts: posts, initialIndex: 0, repository: repository, onPageChanged: (post) => changed.add(post.id))),
+    );
+    await tester.pump();
+
+    await tester.drag(find.byType(PhotoViewGallery), const Offset(-800, 0));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
+
+    expect(changed, [2]);
+    // Still inside fullscreen -- this fires on every swipe, not on exit.
+    expect(find.byType(FullScreenPostViewerScreen), findsOneWidget);
+  });
+
   testWidgets('a close button pops the viewer', (WidgetTester tester) async {
     final repository = FakeBunnyRepository();
     final posts = [_post(1)];
