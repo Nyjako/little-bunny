@@ -2064,6 +2064,42 @@ this file is the single source of truth for "what's done" across sessions.
     way `SearchesScreen`'s own per-row sync button already did. No rename/pin/interval
     UI -- intentionally, per the user's explicit "no need to have even editing there."
 
+- [x] **M32 — Fix two latent deploy/self-update bugs, found while manually pushing a
+  build to the user's live server**
+  - [x] **`deploy/_install-common.sh` was unparseable bash.** An apostrophe inside a
+    `${public_ip:-<this-machine's-public-IP-or-hostname>}` parameter-expansion default
+    (introduced alongside M23's update-apply wiring) opens an unterminated single-quoted
+    string as far as bash's parser is concerned, so the *entire* file fails with
+    "unexpected EOF while looking for matching `''" the moment it's sourced -- meaning
+    `install.sh`/`install-prebuilt.sh` could never have actually completed an install on
+    any machine since that commit. Reworded the placeholder to drop the apostrophe.
+  - [x] **The server's self-updater always fetched the wrong release asset.**
+    `server/src/updater.c`'s `check_for_update` hardcoded the asset suffix
+    `"linux-x64.tar.gz"` -- the build made on GitHub's `ubuntu-latest` runner, whose
+    glibc tracks whatever image GitHub currently ships -- instead of
+    `"linux-x64-ubuntu22.tar.gz"`, the one deliberately built inside a pinned
+    `ubuntu:22.04` container specifically so it stays runnable on older deployment
+    targets (see `deploy/README.md`'s "Installing a binary built elsewhere"). Caught
+    live: the user's Oracle Cloud Ubuntu 22.04 box had already auto-staged a build this
+    way, and installing a manually-fetched newer build triggered `ExecStartPre`'s
+    update-apply step to silently swap in that staged (wrong-glibc) binary instead,
+    `GLIBC_2.38 not found` crash-looping the service (`restart counter` climbing) until
+    caught and the correct `-ubuntu22` asset was installed by hand. Every automatic
+    self-update on this or any similar deployment target had been doing this unnoticed.
+  - [x] **"Stuck in loading" browsing an uncached author or pool.** `bunny_core_
+    preview_search` (TagBrowseScreen's live, stateless browse -- tapping an artist name
+    or a pool chip that isn't already a saved search) upserted each post in a page with
+    its own `bunny_core_db_lock`/implicit-auto-commit/`unlock`, one at a time -- up to
+    `BUNNY_CORE_SYNC_E621_PAGE_LIMIT` (320) separate fsync-backed commits for a single
+    page. `upsert_e621_search_page` (the saved-search *sync* path) had already been
+    fixed to batch a whole page into one transaction for exactly this reason (see that
+    function's own comment, `cae39d5`), but `bunny_core_preview_search` (and
+    `bunny_core_list_my_inkbunny_favorites`, same shape) never got the same fix. Found
+    live on the user's server: a `POST /search/preview` request measured taking over two
+    minutes and returning 0 bytes (the client had already given up and disconnected).
+    Fixed by wrapping each page's upsert loop in one `bunny_db_begin_transaction`/
+    `commit_transaction` pair, same as the sync path.
+
 - [x] **M33 — Fix fullscreen image viewer snapping back to the original post on exit**
   Reported by the user: swipe to a different post while in `FullScreenPostViewerScreen`,
   then leave fullscreen -- `PostDetailScreen` showed the post fullscreen was *opened*

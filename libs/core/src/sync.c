@@ -734,17 +734,27 @@ bunny_core_result_t bunny_core_preview_search(bunny_core_t *core, bunny_db_site_
             return BUNNY_CORE_ERR_SITE;
         }
 
+        /* One transaction (and one db_mutex hold) for the whole page, not
+         * one implicit auto-commit transaction per post -- same fix as
+         * upsert_e621_search_page's own comment describes, just never
+         * applied here: a page can have up to BUNNY_CORE_SYNC_E621_PAGE_LIMIT
+         * (320) posts, and committing each individually means up to 320
+         * separate fsync-backed commits for a single preview page, which is
+         * what made browsing an uncached author/pool (TagBrowseScreen's
+         * live preview) feel stuck rather than just slow. */
+        bunny_core_db_lock(core);
+        bunny_db_begin_transaction(core->db);
         for (size_t i = 0; i < posts.count; i++) {
             int64_t post_id = 0;
             bunny_db_post_t item;
             memset(&item, 0, sizeof(item));
-            bunny_core_db_lock(core);
             bool ok = upsert_e621_post(core->db, &posts.items[i], &post_id) == BUNNY_CORE_OK && bunny_db_post_get_by_id(core->db, post_id, &item) == BUNNY_DB_OK;
-            bunny_core_db_unlock(core);
             if (ok) {
                 bunny_core_post_array_push(&arr, item);
             }
         }
+        bunny_db_commit_transaction(core->db);
+        bunny_core_db_unlock(core);
         e621_post_list_free(&posts);
         e621_client_destroy(client);
     } else {
@@ -779,17 +789,20 @@ bunny_core_result_t bunny_core_preview_search(bunny_core_t *core, bunny_db_site_
             return BUNNY_CORE_ERR_SITE;
         }
 
+        /* Same one-transaction-per-page fix as the e621 branch above. */
+        bunny_core_db_lock(core);
+        bunny_db_begin_transaction(core->db);
         for (size_t i = 0; i < submissions.count; i++) {
             int64_t post_id = 0;
             bunny_db_post_t item;
             memset(&item, 0, sizeof(item));
-            bunny_core_db_lock(core);
             bool ok = upsert_inkbunny_submission(core->db, &submissions.items[i], &post_id) == BUNNY_CORE_OK && bunny_db_post_get_by_id(core->db, post_id, &item) == BUNNY_DB_OK;
-            bunny_core_db_unlock(core);
             if (ok) {
                 bunny_core_post_array_push(&arr, item);
             }
         }
+        bunny_db_commit_transaction(core->db);
+        bunny_core_db_unlock(core);
         inkbunny_submission_list_free(&submissions);
         inkbunny_client_destroy(client);
     }
@@ -828,17 +841,20 @@ bunny_core_result_t bunny_core_list_my_inkbunny_favorites(bunny_core_t *core, in
 
     bunny_core_post_array arr;
     bunny_core_post_array_init(&arr);
+    /* Same one-transaction-per-page fix as bunny_core_preview_search above. */
+    bunny_core_db_lock(core);
+    bunny_db_begin_transaction(core->db);
     for (size_t i = 0; i < submissions.count; i++) {
         int64_t post_id = 0;
         bunny_db_post_t item;
         memset(&item, 0, sizeof(item));
-        bunny_core_db_lock(core);
         bool ok = upsert_inkbunny_submission(core->db, &submissions.items[i], &post_id) == BUNNY_CORE_OK && bunny_db_post_get_by_id(core->db, post_id, &item) == BUNNY_DB_OK;
-        bunny_core_db_unlock(core);
         if (ok) {
             bunny_core_post_array_push(&arr, item);
         }
     }
+    bunny_db_commit_transaction(core->db);
+    bunny_core_db_unlock(core);
     inkbunny_submission_list_free(&submissions);
     inkbunny_client_destroy(client);
 
