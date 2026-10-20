@@ -314,6 +314,84 @@ void main() {
       expect(posts.single.userVote, 1);
     });
 
+    test('listSearchPosts tolerates a server running an older build missing newer post fields', () async {
+      // user_vote (M9.7.1), favorite_stars (M27), score_up/score_down (M8.5.0)
+      // all postdate this app's very first release -- a server a version or
+      // two behind the app simply won't send them yet. Must degrade to a
+      // sane default for that one post, not throw and take down the whole
+      // search (every post in the array goes through the same parser).
+      respond = (_) => http.Response(
+        jsonEncode([
+          {
+            'id': 1,
+            'site': 'e621',
+            'external_id': 100,
+            'artist': 'someartist',
+            'title': null,
+            'description': null,
+            'rating': 's',
+            'score': 5,
+            'fav_count': 2,
+            'comment_count': 0,
+            'file_url': 'https://example.com/1.png',
+            'file_ext': 'png',
+            'file_md5': 'abc',
+            'preview_url': null,
+            'width': 100,
+            'height': 200,
+            'created_at_site': null,
+            'cached_at': '2026-01-01T00:00:00Z',
+            'is_seen': false,
+            'is_favorited': true,
+          },
+        ]),
+        200,
+      );
+
+      final posts = await buildRepository().listSearchPosts(7);
+
+      expect(posts, hasLength(1));
+      expect(posts.single.externalId, 100);
+      expect(posts.single.scoreUp, 0);
+      expect(posts.single.scoreDown, 0);
+      expect(posts.single.userVote, 0);
+      expect(posts.single.favoriteStars, 0);
+      expect(posts.single.sampleUrl, isNull);
+    });
+
+    test('listSearches tolerates a server running an older build missing newer search fields', () async {
+      // unseen_count (M8.5.11), total_count/pinned (M14.1), auto_favorite*
+      // (M9.6.8/M9.7.2), auto_upvote (M9.7.2), uses_default_interval (M20),
+      // group_id (M21) all postdate this app's very first release.
+      respond = (_) => http.Response(
+        jsonEncode([
+          {
+            'id': 1,
+            'site': 'e621',
+            'label': 'my search',
+            'query': 'rating:safe',
+            'interval_hours': 24,
+            'created_at': '2026-01-01T00:00:00Z',
+            'last_run_at': null,
+          },
+        ]),
+        200,
+      );
+
+      final searches = await buildRepository().listSearches();
+
+      expect(searches, hasLength(1));
+      expect(searches.single.label, 'my search');
+      expect(searches.single.unseenCount, 0);
+      expect(searches.single.totalCount, 0);
+      expect(searches.single.autoFavorite, isFalse);
+      expect(searches.single.autoFavoriteStars, 1);
+      expect(searches.single.autoUpvote, isFalse);
+      expect(searches.single.pinned, isFalse);
+      expect(searches.single.usesDefaultInterval, isFalse);
+      expect(searches.single.groupId, 0);
+    });
+
     test('tagAutocomplete sends site/prefix/limit as query params and maps results', () async {
       respond = (_) => http.Response(
         jsonEncode([

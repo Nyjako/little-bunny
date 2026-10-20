@@ -626,6 +626,33 @@ void test_preview_search_requests_the_given_inkbunny_page(void)
     TEST_ASSERT_NOT_NULL(strstr(g_captured_url, "page=2"));
 }
 
+void test_preview_search_inkbunny_pool_sends_pool_id_not_literal_text(void)
+{
+    /* TagBrowseScreen's stateless pool preview (M9.6.3) reuses this same
+     * preview_search call for Inkbunny pools too (M28) -- "pool:<id>" must
+     * resolve to pool_id, never sent as literal free-text keywords (which
+     * "pool:108216" would be nonsense as). */
+    g_inkbunny_transport.send = capturing_fake_send;
+
+    char *login_fixture = read_fixture("inkbunny_login_success.json");
+    char *search_fixture = read_fixture("inkbunny_search_response.json");
+    TEST_ASSERT_NOT_NULL(login_fixture);
+    TEST_ASSERT_NOT_NULL(search_fixture);
+    g_inkbunny_state.bodies[0] = login_fixture;
+    g_inkbunny_state.bodies[1] = search_fixture;
+    g_inkbunny_state.body_count = 2;
+
+    bunny_db_post_list_t posts;
+    bunny_core_result_t result = bunny_core_preview_search(g_core, BUNNY_DB_SITE_INKBUNNY, "pool:108216", 1, &posts);
+    TEST_ASSERT_EQUAL(BUNNY_CORE_OK, result);
+    bunny_db_post_list_free(&posts);
+    free(login_fixture);
+    free(search_fixture);
+
+    TEST_ASSERT_NOT_NULL(strstr(g_captured_url, "pool_id=108216"));
+    TEST_ASSERT_NULL(strstr(g_captured_url, "text="));
+}
+
 void test_list_my_inkbunny_favorites_searches_by_the_logged_in_users_own_id(void)
 {
     g_inkbunny_transport.send = capturing_fake_send;
@@ -1054,6 +1081,39 @@ void test_sync_inkbunny_favorites_search_requests_the_logged_in_users_own_favori
     free(empty_fixture);
 }
 
+void test_sync_inkbunny_pool_search_sends_pool_id_not_literal_text(void)
+{
+    /* A search whose query is "pool:<id>" is the same sentinel e621 pool
+     * searches already use (BunnySearch.isPool) -- confirmed live that
+     * Inkbunny's search API also accepts a pool_id param, so this must
+     * resolve to params.pool_id, never treated as literal free-text
+     * keywords (which "pool:108216" would be nonsense as). */
+    g_inkbunny_transport.send = capturing_fake_send;
+
+    char *login_fixture = read_fixture("inkbunny_login_success.json");
+    char *empty_fixture = read_fixture("inkbunny_search_response_empty.json");
+    TEST_ASSERT_NOT_NULL(login_fixture);
+    TEST_ASSERT_NOT_NULL(empty_fixture);
+    g_inkbunny_state.bodies[0] = login_fixture;
+    g_inkbunny_state.bodies[1] = empty_fixture;
+    g_inkbunny_state.body_count = 2;
+
+    int64_t search_id = 0;
+    bunny_core_result_t result = bunny_core_search_create(g_core, BUNNY_DB_SITE_INKBUNNY, "a pool", "pool:108216", 24, NULL, &search_id);
+    TEST_ASSERT_EQUAL(BUNNY_CORE_OK, result);
+
+    bunny_core_sync_stats_t stats;
+    result = bunny_core_sync_due_searches(g_core, &stats);
+    TEST_ASSERT_EQUAL(BUNNY_CORE_OK, result);
+    TEST_ASSERT_EQUAL(1, stats.searches_synced);
+
+    TEST_ASSERT_NOT_NULL(strstr(g_captured_url, "pool_id=108216"));
+    TEST_ASSERT_NULL(strstr(g_captured_url, "text="));
+
+    free(login_fixture);
+    free(empty_fixture);
+}
+
 void test_sync_inkbunny_search_marks_a_favorited_submission_locally(void)
 {
     /* M10.3: same mirroring as the e621 test above, but for Inkbunny's own
@@ -1441,6 +1501,7 @@ int main(void)
     RUN_TEST(test_preview_search_is_unaffected_by_the_tag_blacklist);
     RUN_TEST(test_preview_search_requests_the_given_e621_page);
     RUN_TEST(test_preview_search_requests_the_given_inkbunny_page);
+    RUN_TEST(test_preview_search_inkbunny_pool_sends_pool_id_not_literal_text);
     RUN_TEST(test_preview_search_rejects_a_page_below_one);
     RUN_TEST(test_list_my_inkbunny_favorites_searches_by_the_logged_in_users_own_id);
     RUN_TEST(test_list_my_inkbunny_favorites_rejects_a_page_below_one);
@@ -1457,6 +1518,7 @@ int main(void)
     RUN_TEST(test_mark_seen_rejects_a_nonexistent_post);
     RUN_TEST(test_sync_inkbunny_search_upserts_post);
     RUN_TEST(test_sync_inkbunny_favorites_search_requests_the_logged_in_users_own_favorites);
+    RUN_TEST(test_sync_inkbunny_pool_search_sends_pool_id_not_literal_text);
     RUN_TEST(test_sync_inkbunny_search_marks_a_favorited_submission_locally);
     RUN_TEST(test_sync_inkbunny_search_second_sync_stops_at_already_synced_submission);
     RUN_TEST(test_sync_inkbunny_search_second_sync_upserts_only_the_new_submission);

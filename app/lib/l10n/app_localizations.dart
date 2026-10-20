@@ -274,6 +274,18 @@ abstract class AppLocalizations {
   /// **'My favorites'**
   String get accountsMyFavoritesTitle;
 
+  /// No description provided for @accountsFavoritesCount.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} favorites'**
+  String accountsFavoritesCount(int count);
+
+  /// No description provided for @accountsSyncFavoritesTooltip.
+  ///
+  /// In en, this message translates to:
+  /// **'Sync favorites now'**
+  String get accountsSyncFavoritesTooltip;
+
   /// No description provided for @searchesScreenTitle.
   ///
   /// In en, this message translates to:
@@ -358,23 +370,11 @@ abstract class AppLocalizations {
   /// **'Pools'**
   String get searchesTabPools;
 
-  /// No description provided for @searchesTabFavorites.
-  ///
-  /// In en, this message translates to:
-  /// **'Favorites'**
-  String get searchesTabFavorites;
-
   /// No description provided for @searchesPoolsEmptyState.
   ///
   /// In en, this message translates to:
   /// **'No saved pools yet. Tap + to add one.'**
   String get searchesPoolsEmptyState;
-
-  /// No description provided for @searchesFavoritesEmptyState.
-  ///
-  /// In en, this message translates to:
-  /// **'No account configured yet -- add one in Accounts to see your favorites here.'**
-  String get searchesFavoritesEmptyState;
 
   /// No description provided for @searchesFavoritesLabel.
   ///
@@ -1233,6 +1233,24 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'AMOLED (true black) dark mode'**
   String get settingsAmoledLabel;
+
+  /// No description provided for @settingsLanguageSection.
+  ///
+  /// In en, this message translates to:
+  /// **'Language'**
+  String get settingsLanguageSection;
+
+  /// No description provided for @settingsLanguageLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Language'**
+  String get settingsLanguageLabel;
+
+  /// No description provided for @settingsLanguageSystemDefault.
+  ///
+  /// In en, this message translates to:
+  /// **'System default'**
+  String get settingsLanguageSystemDefault;
 
   /// No description provided for @settingsAppLockSection.
   ///

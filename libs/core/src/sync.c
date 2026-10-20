@@ -550,6 +550,20 @@ static bunny_core_result_t sync_inkbunny_search(bunny_core_t *core, const bunny_
         snprintf(favorited_by_user_id, sizeof(favorited_by_user_id), "%lld", (long long)inkbunny_client_get_user_id(client));
     }
 
+    /* Same "pool:<id>" sentinel e621 pool searches already use -- confirmed
+     * live that Inkbunny's /api_search.php accepts an (undocumented)
+     * pool_id param returning every submission in that pool, so this is a
+     * real site-agnostic query shape, not an e621-only trick as originally
+     * assumed. Unlike e621, there's no endpoint to fetch the pool's own
+     * authoritative ordering (no bunny_core_sync_pool_order equivalent) --
+     * results come back newest-first by creation date, so posts here always
+     * have an unknown post_pools.position, and bunny_db_pool_search_list_posts'
+     * existing "unknown position sorts oldest-first by creation date" fallback
+     * (M26) is what actually produces correct reading order, not anything
+     * added here. */
+    int64_t pool_id = 0;
+    bool is_pool_search = bunny_core_parse_pool_id_from_query(search->query, &pool_id);
+
     /* Inkbunny has no confirmed id-cursor pagination like e621's a<ID>/b<ID>,
      * so this still walks plain numeric pages (newest first, since nothing
      * in this codebase sets a custom Inkbunny sort order) -- but stops as
@@ -564,6 +578,8 @@ static bunny_core_result_t sync_inkbunny_search(bunny_core_t *core, const bunny_
         memset(&params, 0, sizeof(params));
         if (is_favorites_search) {
             params.favorited_by_user_id = favorited_by_user_id;
+        } else if (is_pool_search) {
+            params.pool_id = pool_id;
         } else {
             params.text = search->query;
         }
@@ -737,9 +753,23 @@ bunny_core_result_t bunny_core_preview_search(bunny_core_t *core, bunny_db_site_
             return BUNNY_CORE_ERR_SITE;
         }
 
+        /* Same "pool:<id>" sentinel the saved-search sync path detects
+         * (sync_inkbunny_search, M28) -- TagBrowseScreen's stateless pool
+         * preview (M9.6.3) reuses this same preview_search call for both
+         * sites, so without this check "pool:<id>" would be sent as
+         * literal free-text keywords instead of the dedicated pool_id
+         * param, returning garbage (or nothing) rather than the pool's
+         * actual submissions. */
+        int64_t pool_id = 0;
+        bool is_pool_browse = bunny_core_parse_pool_id_from_query(query, &pool_id);
+
         inkbunny_search_params_t params;
         memset(&params, 0, sizeof(params));
-        params.text = query;
+        if (is_pool_browse) {
+            params.pool_id = pool_id;
+        } else {
+            params.text = query;
+        }
         params.page = page;
 
         inkbunny_submission_list_t submissions;

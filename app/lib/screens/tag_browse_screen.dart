@@ -96,7 +96,12 @@ class _TagBrowseScreenState extends State<TagBrowseScreen> {
 
   Future<void> _loadPoolInfo() async {
     final poolId = _poolId;
-    if (poolId == null) {
+    // fetchPool always hits e621's GET /pools/{id} -- Inkbunny has no
+    // equivalent pool-metadata endpoint at all (M28), and pool ids aren't
+    // shared/comparable across sites, so calling it for an Inkbunny pool
+    // search would risk silently showing an unrelated e621 pool's
+    // description if the numeric id happens to collide.
+    if (poolId == null || widget.site != BunnySite.e621) {
       return;
     }
     try {
@@ -159,12 +164,19 @@ class _TagBrowseScreenState extends State<TagBrowseScreen> {
   /// local list by reversing it), this is a live, paginated e621 search, so
   /// the fix has to ask the site itself to sort ascending -- reversing one
   /// page at a time wouldn't produce a correct overall order across pages.
+  /// e621 only: `order:id` is e621 tag-search syntax, meaningless to
+  /// Inkbunny's dedicated `pool_id` param (M28) -- appending it there would
+  /// also break `bunny_core_parse_pool_id_from_query`'s exact-match parsing
+  /// of the `pool:<id>` sentinel. Inkbunny has no equivalent "sort
+  /// ascending" request at all, so its pool browse just inherits the same
+  /// newest-first-with-no-authoritative-order limitation M28 already notes
+  /// for the saved-search sync path.
   Future<List<BunnyPost>> _fetchPage(int page) {
     final customFetch = widget.customFetch;
     if (customFetch != null) {
       return customFetch(page);
     }
-    final query = widget.query.startsWith('pool:') ? '${widget.query} order:id' : widget.query;
+    final query = widget.site == BunnySite.e621 && widget.query.startsWith('pool:') ? '${widget.query} order:id' : widget.query;
     return widget.repository.previewSearch(widget.site, query, page: page);
   }
 

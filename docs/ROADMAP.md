@@ -1940,7 +1940,7 @@ this file is the single source of truth for "what's done" across sessions.
     counted separately rather than silently dropped or misinterpreted as one literal
     (space-containing) tag; full AND-group support is backlog (see M28).
 
-- [ ] **M28 — Search filters, Inkbunny type coverage, and diagnostics (planned, not started)**
+- [ ] **M28 — Search filters, Inkbunny type coverage, and diagnostics (in progress)**
   Backlog from the same round of feedback that produced M27, roughly in the order the
   user asked to tackle them.
   - [ ] **Rating + media-type filters.** Post-grid filtering by rating (safe/
@@ -1954,25 +1954,112 @@ this file is the single source of truth for "what's done" across sessions.
     to confirm what actually renders correctly today. Flash submissions (Shockwave/Flash
     - Animation, Shockwave/Flash - Interactive) are to be **permanently dropped/filtered
     out**, not supported, once this is scoped.
+  - [ ] **Bulk Inkbunny submission detail fetch (background job).** The user pointed out
+    `api_submissions.php` (see `docs/API - Inkbunny.pdf`, gitignored -- Inkbunny's
+    official docs, kept locally): takes up to 100 comma-separated submission ids per
+    call and returns full details for all of them at once (tags, descriptions,
+    dimensions, comment counts, pool membership, ...) -- the same data a search sync
+    currently can only get one submission at a time via `inkbunny_get_submission`
+    (confirmed limited to single ids, unlike this batched endpoint). A background job
+    batching already-synced-but-thin Inkbunny posts through this in groups of 100 would
+    backfill the M26.5/M27-era "search sync returns no tags/dimensions/comment count"
+    gap proactively, instead of relying on `PostDetailScreen`'s live per-post refresh
+    on open (M26.5) to fill it in lazily, post by post.
   - [ ] **Blacklist "AND" groups.** M27's e621 blacklist sync only imports single-tag
     lines; multi-tag space-separated lines (e621's "AND" semantics -- a post is
     blacklisted only when *every* tag on that line matches) are skipped and merely
     counted. Extending the local blacklist's matching logic (currently a flat
     `List<String>` of exact-match tags, see `post_detail_screen.dart`'s
     `tags.where(blacklist.contains)`) to support these is a separate, larger change.
-  - [ ] **Confirm Inkbunny private-submission access.** Reported as broken (submission
+  - [x] **Confirm Inkbunny private-submission access.** Reported as broken (submission
     726100, a private/friends-only post, 404s under a guest-session test). Investigation
     found the single-post fetch path (`bunny_core_fetch_and_cache_post` ->
     `bunny_core_build_inkbunny_client`, `libs/core/src/site_clients.c`) already
     authenticates with the real configured account (username *and* password, already
-    stored server-side the same way e621's account is) whenever one exists -- so this
-    may already work with no further changes. Needs the user to confirm a real Inkbunny
-    account (not guest) is actually configured in the app before concluding anything is
-    genuinely broken.
-  - [ ] **Scheduler "N due searches" log diagnostic.** Production logs showed "synced
-    0/689 due searches" unchanged across several consecutive 15-minute scheduler ticks.
-    Mechanically consistent with ordinary behavior (searches on longer sync intervals
-    simply not due yet within that window) but unconfirmed without direct DB access.
-    Add a log line reporting the next-due timestamp (or how many hours until the
-    soonest-due search) whenever 0 searches sync, so this is self-diagnosing from the
-    logs alone going forward, without needing to SSH in and query `searches` directly.
+    stored server-side the same way e621's account is) whenever one exists. **Confirmed
+    live** against the user's real account and submission 726100 -- fetched correctly,
+    no code change needed; the app already worked once a real (non-guest) account is
+    configured.
+  - [x] **Scheduler "N due searches" log diagnostic** (PR #119, shipped as its own
+    release ahead of the rest of M28). Production logs showed "synced 0/689 due
+    searches" unchanged across several consecutive 15-minute scheduler ticks --
+    mechanically consistent with ordinary behavior (searches on longer intervals simply
+    not due yet), but unconfirmed without direct DB access at the time.
+    `bunny_core_sync_stats_t` gained `seconds_until_next_due` (computed during the same
+    due-searches pass, no extra DB scan -- the minimum remaining time across every
+    search checked, or -1 if there are none); the scheduler now logs `next due search in
+    N minute(s)` right after a "0 synced" line, so this is self-diagnosing from the logs
+    alone going forward.
+
+- [x] **M29 — Inkbunny pool search support**
+  The user pointed out that Inkbunny's `/api_search.php` accepts an undocumented
+  `pool_id` param -- confirmed live (pool 108216) that it works identically to e621's
+  own `pool:<id>` search tag, correcting an earlier assumption (M2.1) that Inkbunny had
+  no way to list a whole pool's submissions at once (only per-submission left/right
+  neighbor navigation). This was wrong; Inkbunny pools just needed wiring up, not a
+  fundamentally different browsing model.
+  - **`libs/inkbunny`**: new `inkbunny_search_params_t.pool_id` field, wired into the
+    query builder. Results come back newest-first by creation date with no endpoint to
+    fetch the pool's own authoritative order (unlike e621's `GET /pools/{id}.json`), so
+    reading order relies entirely on `bunny_db_pool_search_list_posts`' existing
+    "unknown position sorts oldest-first by creation date" fallback (M26) -- which
+    already produces correct order for free, since Inkbunny posts never get a
+    `post_pools.position` (that's only ever written by the e621-only `bunny_core_
+    sync_pool_order` hook). Zero new ordering code needed.
+  - **`sync_inkbunny_search`**: detects the same `"pool:<id>"` sentinel e621 pool
+    searches already use (`bunny_core_parse_pool_id_from_query`, already site-agnostic)
+    and sets `params.pool_id` instead of treating it as literal free-text keywords.
+  - **`bunny_core_preview_search`**: same sentinel detection added to its Inkbunny
+    branch -- this is the *other* pool-browsing entry point (`TagBrowseScreen`'s
+    stateless preview, M9.6.3), which shares this one call for both sites. Without this
+    fix, browsing an Inkbunny pool via a chip/link would have sent `"pool:<id>"` as
+    literal search keywords, returning garbage instead of the pool's submissions -- a
+    real bug caught while implementing this, not purely theoretical.
+  - **App**: `BunnySearch.isPool` is no longer e621-only. `SearchesScreen`'s "Add pool"
+    dialog gained a site selector (e621/Inkbunny); for Inkbunny the pool-name lookup
+    (`fetchPool`, e621-only -- `GET /pools/{id}.json` has no Inkbunny equivalent at all)
+    is skipped entirely rather than attempted and allowed to fail, since pool ids aren't
+    shared/comparable across sites and a numeric collision could otherwise silently
+    show an unrelated e621 pool's name. The same e621-only guard was added to the three
+    other `fetchPool` call sites that display pool metadata (description,
+    cross-referenced pools) for an already-open pool search/browse
+    (`tag_browse_screen.dart`, `post_grid_screen.dart`) for the same collision reason;
+    `post_detail_screen.dart`'s call site was already unreachable for Inkbunny by
+    construction (that chip only ever renders for e621 posts) and `create_search_
+    screen.dart`'s was already correctly gated from an earlier milestone.
+  - `docs/API - Inkbunny.pdf` (Inkbunny's official API reference, provided by the user)
+    added to `.gitignore` -- kept locally for development reference only, never
+    committed.
+
+- [x] **M30 — Manual language switching, default-interval-checked new searches**
+  - [x] **Language switching in Settings.** A new "Language" section with a dropdown
+    of `AppLocalizations.supportedLocales` plus a "System default" option
+    (`ThemeSettingsStore.loadLanguageCode`/`saveLanguageCode`, null means follow the
+    device). Priority order requested by the user: manual setting > device language >
+    default (English) -- implemented by leaving `MaterialApp.locale` unset (letting
+    Flutter's own device-locale resolution run) unless a manual override is stored, in
+    which case it's forced via `Locale(_languageCode!)`. Only English exists today, but
+    the picker is in place for future translations.
+  - [x] **"Use default interval" checked by default.** Both the regular create-search
+    dialog (`create_search_screen.dart`) and the pool-add dialog
+    (`searches_screen.dart`, see the `feature/inkbunny-pool-search` branch's follow-up
+    commit) now start with this checkbox checked, rather than requiring the user to
+    opt in every time.
+
+- [x] **M31 — Favorites moved from its own tab to an Accounts-screen count + sync button**
+  User feedback: a dedicated "Favorites" tab in `SearchesScreen` (M27) wasn't worth a
+  whole tab, since it was entirely auto-managed (no manual add, no per-row editing
+  users would actually use) -- just a per-account total count and a way to sync it.
+  - `SearchesScreen`'s `TabController` dropped from 3 tabs to 2 (Searches/Pools);
+    `_ensureFavoritesSearches` (the per-account sentinel-search auto-creation, same
+    `fav:<username>`/`favorited_by:me` trick as before) moved to `AccountsScreen`,
+    which is now the sole owner of this feature. The Searches tab still filters out
+    `isFavorites` searches (same as before) since the sentinel search is still a real
+    row in the `searches` table, synced via the exact same scheduler/due-interval
+    machinery as any other search -- nothing server-side needed to change.
+  - `AccountsScreen`: each configured account's subtitle now also shows its favorites
+    search's live `totalCount` (e.g. "Logged in as foo · 128 favorites"), plus a sync
+    icon button next to the existing "view my favorites" heart icon that calls
+    `syncSearch` on that account's sentinel search and polls `getSyncStatus` the same
+    way `SearchesScreen`'s own per-row sync button already did. No rename/pin/interval
+    UI -- intentionally, per the user's explicit "no need to have even editing there."

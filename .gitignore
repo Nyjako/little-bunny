@@ -5,6 +5,10 @@ scripts/git-commit.sh
 # for local manual testing against deploy/dump_server_info.sh's output
 .env
 
+# Reference material only (Inkbunny's official API docs, PDF) -- not ours to
+# redistribute, kept locally for development reference only
+docs/API - Inkbunny.pdf
+
 # CMake / build outputs
 build/
 build-*/

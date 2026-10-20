@@ -45,6 +45,11 @@
   "accountsNotConnected": "Not connected",
   "accountsMyFavoritesTooltip": "View my favorites",
   "accountsMyFavoritesTitle": "My favorites",
+  "accountsFavoritesCount": "{count} favorites",
+  "@accountsFavoritesCount": {
+    "placeholders": {"count": {"type": "int"}}
+  },
+  "accountsSyncFavoritesTooltip": "Sync favorites now",
 
   "searchesScreenTitle": "Searches",
   "searchesAccountsTooltip": "Accounts",
@@ -70,9 +75,7 @@
   },
   "searchesTabSearches": "Searches",
   "searchesTabPools": "Pools",
-  "searchesTabFavorites": "Favorites",
   "searchesPoolsEmptyState": "No saved pools yet. Tap + to add one.",
-  "searchesFavoritesEmptyState": "No account configured yet -- add one in Accounts to see your favorites here.",
   "searchesFavoritesLabel": "Favorites",
   "searchesNewPoolTooltip": "Add pool",
   "searchesSortTooltip": "Sort",
@@ -276,6 +279,9 @@
   "settingsThemeColorTeal": "Teal",
   "settingsThemeColorPink": "Pink",
   "settingsAmoledLabel": "AMOLED (true black) dark mode",
+  "settingsLanguageSection": "Language",
+  "settingsLanguageLabel": "Language",
+  "settingsLanguageSystemDefault": "System default",
   "settingsAppLockSection": "App lock",
   "settingsAppLockEntry": "Manage app lock",
   "settingsAboutSection": "About",

@@ -74,14 +74,21 @@ class BunnySearch {
   /// The [BunnyGroup] this search belongs to, or 0 if ungrouped (M21).
   final int groupId;
 
-  /// e621's own tag-search syntax treats `pool:<id>` as a literal query
-  /// string -- `bunny_core_search_create(site: e621, query: 'pool:$id')`
+  /// `pool:<id>` is a real tag e621's own search syntax understands
+  /// natively (M9.6.2); Inkbunny's /api_search.php also accepts an
+  /// (undocumented, confirmed live) `pool_id` param with the same meaning,
+  /// detected site-generically via the identical `pool:<id>` sentinel in
+  /// `sync_inkbunny_search` (M28). Either way `bunny_core_search_create`
   /// already works with no dedicated backend concept of "this is a pool",
   /// so this is the one place that distinguishes a pool search from a
   /// regular one, for anywhere in the UI that needs to tell them apart
   /// (e.g. SearchesScreen's tab split, M9.6.2; PostGridScreen's display
-  /// order, M22 -- pools read like comics, oldest page first).
-  bool get isPool => site == BunnySite.e621 && query.startsWith('pool:');
+  /// order, M22 -- pools read like comics, oldest page first. Inkbunny has
+  /// no authoritative pool ordering endpoint like e621's own
+  /// `GET /pools/{id}.json`, so its reading order is only ever the
+  /// creation-date-ascending fallback M26 already uses for any post with an
+  /// unknown position -- never the real position-based ordering).
+  bool get isPool => query.startsWith('pool:');
 
   /// Same "just a search with a recognizable query" trick as [isPool] (M27)
   /// -- auto-created once per configured account (SearchesScreen) so a

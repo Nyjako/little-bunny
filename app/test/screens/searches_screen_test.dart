@@ -30,6 +30,7 @@ Widget _wrap(FakeBunnyRepository repository) => wrapWithLocalization(
       onThemeModeChanged: (_) {},
       onThemeColorChanged: (_) {},
       onAmoledChanged: (_) {},
+          onLanguageCodeChanged: (_) {},
       onRepositoryConfigured: (_) {},
     ),
   ),
@@ -428,58 +429,16 @@ void main() {
     expect(find.text('Foxes'), findsNothing);
   });
 
-  testWidgets('auto-creates a favorites search per configured account, shown only in the Favorites tab (M27)', (WidgetTester tester) async {
+  testWidgets('a favorites search (the AccountsScreen-managed sentinel, M30) is hidden from the Searches tab', (WidgetTester tester) async {
     final repository = FakeBunnyRepository();
     await repository.createSearch(BunnySite.e621, 'Foxes', 'fox');
-    await repository.setAccount(BunnySite.e621, 'someuser', 'apikey');
-    await repository.setAccount(BunnySite.inkbunny, 'someinkbunnyuser', 'password');
+    await repository.createSearch(BunnySite.e621, 'Favorites', 'fav:someuser');
 
     await tester.pumpWidget(_wrap(repository));
     await tester.pumpAndSettle();
 
-    // Auto-created, but not shown in the Searches tab alongside the regular
-    // "Foxes" search -- it's the Favorites tab's own slice (same reasoning
-    // as pool searches being hidden from the Searches tab above). The lone
-    // "Favorites" match here is the tab bar's own label -- its TabBarView
-    // page isn't built until selected, so this doesn't yet see its entries.
     expect(find.text('Foxes'), findsOneWidget);
-    expect(find.text('Favorites'), findsOneWidget);
-
-    await tester.tap(find.text('Favorites'));
-    await tester.pumpAndSettle();
-
-    // The tab bar's own label, plus one entry per configured account (e621
-    // + Inkbunny), both labeled "Favorites".
-    expect(find.text('Favorites'), findsNWidgets(3));
-    expect(find.text('Foxes'), findsNothing);
-    expect(repository.searches.where((s) => s.isFavorites && s.site == BunnySite.e621).single.query, 'fav:someuser');
-    expect(repository.searches.where((s) => s.isFavorites && s.site == BunnySite.inkbunny).single.query, 'favorited_by:me');
-  });
-
-  testWidgets('shows the Favorites empty state when no account is configured', (WidgetTester tester) async {
-    final repository = FakeBunnyRepository();
-
-    await tester.pumpWidget(_wrap(repository));
-    await tester.pumpAndSettle();
-
-    await tester.tap(find.text('Favorites'));
-    await tester.pumpAndSettle();
-
-    expect(find.text('No account configured yet -- add one in Accounts to see your favorites here.'), findsOneWidget);
-    expect(repository.searches, isEmpty);
-  });
-
-  testWidgets('the Favorites tab has no FAB -- it is entirely auto-managed (M27)', (WidgetTester tester) async {
-    final repository = FakeBunnyRepository();
-    await repository.setAccount(BunnySite.e621, 'someuser', 'apikey');
-
-    await tester.pumpWidget(_wrap(repository));
-    await tester.pumpAndSettle();
-
-    await tester.tap(find.text('Favorites'));
-    await tester.pumpAndSettle();
-
-    expect(find.byType(FloatingActionButton), findsNothing);
+    expect(find.text('Favorites'), findsNothing);
   });
 
   testWidgets('shows the pools empty state on the Pools tab when there are no pool searches', (WidgetTester tester) async {
@@ -537,6 +496,37 @@ void main() {
 
     expect(find.text('pool:5'), findsOneWidget);
     expect(repository.searches, hasLength(1));
+  });
+
+  testWidgets('add-pool dialog can create an Inkbunny pool search, skipping the e621-only name lookup (M28)', (WidgetTester tester) async {
+    final repository = FakeBunnyRepository();
+    repository.poolInfoById[108216] = const BunnyPoolInfo(id: 108216, name: 'should never be used', postCount: 20);
+
+    await tester.pumpWidget(_wrap(repository));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Pools'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byType(FloatingActionButton));
+    await tester.pumpAndSettle();
+    expect(find.text('Add pool'), findsOneWidget);
+
+    await tester.tap(find.descendant(of: find.byType(AlertDialog), matching: find.text('Inkbunny')));
+    await tester.pumpAndSettle();
+
+    await tester.enterText(find.widgetWithText(TextField, 'Pool ID'), '108216');
+    await tester.tap(find.text('Add'));
+    await tester.pumpAndSettle();
+
+    // Never attempted the e621-only lookup -- it would risk showing an
+    // unrelated e621 pool's name if the numeric id happened to collide.
+    expect(repository.fetchPoolCallCount, 0);
+    expect(find.text('pool:108216'), findsOneWidget);
+    expect(repository.searches, hasLength(1));
+    expect(repository.searches.single.site, BunnySite.inkbunny);
+    expect(repository.searches.single.query, 'pool:108216');
+    expect(repository.searches.single.usesDefaultInterval, isTrue);
   });
 
   testWidgets('assigning a search to a group nests it under an expandable group row (M21)', (WidgetTester tester) async {
