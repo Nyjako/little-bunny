@@ -42,11 +42,23 @@ class PostGridScreen extends StatefulWidget {
 class _PostGridScreenState extends State<PostGridScreen> {
   bool _unseenOnly = false;
   bool _syncing = false;
-  Future<List<BunnyPost>>? _postsFuture;
   // Sensible defaults (match DisplaySettingsStore's own) so the first frame
   // doesn't flash a different column count before the real value loads.
   PreviewQuality _previewQuality = PreviewQuality.thumbnail;
   int _gridColumns = 3;
+
+  /// Infinite scroll (M34) -- a search can accumulate thousands of cached
+  /// posts (e.g. a long-running favorites search), and `listSearchPosts`
+  /// returning them all in one unbounded response routinely took minutes
+  /// and timed out client-side. Same shape as `TagBrowseScreen`'s own
+  /// infinite scroll (`_loadInitial`/`_loadMore`/`_maybeLoadMore`), just
+  /// paging through the local cache instead of a live site search.
+  final List<BunnyPost> _posts = [];
+  bool _loading = true;
+  bool _loadingMore = false;
+  bool _hasMore = true;
+  int _nextPage = 1;
+  final _scrollController = ScrollController();
 
   /// Non-empty means selection mode is active (M9.2) -- there's no separate
   /// boolean flag, since "at least one post selected" and "in selection
@@ -80,9 +92,18 @@ class _PostGridScreenState extends State<PostGridScreen> {
   @override
   void initState() {
     super.initState();
-    _postsFuture = _loadPosts();
+    _loadInitial();
     _loadDisplaySettings();
     _loadPoolInfo();
+    _scrollController.addListener(_maybeLoadMore);
+  }
+
+  @override
+  void dispose() {
+    _scrollController
+      ..removeListener(_maybeLoadMore)
+      ..dispose();
+    super.dispose();
   }
 
   Future<void> _loadPoolInfo() async {
@@ -192,13 +213,83 @@ class _PostGridScreenState extends State<PostGridScreen> {
   /// order" (M22, this comment's old approach) was wrong whenever a pool's
   /// pages were uploaded out of sequence, a common occurrence for ongoing
   /// comics.
-  Future<List<BunnyPost>> _loadPosts() => widget.repository.listSearchPosts(widget.search.id, unseenOnly: _unseenOnly);
+  Future<List<BunnyPost>> _fetchPage(int page) => widget.repository.listSearchPosts(widget.search.id, unseenOnly: _unseenOnly, page: page);
+
+  Future<void> _loadInitial() async {
+    final page = await _fetchPage(1);
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      _posts.addAll(page);
+      _loading = false;
+      _hasMore = page.isNotEmpty;
+      _nextPage = 2;
+    });
+  }
+
+  // Same "any non-empty page might have more" convention as TagBrowseScreen.
+  Future<void> _loadMore() async {
+    if (_loadingMore || !_hasMore) {
+      return;
+    }
+    setState(() => _loadingMore = true);
+    final page = await _fetchPage(_nextPage);
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      _posts.addAll(page);
+      _loadingMore = false;
+      _hasMore = page.isNotEmpty;
+      _nextPage++;
+    });
+  }
+
+  void _maybeLoadMore() {
+    if (!_scrollController.hasClients) {
+      return;
+    }
+    final position = _scrollController.position;
+    if (position.pixels >= position.maxScrollExtent - 400) {
+      _loadMore();
+    }
+  }
+
+  /// Full reset back to page 1 -- for when the matching post *set* itself
+  /// changes (the unseen filter, or a sync that may have added new posts),
+  /// as opposed to [_refreshLoadedPages] below.
+  Future<void> _resetAndReload() async {
+    setState(() {
+      _posts.clear();
+      _loading = true;
+      _hasMore = true;
+      _nextPage = 1;
+    });
+    await _loadInitial();
+  }
+
+  /// Re-fetches exactly the pages already loaded and replaces [_posts] with
+  /// the result, rather than resetting to page 1 -- for actions that only
+  /// change already-loaded posts' own fields (seen state, a vote/favorite)
+  /// without changing which posts match this search, so scroll position and
+  /// how far the user has already scrolled stay put.
+  Future<void> _refreshLoadedPages() async {
+    final loadedPageCount = _nextPage - 1;
+    final pages = await Future.wait(List.generate(loadedPageCount, (i) => _fetchPage(i + 1)));
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      _posts
+        ..clear()
+        ..addAll(pages.expand((page) => page));
+    });
+  }
 
   void _toggleUnseenOnly() {
-    setState(() {
-      _unseenOnly = !_unseenOnly;
-      _postsFuture = _loadPosts();
-    });
+    setState(() => _unseenOnly = !_unseenOnly);
+    _resetAndReload();
   }
 
   Future<void> _refresh() async {
@@ -207,31 +298,24 @@ class _PostGridScreenState extends State<PostGridScreen> {
     if (!mounted) {
       return;
     }
-    setState(() {
-      _syncing = false;
-      _postsFuture = _loadPosts();
-    });
+    setState(() => _syncing = false);
+    await _resetAndReload();
   }
 
   Future<void> _markAllSeen() async {
     await widget.repository.markAllSeen(widget.search.id);
-    if (!mounted) {
-      return;
-    }
-    setState(() {
-      _postsFuture = _loadPosts();
-    });
+    await _refreshLoadedPages();
   }
 
-  Future<void> _selectAll() async {
-    final posts = await (_postsFuture ?? Future.value(const <BunnyPost>[]));
-    if (!mounted) {
-      return;
-    }
+  /// Scoped to posts already loaded via infinite scroll, not every post
+  /// matching this search -- fetching every remaining page first would
+  /// reintroduce the same unbounded-load problem this screen's pagination
+  /// (M34) exists to avoid.
+  void _selectAll() {
     setState(() {
       _selectedPostIds
         ..clear()
-        ..addAll(posts.map((post) => post.id));
+        ..addAll(_posts.map((post) => post.id));
     });
   }
 
@@ -251,9 +335,7 @@ class _PostGridScreenState extends State<PostGridScreen> {
     if (!mounted) {
       return;
     }
-    setState(() {
-      _postsFuture = _loadPosts();
-    });
+    await _refreshLoadedPages();
   }
 
   void _toggleSelection(int postId) {
@@ -285,10 +367,8 @@ class _PostGridScreenState extends State<PostGridScreen> {
     if (!mounted) {
       return;
     }
-    setState(() {
-      _selectedPostIds.clear();
-      _postsFuture = _loadPosts();
-    });
+    setState(() => _selectedPostIds.clear());
+    await _refreshLoadedPages();
   }
 
   Future<void> _massVote(int score) async {
@@ -300,15 +380,12 @@ class _PostGridScreenState extends State<PostGridScreen> {
     if (!mounted) {
       return;
     }
-    setState(() {
-      _selectedPostIds.clear();
-      _postsFuture = _loadPosts();
-    });
+    setState(() => _selectedPostIds.clear());
+    await _refreshLoadedPages();
   }
 
   Future<void> _massDownload(AppLocalizations l10n) async {
-    final allPosts = await (_postsFuture ?? Future.value(const <BunnyPost>[]));
-    final selected = allPosts.where((post) => _selectedPostIds.contains(post.id)).toList();
+    final selected = _posts.where((post) => _selectedPostIds.contains(post.id)).toList();
     if (!mounted || selected.isEmpty) {
       return;
     }
@@ -357,8 +434,11 @@ class _PostGridScreenState extends State<PostGridScreen> {
     setState(() {
       _massDownloadProgress = null;
       _selectedPostIds.clear();
-      _postsFuture = _loadPosts();
     });
+    await _refreshLoadedPages();
+    if (!mounted) {
+      return;
+    }
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(l10n.postGridMassDownloadSummary(succeeded, mismatched, failed))));
   }
 
@@ -410,35 +490,31 @@ class _PostGridScreenState extends State<PostGridScreen> {
     final l10n = AppLocalizations.of(context)!;
     return Scaffold(
       appBar: _buildAppBar(l10n, context),
-      body: FutureBuilder<List<BunnyPost>>(
-        future: _postsFuture,
-        builder: (context, snapshot) {
-          if (!snapshot.hasData) {
-            return const Center(child: CircularProgressIndicator());
-          }
-          final posts = snapshot.data!;
-          if (posts.isEmpty) {
-            return Center(child: Text(l10n.postGridEmptyState));
-          }
-          return GridView.builder(
-            padding: const EdgeInsets.all(4),
-            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: _gridColumns, crossAxisSpacing: 4, mainAxisSpacing: 4),
-            itemCount: posts.length,
-            itemBuilder: (context, index) {
-              final post = posts[index];
-              return PostGridTile(
-                key: ValueKey(post.id),
-                post: post,
-                imageUrl: _imageUrlFor(post),
-                selected: _selectedPostIds.contains(post.id),
-                onTap: () => _onTileTap(posts, post),
-                onLongPress: () => _toggleSelection(post.id),
-                selectionMode: _selectionMode,
-              );
-            },
-          );
-        },
-      ),
+      body: _loading
+          ? const Center(child: CircularProgressIndicator())
+          : _posts.isEmpty
+          ? Center(child: Text(l10n.postGridEmptyState))
+          : GridView.builder(
+              controller: _scrollController,
+              padding: const EdgeInsets.all(4),
+              gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: _gridColumns, crossAxisSpacing: 4, mainAxisSpacing: 4),
+              itemCount: _posts.length + (_loadingMore ? 1 : 0),
+              itemBuilder: (context, index) {
+                if (index >= _posts.length) {
+                  return const Center(child: CircularProgressIndicator());
+                }
+                final post = _posts[index];
+                return PostGridTile(
+                  key: ValueKey(post.id),
+                  post: post,
+                  imageUrl: _imageUrlFor(post),
+                  selected: _selectedPostIds.contains(post.id),
+                  onTap: () => _onTileTap(_posts, post),
+                  onLongPress: () => _toggleSelection(post.id),
+                  selectionMode: _selectionMode,
+                );
+              },
+            ),
     );
   }
 }

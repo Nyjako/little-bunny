@@ -2063,3 +2063,80 @@ this file is the single source of truth for "what's done" across sessions.
     `syncSearch` on that account's sentinel search and polls `getSyncStatus` the same
     way `SearchesScreen`'s own per-row sync button already did. No rename/pin/interval
     UI -- intentionally, per the user's explicit "no need to have even editing there."
+
+- [x] **M32 — Fix two latent deploy/self-update bugs, found while manually pushing a
+  build to the user's live server**
+  - [x] **`deploy/_install-common.sh` was unparseable bash.** An apostrophe inside a
+    `${public_ip:-<this-machine's-public-IP-or-hostname>}` parameter-expansion default
+    (introduced alongside M23's update-apply wiring) opens an unterminated single-quoted
+    string as far as bash's parser is concerned, so the *entire* file fails with
+    "unexpected EOF while looking for matching `''" the moment it's sourced -- meaning
+    `install.sh`/`install-prebuilt.sh` could never have actually completed an install on
+    any machine since that commit. Reworded the placeholder to drop the apostrophe.
+  - [x] **The server's self-updater always fetched the wrong release asset.**
+    `server/src/updater.c`'s `check_for_update` hardcoded the asset suffix
+    `"linux-x64.tar.gz"` -- the build made on GitHub's `ubuntu-latest` runner, whose
+    glibc tracks whatever image GitHub currently ships -- instead of
+    `"linux-x64-ubuntu22.tar.gz"`, the one deliberately built inside a pinned
+    `ubuntu:22.04` container specifically so it stays runnable on older deployment
+    targets (see `deploy/README.md`'s "Installing a binary built elsewhere"). Caught
+    live: the user's Oracle Cloud Ubuntu 22.04 box had already auto-staged a build this
+    way, and installing a manually-fetched newer build triggered `ExecStartPre`'s
+    update-apply step to silently swap in that staged (wrong-glibc) binary instead,
+    `GLIBC_2.38 not found` crash-looping the service (`restart counter` climbing) until
+    caught and the correct `-ubuntu22` asset was installed by hand. Every automatic
+    self-update on this or any similar deployment target had been doing this unnoticed.
+  - [x] **"Stuck in loading" browsing an uncached author or pool.** `bunny_core_
+    preview_search` (TagBrowseScreen's live, stateless browse -- tapping an artist name
+    or a pool chip that isn't already a saved search) upserted each post in a page with
+    its own `bunny_core_db_lock`/implicit-auto-commit/`unlock`, one at a time -- up to
+    `BUNNY_CORE_SYNC_E621_PAGE_LIMIT` (320) separate fsync-backed commits for a single
+    page. `upsert_e621_search_page` (the saved-search *sync* path) had already been
+    fixed to batch a whole page into one transaction for exactly this reason (see that
+    function's own comment, `cae39d5`), but `bunny_core_preview_search` (and
+    `bunny_core_list_my_inkbunny_favorites`, same shape) never got the same fix. Found
+    live on the user's server: a `POST /search/preview` request measured taking over two
+    minutes and returning 0 bytes (the client had already given up and disconnected).
+    Fixed by wrapping each page's upsert loop in one `bunny_db_begin_transaction`/
+    `commit_transaction` pair, same as the sync path.
+
+- [x] **M33 — Fix fullscreen image viewer snapping back to the original post on exit**
+  Reported by the user: swipe to a different post while in `FullScreenPostViewerScreen`,
+  then leave fullscreen -- `PostDetailScreen` showed the post fullscreen was *opened*
+  from, not the one swiped to. `FullScreenPostViewerScreen` tracked its own swiped-to
+  page internally but never told the screen that opened it, and a plain
+  `Navigator.pop(context)` (both the close button and the system back gesture) carries
+  no return value by default. Fixed by threading a `ValueChanged<BunnyPost>?
+  onPageChanged` callback down (`_PostDetailPage.onFullScreenPostChanged` ->
+  `FullScreenPostViewerScreen.onPageChanged`), invoked live on every swipe inside
+  fullscreen rather than only once on exit -- so `PostDetailScreen`'s own `PageController`
+  (`_jumpToPost`) is already on the right page by the time fullscreen closes, regardless
+  of how the user leaves it (close button vs. back gesture both just pop either way).
+
+- [x] **M34 — Paginate `listSearchPosts` (opening a search with thousands of cached
+  posts was effectively impossible)**
+  Reported by the user: their e621 favorites search (18,503 cached posts) took a very
+  long time to open and left errors in the server logs afterward. `bunny_db_search_
+  list_posts`/`bunny_db_pool_search_list_posts` had no `LIMIT`/`OFFSET` at all -- a
+  single call returned every matching post in one response, serialized into one giant
+  JSON array. Confirmed live: a `POST /search/preview`-shaped request for this exact
+  search measured at over two minutes with a "200, 0 bytes" result (the client had
+  already given up and disconnected) -- civetweb logs showed a burst of
+  `SSL routines::unexpected eof while reading` from repeated client retries.
+  - **DB**: both functions gained a 1-indexed `page` param and `LIMIT ? OFFSET ?`
+    (`BUNNY_DB_SEARCH_POSTS_PAGE_SIZE`, posts.c, 200 -- a local listing page size, not
+    tied to any site API limit). `bunny_core_search_list_posts`/the FFI binding/
+    `GET /searches/<id>/posts`'s `page` query param (same parsing style as `/search/
+    preview`'s) thread it straight through.
+  - **App**: `listSearchPosts` gained a `{int page = 1}` param across the abstract
+    interface and both the HTTP and FFI implementations. `PostGridScreen` converted
+    from one single unbounded fetch to infinite scroll, the same shape as
+    `TagBrowseScreen`'s own (`_loadInitial`/`_loadMore`/`_maybeLoadMore`). Actions that
+    only change already-loaded posts' own fields (mark-seen, mark-all-seen, a mass
+    vote/favorite/download) re-fetch just the pages already loaded in place
+    (`_refreshLoadedPages`) rather than resetting to page 1, so scroll position isn't
+    lost; actions that change the matching post *set* itself (the unseen filter, a
+    manual sync) do reset to page 1 (`_resetAndReload`). "Select all" is now scoped to
+    posts loaded so far rather than every post matching the search -- fetching every
+    remaining page first to support it would reintroduce the exact problem this
+    milestone exists to fix.

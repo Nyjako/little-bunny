@@ -368,7 +368,17 @@ void bunny_updater_scheduler_tick(const bunny_http_transport_t *transport, const
     free(marker_path);
 
     bunny_updater_check_result_t check;
-    bunny_http_result_t result = bunny_updater_check(transport, "Nyjako", "little-bunny", user_agent, "linux-x64.tar.gz", BUNNY_BUILD_NUMBER, &check);
+    /* "linux-x64-ubuntu22.tar.gz", never plain "linux-x64.tar.gz" -- the
+     * latter is built on GitHub's `ubuntu-latest` runner, whose glibc moves
+     * forward with whatever image GitHub currently ships and can end up
+     * newer than this deployed box's (glibc/OpenSSL symbol versioning is
+     * forward-compatible only). The ubuntu22-tagged asset is deliberately
+     * built inside a pinned `ubuntu:22.04` container (see release.yml and
+     * deploy/README.md's "Installing a binary built elsewhere" section) so
+     * it runs on effectively every currently-supported Ubuntu/Debian --
+     * exactly the portability self-update needs, since it has no way to
+     * know in advance what glibc the box it's running on actually has. */
+    bunny_http_result_t result = bunny_updater_check(transport, "Nyjako", "little-bunny", user_agent, "linux-x64-ubuntu22.tar.gz", BUNNY_BUILD_NUMBER, &check);
     if (result != BUNNY_HTTP_OK) {
         server_log("ERROR", "updater: failed to check for a new release");
         return;
@@ -378,7 +388,7 @@ void bunny_updater_scheduler_tick(const bunny_http_transport_t *transport, const
         return;
     }
     if (!check.download_url) {
-        server_log("ERROR", "updater: release %s has no linux-x64.tar.gz asset", check.tag_name);
+        server_log("ERROR", "updater: release %s has no linux-x64-ubuntu22.tar.gz asset", check.tag_name);
         bunny_updater_check_result_free(&check);
         return;
     }
@@ -392,7 +402,7 @@ void bunny_updater_scheduler_tick(const bunny_http_transport_t *transport, const
         return;
     }
 
-    char *archive_path = goblin_appdir_join(staging_dir, "bunny-server-linux-x64.tar.gz");
+    char *archive_path = goblin_appdir_join(staging_dir, "bunny-server-linux-x64-ubuntu22.tar.gz");
     if (!archive_path || bunny_updater_download_file(transport, check.download_url, user_agent, archive_path) != BUNNY_HTTP_OK) {
         server_log("ERROR", "updater: download of %s failed", check.tag_name);
         bunny_updater_check_result_free(&check);
@@ -413,8 +423,8 @@ void bunny_updater_scheduler_tick(const bunny_http_transport_t *transport, const
         char actual_hex[65];
         if (!sums_text) {
             server_log("ERROR", "updater: failed to download SHA256SUMS.txt for %s", check.tag_name);
-        } else if (!bunny_updater_find_sha256(sums_text, "bunny-server-linux-x64.tar.gz", expected_hex)) {
-            server_log("ERROR", "updater: SHA256SUMS.txt for %s has no entry for bunny-server-linux-x64.tar.gz", check.tag_name);
+        } else if (!bunny_updater_find_sha256(sums_text, "bunny-server-linux-x64-ubuntu22.tar.gz", expected_hex)) {
+            server_log("ERROR", "updater: SHA256SUMS.txt for %s has no entry for bunny-server-linux-x64-ubuntu22.tar.gz", check.tag_name);
         } else if (!bunny_updater_sha256_hex(archive_path, actual_hex)) {
             server_log("ERROR", "updater: failed to hash the downloaded archive for %s", check.tag_name);
         } else if (strcmp(expected_hex, actual_hex) != 0) {

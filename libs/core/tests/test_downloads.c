@@ -94,7 +94,7 @@ static int64_t seed_e621_post(void)
     TEST_ASSERT_EQUAL(1, sync_stats.posts_upserted);
 
     bunny_db_post_list_t posts;
-    bunny_core_search_list_posts(g_core, search_id, false, &posts);
+    bunny_core_search_list_posts(g_core, search_id, false, 1, &posts);
     TEST_ASSERT_EQUAL(1, (int)posts.count);
     int64_t post_id = posts.items[0].id;
     bunny_db_post_list_free(&posts);

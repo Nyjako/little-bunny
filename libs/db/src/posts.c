@@ -12,6 +12,12 @@ GOBLIN_DYN_ARRAY_DECL(bunny_db_post_tag, bunny_db_post_tag_t)
 GOBLIN_DYN_ARRAY_DECL(bunny_db_string, char *)
 GOBLIN_DYN_ARRAY_DECL(bunny_db_int64, int64_t)
 
+/* Posts per page for bunny_db_search_list_posts/bunny_db_pool_search_list_posts
+ * (see their own doc comments in db.h) -- a local DB listing, not a site API
+ * page size, so this is chosen purely for a reasonable response size rather
+ * than matching e621/Inkbunny's own limits. */
+#define BUNNY_DB_SEARCH_POSTS_PAGE_SIZE 200
+
 bunny_db_result_t bunny_db_post_upsert(bunny_db_t *db, const bunny_db_post_upsert_t *post, int64_t *out_id)
 {
     if (!db || !post) {
@@ -471,9 +477,9 @@ bunny_db_result_t bunny_db_search_has_result(bunny_db_t *db, int64_t search_id, 
     return (rc == SQLITE_ROW || rc == SQLITE_DONE) ? BUNNY_DB_OK : bunny_db_sqlite_rc_to_result(rc);
 }
 
-bunny_db_result_t bunny_db_search_list_posts(bunny_db_t *db, int64_t search_id, bool unseen_only, bunny_db_post_list_t *out_list)
+bunny_db_result_t bunny_db_search_list_posts(bunny_db_t *db, int64_t search_id, bool unseen_only, int page, bunny_db_post_list_t *out_list)
 {
-    if (!db || !out_list) {
+    if (!db || !out_list || page < 1) {
         return BUNNY_DB_ERR_INVALID_ARG;
     }
     memset(out_list, 0, sizeof(*out_list));
@@ -495,12 +501,12 @@ bunny_db_result_t bunny_db_search_list_posts(bunny_db_t *db, int64_t search_id, 
                            "WHERE sr.search_id = ? "
                            "AND NOT EXISTS (SELECT 1 FROM post_tags pt JOIN tags t ON t.id = pt.tag_id "
                            "JOIN blacklist_tags bl ON bl.site = t.site AND bl.tag = t.name WHERE pt.post_id = p.id) "
-                           "ORDER BY COALESCE(p.created_at_site, p.cached_at) DESC;";
+                           "ORDER BY COALESCE(p.created_at_site, p.cached_at) DESC LIMIT ? OFFSET ?;";
     const char *sql_unseen = "SELECT " BUNNY_DB_POST_SELECT_COLUMNS BUNNY_DB_POST_SELECT_FROM_JOIN "JOIN search_results sr ON sr.post_id = p.id "
                              "WHERE sr.search_id = ? AND seen.post_id IS NULL "
                              "AND NOT EXISTS (SELECT 1 FROM post_tags pt JOIN tags t ON t.id = pt.tag_id "
                              "JOIN blacklist_tags bl ON bl.site = t.site AND bl.tag = t.name WHERE pt.post_id = p.id) "
-                             "ORDER BY COALESCE(p.created_at_site, p.cached_at) DESC;";
+                             "ORDER BY COALESCE(p.created_at_site, p.cached_at) DESC LIMIT ? OFFSET ?;";
 
     const char *sql = unseen_only ? sql_unseen : sql_seen;
     sqlite3_stmt *stmt = NULL;
@@ -508,6 +514,8 @@ bunny_db_result_t bunny_db_search_list_posts(bunny_db_t *db, int64_t search_id, 
         return BUNNY_DB_ERR_QUERY_FAILED;
     }
     sqlite3_bind_int64(stmt, 1, search_id);
+    sqlite3_bind_int(stmt, 2, BUNNY_DB_SEARCH_POSTS_PAGE_SIZE);
+    sqlite3_bind_int64(stmt, 3, (int64_t)(page - 1) * BUNNY_DB_SEARCH_POSTS_PAGE_SIZE);
 
     bunny_db_post_array arr;
     bunny_db_post_array_init(&arr);
@@ -542,9 +550,9 @@ bunny_db_result_t bunny_db_search_list_posts(bunny_db_t *db, int64_t search_id, 
     return BUNNY_DB_OK;
 }
 
-bunny_db_result_t bunny_db_pool_search_list_posts(bunny_db_t *db, int64_t search_id, int64_t pool_id, bool unseen_only, bunny_db_post_list_t *out_list)
+bunny_db_result_t bunny_db_pool_search_list_posts(bunny_db_t *db, int64_t search_id, int64_t pool_id, bool unseen_only, int page, bunny_db_post_list_t *out_list)
 {
-    if (!db || !out_list) {
+    if (!db || !out_list || page < 1) {
         return BUNNY_DB_ERR_INVALID_ARG;
     }
     memset(out_list, 0, sizeof(*out_list));
@@ -560,13 +568,13 @@ bunny_db_result_t bunny_db_pool_search_list_posts(bunny_db_t *db, int64_t search
                            "WHERE sr.search_id = ? "
                            "AND NOT EXISTS (SELECT 1 FROM post_tags pt JOIN tags t ON t.id = pt.tag_id "
                            "JOIN blacklist_tags bl ON bl.site = t.site AND bl.tag = t.name WHERE pt.post_id = p.id) "
-                           "ORDER BY (COALESCE(pp.position, -1) >= 0) DESC, pp.position ASC, COALESCE(p.created_at_site, p.cached_at) ASC;";
+                           "ORDER BY (COALESCE(pp.position, -1) >= 0) DESC, pp.position ASC, COALESCE(p.created_at_site, p.cached_at) ASC LIMIT ? OFFSET ?;";
     const char *sql_unseen = "SELECT " BUNNY_DB_POST_SELECT_COLUMNS BUNNY_DB_POST_SELECT_FROM_JOIN "JOIN search_results sr ON sr.post_id = p.id "
                              "LEFT JOIN post_pools pp ON pp.post_id = p.id AND pp.pool_id = ? "
                              "WHERE sr.search_id = ? AND seen.post_id IS NULL "
                              "AND NOT EXISTS (SELECT 1 FROM post_tags pt JOIN tags t ON t.id = pt.tag_id "
                              "JOIN blacklist_tags bl ON bl.site = t.site AND bl.tag = t.name WHERE pt.post_id = p.id) "
-                             "ORDER BY (COALESCE(pp.position, -1) >= 0) DESC, pp.position ASC, COALESCE(p.created_at_site, p.cached_at) ASC;";
+                             "ORDER BY (COALESCE(pp.position, -1) >= 0) DESC, pp.position ASC, COALESCE(p.created_at_site, p.cached_at) ASC LIMIT ? OFFSET ?;";
 
     const char *sql = unseen_only ? sql_unseen : sql_seen;
     sqlite3_stmt *stmt = NULL;
@@ -575,6 +583,8 @@ bunny_db_result_t bunny_db_pool_search_list_posts(bunny_db_t *db, int64_t search
     }
     sqlite3_bind_int64(stmt, 1, pool_id);
     sqlite3_bind_int64(stmt, 2, search_id);
+    sqlite3_bind_int(stmt, 3, BUNNY_DB_SEARCH_POSTS_PAGE_SIZE);
+    sqlite3_bind_int64(stmt, 4, (int64_t)(page - 1) * BUNNY_DB_SEARCH_POSTS_PAGE_SIZE);
 
     bunny_db_post_array arr;
     bunny_db_post_array_init(&arr);

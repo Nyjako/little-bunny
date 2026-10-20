@@ -56,7 +56,7 @@ bunny_install_and_start() {
     # Best-effort public IP lookup -- falls back to the old placeholder text
     # if ipinfo.io is unreachable (no outbound internet, firewalled, etc.).
     public_ip="$(curl -s -m 5 https://ipinfo.io/ip || true)"
-    host_display="${public_ip:-<this-machine's-public-IP-or-hostname>}"
+    host_display="${public_ip:-<this-machine-public-IP-or-hostname>}"
 
     cat <<EOF
 
