@@ -61,6 +61,13 @@ typedef struct
     const char *text;                 /* may be NULL; matched against title/description/keywords by default */
     bool keywords_only;               /* restrict text matching to keywords only */
     const char *favorited_by_user_id; /* may be NULL; Inkbunny's numeric user id (as a string) whose existing favorites to list */
+    int64_t pool_id;                  /* 0 means unset; lists every submission in this pool (confirmed live against the real API --
+                                        * undocumented in Inkbunny's official API docs, but works identically to e621's own
+                                        * `pool:<id>` search tag). Results come back newest-first by creation date, with no
+                                        * endpoint to fetch the pool's own authoritative ordering (unlike e621's
+                                        * GET /pools/{id}.json) -- callers that need reading order should treat the reversed
+                                        * creation-date order as a best-effort placeholder, same as e621's pools did before
+                                        * that authoritative-ordering fetch was added. */
     int page;                         /* 1-based; 0 or negative defaults to 1 */
 } inkbunny_search_params_t;
 

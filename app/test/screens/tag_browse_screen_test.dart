@@ -159,6 +159,25 @@ void main() {
 
       expect(find.text('Related pools'), findsNothing);
     });
+
+    testWidgets('skips the e621-only pool-info lookup for an Inkbunny pool browse (M28)', (WidgetTester tester) async {
+      final repository = FakeBunnyRepository();
+      repository.previewSearchResults['inkbunny:pool:123:1'] = [_post(1)];
+      // Seeded under the same id a real e621 pool might coincidentally
+      // share -- must never surface for an Inkbunny browse.
+      repository.poolInfoById[123] = const BunnyPoolInfo(id: 123, name: 'unrelated e621 pool', description: 'should never show up here', postCount: 1);
+
+      await tester.pumpWidget(
+        wrapWithLocalization(
+          TagBrowseScreen(site: BunnySite.inkbunny, query: 'pool:123', repository: repository, displaySettingsStore: const DisplaySettingsStore(), downloadSettingsStore: const DownloadSettingsStore()),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(repository.fetchPoolCallCount, 0);
+      expect(find.text('should never show up here'), findsNothing);
+      expect(find.text('Related pools'), findsNothing);
+    });
   });
 
   testWidgets('scrolling near the bottom requests and appends the next page', (WidgetTester tester) async {
