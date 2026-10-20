@@ -2086,3 +2086,16 @@ this file is the single source of truth for "what's done" across sessions.
     `GLIBC_2.38 not found` crash-looping the service (`restart counter` climbing) until
     caught and the correct `-ubuntu22` asset was installed by hand. Every automatic
     self-update on this or any similar deployment target had been doing this unnoticed.
+  - [x] **"Stuck in loading" browsing an uncached author or pool.** `bunny_core_
+    preview_search` (TagBrowseScreen's live, stateless browse -- tapping an artist name
+    or a pool chip that isn't already a saved search) upserted each post in a page with
+    its own `bunny_core_db_lock`/implicit-auto-commit/`unlock`, one at a time -- up to
+    `BUNNY_CORE_SYNC_E621_PAGE_LIMIT` (320) separate fsync-backed commits for a single
+    page. `upsert_e621_search_page` (the saved-search *sync* path) had already been
+    fixed to batch a whole page into one transaction for exactly this reason (see that
+    function's own comment, `cae39d5`), but `bunny_core_preview_search` (and
+    `bunny_core_list_my_inkbunny_favorites`, same shape) never got the same fix. Found
+    live on the user's server: a `POST /search/preview` request measured taking over two
+    minutes and returning 0 bytes (the client had already given up and disconnected).
+    Fixed by wrapping each page's upsert loop in one `bunny_db_begin_transaction`/
+    `commit_transaction` pair, same as the sync path.
