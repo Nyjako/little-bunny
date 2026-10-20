@@ -252,15 +252,13 @@ void main() {
     expect(tester.widget<TextFormField>(find.widgetWithText(TextFormField, 'Label')).controller!.text, 'My Own Label');
   });
 
-  testWidgets('enabling "use default interval" disables the interval field and submits it (M20)', (WidgetTester tester) async {
+  testWidgets('"use default interval" starts checked and submits it with no further action (M30)', (WidgetTester tester) async {
     final repository = FakeBunnyRepository()..defaultSyncIntervalHours = 24;
 
     await tester.pumpWidget(_wrap(repository));
     await tester.pumpAndSettle();
 
-    await tester.tap(find.widgetWithText(SwitchListTile, 'Use default interval'));
-    await tester.pumpAndSettle();
-
+    expect(tester.widget<SwitchListTile>(find.widgetWithText(SwitchListTile, 'Use default interval')).value, isTrue);
     expect(tester.widget<TextFormField>(find.widgetWithText(TextFormField, 'Sync interval (hours)')).enabled, isFalse);
 
     await tester.enterText(find.widgetWithText(TextFormField, 'Label'), 'Foxes');
@@ -269,5 +267,26 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(repository.searches.single.usesDefaultInterval, isTrue);
+  });
+
+  testWidgets('disabling "use default interval" re-enables the interval field and submits a fixed one', (WidgetTester tester) async {
+    final repository = FakeBunnyRepository()..defaultSyncIntervalHours = 24;
+
+    await tester.pumpWidget(_wrap(repository));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.widgetWithText(SwitchListTile, 'Use default interval'));
+    await tester.pumpAndSettle();
+
+    expect(tester.widget<TextFormField>(find.widgetWithText(TextFormField, 'Sync interval (hours)')).enabled, isTrue);
+
+    await tester.enterText(find.widgetWithText(TextFormField, 'Label'), 'Foxes');
+    await tester.enterText(find.widgetWithText(TextFormField, 'Query'), 'fox');
+    await tester.enterText(find.widgetWithText(TextFormField, 'Sync interval (hours)'), '12');
+    await _tapCreate(tester);
+    await tester.pumpAndSettle();
+
+    expect(repository.searches.single.usesDefaultInterval, isFalse);
+    expect(repository.searches.single.intervalHours, 12);
   });
 }

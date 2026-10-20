@@ -30,6 +30,7 @@ Widget _wrap(FakeBunnyRepository repository) => wrapWithLocalization(
       onThemeModeChanged: (_) {},
       onThemeColorChanged: (_) {},
       onAmoledChanged: (_) {},
+          onLanguageCodeChanged: (_) {},
       onRepositoryConfigured: (_) {},
     ),
   ),

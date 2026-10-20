@@ -33,6 +33,7 @@ class SearchesScreen extends StatefulWidget {
   final ValueChanged<ThemeMode> onThemeModeChanged;
   final ValueChanged<ThemeColorOption> onThemeColorChanged;
   final ValueChanged<bool> onAmoledChanged;
+  final ValueChanged<String?> onLanguageCodeChanged;
   final ValueChanged<BunnyRepository> onRepositoryConfigured;
 
   const SearchesScreen({
@@ -45,6 +46,7 @@ class SearchesScreen extends StatefulWidget {
     required this.onThemeModeChanged,
     required this.onThemeColorChanged,
     required this.onAmoledChanged,
+    required this.onLanguageCodeChanged,
     required this.onRepositoryConfigured,
   });
 
@@ -670,6 +672,7 @@ class _SearchesScreenState extends State<SearchesScreen> with SingleTickerProvid
                     onThemeModeChanged: widget.onThemeModeChanged,
                     onThemeColorChanged: widget.onThemeColorChanged,
                     onAmoledChanged: widget.onAmoledChanged,
+                    onLanguageCodeChanged: widget.onLanguageCodeChanged,
                     onRepositoryConfigured: widget.onRepositoryConfigured,
                   ),
                 ),
