@@ -155,6 +155,33 @@ void main() {
     expect(find.text('First'), findsNothing);
   });
 
+  testWidgets('opening fullscreen includes video posts too, not just images (M35)', (WidgetTester tester) async {
+    final repository = FakeBunnyRepository();
+    final posts = [
+      _post(id: 1, externalId: 1, title: 'First', fileExt: 'jpg'),
+      _post(id: 2, externalId: 2, title: 'A video', fileExt: 'mp4'),
+      _post(id: 3, externalId: 3, title: 'Third', fileExt: 'jpg'),
+    ];
+    repository.postsBySearchId[1] = posts;
+
+    await tester.pumpWidget(
+      wrapWithLocalization(PostDetailScreen(post: posts[0], repository: repository, displaySettingsStore: const DisplaySettingsStore(), downloadSettingsStore: const DownloadSettingsStore(), siblingPosts: posts)),
+    );
+    await tester.pumpAndSettle();
+
+    tester.widget<GestureDetector>(find.byKey(const Key('postDetailImageTapTarget'))).onTap!();
+    await tester.pumpAndSettle();
+    expect(find.byType(PhotoViewGallery), findsOneWidget);
+
+    // Previously the video post was filtered out entirely, so swiping once
+    // from the first image landed straight on the third post instead.
+    await tester.drag(find.byType(PhotoViewGallery), const Offset(-800, 0));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(VideoPlayer), findsOneWidget);
+    expect(repository.postsBySearchId[1]![1].isSeen, isTrue);
+  });
+
   testWidgets('right/left arrow keys move between posts in siblingPosts', (WidgetTester tester) async {
     final repository = FakeBunnyRepository();
     final posts = [_post(id: 1, externalId: 1, title: 'First'), _post(id: 2, externalId: 2, title: 'Second')];

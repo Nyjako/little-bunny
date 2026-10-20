@@ -1,8 +1,10 @@
 import 'dart:convert';
+import 'dart:io' show Platform;
 import 'dart:typed_data';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:saf_util/saf_util.dart';
 
 import '../l10n/app_localizations.dart';
 import '../repository/bunny_models.dart';
@@ -207,8 +209,22 @@ class _SettingsScreenState extends State<SettingsScreen> {
     await widget.displaySettingsStore.saveImagePreloadCount(count);
   }
 
+  /// `file_picker`'s own directory picker returns a `content://` URI on
+  /// Android (Storage Access Framework) that `dart:io`'s `File`/`Directory`
+  /// can't write to at all -- `file_picker` dropped its old SAF-write
+  /// support in a rewrite, so Android uses the dedicated `saf_util` picker
+  /// instead, requesting a *persistable* write grant so the chosen folder
+  /// stays usable across app restarts. [DownloadManager] branches on
+  /// whether the saved folder looks like a SAF URI to decide how to
+  /// actually write files there (see its own doc comment).
   Future<void> _chooseDownloadFolder() async {
-    final chosen = await FilePicker.getDirectoryPath();
+    String? chosen;
+    if (Platform.isAndroid) {
+      final picked = await SafUtil().pickDirectory(writePermission: true, persistablePermission: true);
+      chosen = picked?.uri;
+    } else {
+      chosen = await FilePicker.getDirectoryPath();
+    }
     if (chosen == null) {
       return;
     }
