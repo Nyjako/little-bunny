@@ -11,6 +11,7 @@ import 'package:little_bunny/screens/post_detail_screen.dart';
 import 'package:little_bunny/services/download_manager.dart';
 import 'package:little_bunny/settings/display_settings_store.dart';
 import 'package:little_bunny/settings/download_settings_store.dart';
+import 'package:photo_view/photo_view_gallery.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:video_player/video_player.dart';
 import 'package:video_player_platform_interface/video_player_platform_interface.dart';
@@ -119,6 +120,39 @@ void main() {
     expect(find.text('Second'), findsOneWidget);
     expect(repository.postsBySearchId[1]![1].isSeen, isTrue);
     expect(repository.postsBySearchId[1]![2].isSeen, isFalse);
+  });
+
+  testWidgets('swiping inside the fullscreen viewer then closing it shows the post swiped to, not the one it was opened from', (WidgetTester tester) async {
+    final repository = FakeBunnyRepository();
+    final posts = [
+      _post(id: 1, externalId: 1, title: 'First', fileExt: 'jpg'),
+      _post(id: 2, externalId: 2, title: 'Second', fileExt: 'jpg'),
+      _post(id: 3, externalId: 3, title: 'Third', fileExt: 'jpg'),
+    ];
+    repository.postsBySearchId[1] = posts;
+
+    await tester.pumpWidget(
+      wrapWithLocalization(PostDetailScreen(post: posts[0], repository: repository, displaySettingsStore: const DisplaySettingsStore(), downloadSettingsStore: const DownloadSettingsStore(), siblingPosts: posts)),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('First'), findsOneWidget);
+
+    // tester.tap's hit-testing is unreliable here -- the tap target sits
+    // under nested scrollables/gesture arenas (the outer PageView plus the
+    // page's own scroll view), so it's invoked directly instead.
+    tester.widget<GestureDetector>(find.byKey(const Key('postDetailImageTapTarget'))).onTap!();
+    await tester.pumpAndSettle();
+    expect(find.byType(PhotoViewGallery), findsOneWidget);
+
+    await tester.drag(find.byType(PhotoViewGallery), const Offset(-800, 0));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byIcon(Icons.close));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(PhotoViewGallery), findsNothing);
+    expect(find.text('Second'), findsOneWidget);
+    expect(find.text('First'), findsNothing);
   });
 
   testWidgets('right/left arrow keys move between posts in siblingPosts', (WidgetTester tester) async {
