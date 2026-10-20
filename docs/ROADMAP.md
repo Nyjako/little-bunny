@@ -2063,3 +2063,26 @@ this file is the single source of truth for "what's done" across sessions.
     `syncSearch` on that account's sentinel search and polls `getSyncStatus` the same
     way `SearchesScreen`'s own per-row sync button already did. No rename/pin/interval
     UI -- intentionally, per the user's explicit "no need to have even editing there."
+
+- [x] **M32 — Fix two latent deploy/self-update bugs, found while manually pushing a
+  build to the user's live server**
+  - [x] **`deploy/_install-common.sh` was unparseable bash.** An apostrophe inside a
+    `${public_ip:-<this-machine's-public-IP-or-hostname>}` parameter-expansion default
+    (introduced alongside M23's update-apply wiring) opens an unterminated single-quoted
+    string as far as bash's parser is concerned, so the *entire* file fails with
+    "unexpected EOF while looking for matching `''" the moment it's sourced -- meaning
+    `install.sh`/`install-prebuilt.sh` could never have actually completed an install on
+    any machine since that commit. Reworded the placeholder to drop the apostrophe.
+  - [x] **The server's self-updater always fetched the wrong release asset.**
+    `server/src/updater.c`'s `check_for_update` hardcoded the asset suffix
+    `"linux-x64.tar.gz"` -- the build made on GitHub's `ubuntu-latest` runner, whose
+    glibc tracks whatever image GitHub currently ships -- instead of
+    `"linux-x64-ubuntu22.tar.gz"`, the one deliberately built inside a pinned
+    `ubuntu:22.04` container specifically so it stays runnable on older deployment
+    targets (see `deploy/README.md`'s "Installing a binary built elsewhere"). Caught
+    live: the user's Oracle Cloud Ubuntu 22.04 box had already auto-staged a build this
+    way, and installing a manually-fetched newer build triggered `ExecStartPre`'s
+    update-apply step to silently swap in that staged (wrong-glibc) binary instead,
+    `GLIBC_2.38 not found` crash-looping the service (`restart counter` climbing) until
+    caught and the correct `-ubuntu22` asset was installed by hand. Every automatic
+    self-update on this or any similar deployment target had been doing this unnoticed.
