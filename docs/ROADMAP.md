@@ -1976,3 +1976,18 @@ this file is the single source of truth for "what's done" across sessions.
     Add a log line reporting the next-due timestamp (or how many hours until the
     soonest-due search) whenever 0 searches sync, so this is self-diagnosing from the
     logs alone going forward, without needing to SSH in and query `searches` directly.
+
+- [x] **M30 — Manual language switching, default-interval-checked new searches**
+  - [x] **Language switching in Settings.** A new "Language" section with a dropdown
+    of `AppLocalizations.supportedLocales` plus a "System default" option
+    (`ThemeSettingsStore.loadLanguageCode`/`saveLanguageCode`, null means follow the
+    device). Priority order requested by the user: manual setting > device language >
+    default (English) -- implemented by leaving `MaterialApp.locale` unset (letting
+    Flutter's own device-locale resolution run) unless a manual override is stored, in
+    which case it's forced via `Locale(_languageCode!)`. Only English exists today, but
+    the picker is in place for future translations.
+  - [x] **"Use default interval" checked by default.** Both the regular create-search
+    dialog (`create_search_screen.dart`) and the pool-add dialog
+    (`searches_screen.dart`, see the `feature/inkbunny-pool-search` branch's follow-up
+    commit) now start with this checkbox checked, rather than requiring the user to
+    opt in every time.
