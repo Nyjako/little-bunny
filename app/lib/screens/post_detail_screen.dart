@@ -197,6 +197,19 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
     _preloadAround(index);
   }
 
+  /// Keeps this screen's own [PageView] in sync with whatever post the user
+  /// swiped to inside [FullScreenPostViewerScreen] -- called live on every
+  /// page change there (see [_PostDetailPage.onFullScreenPostChanged]'s doc
+  /// comment), not just once when fullscreen closes, so there's no visible
+  /// snap-back regardless of how fullscreen is exited (close button, system
+  /// back gesture, ...).
+  void _jumpToPost(BunnyPost post) {
+    final index = _posts.indexWhere((p) => p.id == post.id);
+    if (index != -1) {
+      _pageController.jumpToPage(index);
+    }
+  }
+
   void _goToDelta(int delta) {
     final current = _pageController.page?.round() ?? _initialIndex;
     final target = current + delta;
@@ -240,6 +253,7 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
             downloadSettingsStore: widget.downloadSettingsStore,
             downloadManager: widget.downloadManager,
             siblingPosts: widget.siblingPosts,
+            onFullScreenPostChanged: _jumpToPost,
           ),
         ),
       ),
@@ -258,6 +272,13 @@ class _PostDetailPage extends StatefulWidget {
   final DownloadManager downloadManager;
   final List<BunnyPost>? siblingPosts;
 
+  /// Called live as the user swipes inside [FullScreenPostViewerScreen]
+  /// (not just once on exit) so the outer [PostDetailScreen]'s own
+  /// [PageView] already shows the right page the moment fullscreen is
+  /// closed, instead of snapping back to whichever post this page was
+  /// originally built for.
+  final ValueChanged<BunnyPost>? onFullScreenPostChanged;
+
   const _PostDetailPage({
     super.key,
     required this.post,
@@ -266,6 +287,7 @@ class _PostDetailPage extends StatefulWidget {
     required this.downloadSettingsStore,
     required this.downloadManager,
     this.siblingPosts,
+    this.onFullScreenPostChanged,
   });
 
   @override
@@ -649,7 +671,15 @@ class _PostDetailPageState extends State<_PostDetailPage> {
     }
     Navigator.push(
       context,
-      MaterialPageRoute(builder: (context) => FullScreenPostViewerScreen(posts: images, initialIndex: index, repository: widget.repository, displaySettingsStore: widget.displaySettingsStore)),
+      MaterialPageRoute(
+        builder: (context) => FullScreenPostViewerScreen(
+          posts: images,
+          initialIndex: index,
+          repository: widget.repository,
+          displaySettingsStore: widget.displaySettingsStore,
+          onPageChanged: widget.onFullScreenPostChanged,
+        ),
+      ),
     );
   }
 
@@ -666,7 +696,11 @@ class _PostDetailPageState extends State<_PostDetailPage> {
     final maxHeight = MediaQuery.sizeOf(context).height * 0.6;
     Widget bounded(Widget child) => ConstrainedBox(constraints: BoxConstraints(maxHeight: maxHeight), child: AspectRatio(aspectRatio: aspectRatio, child: child));
     if (_imageExtensions.contains(ext)) {
-      return GestureDetector(onTap: _openFullScreenViewer, child: bounded(CachedNetworkImage(imageUrl: post.fileUrl!, httpHeaders: imageHeadersFor(post.site), fit: BoxFit.contain)));
+      return GestureDetector(
+        key: const Key('postDetailImageTapTarget'),
+        onTap: _openFullScreenViewer,
+        child: bounded(CachedNetworkImage(imageUrl: post.fileUrl!, httpHeaders: imageHeadersFor(post.site), fit: BoxFit.contain)),
+      );
     }
     if (isVideoExt(ext)) {
       return FutureBuilder<void>(
