@@ -386,7 +386,7 @@ class _SearchesScreenState extends State<SearchesScreen> with SingleTickerProvid
       }
     }
 
-    await _repository!.createSearch(site, label, 'pool:$poolId');
+    await _repository!.createSearch(site, label, 'pool:$poolId', usesDefaultInterval: true);
     _refresh();
   }
 

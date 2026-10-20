@@ -567,6 +567,7 @@ void main() {
     expect(repository.searches, hasLength(1));
     expect(repository.searches.single.site, BunnySite.inkbunny);
     expect(repository.searches.single.query, 'pool:108216');
+    expect(repository.searches.single.usesDefaultInterval, isTrue);
   });
 
   testWidgets('assigning a search to a group nests it under an expandable group row (M21)', (WidgetTester tester) async {
