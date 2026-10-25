@@ -610,6 +610,12 @@ abstract class AppLocalizations {
   /// **'Add'**
   String get createPoolSearchSubmit;
 
+  /// No description provided for @createPoolSearchAlreadyExists.
+  ///
+  /// In en, this message translates to:
+  /// **'This pool is already saved.'**
+  String get createPoolSearchAlreadyExists;
+
   /// No description provided for @editSearchScreenTitle.
   ///
   /// In en, this message translates to:
@@ -729,6 +735,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Save as a search'**
   String get tagBrowseAddToSearchesTooltip;
+
+  /// No description provided for @tagBrowseAlreadySavedTooltip.
+  ///
+  /// In en, this message translates to:
+  /// **'Already saved -- tap to remove'**
+  String get tagBrowseAlreadySavedTooltip;
 
   /// No description provided for @tagBrowseRelatedPoolsLabel.
   ///

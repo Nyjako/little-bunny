@@ -233,6 +233,80 @@ void main() {
     expect(queryField.controller!.text, 'someartist');
   });
 
+  group('duplicate prevention (M38)', () {
+    testWidgets('shows a checkmark instead of "add" when a matching search already exists', (WidgetTester tester) async {
+      final repository = FakeBunnyRepository();
+      repository.previewSearchResults['e621:someartist:1'] = [_post(1)];
+      await repository.createSearch(BunnySite.e621, 'someartist', 'someartist');
+
+      await tester.pumpWidget(wrap(repository));
+      await tester.pumpAndSettle();
+
+      expect(find.byTooltip('Save as a search'), findsNothing);
+      expect(find.byTooltip('Already saved -- tap to remove'), findsOneWidget);
+    });
+
+    testWidgets('creating a search stays on this screen and swaps the action to a checkmark', (WidgetTester tester) async {
+      final repository = FakeBunnyRepository();
+      repository.previewSearchResults['e621:someartist:1'] = [_post(1)];
+
+      await tester.pumpWidget(wrap(repository));
+      await tester.pumpAndSettle();
+      expect(find.byTooltip('Save as a search'), findsOneWidget);
+
+      await tester.tap(find.byTooltip('Save as a search'));
+      await tester.pumpAndSettle();
+      // tester.tap's hit-testing is unreliable for this button when
+      // CreateSearchScreen is reached via a push (as opposed to being the
+      // route's own home) -- same nested-overlay flakiness as elsewhere in
+      // this codebase, invoked directly instead.
+      await tester.ensureVisible(find.widgetWithText(FilledButton, 'Create'));
+      tester.widget<FilledButton>(find.widgetWithText(FilledButton, 'Create')).onPressed!();
+      await tester.pumpAndSettle();
+
+      expect(find.byType(TagBrowseScreen), findsOneWidget);
+      expect(find.byTooltip('Already saved -- tap to remove'), findsOneWidget);
+      expect(repository.searches, hasLength(1));
+    });
+
+    testWidgets('tapping the checkmark then confirming removes the search and reverts to "add"', (WidgetTester tester) async {
+      final repository = FakeBunnyRepository();
+      repository.previewSearchResults['e621:someartist:1'] = [_post(1)];
+      final searchId = await repository.createSearch(BunnySite.e621, 'someartist', 'someartist');
+
+      await tester.pumpWidget(wrap(repository));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byTooltip('Already saved -- tap to remove'));
+      await tester.pumpAndSettle();
+      expect(find.text('Remove search?'), findsOneWidget);
+
+      await tester.tap(find.text('Remove'));
+      await tester.pumpAndSettle();
+
+      expect(repository.searches.where((s) => s.id == searchId), isEmpty);
+      expect(find.byTooltip('Save as a search'), findsOneWidget);
+      expect(find.byTooltip('Already saved -- tap to remove'), findsNothing);
+    });
+
+    testWidgets('canceling the remove dialog keeps the search and the checkmark', (WidgetTester tester) async {
+      final repository = FakeBunnyRepository();
+      repository.previewSearchResults['e621:someartist:1'] = [_post(1)];
+      await repository.createSearch(BunnySite.e621, 'someartist', 'someartist');
+
+      await tester.pumpWidget(wrap(repository));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byTooltip('Already saved -- tap to remove'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Cancel'));
+      await tester.pumpAndSettle();
+
+      expect(repository.searches, hasLength(1));
+      expect(find.byTooltip('Already saved -- tap to remove'), findsOneWidget);
+    });
+  });
+
   group('customFetch (M10.3)', () {
     Widget wrapWithCustomFetch(FakeBunnyRepository repository, Future<List<BunnyPost>> Function(int page) customFetch, {String? title}) => wrapWithLocalization(
       TagBrowseScreen(
