@@ -2558,3 +2558,22 @@ this file is the single source of truth for "what's done" across sessions.
     local user explicitly tapping refresh, not a shared server whose *other*
     requests need to stay responsive through it. Only the networked server's
     `/stats_report` route needed the fix.
+
+- [ ] **M56 — Offline/local smoke tests against a real, just-deployed server**
+  The user's idea, deliberately scoped as planned-for-later, not for immediate
+  implementation: a script (not a GitHub Actions job -- CI has no access to the
+  user's real server or its `.env` credentials) that runs locally right after a
+  new build is installed, to catch exactly the kind of thing that only shows up
+  against real data/hardware and slipped past this session's fixture-based test
+  suites -- e.g. M46's 12-14s search-listing hang and M55's 2+-minute stats-
+  report build, both only ever surfaced by manually curling the live server
+  with its real ~1.39GB database, never by `make test-c`/`make test-flutter`
+  against small fixtures. Candidate checks: response time on a handful of key
+  endpoints (flag anything unexpectedly slow), confirming `/stats_report`'s
+  background build actually completes and the cache updates, confirming the
+  server survives a batch of concurrent requests without exhausting civetweb's
+  worker pool the way M55's own manual testing did. Needs its own design pass
+  before implementation -- what "pass" means per check, how it authenticates
+  (presumably reads the same `.env` this session used by hand), whether it's a
+  shell script wrapping `curl` (matching this session's own ad hoc verification
+  style) or something more structured.
