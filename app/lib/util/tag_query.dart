@@ -1,3 +1,10 @@
+/// Below this many characters, the server rejects an autocomplete request
+/// outright (M39) -- a shorter prefix matches far too many tags for its
+/// index to narrow usefully, which is what hung the server on a single
+/// keystroke. Checked client-side too, so a short prefix never fires the
+/// request in the first place.
+const int tagAutocompleteMinPrefixLength = 5;
+
 /// Finds the start/end offsets (in [text]) of the whitespace-delimited token
 /// that contains [cursorOffset] -- unlike splitting on the last space in the
 /// whole string (which always picks the trailing word), this works correctly

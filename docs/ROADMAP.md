@@ -2182,3 +2182,27 @@ this file is the single source of truth for "what's done" across sessions.
     right arguments, right handling of the result) without a device, but the
     `saf_util`/`saf_stream` plugins' actual native Android behavior still needs
     verification on a real device, which this environment has no way to do.
+
+- [x] **M39 — Throttle tag autocomplete to stop it hanging the server**
+  Reported by the user: tag autocomplete could hang the server. `bunny_db_tag_autocomplete`
+  runs `SELECT ... FROM tags LEFT JOIN post_tags ... WHERE site = ? AND name LIKE ?
+  GROUP BY t.id ORDER BY n DESC ... LIMIT ?` -- a prefix match that's indexable via
+  `tags`' own `UNIQUE (site, name)`, but only once the prefix itself has narrowed the
+  candidate tags down. A one- or two-character prefix (fired on every keystroke,
+  debounced but still frequent) matches thousands of tags on a large site, each
+  needing its own `post_tags` join to count -- that's what actually hung the server.
+  - `bunny_core_tag_autocomplete` (`libs/core/src/searches.c`) now rejects any
+    `prefix` shorter than 5 characters outright, returning an empty list without
+    touching the database at all, and caps the result count at 5 regardless of the
+    `limit` the caller asks for. `bunny_db_tag_autocomplete` itself is untouched --
+    it stays a flexible, unthrottled primitive for any other caller/test, since the
+    throttle is a UI-autocomplete-specific policy decision, not a database-layer one.
+  - Both the server's HTTP route (`/tags/autocomplete`) and the FFI path used by a
+    standalone (no-server) build go through `bunny_core_tag_autocomplete`, so both
+    get the same protection.
+  - `CreateSearchScreen`/`EditSearchScreen` (Flutter) now also skip firing the
+    autocomplete request client-side for a sub-5-character tag (`tag_query.dart`'s
+    new `tagAutocompleteMinPrefixLength`), so a short prefix never leaves the device
+    in the first place, on top of the server-side guarantee.
+  - Already sorted by post count descending (`ORDER BY n DESC, t.name ASC`) --
+    no change needed there.

@@ -170,7 +170,7 @@ class _CreateSearchScreenState extends State<CreateSearchScreen> {
     final text = _queryController.text;
     final (start, end) = tagTokenRangeAt(text, _cursorOffset);
     final (_, tag) = splitTagPrefix(text.substring(start, end));
-    if (tag.isEmpty || tagHasWildcard(tag)) {
+    if (tag.length < tagAutocompleteMinPrefixLength || tagHasWildcard(tag)) {
       setState(() => _suggestions = []);
       return;
     }

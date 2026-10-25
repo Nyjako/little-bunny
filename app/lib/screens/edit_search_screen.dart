@@ -74,7 +74,7 @@ class _EditSearchScreenState extends State<EditSearchScreen> {
     final text = _queryController.text;
     final (start, end) = tagTokenRangeAt(text, _cursorOffset);
     final (_, tag) = splitTagPrefix(text.substring(start, end));
-    if (tag.isEmpty || tagHasWildcard(tag)) {
+    if (tag.length < tagAutocompleteMinPrefixLength || tagHasWildcard(tag)) {
       setState(() => _suggestions = []);
       return;
     }
