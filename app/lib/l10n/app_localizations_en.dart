@@ -244,6 +244,10 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String get tagStatsBuildingLabel =>
+      'Building the report for the first time -- check back shortly.';
+
+  @override
   String get tagStatsTopFavoritedTagsLabel => 'Top favorited tags';
 
   @override

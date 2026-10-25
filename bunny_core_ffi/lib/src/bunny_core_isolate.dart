@@ -574,7 +574,9 @@ Map<String, Object?> _statsReportToMap(bunny_core_stats_report_t report) => {
 Map<String, Object?> _handleGetStatsReport(Pointer<bunny_core_t> core) {
   return using((arena) {
     final out = arena<bunny_core_stats_report_t>();
-    _check(_bindings.bunny_core_get_stats_report(core, out));
+    final hasCache = arena<Bool>();
+    final isStale = arena<Bool>();
+    _check(_bindings.bunny_core_get_cached_stats_report(core, out, hasCache, isStale));
     final map = _statsReportToMap(out.ref);
     _bindings.bunny_core_stats_report_free(out);
     return map;

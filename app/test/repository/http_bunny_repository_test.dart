@@ -455,6 +455,17 @@ void main() {
       expect(report.computedAt, '2026-01-02T00:00:00Z');
     });
 
+    test('getStatsReport maps a null computed_at to null, not a cast error (M55)', () async {
+      respond = (_) => http.Response(
+        jsonEncode({'computed_at': null, 'top_favorited_tags': [], 'top_used_tags': [], 'top_pools': [], 'top_viewed_searches': []}),
+        200,
+      );
+
+      final report = await buildRepository().getStatsReport();
+
+      expect(report.computedAt, isNull);
+    });
+
     test('getPostTagsByCategory sends GET to the right path and maps results', () async {
       respond = (_) => http.Response(
         jsonEncode([

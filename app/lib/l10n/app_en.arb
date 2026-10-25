@@ -116,6 +116,7 @@
   "@tagStatsLastUpdatedLabel": {
     "placeholders": {"time": {"type": "String"}}
   },
+  "tagStatsBuildingLabel": "Building the report for the first time -- check back shortly.",
   "tagStatsTopFavoritedTagsLabel": "Top favorited tags",
   "tagStatsTopUsedTagsLabel": "Top used tags",
   "tagStatsTopPoolsLabel": "Top pools (by favorited posts)",

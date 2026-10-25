@@ -520,6 +520,12 @@ abstract class AppLocalizations {
   /// **'Updated {time}'**
   String tagStatsLastUpdatedLabel(String time);
 
+  /// No description provided for @tagStatsBuildingLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Building the report for the first time -- check back shortly.'**
+  String get tagStatsBuildingLabel;
+
   /// No description provided for @tagStatsTopFavoritedTagsLabel.
   ///
   /// In en, this message translates to:

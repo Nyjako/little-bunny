@@ -64,7 +64,7 @@ BunnyTagStat _tagStatFromMap(Map<String, Object?> m) => BunnyTagStat(name: m['na
 List<BunnyTagStat> _tagStatListFromMaps(Object? list) => (list as List).cast<Map<String, Object?>>().map(_tagStatFromMap).toList();
 
 BunnyStatsReport _statsReportFromMap(Map<String, Object?> m) => BunnyStatsReport(
-  computedAt: m['computedAt'] as String,
+  computedAt: m['computedAt'] as String?,
   topFavoritedTags: _tagStatListFromMaps(m['topFavoritedTags']),
   topUsedTags: _tagStatListFromMaps(m['topUsedTags']),
   topPools: _tagStatListFromMaps(m['topPools']),

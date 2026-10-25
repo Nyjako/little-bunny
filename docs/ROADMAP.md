@@ -2503,3 +2503,43 @@ this file is the single source of truth for "what's done" across sessions.
   string, so this may mostly be a client-side authoring/autocomplete problem rather
   than a storage one), and the *same* syntax + autocomplete support added to the
   blacklist editor, which today only accepts single bare tags.
+
+- [x] **M55 — Build the tag-stats report in the background instead of on the request thread**
+  Discovered right after deploying M46: on the user's real database (1.39GB,
+  nowhere close to the small fixtures/synthetic databases used while building
+  M40), the stats report's *first* build (cold cache, or the 24h TTL expiring)
+  took well over two minutes. Since `bunny_core_get_stats_report` used to build
+  inline on a cache miss, a request that triggered that build tied up a civetweb
+  worker thread for the entire two-plus minutes -- and since civetweb only has a
+  handful of worker threads total, a couple of overlapping slow requests (which
+  is exactly what happened testing this: three `/stats_report` calls fired close
+  together) was enough to starve the thread pool completely, including totally
+  unrelated requests like `/health`. Had to restart the live service to clear it.
+  The user's own framing: building the report should be a low-priority
+  background job -- request it, it starts building if it isn't already, other
+  requests stay more important, and whenever it finishes it finishes.
+  - `bunny_core_get_stats_report` is gone, replaced by `bunny_core_
+    get_cached_stats_report(core, &report, &has_cache, &is_stale)` -- reads
+    whatever's cached and returns immediately, *never* builds, *never* blocks.
+    `bunny_core_refresh_stats_report` (the actual, still-slow build) is unchanged,
+    but is now only ever meant to be called from a background worker, not inline
+    on a thread answering a live request.
+  - New `TASK_TYPE_BUILD_STATS_REPORT` (LOW priority, same existing task_queue
+    worker thread M24 already built for exactly this class of problem) runs that
+    build. `task_queue_enqueue_stats_report_build` dedupes the same way the
+    other LOW-priority background jobs do -- a no-op if a build is already
+    pending/running, never piles up duplicates.
+  - `GET /stats_report` reads the cache and enqueues a background build only if
+    the cache is missing or stale; `POST /stats_report` (manual refresh) always
+    enqueues one, as the "force" case -- but *both* just return whatever was
+    cached *before* this request, same as GET. Neither blocks.
+  - `BunnyStatsReport.computedAt` is now nullable -- `null` means no report has
+    ever been built. `TagStatsScreen` shows a "building the report for the first
+    time" message instead of a timestamp in that case, rather than hanging on an
+    indefinite spinner; the user is expected to just come back to the screen
+    later, same as any other background job in this app.
+  - `FfiBunnyRepository` (standalone mode) keeps `refreshStatsReport` blocking --
+    there's no separate background worker to delegate to there, and it's one
+    local user explicitly tapping refresh, not a shared server whose *other*
+    requests need to stay responsive through it. Only the networked server's
+    `/stats_report` route needed the fix.
