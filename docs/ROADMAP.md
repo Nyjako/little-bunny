@@ -2286,3 +2286,30 @@ this file is the single source of truth for "what's done" across sessions.
     dispatch glue (`getStatsReport`/`refreshStatsReport`) alongside the existing
     `topFavoritedTags`/`topUsedTags` calls (kept as internal-only API, no longer
     surfaced to the app directly -- the report builder still calls them per-site).
+
+- [ ] **M41 — Detect/clean up saved searches or pools that duplicated each other before M38**
+  M38 (above) only stops *new* duplicates from being created going forward -- it has no
+  effect on any `(site, query)` duplicates that were already saved before that check
+  existed. The user confirmed the client-side prevention approach is fine as the
+  ongoing guard, but asked for the pre-existing duplicates to be handled too, exact
+  mechanism still open: candidates include a one-time startup/sync-time scan that
+  finds searches sharing a `(site, query)` and offers to merge them (keeping one,
+  reassigning/dropping `search_results` rows for the others) or just flags them for
+  the user to resolve manually in `SearchesScreen`, rather than silently auto-deleting
+  anything a user may be relying on (e.g. divergent `interval_hours`/group membership
+  between the duplicates).
+
+- [ ] **M42 — Stop tracking "downloaded" state server-side; check local file existence instead**
+  Reported by the user: a post downloaded on one device shows as downloaded on every
+  other device too, because `bunny_db_download_record`/`bunny_db_download_list_for_post`
+  store download state centrally on the shared server -- but "downloaded" is inherently
+  a per-device, per-filesystem fact, not something the server can meaningfully own.
+  The user's proposed fix: drop download tracking from the database entirely.
+  `DownloadManager.downloadPost` already computes a fully deterministic destination
+  path (artist subfolder + fixed filename pattern, same path every time, always
+  overwrites -- see M36's own notes) given a post and the user's chosen destination
+  folder, so each client can instead just check whether a file already exists at that
+  predicted path to show "downloaded" status locally, with no server round-trip and
+  no shared state to get stale or conflict across devices. Needs a migration path for
+  `recordDownload`/`listDownloadsForPost` call sites (and the `downloads` table/schema
+  itself) once the local-existence-check replacement is designed.
