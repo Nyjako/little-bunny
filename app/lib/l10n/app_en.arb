@@ -130,6 +130,7 @@
   "createPoolSearchDialogTitle": "Add pool",
   "createPoolSearchIdLabel": "Pool ID",
   "createPoolSearchSubmit": "Add",
+  "createPoolSearchAlreadyExists": "This pool is already saved.",
 
   "editSearchScreenTitle": "Edit search",
   "editSearchSiteLabel": "Site: {site}",
@@ -172,6 +173,7 @@
 
   "tagBrowseEmptyState": "No posts found for this search.",
   "tagBrowseAddToSearchesTooltip": "Save as a search",
+  "tagBrowseAlreadySavedTooltip": "Already saved -- tap to remove",
   "tagBrowseRelatedPoolsLabel": "Related pools",
   "tagBrowseRelatedPoolChip": "Pool #{poolId}",
   "@tagBrowseRelatedPoolChip": {
