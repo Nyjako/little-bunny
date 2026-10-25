@@ -2182,3 +2182,23 @@ this file is the single source of truth for "what's done" across sessions.
     right arguments, right handling of the result) without a device, but the
     `saf_util`/`saf_stream` plugins' actual native Android behavior still needs
     verification on a real device, which this environment has no way to do.
+
+- [x] **M38 — Prevent duplicate saved searches/pools for the same (site, query)**
+  Reported by the user: tapping an already-saved tag/author (`TagBrowseScreen`'s
+  "add to searches" action), or re-adding a pool already saved (`SearchesScreen`'s
+  "add pool" dialog), silently created a second, functionally-identical search --
+  nothing in either flow checked for an existing match first.
+  - `TagBrowseScreen` now loads `listSearches()` on init and looks for a saved
+    search with the same `(site, query)` pair. The app bar's "+" add action swaps
+    to a checkmark when a match exists; tapping it asks (via a confirm dialog) to
+    remove that search instead of creating a duplicate. Creating a new search no
+    longer pops this screen -- it reloads the match so the checkmark appears in
+    place immediately.
+  - `SearchesScreen._createPoolSearch` gained the same check for the
+    `pool:<id>` sentinel query: if a search with that exact `(site, query)`
+    already exists, the dialog shows a message and refuses to create a second
+    one, skipping the pool-name lookup entirely.
+  - Known gap: manually typing a query into `CreateSearchScreen`'s own entry form
+    (the main FAB) still has no duplicate check -- left for a future pass, since
+    it's a bigger UI undertaking than either flow above and wasn't one of the
+    cases the user actually hit.
