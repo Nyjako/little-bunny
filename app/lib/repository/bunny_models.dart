@@ -204,6 +204,32 @@ class BunnyTagStat {
   const BunnyTagStat({required this.name, required this.count});
 }
 
+/// The tag-stats screen's unified report (M40), replacing what used to be
+/// four separate per-site/per-kind queries fetched fresh on every page open.
+/// Server-side (`bunny_core_get_stats_report`), this is cached for up to 24h
+/// and rebuilt in full on a manual refresh ([BunnyRepository.
+/// refreshStatsReport]) -- there's no per-section refresh. [topFavoritedTags]/
+/// [topUsedTags]/[topViewedSearches] merge both sites into one ranking, each
+/// entry's [BunnyTagStat.name] prefixed with its site ("e621: ", "inkbunny: ")
+/// since the same tag/label text can exist on both; [topPools] is e621-only
+/// (Inkbunny has no pool concept) and its [BunnyTagStat.name] is the
+/// `pool:<id>` sentinel also used by [TagBrowseScreen], not a display label.
+class BunnyStatsReport {
+  final String computedAt;
+  final List<BunnyTagStat> topFavoritedTags;
+  final List<BunnyTagStat> topUsedTags;
+  final List<BunnyTagStat> topPools;
+  final List<BunnyTagStat> topViewedSearches;
+
+  const BunnyStatsReport({
+    required this.computedAt,
+    required this.topFavoritedTags,
+    required this.topUsedTags,
+    required this.topPools,
+    required this.topViewedSearches,
+  });
+}
+
 /// One of a post's tags, with its category (e621: general/artist/copyright/
 /// character/species/invalid/lore/meta; `null` for Inkbunny keywords, which
 /// have no category concept at all). Mirrors `bunny_db_post_tag_t`.

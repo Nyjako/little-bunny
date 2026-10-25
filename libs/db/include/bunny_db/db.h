@@ -315,6 +315,30 @@ bunny_db_result_t bunny_db_top_used_tags(bunny_db_t *db, bunny_db_site_t site, i
  * literally, not treated as SQL LIKE wildcards. */
 bunny_db_result_t bunny_db_tag_autocomplete(bunny_db_t *db, bunny_db_site_t site, const char *prefix, int limit, bunny_db_tag_stat_list_t *out_list);
 
+/* Pools on `site` ranked by how many of their posts are favorited, descending
+ * (M40) -- reuses bunny_db_tag_stat_t's generic {name, count} shape: `name`
+ * is the `pool:<id>` sentinel already used everywhere else a pool is
+ * addressed as a query string (see bunny_core_parse_pool_id_from_query), not
+ * a tag name. e621 only; Inkbunny has no pool concept, so a call with
+ * BUNNY_DB_SITE_INKBUNNY always returns an empty list. */
+bunny_db_result_t bunny_db_top_favorited_pools(bunny_db_t *db, bunny_db_site_t site, int limit, bunny_db_tag_stat_list_t *out_list);
+
+/* Saved searches on `site` ranked by bunny_db_search_touch_last_viewed's own
+ * view_count, descending (M40) -- again reuses bunny_db_tag_stat_t's
+ * {name, count} shape: `name` is the search's label, `count` its view count.
+ * Searches never viewed (view_count = 0) are excluded rather than padding
+ * out the list with an arbitrary tie-break order among them. */
+bunny_db_result_t bunny_db_top_viewed_searches(bunny_db_t *db, bunny_db_site_t site, int limit, bunny_db_tag_stat_list_t *out_list);
+
+/* The tag-stats screen's cached unified report (M40) -- a single opaque JSON
+ * blob bunny_core builds/parses; this table doesn't need to know its shape.
+ * Both out params are set to NULL (not an error) when nothing has been
+ * cached yet. Caller owns both returned strings. */
+bunny_db_result_t bunny_db_get_cached_stats_report(bunny_db_t *db, char **out_json, char **out_computed_at);
+
+/* Replaces the cached report wholesale (there's only ever one). */
+bunny_db_result_t bunny_db_set_cached_stats_report(bunny_db_t *db, const char *json, const char *computed_at);
+
 /* --- Action queue -------------------------------------------------------------
  * Proxies favorite/vote/comment calls to the sites (M4.3): an action is
  * enqueued here, then bunny_core_process_queue() (libs/core) drains it

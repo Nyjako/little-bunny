@@ -111,10 +111,16 @@
   },
 
   "tagStatsScreenTitle": "Tag stats",
-  "tagStatsEmptyState": "No favorited posts yet -- favorite some to see their tags here.",
-  "tagStatsAllEmptyState": "No synced posts yet -- sync a search to see their tags here.",
-  "tagStatsFavoritesLabel": "Favorites",
-  "tagStatsAllLabel": "All",
+  "tagStatsRefreshTooltip": "Refresh now",
+  "tagStatsLastUpdatedLabel": "Updated {time}",
+  "@tagStatsLastUpdatedLabel": {
+    "placeholders": {"time": {"type": "String"}}
+  },
+  "tagStatsTopFavoritedTagsLabel": "Top favorited tags",
+  "tagStatsTopUsedTagsLabel": "Top used tags",
+  "tagStatsTopPoolsLabel": "Top pools (by favorited posts)",
+  "tagStatsTopViewedSearchesLabel": "Most-visited searches",
+  "tagStatsSectionEmptyState": "Nothing here yet.",
 
   "createSearchScreenTitle": "New search",
   "createSearchLabelField": "Label",

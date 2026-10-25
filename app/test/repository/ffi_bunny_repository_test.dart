@@ -26,12 +26,17 @@ void main() {
     expect(await repository.tagAutocomplete(BunnySite.e621, 'any'), isEmpty);
   });
 
-  test('topFavoritedTags returns an empty list when nothing is favorited (M10.2)', () async {
-    expect(await repository.topFavoritedTags(BunnySite.e621), isEmpty);
+  test('getStatsReport returns an empty report when nothing is cached (M40)', () async {
+    final report = await repository.getStatsReport();
+    expect(report.topFavoritedTags, isEmpty);
+    expect(report.topUsedTags, isEmpty);
+    expect(report.topPools, isEmpty);
+    expect(report.topViewedSearches, isEmpty);
   });
 
-  test('topUsedTags returns an empty list when nothing is synced (M14.4)', () async {
-    expect(await repository.topUsedTags(BunnySite.e621), isEmpty);
+  test('refreshStatsReport also returns an empty report when nothing is cached (M40)', () async {
+    final report = await repository.refreshStatsReport();
+    expect(report.topFavoritedTags, isEmpty);
   });
 
   test('markPostSeen rejects a post id with no cached post', () async {

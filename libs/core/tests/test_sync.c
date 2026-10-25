@@ -1606,6 +1606,172 @@ void test_sync_e621_blacklist_imports_new_tags_and_skips_multi_tag_lines(void)
     bunny_db_string_list_free(&blacklist);
 }
 
+static bunny_db_tag_stat_t *find_stat(bunny_db_tag_stat_list_t *list, const char *name)
+{
+    for (size_t i = 0; i < list->count; i++) {
+        if (strcmp(list->items[i].name, name) == 0) {
+            return &list->items[i];
+        }
+    }
+    return NULL;
+}
+
+void test_stats_report_top_used_tags_merges_both_sites_with_a_site_prefix(void)
+{
+    char *e621_fixture = read_fixture("e621_posts_search.json");
+    char *inkbunny_login = read_fixture("inkbunny_login_success.json");
+    char *inkbunny_search = read_fixture("inkbunny_search_response.json");
+    char *inkbunny_empty = read_fixture("inkbunny_search_response_empty.json");
+    TEST_ASSERT_NOT_NULL(e621_fixture);
+    TEST_ASSERT_NOT_NULL(inkbunny_login);
+    TEST_ASSERT_NOT_NULL(inkbunny_search);
+    TEST_ASSERT_NOT_NULL(inkbunny_empty);
+    g_e621_state.bodies[0] = e621_fixture;
+    g_e621_state.body_count = 1;
+    g_inkbunny_state.bodies[0] = inkbunny_login;
+    g_inkbunny_state.bodies[1] = inkbunny_search;
+    g_inkbunny_state.bodies[2] = inkbunny_empty;
+    g_inkbunny_state.body_count = 3;
+
+    int64_t e621_search_id = 0, inkbunny_search_id = 0;
+    bunny_core_search_create(g_core, BUNNY_DB_SITE_E621, "wolves", "wolf", 24, NULL, &e621_search_id);
+    bunny_core_search_create(g_core, BUNNY_DB_SITE_INKBUNNY, "tribute", "tribute", 24, NULL, &inkbunny_search_id);
+    bunny_core_sync_due_searches(g_core, NULL);
+
+    bunny_core_stats_report_t report;
+    bunny_core_result_t result = bunny_core_refresh_stats_report(g_core, &report);
+    TEST_ASSERT_EQUAL(BUNNY_CORE_OK, result);
+
+    TEST_ASSERT_NOT_NULL(find_stat(&report.top_used_tags, "e621: someartist"));
+    TEST_ASSERT_NOT_NULL(find_stat(&report.top_used_tags, "inkbunny: tribute"));
+
+    bunny_core_stats_report_free(&report);
+    free(e621_fixture);
+    free(inkbunny_login);
+    free(inkbunny_search);
+    free(inkbunny_empty);
+}
+
+void test_stats_report_top_favorited_tags_only_counts_favorited_posts(void)
+{
+    const char *fixture = "{\"posts\":["
+                          "{\"id\":1,\"created_at\":\"2024-01-01T00:00:00.000-05:00\","
+                          "\"file\":{\"width\":100,\"height\":100,\"ext\":\"png\",\"size\":1000,\"md5\":\"aaa\",\"url\":\"https://static1.e621.net/data/1.png\"},"
+                          "\"preview\":{\"width\":50,\"height\":50,\"url\":\"https://static1.e621.net/data/preview/1.png\"},"
+                          "\"score\":{\"up\":1,\"down\":0,\"total\":1},"
+                          "\"tags\":{\"general\":[],\"species\":[],\"character\":[],\"copyright\":[],\"artist\":[\"favorited_artist\"],\"invalid\":[],\"lore\":[],\"meta\":[]},"
+                          "\"rating\":\"s\",\"fav_count\":1,\"sources\":[],\"description\":\"\",\"comment_count\":0,\"is_favorited\":true,\"pools\":[]},"
+                          "{\"id\":2,\"created_at\":\"2024-01-01T00:00:00.000-05:00\","
+                          "\"file\":{\"width\":100,\"height\":100,\"ext\":\"png\",\"size\":1000,\"md5\":\"bbb\",\"url\":\"https://static1.e621.net/data/2.png\"},"
+                          "\"preview\":{\"width\":50,\"height\":50,\"url\":\"https://static1.e621.net/data/preview/2.png\"},"
+                          "\"score\":{\"up\":1,\"down\":0,\"total\":1},"
+                          "\"tags\":{\"general\":[],\"species\":[],\"character\":[],\"copyright\":[],\"artist\":[\"unfavorited_artist\"],\"invalid\":[],\"lore\":[],\"meta\":[]},"
+                          "\"rating\":\"s\",\"fav_count\":0,\"sources\":[],\"description\":\"\",\"comment_count\":0,\"is_favorited\":false,\"pools\":[]}"
+                          "]}";
+    g_e621_state.bodies[0] = fixture;
+    g_e621_state.body_count = 1;
+
+    int64_t search_id = 0;
+    bunny_core_search_create(g_core, BUNNY_DB_SITE_E621, "wolves", "wolf", 24, NULL, &search_id);
+    bunny_core_sync_due_searches(g_core, NULL);
+
+    bunny_core_stats_report_t report;
+    bunny_core_result_t result = bunny_core_refresh_stats_report(g_core, &report);
+    TEST_ASSERT_EQUAL(BUNNY_CORE_OK, result);
+
+    TEST_ASSERT_NOT_NULL(find_stat(&report.top_favorited_tags, "e621: favorited_artist"));
+    TEST_ASSERT_NULL(find_stat(&report.top_favorited_tags, "e621: unfavorited_artist"));
+
+    bunny_core_stats_report_free(&report);
+}
+
+void test_stats_report_top_pools_ranks_by_favorited_post_count(void)
+{
+    const char *fixture = "{\"posts\":["
+                          "{\"id\":1,\"created_at\":\"2024-01-01T00:00:00.000-05:00\","
+                          "\"file\":{\"width\":100,\"height\":100,\"ext\":\"png\",\"size\":1000,\"md5\":\"aaa\",\"url\":\"https://static1.e621.net/data/1.png\"},"
+                          "\"preview\":{\"width\":50,\"height\":50,\"url\":\"https://static1.e621.net/data/preview/1.png\"},"
+                          "\"score\":{\"up\":1,\"down\":0,\"total\":1},"
+                          "\"tags\":{\"general\":[],\"species\":[],\"character\":[],\"copyright\":[],\"artist\":[],\"invalid\":[],\"lore\":[],\"meta\":[]},"
+                          "\"rating\":\"s\",\"fav_count\":1,\"sources\":[],\"description\":\"\",\"comment_count\":0,\"is_favorited\":true,\"pools\":[5]}"
+                          "]}";
+    g_e621_state.bodies[0] = fixture;
+    g_e621_state.body_count = 1;
+
+    int64_t search_id = 0;
+    bunny_core_search_create(g_core, BUNNY_DB_SITE_E621, "wolves", "wolf", 24, NULL, &search_id);
+    bunny_core_sync_due_searches(g_core, NULL);
+
+    bunny_core_stats_report_t report;
+    bunny_core_result_t result = bunny_core_refresh_stats_report(g_core, &report);
+    TEST_ASSERT_EQUAL(BUNNY_CORE_OK, result);
+
+    bunny_db_tag_stat_t *pool = find_stat(&report.top_pools, "pool:5");
+    TEST_ASSERT_NOT_NULL(pool);
+    TEST_ASSERT_EQUAL(1, pool->count);
+
+    bunny_core_stats_report_free(&report);
+}
+
+void test_stats_report_top_viewed_searches_reflects_view_count(void)
+{
+    int64_t search_id = 0;
+    bunny_core_search_create(g_core, BUNNY_DB_SITE_E621, "Often viewed", "wolf", 24, NULL, &search_id);
+    bunny_core_search_touch_last_viewed(g_core, search_id);
+    bunny_core_search_touch_last_viewed(g_core, search_id);
+
+    bunny_core_stats_report_t report;
+    bunny_core_result_t result = bunny_core_refresh_stats_report(g_core, &report);
+    TEST_ASSERT_EQUAL(BUNNY_CORE_OK, result);
+
+    bunny_db_tag_stat_t *viewed = find_stat(&report.top_viewed_searches, "e621: Often viewed");
+    TEST_ASSERT_NOT_NULL(viewed);
+    TEST_ASSERT_EQUAL(2, viewed->count);
+
+    bunny_core_stats_report_free(&report);
+}
+
+void test_stats_report_get_serves_the_cached_report_until_explicitly_refreshed(void)
+{
+    int64_t search_id = 0;
+    bunny_core_search_create(g_core, BUNNY_DB_SITE_E621, "Some search", "wolf", 24, NULL, &search_id);
+    bunny_core_search_touch_last_viewed(g_core, search_id);
+
+    bunny_core_stats_report_t first;
+    TEST_ASSERT_EQUAL(BUNNY_CORE_OK, bunny_core_get_stats_report(g_core, &first));
+    TEST_ASSERT_NOT_NULL(find_stat(&first.top_viewed_searches, "e621: Some search"));
+    bunny_db_tag_stat_t *first_stat = find_stat(&first.top_viewed_searches, "e621: Some search");
+    TEST_ASSERT_EQUAL(1, first_stat->count);
+    bunny_core_stats_report_free(&first);
+
+    /* Viewed again, but bunny_core_get_stats_report should still serve the
+     * cache built above rather than noticing. */
+    bunny_core_search_touch_last_viewed(g_core, search_id);
+
+    bunny_core_stats_report_t second;
+    TEST_ASSERT_EQUAL(BUNNY_CORE_OK, bunny_core_get_stats_report(g_core, &second));
+    bunny_db_tag_stat_t *second_stat = find_stat(&second.top_viewed_searches, "e621: Some search");
+    TEST_ASSERT_NOT_NULL(second_stat);
+    TEST_ASSERT_EQUAL(1, second_stat->count); /* still cached, not 2 */
+    bunny_core_stats_report_free(&second);
+
+    /* A manual refresh does pick up the new view. */
+    bunny_core_stats_report_t refreshed;
+    TEST_ASSERT_EQUAL(BUNNY_CORE_OK, bunny_core_refresh_stats_report(g_core, &refreshed));
+    bunny_db_tag_stat_t *refreshed_stat = find_stat(&refreshed.top_viewed_searches, "e621: Some search");
+    TEST_ASSERT_NOT_NULL(refreshed_stat);
+    TEST_ASSERT_EQUAL(2, refreshed_stat->count);
+    bunny_core_stats_report_free(&refreshed);
+
+    /* And bunny_core_get_stats_report now serves that fresh cache too. */
+    bunny_core_stats_report_t third;
+    TEST_ASSERT_EQUAL(BUNNY_CORE_OK, bunny_core_get_stats_report(g_core, &third));
+    bunny_db_tag_stat_t *third_stat = find_stat(&third.top_viewed_searches, "e621: Some search");
+    TEST_ASSERT_NOT_NULL(third_stat);
+    TEST_ASSERT_EQUAL(2, third_stat->count);
+    bunny_core_stats_report_free(&third);
+}
+
 int main(void)
 {
     UNITY_BEGIN();
@@ -1666,5 +1832,10 @@ int main(void)
     RUN_TEST(test_verify_inkbunny_rejects_invalid_credentials);
     RUN_TEST(test_sync_e621_blacklist_requires_a_configured_account);
     RUN_TEST(test_sync_e621_blacklist_imports_new_tags_and_skips_multi_tag_lines);
+    RUN_TEST(test_stats_report_top_used_tags_merges_both_sites_with_a_site_prefix);
+    RUN_TEST(test_stats_report_top_favorited_tags_only_counts_favorited_posts);
+    RUN_TEST(test_stats_report_top_pools_ranks_by_favorited_post_count);
+    RUN_TEST(test_stats_report_top_viewed_searches_reflects_view_count);
+    RUN_TEST(test_stats_report_get_serves_the_cached_report_until_explicitly_refreshed);
     return UNITY_END();
 }

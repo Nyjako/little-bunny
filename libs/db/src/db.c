@@ -63,6 +63,12 @@ static const bunny_db_migration_t BUNNY_DB_MIGRATIONS[] = {
      * scheduler's first tick (server mode) or FfiBunnyRepository.open
      * (standalone mode). */
     {13, "ALTER TABLE server_settings ADD COLUMN pool_positions_backfilled INTEGER NOT NULL DEFAULT 0;"},
+    /* Feeds the "most-visited searches" section of the cached stats report
+     * (M40) -- last_viewed_at (migration 7) only has the most recent view,
+     * not how many there have been, so ranking by visit frequency needs its
+     * own counter. bunny_db_search_mark_viewed increments this in the same
+     * UPDATE that already sets last_viewed_at. */
+    {14, "ALTER TABLE searches ADD COLUMN view_count INTEGER NOT NULL DEFAULT 0;"},
 };
 // clang-format on
 

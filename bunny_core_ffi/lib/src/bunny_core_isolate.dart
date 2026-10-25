@@ -297,6 +297,14 @@ class _TopUsedTagsRequest extends _Request {
   const _TopUsedTagsRequest(this.site, this.limit);
 }
 
+class _GetStatsReportRequest extends _Request {
+  const _GetStatsReportRequest();
+}
+
+class _RefreshStatsReportRequest extends _Request {
+  const _RefreshStatsReportRequest();
+}
+
 class _MarkPostSeenRequest extends _Request {
   final int postId;
 
@@ -544,6 +552,42 @@ List<Map<String, Object?>> _handleTopUsedTags(Pointer<bunny_core_t> core, _TopUs
     }
     _bindings.bunny_db_tag_stat_list_free(out);
     return items;
+  });
+}
+
+List<Map<String, Object?>> _tagStatListToMaps(bunny_db_tag_stat_list_t list) {
+  final items = <Map<String, Object?>>[];
+  for (var i = 0; i < list.count; i++) {
+    items.add(_tagStatToMap(list.items[i]));
+  }
+  return items;
+}
+
+Map<String, Object?> _statsReportToMap(bunny_core_stats_report_t report) => {
+  'computedAt': _readNullableString(report.computed_at),
+  'topFavoritedTags': _tagStatListToMaps(report.top_favorited_tags),
+  'topUsedTags': _tagStatListToMaps(report.top_used_tags),
+  'topPools': _tagStatListToMaps(report.top_pools),
+  'topViewedSearches': _tagStatListToMaps(report.top_viewed_searches),
+};
+
+Map<String, Object?> _handleGetStatsReport(Pointer<bunny_core_t> core) {
+  return using((arena) {
+    final out = arena<bunny_core_stats_report_t>();
+    _check(_bindings.bunny_core_get_stats_report(core, out));
+    final map = _statsReportToMap(out.ref);
+    _bindings.bunny_core_stats_report_free(out);
+    return map;
+  });
+}
+
+Map<String, Object?> _handleRefreshStatsReport(Pointer<bunny_core_t> core) {
+  return using((arena) {
+    final out = arena<bunny_core_stats_report_t>();
+    _check(_bindings.bunny_core_refresh_stats_report(core, out));
+    final map = _statsReportToMap(out.ref);
+    _bindings.bunny_core_stats_report_free(out);
+    return map;
   });
 }
 
@@ -828,6 +872,10 @@ Object? _dispatch(Pointer<bunny_core_t>? core, _Request request, void Function(P
         return _handleTopFavoritedTags(c, r);
       case _TopUsedTagsRequest r:
         return _handleTopUsedTags(c, r);
+      case _GetStatsReportRequest():
+        return _handleGetStatsReport(c);
+      case _RefreshStatsReportRequest():
+        return _handleRefreshStatsReport(c);
       case _MarkPostSeenRequest r:
         _check(_bindings.bunny_core_post_mark_seen(c, r.postId));
         return null;
@@ -1020,6 +1068,10 @@ class BunnyCoreNative {
   Future<List<Map<String, Object?>>> topFavoritedTags(String site, int limit) => _send<List<Map<String, Object?>>>(_TopFavoritedTagsRequest(site, limit));
 
   Future<List<Map<String, Object?>>> topUsedTags(String site, int limit) => _send<List<Map<String, Object?>>>(_TopUsedTagsRequest(site, limit));
+
+  Future<Map<String, Object?>> getStatsReport() => _send<Map<String, Object?>>(const _GetStatsReportRequest());
+
+  Future<Map<String, Object?>> refreshStatsReport() => _send<Map<String, Object?>>(const _RefreshStatsReportRequest());
 
   Future<void> markPostSeen(int postId) => _send<void>(_MarkPostSeenRequest(postId));
 

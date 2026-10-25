@@ -19,82 +19,110 @@ void main() {
     TagStatsScreen(repository: repository, displaySettingsStore: const DisplaySettingsStore(), downloadSettingsStore: const DownloadSettingsStore()),
   );
 
-  testWidgets('shows the empty state when nothing is favorited', (WidgetTester tester) async {
+  testWidgets('shows the empty state for every section when the report is empty (M40)', (WidgetTester tester) async {
     await tester.pumpWidget(wrap(FakeBunnyRepository()));
     await tester.pumpAndSettle();
 
-    expect(find.text('No favorited posts yet -- favorite some to see their tags here.'), findsOneWidget);
+    expect(find.text('Nothing here yet.'), findsNWidgets(4));
   });
 
-  testWidgets('lists the top favorited tags for the selected site, with counts', (WidgetTester tester) async {
+  testWidgets('lists each section with its own entries and counts (M40)', (WidgetTester tester) async {
     final repository = FakeBunnyRepository();
-    repository.topFavoritedTagsBySite[BunnySite.e621] = const [BunnyTagStat(name: 'wolf', count: 5), BunnyTagStat(name: 'forest', count: 2)];
+    repository.statsReport = const BunnyStatsReport(
+      computedAt: '2026-01-01T00:00:00Z',
+      topFavoritedTags: [BunnyTagStat(name: 'e621: wolf', count: 5)],
+      topUsedTags: [BunnyTagStat(name: 'inkbunny: fox', count: 3)],
+      topPools: [BunnyTagStat(name: 'pool:5', count: 2)],
+      topViewedSearches: [BunnyTagStat(name: 'e621: My search', count: 9)],
+    );
 
     await tester.pumpWidget(wrap(repository));
     await tester.pumpAndSettle();
 
-    expect(find.text('wolf'), findsOneWidget);
+    expect(find.text('Updated 2026-01-01T00:00:00Z'), findsOneWidget);
+    expect(find.text('e621: wolf'), findsOneWidget);
     expect(find.text('5'), findsOneWidget);
-    expect(find.text('forest'), findsOneWidget);
+    expect(find.text('inkbunny: fox'), findsOneWidget);
+    expect(find.text('3'), findsOneWidget);
+    expect(find.text('Pool #5'), findsOneWidget);
     expect(find.text('2'), findsOneWidget);
-  });
-
-  testWidgets('switching site reloads the list for that site (M10.2)', (WidgetTester tester) async {
-    final repository = FakeBunnyRepository();
-    repository.topFavoritedTagsBySite[BunnySite.e621] = const [BunnyTagStat(name: 'wolf', count: 5)];
-    repository.topFavoritedTagsBySite[BunnySite.inkbunny] = const [BunnyTagStat(name: 'fox', count: 3)];
-
-    await tester.pumpWidget(wrap(repository));
-    await tester.pumpAndSettle();
-    expect(find.text('wolf'), findsOneWidget);
-    expect(find.text('fox'), findsNothing);
-
-    await tester.tap(find.text('Inkbunny'));
-    await tester.pumpAndSettle();
-
-    expect(find.text('fox'), findsOneWidget);
-    expect(find.text('wolf'), findsNothing);
-  });
-
-  testWidgets('switching to "All" shows tags from every synced post, not just favorited ones (M14.4)', (WidgetTester tester) async {
-    final repository = FakeBunnyRepository();
-    repository.topFavoritedTagsBySite[BunnySite.e621] = const [BunnyTagStat(name: 'wolf', count: 5)];
-    repository.topUsedTagsBySite[BunnySite.e621] = const [BunnyTagStat(name: 'wolf', count: 5), BunnyTagStat(name: 'forest', count: 9)];
-
-    await tester.pumpWidget(wrap(repository));
-    await tester.pumpAndSettle();
-    expect(find.text('forest'), findsNothing);
-
-    await tester.tap(find.text('All'));
-    await tester.pumpAndSettle();
-
-    expect(find.text('wolf'), findsOneWidget);
-    expect(find.text('forest'), findsOneWidget);
+    expect(find.text('e621: My search'), findsOneWidget);
     expect(find.text('9'), findsOneWidget);
   });
 
-  testWidgets('shows the "All" empty state when nothing is synced (M14.4)', (WidgetTester tester) async {
-    await tester.pumpWidget(wrap(FakeBunnyRepository()));
-    await tester.pumpAndSettle();
-
-    await tester.tap(find.text('All'));
-    await tester.pumpAndSettle();
-
-    expect(find.text('No synced posts yet -- sync a search to see their tags here.'), findsOneWidget);
-  });
-
-  testWidgets('tapping a tag opens TagBrowseScreen for it on the selected site', (WidgetTester tester) async {
+  testWidgets('tapping a merged tag entry opens TagBrowseScreen for its own site, stripped of the prefix', (WidgetTester tester) async {
     final repository = FakeBunnyRepository();
-    repository.topFavoritedTagsBySite[BunnySite.e621] = const [BunnyTagStat(name: 'wolf', count: 5)];
+    repository.statsReport = const BunnyStatsReport(
+      computedAt: '2026-01-01T00:00:00Z',
+      topFavoritedTags: [BunnyTagStat(name: 'inkbunny: wolf', count: 5)],
+      topUsedTags: [],
+      topPools: [],
+      topViewedSearches: [],
+    );
 
     await tester.pumpWidget(wrap(repository));
     await tester.pumpAndSettle();
 
-    await tester.tap(find.text('wolf'));
+    await tester.tap(find.text('inkbunny: wolf'));
+    await tester.pumpAndSettle();
+
+    final browseScreen = tester.widget<TagBrowseScreen>(find.byType(TagBrowseScreen));
+    expect(browseScreen.site, BunnySite.inkbunny);
+    expect(browseScreen.query, 'wolf');
+  });
+
+  testWidgets('tapping a pool entry opens TagBrowseScreen for the pool: query on e621', (WidgetTester tester) async {
+    final repository = FakeBunnyRepository();
+    repository.statsReport = const BunnyStatsReport(computedAt: '2026-01-01T00:00:00Z', topFavoritedTags: [], topUsedTags: [], topPools: [BunnyTagStat(name: 'pool:42', count: 1)], topViewedSearches: []);
+
+    await tester.pumpWidget(wrap(repository));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Pool #42'));
     await tester.pumpAndSettle();
 
     final browseScreen = tester.widget<TagBrowseScreen>(find.byType(TagBrowseScreen));
     expect(browseScreen.site, BunnySite.e621);
-    expect(browseScreen.query, 'wolf');
+    expect(browseScreen.query, 'pool:42');
+  });
+
+  testWidgets('most-visited searches entries are not tappable (M40)', (WidgetTester tester) async {
+    final repository = FakeBunnyRepository();
+    repository.statsReport = const BunnyStatsReport(
+      computedAt: '2026-01-01T00:00:00Z',
+      topFavoritedTags: [],
+      topUsedTags: [],
+      topPools: [],
+      topViewedSearches: [BunnyTagStat(name: 'e621: My search', count: 9)],
+    );
+
+    await tester.pumpWidget(wrap(repository));
+    await tester.pumpAndSettle();
+
+    final tile = tester.widget<ListTile>(find.widgetWithText(ListTile, 'e621: My search'));
+    expect(tile.onTap, isNull);
+  });
+
+  testWidgets('the refresh action calls refreshStatsReport and reloads the report (M40)', (WidgetTester tester) async {
+    final repository = FakeBunnyRepository();
+    repository.statsReport = const BunnyStatsReport(computedAt: '2026-01-01T00:00:00Z', topFavoritedTags: [BunnyTagStat(name: 'e621: wolf', count: 1)], topUsedTags: [], topPools: [], topViewedSearches: []);
+
+    await tester.pumpWidget(wrap(repository));
+    await tester.pumpAndSettle();
+
+    repository.statsReport = const BunnyStatsReport(computedAt: '2026-02-01T00:00:00Z', topFavoritedTags: [BunnyTagStat(name: 'e621: fox', count: 2)], topUsedTags: [], topPools: [], topViewedSearches: []);
+
+    // Not pumpAndSettle -- the refresh action shows an indeterminate
+    // CircularProgressIndicator while in flight, which never "settles" on
+    // its own (it animates forever until the refresh completes and swaps it
+    // back out). A couple of bounded pumps is enough to drain the fake
+    // repository's microtask-only async gap.
+    await tester.tap(find.byTooltip('Refresh now'));
+    await tester.pump();
+    await tester.pump();
+
+    expect(repository.refreshStatsReportCallCount, 1);
+    expect(find.text('e621: fox'), findsOneWidget);
+    expect(find.text('Updated 2026-02-01T00:00:00Z'), findsOneWidget);
   });
 }
