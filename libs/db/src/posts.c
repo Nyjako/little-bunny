@@ -444,13 +444,25 @@ bunny_db_result_t bunny_db_search_add_result(bunny_db_t *db, int64_t search_id, 
     if (!db) {
         return BUNNY_DB_ERR_INVALID_ARG;
     }
-    const char *sql = "INSERT OR IGNORE INTO search_results (search_id, post_id) VALUES (?, ?);";
+    /* post_sort_key denormalizes bunny_db_search_list_posts' own sort expression
+     * (COALESCE(created_at_site, cached_at)) onto this row so that query can use a
+     * (search_id, post_sort_key) index for its ORDER BY instead of sorting every
+     * matching row at read time (see migration 15's own comment). Frozen at
+     * whichever value the post had the first time it was linked to this search --
+     * never updated on a later resync, same as every other field on this row. In
+     * practice this only matters for a post whose created_at_site is still NULL (no
+     * known site creation date), since that's the only case where the COALESCE
+     * fallback -- and therefore this value -- could otherwise have drifted on a
+     * later resync. */
+    const char *sql = "INSERT OR IGNORE INTO search_results (search_id, post_id, post_sort_key) "
+                      "VALUES (?, ?, (SELECT COALESCE(p.created_at_site, p.cached_at) FROM posts p WHERE p.id = ?));";
     sqlite3_stmt *stmt = NULL;
     if (sqlite3_prepare_v2(db->handle, sql, -1, &stmt, NULL) != SQLITE_OK) {
         return BUNNY_DB_ERR_QUERY_FAILED;
     }
     sqlite3_bind_int64(stmt, 1, search_id);
     sqlite3_bind_int64(stmt, 2, post_id);
+    sqlite3_bind_int64(stmt, 3, post_id);
     int rc = sqlite3_step(stmt);
     sqlite3_finalize(stmt);
     if (out_was_new) {
@@ -487,8 +499,18 @@ bunny_db_result_t bunny_db_search_list_posts(bunny_db_t *db, int64_t search_id, 
     /* Newest-post-first by the site's own creation date, not by when this
      * app happened to find it (sr.found_at) -- a single sync pass can link
      * posts spanning a wide date range all at once, so found_at doesn't
-     * track actual recency. Falls back to cached_at for the rare post with
-     * no created_at_site rather than sorting it to the very end.
+     * track actual recency. Sorts by sr.post_sort_key (migration 15), a
+     * denormalized copy of COALESCE(p.created_at_site, p.cached_at) set once
+     * when a post is first linked to a search (bunny_db_search_add_result) --
+     * NOT by that same expression computed live against `posts` here, even
+     * though the two are equivalent in value. Ordering by a plain column on
+     * `search_results` itself lets the (search_id, post_sort_key) index
+     * satisfy both this query's WHERE and its ORDER BY directly, so SQLite
+     * can walk straight to the requested page; ordering by a COALESCE(...)
+     * over two `posts` columns instead (the pre-M46 version of this query)
+     * can't use any index for the ORDER BY at all, forcing a full sort of
+     * every row matching this search_id before LIMIT/OFFSET could apply --
+     * confirmed live at 12-14s for a single page of a 58k-post search.
      *
      * The NOT EXISTS clause (when apply_blacklist is true, M37) excludes any
      * post carrying a tag blacklisted for its own site (M13.3) -- skipped
@@ -500,18 +522,18 @@ bunny_db_result_t bunny_db_search_list_posts(bunny_db_t *db, int64_t search_id, 
                                     "WHERE sr.search_id = ? "
                                     "AND NOT EXISTS (SELECT 1 FROM post_tags pt JOIN tags t ON t.id = pt.tag_id "
                                     "JOIN blacklist_tags bl ON bl.site = t.site AND bl.tag = t.name WHERE pt.post_id = p.id) "
-                                    "ORDER BY COALESCE(p.created_at_site, p.cached_at) DESC LIMIT ? OFFSET ?;";
+                                    "ORDER BY sr.post_sort_key DESC LIMIT ? OFFSET ?;";
     const char *sql_seen_unfiltered = "SELECT " BUNNY_DB_POST_SELECT_COLUMNS BUNNY_DB_POST_SELECT_FROM_JOIN "JOIN search_results sr ON sr.post_id = p.id "
                                       "WHERE sr.search_id = ? "
-                                      "ORDER BY COALESCE(p.created_at_site, p.cached_at) DESC LIMIT ? OFFSET ?;";
+                                      "ORDER BY sr.post_sort_key DESC LIMIT ? OFFSET ?;";
     const char *sql_unseen_filtered = "SELECT " BUNNY_DB_POST_SELECT_COLUMNS BUNNY_DB_POST_SELECT_FROM_JOIN "JOIN search_results sr ON sr.post_id = p.id "
                                       "WHERE sr.search_id = ? AND seen.post_id IS NULL "
                                       "AND NOT EXISTS (SELECT 1 FROM post_tags pt JOIN tags t ON t.id = pt.tag_id "
                                       "JOIN blacklist_tags bl ON bl.site = t.site AND bl.tag = t.name WHERE pt.post_id = p.id) "
-                                      "ORDER BY COALESCE(p.created_at_site, p.cached_at) DESC LIMIT ? OFFSET ?;";
+                                      "ORDER BY sr.post_sort_key DESC LIMIT ? OFFSET ?;";
     const char *sql_unseen_unfiltered = "SELECT " BUNNY_DB_POST_SELECT_COLUMNS BUNNY_DB_POST_SELECT_FROM_JOIN "JOIN search_results sr ON sr.post_id = p.id "
                                         "WHERE sr.search_id = ? AND seen.post_id IS NULL "
-                                        "ORDER BY COALESCE(p.created_at_site, p.cached_at) DESC LIMIT ? OFFSET ?;";
+                                        "ORDER BY sr.post_sort_key DESC LIMIT ? OFFSET ?;";
 
     const char *sql = unseen_only ? (apply_blacklist ? sql_unseen_filtered : sql_unseen_unfiltered) : (apply_blacklist ? sql_seen_filtered : sql_seen_unfiltered);
     sqlite3_stmt *stmt = NULL;
