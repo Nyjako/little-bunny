@@ -2299,20 +2299,32 @@ this file is the single source of truth for "what's done" across sessions.
   anything a user may be relying on (e.g. divergent `interval_hours`/group membership
   between the duplicates).
 
-- [ ] **M42 — Stop tracking "downloaded" state server-side; check local file existence instead**
-  Reported by the user: a post downloaded on one device shows as downloaded on every
+- [x] **M42 — Stop tracking "downloaded" state server-side; check local file existence instead**
+  Reported by the user: a post downloaded on one device showed as downloaded on every
   other device too, because `bunny_db_download_record`/`bunny_db_download_list_for_post`
-  store download state centrally on the shared server -- but "downloaded" is inherently
+  stored download state centrally on the shared server -- but "downloaded" is inherently
   a per-device, per-filesystem fact, not something the server can meaningfully own.
-  The user's proposed fix: drop download tracking from the database entirely.
-  `DownloadManager.downloadPost` already computes a fully deterministic destination
-  path (artist subfolder + fixed filename pattern, same path every time, always
-  overwrites -- see M36's own notes) given a post and the user's chosen destination
-  folder, so each client can instead just check whether a file already exists at that
-  predicted path to show "downloaded" status locally, with no server round-trip and
-  no shared state to get stale or conflict across devices. Needs a migration path for
-  `recordDownload`/`listDownloadsForPost` call sites (and the `downloads` table/schema
-  itself) once the local-existence-check replacement is designed.
+  Removed download tracking from the database entirely rather than reworking it: the
+  `downloads` table, `bunny_db_download_*`/`bunny_core_record_download`/
+  `bunny_core_list_downloads_for_post`, the `/posts/{id}/downloads` server routes, and
+  every Dart-side `recordDownload`/`listDownloadsForPost`/`BunnyDownload` call site
+  (both repository implementations, the ffigen-generated bindings, `bunny_core_ffi`'s
+  own isolate glue) are all gone. A new migration (`libs/db/src/db.c`, version 16)
+  `DROP TABLE IF EXISTS downloads;` clears the table from existing production databases
+  too, not just new ones.
+  New `DownloadManager.isDownloaded(post, destinationFolder)` replaces the server round-
+  trip: it recomputes the exact same deterministic path `downloadPost` already writes to
+  (same artist-folder sanitization, same `$externalId.$ext` filename) and checks for it
+  locally -- `File(...).exists()` for a plain path, `SafUtil().child(folder, [artist,
+  filename])` (resolving to null vs. a real child) for an Android SAF `content://` tree,
+  since a SAF child's own URI is opaque and can't be read back without parent + name.
+  `PostDetailScreen` now resolves its "already downloaded" icon through this instead of
+  `listDownloadsForPost`, with no shared state to get stale or conflict across devices.
+  One wrinkle in the widget test covering this: `testWidgets`'s FakeAsync zone never lets
+  a real `dart:io` call started from `initState` actually resolve (unlike one kicked off
+  later from the test body inside `tester.runAsync`), so that one test stubs
+  `DownloadManager.isDownloaded` via a small subclass rather than seeding a real file on
+  disk and waiting on the real check.
 
 - [ ] **M43 — Queue downloads (and mass download/favorite/upvote) server-side instead of blocking the app**
   Reported by the user: downloading currently means sitting on the post screen waiting
