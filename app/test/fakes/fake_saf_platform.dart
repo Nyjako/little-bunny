@@ -18,10 +18,24 @@ class FakeSafUtilPlatform extends SafUtilPlatform {
   /// in a test.
   final List<(String, String)> mkdirpCalls = [];
 
+  /// Child paths (as `treeUri/joined-names`) that [child] should resolve to
+  /// an existing file for -- everything else returns null, matching
+  /// [DownloadManager.isDownloaded]'s "not found" case for a SAF tree.
+  final Set<String> existingChildPaths = {};
+
   @override
   Future<SafDocumentFile> mkdirp(String uri, List<String> names) async {
     mkdirpCalls.add((uri, names.join('/')));
     return SafDocumentFile(uri: '$uri/${names.join('/')}', name: names.last, isDir: true, length: 0, lastModified: 0);
+  }
+
+  @override
+  Future<SafDocumentFile?> child(String uri, List<String> names) async {
+    final path = '$uri/${names.join('/')}';
+    if (!existingChildPaths.contains(path)) {
+      return null;
+    }
+    return SafDocumentFile(uri: path, name: names.last, isDir: false, length: 0, lastModified: 0);
   }
 }
 

@@ -122,19 +122,6 @@ void main() {
     await expectLater(native.queueFavoriteAdd(1, -1), throwsA(isA<BunnyCoreNativeException>()));
   });
 
-  test('recordDownload rejects a post id with no cached post', () async {
-    // downloads.post_id REFERENCES posts(id) -- same foreign-key rejection
-    // as queueFavoriteAdd/markPostSeen above.
-    await expectLater(native.recordDownload(1, '/tmp/file.jpg', null, false), throwsA(isA<BunnyCoreNativeException>()));
-  });
-
-  test('listDownloadsForPost is empty for a post with no recorded downloads', () async {
-    // bunny_db_download_list_for_post has no foreign-key check on read
-    // (unlike recordDownload's insert above) -- a post id with no matching
-    // rows is just an empty result, even for one that was never cached.
-    expect(await native.listDownloadsForPost(1), isEmpty);
-  });
-
   test('verifyAccount rejects bogus e621 credentials', () async {
     // bunny_core_ffi_open never exposes a fake-transport override (unlike
     // libs/core's own tests) -- standalone mode always talks to the real

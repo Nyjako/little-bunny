@@ -235,30 +235,6 @@ class BunnyCoreFfiBindings {
             void Function(ffi.Pointer<bunny_db_post_relationships_t>)
           >();
 
-  void bunny_db_download_free(ffi.Pointer<bunny_db_download_t> download) {
-    return _bunny_db_download_free(download);
-  }
-
-  late final _bunny_db_download_freePtr =
-      _lookup<
-        ffi.NativeFunction<ffi.Void Function(ffi.Pointer<bunny_db_download_t>)>
-      >('bunny_db_download_free');
-  late final _bunny_db_download_free = _bunny_db_download_freePtr
-      .asFunction<void Function(ffi.Pointer<bunny_db_download_t>)>();
-
-  void bunny_db_download_list_free(ffi.Pointer<bunny_db_download_list_t> list) {
-    return _bunny_db_download_list_free(list);
-  }
-
-  late final _bunny_db_download_list_freePtr =
-      _lookup<
-        ffi.NativeFunction<
-          ffi.Void Function(ffi.Pointer<bunny_db_download_list_t>)
-        >
-      >('bunny_db_download_list_free');
-  late final _bunny_db_download_list_free = _bunny_db_download_list_freePtr
-      .asFunction<void Function(ffi.Pointer<bunny_db_download_list_t>)>();
-
   void bunny_db_action_free(ffi.Pointer<bunny_db_action_t> action) {
     return _bunny_db_action_free(action);
   }
@@ -1290,87 +1266,6 @@ class BunnyCoreFfiBindings {
         )
       >();
 
-  /// Records that a file was downloaded for a post -- a thin pass-through to
-  /// bunny_db_download_record. The actual HTTP fetch, disk write, and checksum
-  /// computation are entirely client-side (never proxied through the server);
-  /// this call only persists the bookkeeping row afterward.
-  bunny_core_result_t bunny_core_record_download(
-    ffi.Pointer<bunny_core_t> core,
-    int post_id,
-    ffi.Pointer<ffi.Char> file_path,
-    ffi.Pointer<ffi.Char> checksum_md5,
-    bool verified,
-    ffi.Pointer<ffi.Int64> out_id,
-  ) {
-    return bunny_core_result_t.fromValue(
-      _bunny_core_record_download(
-        core,
-        post_id,
-        file_path,
-        checksum_md5,
-        verified,
-        out_id,
-      ),
-    );
-  }
-
-  late final _bunny_core_record_downloadPtr =
-      _lookup<
-        ffi.NativeFunction<
-          ffi.UnsignedInt Function(
-            ffi.Pointer<bunny_core_t>,
-            ffi.Int64,
-            ffi.Pointer<ffi.Char>,
-            ffi.Pointer<ffi.Char>,
-            ffi.Bool,
-            ffi.Pointer<ffi.Int64>,
-          )
-        >
-      >('bunny_core_record_download');
-  late final _bunny_core_record_download = _bunny_core_record_downloadPtr
-      .asFunction<
-        int Function(
-          ffi.Pointer<bunny_core_t>,
-          int,
-          ffi.Pointer<ffi.Char>,
-          ffi.Pointer<ffi.Char>,
-          bool,
-          ffi.Pointer<ffi.Int64>,
-        )
-      >();
-
-  /// A post's download history, newest first -- a thin pass-through to
-  /// bunny_db_download_list_for_post. Empty for a post never downloaded.
-  bunny_core_result_t bunny_core_list_downloads_for_post(
-    ffi.Pointer<bunny_core_t> core,
-    int post_id,
-    ffi.Pointer<bunny_db_download_list_t> out_list,
-  ) {
-    return bunny_core_result_t.fromValue(
-      _bunny_core_list_downloads_for_post(core, post_id, out_list),
-    );
-  }
-
-  late final _bunny_core_list_downloads_for_postPtr =
-      _lookup<
-        ffi.NativeFunction<
-          ffi.UnsignedInt Function(
-            ffi.Pointer<bunny_core_t>,
-            ffi.Int64,
-            ffi.Pointer<bunny_db_download_list_t>,
-          )
-        >
-      >('bunny_core_list_downloads_for_post');
-  late final _bunny_core_list_downloads_for_post =
-      _bunny_core_list_downloads_for_postPtr
-          .asFunction<
-            int Function(
-              ffi.Pointer<bunny_core_t>,
-              int,
-              ffi.Pointer<bunny_db_download_list_t>,
-            )
-          >();
-
   /// --- Tag blacklist (M13.3) -- thin pass-throughs to bunny_db_blacklist_*.
   /// See bunny_db/db.h for which post-listing query the blacklist does (and
   /// deliberately does not) apply to.
@@ -2321,30 +2216,6 @@ final class bunny_db_post_relationships_t extends ffi.Struct {
 
   /// child external ids
   external bunny_db_int64_list_t children;
-}
-
-final class bunny_db_download_t extends ffi.Struct {
-  @ffi.Int64()
-  external int id;
-
-  @ffi.Int64()
-  external int post_id;
-
-  external ffi.Pointer<ffi.Char> file_path;
-
-  external ffi.Pointer<ffi.Char> checksum_md5;
-
-  @ffi.Bool()
-  external bool checksum_verified;
-
-  external ffi.Pointer<ffi.Char> downloaded_at;
-}
-
-final class bunny_db_download_list_t extends ffi.Struct {
-  external ffi.Pointer<bunny_db_download_t> items;
-
-  @ffi.Size()
-  external int count;
 }
 
 enum bunny_db_action_type_t {
