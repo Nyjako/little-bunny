@@ -83,6 +83,16 @@ void main() {
     expect(await native.listSearches(), isEmpty);
   });
 
+  test('mergeDuplicateSearch deletes the duplicate and keeps the keeper', () async {
+    final keeperId = await native.createSearch('e621', 'wolves', 'wolf', 24);
+    final duplicateId = await native.createSearch('e621', 'wolves (dupe)', 'wolf', 48);
+
+    await native.mergeDuplicateSearch(keeperId, duplicateId);
+
+    final searches = await native.listSearches();
+    expect(searches.single['id'], keeperId);
+  });
+
   test('listSearchPosts is empty for a freshly created search', () async {
     final id = await native.createSearch('e621', 'my search', 'rating:safe', 24);
 

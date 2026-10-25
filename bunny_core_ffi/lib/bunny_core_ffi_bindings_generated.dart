@@ -497,6 +497,32 @@ class BunnyCoreFfiBindings {
   late final _bunny_core_search_delete = _bunny_core_search_deletePtr
       .asFunction<int Function(ffi.Pointer<bunny_core_t>, int)>();
 
+  /// Folds a pre-existing (site, query) duplicate into keeper_id (M41) -- a thin
+  /// pass-through to bunny_db_search_merge_duplicate.
+  bunny_core_result_t bunny_core_search_merge_duplicate(
+    ffi.Pointer<bunny_core_t> core,
+    int keeper_id,
+    int duplicate_id,
+  ) {
+    return bunny_core_result_t.fromValue(
+      _bunny_core_search_merge_duplicate(core, keeper_id, duplicate_id),
+    );
+  }
+
+  late final _bunny_core_search_merge_duplicatePtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.UnsignedInt Function(
+            ffi.Pointer<bunny_core_t>,
+            ffi.Int64,
+            ffi.Int64,
+          )
+        >
+      >('bunny_core_search_merge_duplicate');
+  late final _bunny_core_search_merge_duplicate =
+      _bunny_core_search_merge_duplicatePtr
+          .asFunction<int Function(ffi.Pointer<bunny_core_t>, int, int)>();
+
   bunny_core_result_t bunny_core_search_list(
     ffi.Pointer<bunny_core_t> core,
     ffi.Pointer<bunny_db_search_list_t> out_list,
