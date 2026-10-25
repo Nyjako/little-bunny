@@ -502,6 +502,66 @@ abstract class AppLocalizations {
   /// **'{total} posts'**
   String searchesGroupSubtitle(int total);
 
+  /// No description provided for @searchesDuplicatesBannerMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} duplicate searches found.'**
+  String searchesDuplicatesBannerMessage(int count);
+
+  /// No description provided for @searchesDuplicatesBannerReviewAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Review'**
+  String get searchesDuplicatesBannerReviewAction;
+
+  /// No description provided for @searchesDuplicatesBannerDismissTooltip.
+  ///
+  /// In en, this message translates to:
+  /// **'Dismiss'**
+  String get searchesDuplicatesBannerDismissTooltip;
+
+  /// No description provided for @searchesResolveDuplicatesDialogTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Duplicate searches'**
+  String get searchesResolveDuplicatesDialogTitle;
+
+  /// No description provided for @searchesResolveDuplicatesGroupHeading.
+  ///
+  /// In en, this message translates to:
+  /// **'{site}: {query}'**
+  String searchesResolveDuplicatesGroupHeading(String site, String query);
+
+  /// No description provided for @searchesResolveDuplicatesKeepButton.
+  ///
+  /// In en, this message translates to:
+  /// **'Keep this one'**
+  String get searchesResolveDuplicatesKeepButton;
+
+  /// No description provided for @searchesResolveDuplicatesIntervalLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Every {hours}h'**
+  String searchesResolveDuplicatesIntervalLabel(int hours);
+
+  /// No description provided for @searchesResolveDuplicatesPinnedLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Pinned'**
+  String get searchesResolveDuplicatesPinnedLabel;
+
+  /// No description provided for @searchesResolveDuplicatesGroupLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Group: {name}'**
+  String searchesResolveDuplicatesGroupLabel(String name);
+
+  /// No description provided for @searchesResolveDuplicatesDoneButton.
+  ///
+  /// In en, this message translates to:
+  /// **'Close'**
+  String get searchesResolveDuplicatesDoneButton;
+
   /// No description provided for @tagStatsScreenTitle.
   ///
   /// In en, this message translates to:

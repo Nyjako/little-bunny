@@ -240,6 +240,16 @@ void main() {
       expect(capturedUri.path, '/searches/7');
     });
 
+    test('mergeDuplicateSearch sends POST with the duplicate id in the body', () async {
+      respond = (_) => http.Response(jsonEncode({'ok': true}), 200);
+
+      await buildRepository().mergeDuplicateSearch(7, 8);
+
+      expect(capturedMethod, 'POST');
+      expect(capturedUri.path, '/searches/7/merge_duplicate');
+      expect(jsonDecode(capturedBody), {'duplicate_id': 8});
+    });
+
     test('updateSearch sends PUT with the new values', () async {
       respond = (_) => http.Response(jsonEncode({'ok': true}), 200);
 

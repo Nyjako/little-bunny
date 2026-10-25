@@ -110,6 +110,29 @@
     "placeholders": {"total": {"type": "int"}}
   },
 
+  "searchesDuplicatesBannerMessage": "{count} duplicate searches found.",
+  "@searchesDuplicatesBannerMessage": {
+    "placeholders": {"count": {"type": "int"}}
+  },
+  "searchesDuplicatesBannerReviewAction": "Review",
+  "searchesDuplicatesBannerDismissTooltip": "Dismiss",
+  "searchesResolveDuplicatesDialogTitle": "Duplicate searches",
+  "searchesResolveDuplicatesGroupHeading": "{site}: {query}",
+  "@searchesResolveDuplicatesGroupHeading": {
+    "placeholders": {"site": {"type": "String"}, "query": {"type": "String"}}
+  },
+  "searchesResolveDuplicatesKeepButton": "Keep this one",
+  "searchesResolveDuplicatesIntervalLabel": "Every {hours}h",
+  "@searchesResolveDuplicatesIntervalLabel": {
+    "placeholders": {"hours": {"type": "int"}}
+  },
+  "searchesResolveDuplicatesPinnedLabel": "Pinned",
+  "searchesResolveDuplicatesGroupLabel": "Group: {name}",
+  "@searchesResolveDuplicatesGroupLabel": {
+    "placeholders": {"name": {"type": "String"}}
+  },
+  "searchesResolveDuplicatesDoneButton": "Close",
+
   "tagStatsScreenTitle": "Tag stats",
   "tagStatsRefreshTooltip": "Refresh now",
   "tagStatsLastUpdatedLabel": "Updated {time}",

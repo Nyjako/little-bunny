@@ -65,6 +65,37 @@ bunny_db_result_t bunny_db_search_delete(bunny_db_t *db, int64_t search_id)
     return rc == SQLITE_DONE ? BUNNY_DB_OK : bunny_db_sqlite_rc_to_result(rc);
 }
 
+/* M41 -- folds duplicate_id into keeper_id: every search_results row duplicate_id
+ * owns moves over to keeper_id (OR IGNORE, since (search_id, post_id) is the
+ * primary key -- a post both searches already found would otherwise collide;
+ * the keeper's own existing row for it just wins and duplicate_id's copy is
+ * dropped), then duplicate_id itself is deleted. Deliberately doesn't touch
+ * keeper_id's own label/interval_hours/auto_favorite/pinned/group_id/etc. --
+ * which of two divergent duplicates to treat as the "keeper" is a decision
+ * callers make (see docs/ROADMAP.md's M41 entry), not something this function
+ * should second-guess. */
+bunny_db_result_t bunny_db_search_merge_duplicate(bunny_db_t *db, int64_t keeper_id, int64_t duplicate_id)
+{
+    if (!db || keeper_id == duplicate_id) {
+        return BUNNY_DB_ERR_INVALID_ARG;
+    }
+
+    const char *move_sql = "UPDATE OR IGNORE search_results SET search_id = ? WHERE search_id = ?;";
+    sqlite3_stmt *move_stmt = NULL;
+    if (sqlite3_prepare_v2(db->handle, move_sql, -1, &move_stmt, NULL) != SQLITE_OK) {
+        return BUNNY_DB_ERR_QUERY_FAILED;
+    }
+    sqlite3_bind_int64(move_stmt, 1, keeper_id);
+    sqlite3_bind_int64(move_stmt, 2, duplicate_id);
+    int rc = sqlite3_step(move_stmt);
+    sqlite3_finalize(move_stmt);
+    if (rc != SQLITE_DONE) {
+        return bunny_db_sqlite_rc_to_result(rc);
+    }
+
+    return bunny_db_search_delete(db, duplicate_id);
+}
+
 static void fill_search_from_row(sqlite3_stmt *stmt, bunny_db_search_t *out)
 {
     out->id = sqlite3_column_int64(stmt, 0);

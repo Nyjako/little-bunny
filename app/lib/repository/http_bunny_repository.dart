@@ -281,6 +281,14 @@ class HttpBunnyRepository implements BunnyRepository {
   }
 
   @override
+  Future<void> mergeDuplicateSearch(int keeperId, int duplicateId) async {
+    final response = await _client.post(_uri('/searches/$keeperId/merge_duplicate'), headers: _headers, body: jsonEncode({'duplicate_id': duplicateId}));
+    if (response.statusCode != 200) {
+      _throwError(response);
+    }
+  }
+
+  @override
   Future<void> touchSearchViewed(int searchId) async {
     final response = await _client.post(_uri('/searches/$searchId/viewed'), headers: _headers);
     if (response.statusCode != 200) {

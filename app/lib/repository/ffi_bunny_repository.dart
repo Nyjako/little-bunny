@@ -187,6 +187,9 @@ class FfiBunnyRepository implements BunnyRepository {
   Future<void> deleteSearch(int searchId) => _wrapped(() => _native.deleteSearch(searchId));
 
   @override
+  Future<void> mergeDuplicateSearch(int keeperId, int duplicateId) => _wrapped(() => _native.mergeDuplicateSearch(keeperId, duplicateId));
+
+  @override
   Future<void> setSearchPinned(int searchId, bool pinned) => _wrapped(() => _native.setSearchPinned(searchId, pinned));
 
   @override

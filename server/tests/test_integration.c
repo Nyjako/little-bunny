@@ -664,6 +664,33 @@ void test_search_pin_and_unpin(void)
     free(response.data);
 }
 
+void test_search_merge_duplicate(void)
+{
+    response_buffer_t response = {0};
+
+    long status = do_request("POST", "/searches", "{\"site\":\"e621\",\"label\":\"wolves\",\"query\":\"wolf\",\"interval_hours\":24}", &response, true, NULL);
+    TEST_ASSERT_EQUAL(201, status);
+    free(response.data);
+    memset(&response, 0, sizeof(response));
+
+    status = do_request("POST", "/searches", "{\"site\":\"e621\",\"label\":\"wolves (dupe)\",\"query\":\"wolf\",\"interval_hours\":48}", &response, true, NULL);
+    TEST_ASSERT_EQUAL(201, status);
+    free(response.data);
+    memset(&response, 0, sizeof(response));
+
+    status = do_request("POST", "/searches/1/merge_duplicate", "{\"duplicate_id\":2}", &response, true, NULL);
+    TEST_ASSERT_EQUAL(200, status);
+    TEST_ASSERT_NOT_NULL(strstr(response.data, "\"ok\":true"));
+    free(response.data);
+    memset(&response, 0, sizeof(response));
+
+    status = do_request("GET", "/searches", NULL, &response, true, NULL);
+    TEST_ASSERT_EQUAL(200, status);
+    TEST_ASSERT_NOT_NULL(strstr(response.data, "\"id\":1"));
+    TEST_ASSERT_NULL(strstr(response.data, "\"id\":2"));
+    free(response.data);
+}
+
 void test_group_crud_and_assign_search(void)
 {
     response_buffer_t response = {0};
@@ -1169,6 +1196,7 @@ int main(void)
     RUN_TEST(test_blacklist_add_list_remove);
     RUN_TEST(test_blacklist_e621_sync_imports_new_tags_and_skips_multi_tag_lines);
     RUN_TEST(test_search_pin_and_unpin);
+    RUN_TEST(test_search_merge_duplicate);
     RUN_TEST(test_group_crud_and_assign_search);
     RUN_TEST(test_search_touch_viewed);
     RUN_TEST(test_search_auto_favorite_create_and_update);

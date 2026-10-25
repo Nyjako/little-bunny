@@ -213,6 +213,13 @@ class _SetSearchPinnedRequest extends _Request {
   const _SetSearchPinnedRequest(this.searchId, this.pinned);
 }
 
+class _MergeDuplicateSearchRequest extends _Request {
+  final int keeperId;
+  final int duplicateId;
+
+  const _MergeDuplicateSearchRequest(this.keeperId, this.duplicateId);
+}
+
 class _TouchSearchViewedRequest extends _Request {
   final int searchId;
 
@@ -785,6 +792,9 @@ Object? _dispatch(Pointer<bunny_core_t>? core, _Request request, void Function(P
       case _SetSearchPinnedRequest r:
         _check(_bindings.bunny_core_search_set_pinned(c, r.searchId, r.pinned));
         return null;
+      case _MergeDuplicateSearchRequest r:
+        _check(_bindings.bunny_core_search_merge_duplicate(c, r.keeperId, r.duplicateId));
+        return null;
       case _TouchSearchViewedRequest r:
         _check(_bindings.bunny_core_search_touch_last_viewed(c, r.searchId));
         return null;
@@ -988,6 +998,8 @@ class BunnyCoreNative {
   Future<void> deleteSearch(int searchId) => _send<void>(_DeleteSearchRequest(searchId));
 
   Future<void> setSearchPinned(int searchId, bool pinned) => _send<void>(_SetSearchPinnedRequest(searchId, pinned));
+
+  Future<void> mergeDuplicateSearch(int keeperId, int duplicateId) => _send<void>(_MergeDuplicateSearchRequest(keeperId, duplicateId));
 
   Future<void> touchSearchViewed(int searchId) => _send<void>(_TouchSearchViewedRequest(searchId));
 

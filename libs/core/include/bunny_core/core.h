@@ -81,6 +81,11 @@ bunny_core_result_t bunny_core_account_verify(bunny_core_t *core, bunny_db_site_
 
 bunny_core_result_t bunny_core_search_create(bunny_core_t *core, bunny_db_site_t site, const char *label, const char *query, int interval_hours, const bunny_db_search_options_t *options, int64_t *out_id);
 bunny_core_result_t bunny_core_search_delete(bunny_core_t *core, int64_t search_id);
+
+/* Folds a pre-existing (site, query) duplicate into keeper_id (M41) -- a thin
+ * pass-through to bunny_db_search_merge_duplicate. */
+bunny_core_result_t bunny_core_search_merge_duplicate(bunny_core_t *core, int64_t keeper_id, int64_t duplicate_id);
+
 bunny_core_result_t bunny_core_search_list(bunny_core_t *core, bunny_db_search_list_t *out_list);
 /* page is 1-indexed -- see bunny_db_search_list_posts' own doc comment for
  * why this is paginated at all (an unbounded response for a search with

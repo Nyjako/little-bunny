@@ -630,4 +630,67 @@ void main() {
     expect(repository.searches.single.groupId, 0);
     expect(find.text('Alpha'), findsOneWidget);
   });
+
+  group('duplicate searches banner (M41)', () {
+    testWidgets('shows a banner when two searches share the same (site, query)', (WidgetTester tester) async {
+      final repository = FakeBunnyRepository();
+      await repository.createSearch(BunnySite.e621, 'Wolves', 'wolf');
+      await repository.createSearch(BunnySite.e621, 'Wolves (dupe)', 'wolf', intervalHours: 48);
+
+      await tester.pumpWidget(_wrap(repository));
+      await tester.pumpAndSettle();
+
+      expect(find.text('1 duplicate searches found.'), findsOneWidget);
+    });
+
+    testWidgets('shows no banner when no searches are duplicated', (WidgetTester tester) async {
+      final repository = FakeBunnyRepository();
+      await repository.createSearch(BunnySite.e621, 'Wolves', 'wolf');
+      await repository.createSearch(BunnySite.e621, 'Foxes', 'fox');
+
+      await tester.pumpWidget(_wrap(repository));
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('duplicate searches found'), findsNothing);
+    });
+
+    testWidgets('dismissing the banner hides it', (WidgetTester tester) async {
+      final repository = FakeBunnyRepository();
+      await repository.createSearch(BunnySite.e621, 'Wolves', 'wolf');
+      await repository.createSearch(BunnySite.e621, 'Wolves (dupe)', 'wolf', intervalHours: 48);
+
+      await tester.pumpWidget(_wrap(repository));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.widgetWithIcon(IconButton, Icons.close));
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('duplicate searches found'), findsNothing);
+    });
+
+    testWidgets('reviewing and keeping one search merges the other duplicate into it', (WidgetTester tester) async {
+      final repository = FakeBunnyRepository();
+      final keeperId = await repository.createSearch(BunnySite.e621, 'Wolves', 'wolf');
+      await repository.createSearch(BunnySite.e621, 'Wolves (dupe)', 'wolf', intervalHours: 48);
+
+      await tester.pumpWidget(_wrap(repository));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text('Review'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Wolves'), findsWidgets);
+      expect(find.text('Wolves (dupe)'), findsWidgets);
+
+      await tester.tap(find.widgetWithText(TextButton, 'Keep this one').first);
+      await tester.pumpAndSettle();
+
+      // Only two duplicates existed, so resolving the group closes the
+      // dialog on its own, back to the main list with just the keeper left.
+      expect(find.text('Duplicate searches'), findsNothing);
+      expect(repository.searches, hasLength(1));
+      expect(repository.searches.single.id, keeperId);
+      expect(find.textContaining('duplicate searches found'), findsNothing);
+    });
+  });
 }

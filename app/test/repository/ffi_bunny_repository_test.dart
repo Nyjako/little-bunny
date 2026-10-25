@@ -136,6 +136,17 @@ void main() {
     expect(updated.single.autoUpvote, isTrue);
   });
 
+  test('mergeDuplicateSearch deletes the duplicate and keeps the keeper (M41)', () async {
+    final keeperId = await repository.createSearch(BunnySite.e621, 'wolves', 'wolf');
+    final duplicateId = await repository.createSearch(BunnySite.e621, 'wolves (dupe)', 'wolf', intervalHours: 48);
+
+    await repository.mergeDuplicateSearch(keeperId, duplicateId);
+
+    final searches = await repository.listSearches();
+    expect(searches, hasLength(1));
+    expect(searches.single.id, keeperId);
+  });
+
   test('syncDueSearches completes with nothing to sync', () async {
     await expectLater(repository.syncDueSearches(), completes);
   });

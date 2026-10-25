@@ -2287,17 +2287,41 @@ this file is the single source of truth for "what's done" across sessions.
     `topFavoritedTags`/`topUsedTags` calls (kept as internal-only API, no longer
     surfaced to the app directly -- the report builder still calls them per-site).
 
-- [ ] **M41 — Detect/clean up saved searches or pools that duplicated each other before M38**
+- [x] **M41 — Detect/clean up saved searches or pools that duplicated each other before M38**
   M38 (above) only stops *new* duplicates from being created going forward -- it has no
   effect on any `(site, query)` duplicates that were already saved before that check
   existed. The user confirmed the client-side prevention approach is fine as the
-  ongoing guard, but asked for the pre-existing duplicates to be handled too, exact
-  mechanism still open: candidates include a one-time startup/sync-time scan that
-  finds searches sharing a `(site, query)` and offers to merge them (keeping one,
-  reassigning/dropping `search_results` rows for the others) or just flags them for
-  the user to resolve manually in `SearchesScreen`, rather than silently auto-deleting
-  anything a user may be relying on (e.g. divergent `interval_hours`/group membership
-  between the duplicates).
+  ongoing guard, but asked for the pre-existing duplicates to be handled too.
+  Went with flag-for-manual-resolution rather than an automatic scan-and-merge: picking
+  which of two divergent duplicates (different `interval_hours`, `pinned`, `group_id`,
+  ...) to silently keep is exactly the kind of decision the roadmap entry above already
+  warned against making on the user's behalf.
+  - New `bunny_db_search_merge_duplicate(db, keeper_id, duplicate_id)` (`libs/db/src/
+    searches.c`) moves `duplicate_id`'s `search_results` rows onto `keeper_id` (`UPDATE
+    OR IGNORE`, since a post both searches already found would otherwise collide on the
+    `(search_id, post_id)` primary key -- the keeper's own existing row just wins) then
+    deletes `duplicate_id`. Deliberately doesn't touch the keeper's own settings --
+    which duplicate to treat as the keeper is the caller's decision, made explicitly in
+    the UI below, not something this function second-guesses. Thin pass-throughs at
+    `bunny_core_search_merge_duplicate` and `POST /searches/{keeperId}/merge_duplicate`
+    (body: `{"duplicate_id": N}`), same shape every other search mutation here uses.
+  - New pure `findDuplicateSearchGroups` (`app/lib/util/duplicate_searches.dart`) groups
+    an already-fetched `List<BunnySearch>` by `(site, query)` entirely client-side --
+    no new fetch needed, `SearchesScreen` already loads the full list once. A pool
+    search's identity is already fully encoded in its `query` (`pool:<id>`), so no
+    special-casing was needed for it to group the same way as a regular search.
+  - `SearchesScreen` shows a dismissible banner above the list when any duplicate group
+    exists ("N duplicate searches found" + a Review action); dismissal is session-only
+    (re-shown on the next manual/automatic refresh) rather than persisted, so it can't
+    end up permanently hiding a *different* set of duplicates that shows up later.
+    Review opens a dialog listing every group with enough per-member detail (interval,
+    pinned, group) to tell divergent duplicates apart, each with its own "Keep this
+    one" button that merges every other member of that group into it and removes the
+    resolved group from the dialog; the main list refreshes once the dialog closes.
+  - One FFI-layer gap closed in passing: `bunny_core_ffi_bindings_generated.dart` was
+    regenerated (`dart run ffigen`) for the new `bunny_core_search_merge_duplicate`
+    declaration, with new isolate dispatch glue (`mergeDuplicateSearch`) mirroring
+    `setSearchPinned`'s existing shape exactly.
 
 - [x] **M42 — Stop tracking "downloaded" state server-side; check local file existence instead**
   Reported by the user: a post downloaded on one device showed as downloaded on every
