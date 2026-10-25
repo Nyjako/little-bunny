@@ -339,9 +339,11 @@ void test_full_account_search_sync_favorite_flow(void)
     free(response.data);
     memset(&response, 0, sizeof(response));
 
-    status = do_request("GET", "/tags/autocomplete?site=e621&prefix=on", NULL, &response, true, NULL);
+    /* "somea", not the shorter "one" -- M39 throttles autocomplete to
+     * prefixes of 5+ characters. */
+    status = do_request("GET", "/tags/autocomplete?site=e621&prefix=somea", NULL, &response, true, NULL);
     TEST_ASSERT_EQUAL(200, status);
-    TEST_ASSERT_NOT_NULL(strstr(response.data, "\"name\":\"one\""));
+    TEST_ASSERT_NOT_NULL(strstr(response.data, "\"name\":\"someartist\""));
     free(response.data);
     memset(&response, 0, sizeof(response));
 

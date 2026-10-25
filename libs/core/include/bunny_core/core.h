@@ -133,9 +133,13 @@ bunny_core_result_t bunny_core_group_delete(bunny_core_t *core, int64_t group_id
 bunny_core_result_t bunny_core_post_get_by_id(bunny_core_t *core, int64_t post_id, bunny_db_post_t *out_post);
 
 /* Ranks cached tags (from already-synced posts) by usage count, for a
- * search box's autocomplete -- a thin pass-through to bunny_db, same shape
- * as the search CRUD above. `prefix`'s characters are matched literally, not
- * as SQL LIKE wildcards. */
+ * search box's autocomplete. `prefix`'s characters are matched literally,
+ * not as SQL LIKE wildcards. A `prefix` shorter than 5 characters returns an
+ * empty list without querying the database at all, and the result count is
+ * always capped at 5 regardless of `limit` -- both throttles exist because a
+ * short prefix matches far too many tags for the LIKE index to narrow
+ * usefully, which could otherwise hang the server on a single keystroke
+ * (M39). */
 bunny_core_result_t bunny_core_tag_autocomplete(bunny_core_t *core, bunny_db_site_t site, const char *prefix, int limit, bunny_db_tag_stat_list_t *out_list);
 
 /* Tags of currently-favorited posts on `site`, ranked by how many favorited
