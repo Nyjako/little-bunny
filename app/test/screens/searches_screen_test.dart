@@ -529,6 +529,27 @@ void main() {
     expect(repository.searches.single.usesDefaultInterval, isTrue);
   });
 
+  testWidgets('add-pool dialog refuses a pool that is already saved (M38)', (WidgetTester tester) async {
+    final repository = FakeBunnyRepository();
+    await repository.createSearch(BunnySite.e621, 'a_pool', 'pool:5', usesDefaultInterval: true);
+
+    await tester.pumpWidget(_wrap(repository));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Pools'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byType(FloatingActionButton));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.widgetWithText(TextField, 'Pool ID'), '5');
+    await tester.tap(find.text('Add'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('This pool is already saved.'), findsOneWidget);
+    expect(repository.searches, hasLength(1));
+    expect(repository.fetchPoolCallCount, 0);
+  });
+
   testWidgets('assigning a search to a group nests it under an expandable group row (M21)', (WidgetTester tester) async {
     final repository = FakeBunnyRepository();
     await repository.createSearch(BunnySite.e621, 'Alpha', 'alpha');

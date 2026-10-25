@@ -298,6 +298,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get createPoolSearchSubmit => 'Add';
 
   @override
+  String get createPoolSearchAlreadyExists => 'This pool is already saved.';
+
+  @override
   String get editSearchScreenTitle => 'Edit search';
 
   @override
@@ -368,6 +371,9 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get tagBrowseAddToSearchesTooltip => 'Save as a search';
+
+  @override
+  String get tagBrowseAlreadySavedTooltip => 'Already saved -- tap to remove';
 
   @override
   String get tagBrowseRelatedPoolsLabel => 'Related pools';

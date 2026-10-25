@@ -332,6 +332,17 @@ class _SearchesScreenState extends State<SearchesScreen> with SingleTickerProvid
       return;
     }
 
+    // Same duplicate-prevention check TagBrowseScreen's own checkmark action
+    // applies (M38) -- a second pool search for the same (site, pool id)
+    // would be functionally identical to the first.
+    final existing = await _repository!.listSearches();
+    if (existing.any((search) => search.site == site && search.query == 'pool:$poolId')) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(l10n.createPoolSearchAlreadyExists)));
+      }
+      return;
+    }
+
     // The pool's own name makes a far more useful label than the raw id, but
     // this works purely as a nice-to-have -- a failed lookup (network error,
     // deleted pool, etc.) still creates a perfectly functional pool search
