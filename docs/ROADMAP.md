@@ -2183,6 +2183,27 @@ this file is the single source of truth for "what's done" across sessions.
     `saf_util`/`saf_stream` plugins' actual native Android behavior still needs
     verification on a real device, which this environment has no way to do.
 
+- [x] **M37 — Apply the blacklist to live tag/author browsing; keep pools and
+  favorites exempt everywhere**
+  Reported by the user: opening an author from a post (`TagBrowseScreen`'s live,
+  stateless preview, `bunny_core_preview_search`) showed blacklisted-tag posts --
+  blacklist filtering had only ever applied to a saved search's own cached listing
+  (`bunny_db_search_list_posts`), by original design (M13.3). The user wants live
+  browsing to filter like everything else, but explicitly does NOT want pools or
+  favorites filtered at all, anywhere -- those should always show everything
+  actually in the pool or favorited.
+  - New `bunny_core_is_favorites_query(site, query)` (`internal.h`) mirrors the app
+    side's `BunnySearch.isFavorites` sentinel check server/core-side.
+  - `bunny_db_search_list_posts` gained an `apply_blacklist` param; `bunny_core_
+    search_list_posts` passes `false` for a favorites search, `true` otherwise.
+    `bunny_db_pool_search_list_posts` dropped its blacklist clause entirely --
+    never filtered, no flag needed.
+  - New `bunny_db_post_is_blacklisted(db, post_id)` -- a single-post check (no
+    listing query to attach a `NOT EXISTS` clause to) used by `bunny_core_
+    preview_search`'s live upsert loop, skipped for a pool or favorites browse.
+  - No app-side/API changes at all -- every decision is made server-side from the
+    search's own stored query/site, nothing new for a client to pass.
+
 - [x] **M38 — Prevent duplicate saved searches/pools for the same (site, query)**
   Reported by the user: tapping an already-saved tag/author (`TagBrowseScreen`'s
   "add to searches" action), or re-adding a pool already saved (`SearchesScreen`'s
