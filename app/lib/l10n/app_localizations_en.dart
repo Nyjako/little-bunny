@@ -380,9 +380,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get tagBrowseAlreadySavedTooltip => 'Already saved -- tap to remove';
 
   @override
-  String get tagBrowseRelatedPoolsLabel => 'Related pools';
-
-  @override
   String tagBrowseRelatedPoolChip(int poolId) {
     return 'Pool #$poolId';
   }

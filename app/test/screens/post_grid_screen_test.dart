@@ -75,7 +75,7 @@ void main() {
     expect(tiles.map((t) => t.post.id).toList(), [1, 2, 3]);
   });
 
-  testWidgets('pool info button (M26) shows the description and opens a referenced pool via its chip', (WidgetTester tester) async {
+  testWidgets('pool info button (M26) shows the description and opens a referenced pool via its inline link (M44)', (WidgetTester tester) async {
     final repository = FakeBunnyRepository();
     final poolSearch = const BunnySearch(id: 3, site: BunnySite.e621, label: 'A pool', query: 'pool:123', intervalHours: 24, createdAt: '2026-01-01T00:00:00Z');
     repository.postsBySearchId[3] = [_post(id: 1, isSeen: false)];
@@ -88,10 +88,9 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('My Comic'), findsOneWidget);
-    expect(find.text('Continuation of pool #456.'), findsOneWidget);
-    expect(find.text('Pool #456'), findsOneWidget);
+    expect(find.textContaining('Continuation of pool #456.'), findsOneWidget);
 
-    await tester.tap(find.text('Pool #456'));
+    await tester.tapOnText(find.textRange.ofSubstring('pool #456'));
     await tester.pumpAndSettle();
 
     expect(find.text('pool:456'), findsOneWidget);
