@@ -564,12 +564,11 @@ void test_preview_search_upserts_posts_without_creating_a_search(void)
     free(fixture);
 }
 
-void test_preview_search_is_unaffected_by_the_tag_blacklist(void)
+void test_preview_search_applies_the_tag_blacklist_for_a_plain_query(void)
 {
-    /* M13.3: the blacklist only applies to bunny_db_search_list_posts (a
-     * saved search's own grid) -- tag/pool browsing and "my favorites"
-     * previews, both of which go through preview_search, must never hide
-     * anything by default. */
+    /* M37: a plain tag/author browse now applies the blacklist, same as a
+     * saved search's own grid -- only a pool or favorites browse (below) is
+     * exempt. */
     char *fixture = read_fixture("e621_posts_search.json");
     TEST_ASSERT_NOT_NULL(fixture);
     g_e621_state.bodies[0] = fixture;
@@ -579,6 +578,78 @@ void test_preview_search_is_unaffected_by_the_tag_blacklist(void)
 
     bunny_db_post_list_t posts;
     bunny_core_result_t result = bunny_core_preview_search(g_core, BUNNY_DB_SITE_E621, "wolf", 1, &posts);
+    TEST_ASSERT_EQUAL(BUNNY_CORE_OK, result);
+    TEST_ASSERT_EQUAL(0, (int)posts.count);
+    bunny_db_post_list_free(&posts);
+
+    free(fixture);
+}
+
+void test_search_list_posts_favorites_search_is_unaffected_by_the_tag_blacklist(void)
+{
+    /* M37: bunny_core_search_list_posts detects a favorites search by its
+     * sentinel query ("fav:<username>" for e621, bunny_core_is_favorites_
+     * query) and skips the blacklist for it, same exemption preview_search
+     * applies above -- a saved favorites search is meant to show everything
+     * favorited, not a filtered subset. */
+    char *fixture = read_fixture("e621_posts_search.json");
+    TEST_ASSERT_NOT_NULL(fixture);
+    g_e621_state.bodies[0] = fixture;
+    g_e621_state.body_count = 1;
+
+    int64_t search_id = 0;
+    bunny_core_result_t result = bunny_core_search_create(g_core, BUNNY_DB_SITE_E621, "Favorites", "fav:someuser", 24, NULL, &search_id);
+    TEST_ASSERT_EQUAL(BUNNY_CORE_OK, result);
+
+    bunny_core_sync_stats_t stats;
+    result = bunny_core_sync_due_searches(g_core, &stats);
+    TEST_ASSERT_EQUAL(BUNNY_CORE_OK, result);
+    TEST_ASSERT_EQUAL(1, stats.posts_upserted);
+
+    bunny_core_blacklist_add(g_core, BUNNY_DB_SITE_E621, "one");
+
+    bunny_db_post_list_t posts;
+    result = bunny_core_search_list_posts(g_core, search_id, false, 1, &posts);
+    TEST_ASSERT_EQUAL(BUNNY_CORE_OK, result);
+    TEST_ASSERT_EQUAL(1, (int)posts.count);
+    bunny_db_post_list_free(&posts);
+
+    free(fixture);
+}
+
+void test_preview_search_pool_browse_is_unaffected_by_the_tag_blacklist(void)
+{
+    /* M37: a pool browse is exempt -- it's meant to show every post
+     * actually in the pool. */
+    char *fixture = read_fixture("e621_posts_search.json");
+    TEST_ASSERT_NOT_NULL(fixture);
+    g_e621_state.bodies[0] = fixture;
+    g_e621_state.body_count = 1;
+
+    bunny_core_blacklist_add(g_core, BUNNY_DB_SITE_E621, "one");
+
+    bunny_db_post_list_t posts;
+    bunny_core_result_t result = bunny_core_preview_search(g_core, BUNNY_DB_SITE_E621, "pool:5", 1, &posts);
+    TEST_ASSERT_EQUAL(BUNNY_CORE_OK, result);
+    TEST_ASSERT_EQUAL(1, (int)posts.count);
+    bunny_db_post_list_free(&posts);
+
+    free(fixture);
+}
+
+void test_preview_search_favorites_browse_is_unaffected_by_the_tag_blacklist(void)
+{
+    /* M37: a favorites browse (the heart icon's "view my favorites",
+     * AccountsScreen) is exempt -- it's meant to show everything favorited. */
+    char *fixture = read_fixture("e621_posts_search.json");
+    TEST_ASSERT_NOT_NULL(fixture);
+    g_e621_state.bodies[0] = fixture;
+    g_e621_state.body_count = 1;
+
+    bunny_core_blacklist_add(g_core, BUNNY_DB_SITE_E621, "one");
+
+    bunny_db_post_list_t posts;
+    bunny_core_result_t result = bunny_core_preview_search(g_core, BUNNY_DB_SITE_E621, "fav:someuser", 1, &posts);
     TEST_ASSERT_EQUAL(BUNNY_CORE_OK, result);
     TEST_ASSERT_EQUAL(1, (int)posts.count);
     bunny_db_post_list_free(&posts);
@@ -1498,7 +1569,10 @@ int main(void)
     RUN_TEST(test_fetch_pool_parses_pool_references_out_of_the_description);
     RUN_TEST(test_syncing_a_pool_search_orders_posts_by_e621s_own_pool_order);
     RUN_TEST(test_preview_search_upserts_posts_without_creating_a_search);
-    RUN_TEST(test_preview_search_is_unaffected_by_the_tag_blacklist);
+    RUN_TEST(test_preview_search_applies_the_tag_blacklist_for_a_plain_query);
+    RUN_TEST(test_preview_search_pool_browse_is_unaffected_by_the_tag_blacklist);
+    RUN_TEST(test_preview_search_favorites_browse_is_unaffected_by_the_tag_blacklist);
+    RUN_TEST(test_search_list_posts_favorites_search_is_unaffected_by_the_tag_blacklist);
     RUN_TEST(test_preview_search_requests_the_given_e621_page);
     RUN_TEST(test_preview_search_requests_the_given_inkbunny_page);
     RUN_TEST(test_preview_search_inkbunny_pool_sends_pool_id_not_literal_text);

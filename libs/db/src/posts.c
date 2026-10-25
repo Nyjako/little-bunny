@@ -477,7 +477,7 @@ bunny_db_result_t bunny_db_search_has_result(bunny_db_t *db, int64_t search_id, 
     return (rc == SQLITE_ROW || rc == SQLITE_DONE) ? BUNNY_DB_OK : bunny_db_sqlite_rc_to_result(rc);
 }
 
-bunny_db_result_t bunny_db_search_list_posts(bunny_db_t *db, int64_t search_id, bool unseen_only, int page, bunny_db_post_list_t *out_list)
+bunny_db_result_t bunny_db_search_list_posts(bunny_db_t *db, int64_t search_id, bool unseen_only, bool apply_blacklist, int page, bunny_db_post_list_t *out_list)
 {
     if (!db || !out_list || page < 1) {
         return BUNNY_DB_ERR_INVALID_ARG;
@@ -490,25 +490,30 @@ bunny_db_result_t bunny_db_search_list_posts(bunny_db_t *db, int64_t search_id, 
      * track actual recency. Falls back to cached_at for the rare post with
      * no created_at_site rather than sorting it to the very end.
      *
-     * The NOT EXISTS clause excludes any post carrying a tag blacklisted
-     * for its own site (M13.3) -- this is the one and only post-listing
-     * query the blacklist applies to; bunny_core_preview_search's separate
-     * query (tag/pool browsing, "my favorites" previews) is deliberately
-     * untouched, so those never hide anything by default. Matching on
-     * t.site rather than joining the searches table means this works
+     * The NOT EXISTS clause (when apply_blacklist is true, M37) excludes any
+     * post carrying a tag blacklisted for its own site (M13.3) -- skipped
+     * for a favorites search (see bunny_core_is_favorites_query), which is
+     * meant to show everything favorited, not a filtered subset. Matching
+     * on t.site rather than joining the searches table means this works
      * without knowing this search's own site. */
-    const char *sql_seen = "SELECT " BUNNY_DB_POST_SELECT_COLUMNS BUNNY_DB_POST_SELECT_FROM_JOIN "JOIN search_results sr ON sr.post_id = p.id "
-                           "WHERE sr.search_id = ? "
-                           "AND NOT EXISTS (SELECT 1 FROM post_tags pt JOIN tags t ON t.id = pt.tag_id "
-                           "JOIN blacklist_tags bl ON bl.site = t.site AND bl.tag = t.name WHERE pt.post_id = p.id) "
-                           "ORDER BY COALESCE(p.created_at_site, p.cached_at) DESC LIMIT ? OFFSET ?;";
-    const char *sql_unseen = "SELECT " BUNNY_DB_POST_SELECT_COLUMNS BUNNY_DB_POST_SELECT_FROM_JOIN "JOIN search_results sr ON sr.post_id = p.id "
-                             "WHERE sr.search_id = ? AND seen.post_id IS NULL "
-                             "AND NOT EXISTS (SELECT 1 FROM post_tags pt JOIN tags t ON t.id = pt.tag_id "
-                             "JOIN blacklist_tags bl ON bl.site = t.site AND bl.tag = t.name WHERE pt.post_id = p.id) "
-                             "ORDER BY COALESCE(p.created_at_site, p.cached_at) DESC LIMIT ? OFFSET ?;";
+    const char *sql_seen_filtered = "SELECT " BUNNY_DB_POST_SELECT_COLUMNS BUNNY_DB_POST_SELECT_FROM_JOIN "JOIN search_results sr ON sr.post_id = p.id "
+                                    "WHERE sr.search_id = ? "
+                                    "AND NOT EXISTS (SELECT 1 FROM post_tags pt JOIN tags t ON t.id = pt.tag_id "
+                                    "JOIN blacklist_tags bl ON bl.site = t.site AND bl.tag = t.name WHERE pt.post_id = p.id) "
+                                    "ORDER BY COALESCE(p.created_at_site, p.cached_at) DESC LIMIT ? OFFSET ?;";
+    const char *sql_seen_unfiltered = "SELECT " BUNNY_DB_POST_SELECT_COLUMNS BUNNY_DB_POST_SELECT_FROM_JOIN "JOIN search_results sr ON sr.post_id = p.id "
+                                      "WHERE sr.search_id = ? "
+                                      "ORDER BY COALESCE(p.created_at_site, p.cached_at) DESC LIMIT ? OFFSET ?;";
+    const char *sql_unseen_filtered = "SELECT " BUNNY_DB_POST_SELECT_COLUMNS BUNNY_DB_POST_SELECT_FROM_JOIN "JOIN search_results sr ON sr.post_id = p.id "
+                                      "WHERE sr.search_id = ? AND seen.post_id IS NULL "
+                                      "AND NOT EXISTS (SELECT 1 FROM post_tags pt JOIN tags t ON t.id = pt.tag_id "
+                                      "JOIN blacklist_tags bl ON bl.site = t.site AND bl.tag = t.name WHERE pt.post_id = p.id) "
+                                      "ORDER BY COALESCE(p.created_at_site, p.cached_at) DESC LIMIT ? OFFSET ?;";
+    const char *sql_unseen_unfiltered = "SELECT " BUNNY_DB_POST_SELECT_COLUMNS BUNNY_DB_POST_SELECT_FROM_JOIN "JOIN search_results sr ON sr.post_id = p.id "
+                                        "WHERE sr.search_id = ? AND seen.post_id IS NULL "
+                                        "ORDER BY COALESCE(p.created_at_site, p.cached_at) DESC LIMIT ? OFFSET ?;";
 
-    const char *sql = unseen_only ? sql_unseen : sql_seen;
+    const char *sql = unseen_only ? (apply_blacklist ? sql_unseen_filtered : sql_unseen_unfiltered) : (apply_blacklist ? sql_seen_filtered : sql_seen_unfiltered);
     sqlite3_stmt *stmt = NULL;
     if (sqlite3_prepare_v2(db->handle, sql, -1, &stmt, NULL) != SQLITE_OK) {
         return BUNNY_DB_ERR_QUERY_FAILED;
@@ -557,23 +562,20 @@ bunny_db_result_t bunny_db_pool_search_list_posts(bunny_db_t *db, int64_t search
     }
     memset(out_list, 0, sizeof(*out_list));
 
-    /* Same blacklist exclusion as bunny_db_search_list_posts, but ordered
-     * by this pool's own position (M26) -- e621's real post_ids order,
-     * ascending -- instead of newest-first by creation date. A post whose
-     * position isn't known yet (-1, not yet covered by a pool-order sync)
-     * sorts after every known one, itself ordered oldest-first by creation
-     * date as a reasonable placeholder until it's filled in. */
+    /* Never filters the blacklist (M37) -- a pool search is meant to show
+     * every post actually in the pool, unlike bunny_db_search_list_posts.
+     * Ordered by this pool's own position (M26) -- e621's real post_ids
+     * order, ascending -- instead of newest-first by creation date. A post
+     * whose position isn't known yet (-1, not yet covered by a pool-order
+     * sync) sorts after every known one, itself ordered oldest-first by
+     * creation date as a reasonable placeholder until it's filled in. */
     const char *sql_seen = "SELECT " BUNNY_DB_POST_SELECT_COLUMNS BUNNY_DB_POST_SELECT_FROM_JOIN "JOIN search_results sr ON sr.post_id = p.id "
                            "LEFT JOIN post_pools pp ON pp.post_id = p.id AND pp.pool_id = ? "
                            "WHERE sr.search_id = ? "
-                           "AND NOT EXISTS (SELECT 1 FROM post_tags pt JOIN tags t ON t.id = pt.tag_id "
-                           "JOIN blacklist_tags bl ON bl.site = t.site AND bl.tag = t.name WHERE pt.post_id = p.id) "
                            "ORDER BY (COALESCE(pp.position, -1) >= 0) DESC, pp.position ASC, COALESCE(p.created_at_site, p.cached_at) ASC LIMIT ? OFFSET ?;";
     const char *sql_unseen = "SELECT " BUNNY_DB_POST_SELECT_COLUMNS BUNNY_DB_POST_SELECT_FROM_JOIN "JOIN search_results sr ON sr.post_id = p.id "
                              "LEFT JOIN post_pools pp ON pp.post_id = p.id AND pp.pool_id = ? "
                              "WHERE sr.search_id = ? AND seen.post_id IS NULL "
-                             "AND NOT EXISTS (SELECT 1 FROM post_tags pt JOIN tags t ON t.id = pt.tag_id "
-                             "JOIN blacklist_tags bl ON bl.site = t.site AND bl.tag = t.name WHERE pt.post_id = p.id) "
                              "ORDER BY (COALESCE(pp.position, -1) >= 0) DESC, pp.position ASC, COALESCE(p.created_at_site, p.cached_at) ASC LIMIT ? OFFSET ?;";
 
     const char *sql = unseen_only ? sql_unseen : sql_seen;

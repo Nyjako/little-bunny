@@ -803,14 +803,14 @@ void test_search_list_posts_excludes_blacklisted_tags(void)
     bunny_db_search_add_result(g_db, search_id, id2, NULL);
 
     bunny_db_post_list_t before;
-    bunny_db_search_list_posts(g_db, search_id, false, 1, &before);
+    bunny_db_search_list_posts(g_db, search_id, false, true, 1, &before);
     TEST_ASSERT_EQUAL(2, (int)before.count);
     bunny_db_post_list_free(&before);
 
     bunny_db_blacklist_add(g_db, BUNNY_DB_SITE_E621, "young");
 
     bunny_db_post_list_t after;
-    bunny_db_result_t result = bunny_db_search_list_posts(g_db, search_id, false, 1, &after);
+    bunny_db_result_t result = bunny_db_search_list_posts(g_db, search_id, false, true, 1, &after);
     TEST_ASSERT_EQUAL(BUNNY_DB_OK, result);
     TEST_ASSERT_EQUAL(1, (int)after.count);
     TEST_ASSERT_EQUAL(id1, after.items[0].id);
@@ -819,7 +819,7 @@ void test_search_list_posts_excludes_blacklisted_tags(void)
     /* A blacklist entry for a different site never affects this search. */
     bunny_db_blacklist_add(g_db, BUNNY_DB_SITE_INKBUNNY, "forest");
     bunny_db_post_list_t still_one;
-    bunny_db_search_list_posts(g_db, search_id, false, 1, &still_one);
+    bunny_db_search_list_posts(g_db, search_id, false, true, 1, &still_one);
     TEST_ASSERT_EQUAL(1, (int)still_one.count);
     bunny_db_post_list_free(&still_one);
 }
@@ -845,7 +845,7 @@ void test_search_results_and_list_posts(void)
     TEST_ASSERT_EQUAL(BUNNY_DB_OK, result);
 
     bunny_db_post_list_t all_results;
-    result = bunny_db_search_list_posts(g_db, search_id, false, 1, &all_results);
+    result = bunny_db_search_list_posts(g_db, search_id, false, true, 1, &all_results);
     TEST_ASSERT_EQUAL(BUNNY_DB_OK, result);
     TEST_ASSERT_EQUAL(2, (int)all_results.count);
     bunny_db_post_list_free(&all_results);
@@ -853,7 +853,7 @@ void test_search_results_and_list_posts(void)
     bunny_db_post_mark_seen(g_db, id1);
 
     bunny_db_post_list_t unseen_results;
-    result = bunny_db_search_list_posts(g_db, search_id, true, 1, &unseen_results);
+    result = bunny_db_search_list_posts(g_db, search_id, true, true, 1, &unseen_results);
     TEST_ASSERT_EQUAL(BUNNY_DB_OK, result);
     TEST_ASSERT_EQUAL(1, (int)unseen_results.count);
     TEST_ASSERT_EQUAL(id2, unseen_results.items[0].id);
@@ -884,7 +884,7 @@ void test_search_list_posts_orders_newest_first_by_site_date(void)
     bunny_db_search_add_result(g_db, search_id, newer_id, NULL);
 
     bunny_db_post_list_t results;
-    bunny_db_result_t result = bunny_db_search_list_posts(g_db, search_id, false, 1, &results);
+    bunny_db_result_t result = bunny_db_search_list_posts(g_db, search_id, false, true, 1, &results);
     TEST_ASSERT_EQUAL(BUNNY_DB_OK, result);
     TEST_ASSERT_EQUAL(2, (int)results.count);
     TEST_ASSERT_EQUAL(newer_id, results.items[0].id);
@@ -914,21 +914,21 @@ void test_search_list_posts_paginates(void)
     }
 
     bunny_db_post_list_t page1;
-    TEST_ASSERT_EQUAL(BUNNY_DB_OK, bunny_db_search_list_posts(g_db, search_id, false, 1, &page1));
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, bunny_db_search_list_posts(g_db, search_id, false, true, 1, &page1));
     TEST_ASSERT_EQUAL(200, (int)page1.count);
     TEST_ASSERT_EQUAL(3000 + 204, page1.items[0].external_id); /* newest first */
     TEST_ASSERT_EQUAL(3000 + 5, page1.items[199].external_id);
     bunny_db_post_list_free(&page1);
 
     bunny_db_post_list_t page2;
-    TEST_ASSERT_EQUAL(BUNNY_DB_OK, bunny_db_search_list_posts(g_db, search_id, false, 2, &page2));
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, bunny_db_search_list_posts(g_db, search_id, false, true, 2, &page2));
     TEST_ASSERT_EQUAL(5, (int)page2.count);
     TEST_ASSERT_EQUAL(3000 + 4, page2.items[0].external_id);
     TEST_ASSERT_EQUAL(3000 + 0, page2.items[4].external_id);
     bunny_db_post_list_free(&page2);
 
     bunny_db_post_list_t page3;
-    TEST_ASSERT_EQUAL(BUNNY_DB_OK, bunny_db_search_list_posts(g_db, search_id, false, 3, &page3));
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, bunny_db_search_list_posts(g_db, search_id, false, true, 3, &page3));
     TEST_ASSERT_EQUAL(0, (int)page3.count);
     bunny_db_post_list_free(&page3);
 }

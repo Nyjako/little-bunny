@@ -182,8 +182,13 @@ bunny_db_result_t bunny_db_search_has_result(bunny_db_t *db, int64_t search_id, 
  * page -- a search with thousands of cached posts (e.g. a long-running
  * favorites search) was otherwise returned in a single unbounded response,
  * which could take minutes to query/serialize/transfer and routinely timed
- * out client-side. */
-bunny_db_result_t bunny_db_search_list_posts(bunny_db_t *db, int64_t search_id, bool unseen_only, int page, bunny_db_post_list_t *out_list);
+ * out client-side.
+ *
+ * apply_blacklist (M37) should be false for a favorites search (see
+ * bunny_core_is_favorites_query) -- a user's own favorites are meant to
+ * show everything they favorited, not a filtered subset. Every other
+ * search (including a plain tag search) passes true. */
+bunny_db_result_t bunny_db_search_list_posts(bunny_db_t *db, int64_t search_id, bool unseen_only, bool apply_blacklist, int page, bunny_db_post_list_t *out_list);
 
 /* A post's tags with their categories, for a post detail view's sectioned
  * tag display (Artists/Characters/Copyrights/Species/General/Meta for e621;
@@ -226,7 +231,9 @@ bunny_db_result_t bunny_db_list_distinct_pool_ids(bunny_db_t *db, bunny_db_int64
  * own `position` (ascending, e621's own reading order) instead of newest-
  * first by creation date, falling back to creation date (ascending, so a
  * still-undetermined tail at least reads oldest-first like the rest of the
- * pool) for any post whose position isn't known yet. */
+ * pool) for any post whose position isn't known yet. Never applies the
+ * blacklist (M37, no apply_blacklist param here at all) -- a pool search is
+ * meant to show every post actually in the pool. */
 bunny_db_result_t bunny_db_pool_search_list_posts(bunny_db_t *db, int64_t search_id, int64_t pool_id, bool unseen_only, int page, bunny_db_post_list_t *out_list);
 
 /* --- Seen state (global per post, not per search) ------------------------- */
@@ -256,17 +263,30 @@ bunny_db_result_t bunny_db_favorite_list(bunny_db_t *db, bunny_db_post_list_t *o
 
 bunny_db_result_t bunny_db_vote_set(bunny_db_t *db, int64_t post_id, int score /* -1 or 1 */);
 
-/* --- Tag blacklist (M13.3) ---------------------------------------------------
+/* --- Tag blacklist (M13.3, M37) -----------------------------------------------
  * A per-site list of exact tag names -- not foreign-keyed into tags(id),
  * since a tag someone wants to blacklist may never have been synced
  * locally. bunny_db_search_list_posts (below) excludes any post carrying a
- * blacklisted tag; bunny_core_preview_search's underlying post-listing
- * query is a separate function and is deliberately left unaffected, so
- * tag/pool browsing never hides anything by default. */
+ * blacklisted tag UNLESS that search is itself a favorites search (the
+ * apply_blacklist param, M37) -- the user's own favorites and every pool
+ * search (bunny_db_pool_search_list_posts, never filtered at all) are
+ * exempt by design: both are meant to show everything you already favorited
+ * or that's actually in the pool, not a filtered subset. An ordinary live
+ * tag/author browse (bunny_core_preview_search) applies the same exemptions
+ * (skips filtering for a pool or favorites query) but otherwise DOES filter
+ * now -- see bunny_db_post_is_blacklisted below, used for exactly that case
+ * since that function's own live-upsert loop has no listing query to attach
+ * a NOT EXISTS clause to. */
 
 bunny_db_result_t bunny_db_blacklist_list(bunny_db_t *db, bunny_db_site_t site, bunny_db_string_list_t *out_list);
 bunny_db_result_t bunny_db_blacklist_add(bunny_db_t *db, bunny_db_site_t site, const char *tag);
 bunny_db_result_t bunny_db_blacklist_remove(bunny_db_t *db, bunny_db_site_t site, const char *tag);
+
+/* True if any of post_id's tags is blacklisted for its own site -- a
+ * single-post check (as opposed to bunny_db_search_list_posts' own listing-
+ * query NOT EXISTS clause) for a live upsert loop with no listing query of
+ * its own to attach one to. */
+bunny_db_result_t bunny_db_post_is_blacklisted(bunny_db_t *db, int64_t post_id, bool *out_is_blacklisted);
 
 /* --- Downloads -------------------------------------------------------------- */
 
