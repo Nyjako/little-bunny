@@ -53,6 +53,7 @@ typedef enum
     TASK_TYPE_SYNC_ALL,
     TASK_TYPE_SYNC_DUE,
     TASK_TYPE_PROCESS_ACTION_QUEUE,
+    TASK_TYPE_BUILD_STATS_REPORT,
 } task_type_t;
 
 typedef enum
@@ -105,6 +106,17 @@ bool task_queue_enqueue_background_due_sync(task_queue_t *queue);
  * in-line on the scheduler's own thread. No-op if a drain of this type is
  * already pending/running. */
 bool task_queue_enqueue_background_action_queue(task_queue_t *queue);
+
+/* LOW priority -- rebuilds the tag-stats screen's cached report
+ * (bunny_core_refresh_stats_report), which can run for minutes against a
+ * large enough database (M55). Routes_tags.c's GET/POST /stats_report
+ * handlers both just enqueue this and return whatever's already cached,
+ * never block waiting for it -- "manual refresh" and "cache missing/stale"
+ * are the same fire-and-forget call, there's no separate HIGH-priority
+ * variant the way sync has. No-op if a build of this type is already
+ * pending/running, same dedupe shape as the other LOW-priority background
+ * jobs above. */
+bool task_queue_enqueue_stats_report_build(task_queue_t *queue);
 
 typedef struct
 {

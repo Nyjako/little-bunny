@@ -173,18 +173,30 @@ typedef struct
     bunny_db_tag_stat_list_t top_used_tags;
     bunny_db_tag_stat_list_t top_pools;
     bunny_db_tag_stat_list_t top_viewed_searches;
-    char *computed_at; /* ISO 8601 UTC; never NULL once a report has been built */
+    char *computed_at; /* ISO 8601 UTC; NULL if no report has ever been built yet */
 } bunny_core_stats_report_t;
 
 void bunny_core_stats_report_free(bunny_core_stats_report_t *report);
 
-/* Returns the cached report if one exists and is younger than 24 hours;
- * otherwise recomputes it (same as bunny_core_refresh_stats_report) and
- * caches the fresh result before returning it. */
-bunny_core_result_t bunny_core_get_stats_report(bunny_core_t *core, bunny_core_stats_report_t *out_report);
+/* Reads whatever report is currently cached WITHOUT ever building or
+ * recomputing one (M55) -- each section is a full-table aggregate, and on
+ * a large enough database bunny_core_refresh_stats_report below can run for
+ * minutes, which is exactly what hung the server when this used to build
+ * synchronously on a cache miss. `*out_has_cache` is false (and `*out_report`
+ * left zeroed) if nothing has ever been cached; `*out_is_stale` is true
+ * whenever there's no cache at all, or the cached one is 24+ hours old --
+ * callers that want the report kept warm should check `*out_is_stale` and
+ * enqueue a `bunny_core_refresh_stats_report` call on a background worker
+ * themselves (see server/src/task_queue.c's TASK_TYPE_BUILD_STATS_REPORT),
+ * never call it inline on whatever thread is answering a live request. */
+bunny_core_result_t bunny_core_get_cached_stats_report(bunny_core_t *core, bunny_core_stats_report_t *out_report, bool *out_has_cache, bool *out_is_stale);
 
-/* Forces a recompute regardless of the cached report's age -- the tag-stats
- * screen's manual refresh action. */
+/* Recomputes the report from scratch and caches the fresh result,
+ * regardless of the previously-cached one's age -- this is the slow,
+ * potentially multi-minute call bunny_core_get_cached_stats_report's own
+ * doc comment warns about. Only ever call this from a background worker
+ * thread, never from a thread that's also expected to answer other
+ * requests promptly. */
 bunny_core_result_t bunny_core_refresh_stats_report(bunny_core_t *core, bunny_core_stats_report_t *out_report);
 
 /* Marks a post seen (global per post, not per search) -- lets a post detail
