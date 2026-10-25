@@ -9,6 +9,11 @@ scripts/git-commit.sh
 # redistribute, kept locally for development reference only
 docs/API - Inkbunny.pdf
 
+# Reference material only (e621.wiki's third-party OpenAPI spec for e621's
+# own API) -- not ours to redistribute, kept locally for development
+# reference only
+docs/API - e621.yaml
+
 # CMake / build outputs
 build/
 build-*/
