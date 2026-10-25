@@ -2349,15 +2349,61 @@ this file is the single source of truth for "what's done" across sessions.
   re-running (or running against stale data) when the screen is popped back to rather
   than freshly built.
 
-- [ ] **M46 — Deep audit for other endpoints that might send/compute too much and hang the server**
+- [x] **M46 — Deep audit for other endpoints that might hang the server; fix the worst one found**
   The user's explicit ask after M39/M40 fixed the two hangs they'd actually hit (tag
-  autocomplete, tag stats): go look for other spots with the same shape -- an
-  unbounded/full-table query, or a client loop with no page cap, that could still hang
-  the server or the app under enough data. Not yet started. Candidate places to check:
-  every `bunny_db_*` query without a `LIMIT`, every Dart-side "fetch all pages until
-  empty" loop (`TagBrowseScreen`'s infinite scroll, favorites sync, pool order sync),
-  and any report/stat-style endpoint added after this audit that might reintroduce the
-  same class of bug M39/M40 just fixed.
+  autocomplete, tag stats): go look for other spots with the same shape. Done by
+  reading every registered route/`bunny_db_*` query for an unbounded operation, then
+  live-testing the suspects against the user's real server (733 saved searches,
+  largest at 58,465 posts).
+  - **Found and fixed: every search/favorites post listing was slow, scaling with the
+    search's total size, not the page requested.** `GET /searches/{id}/posts` took
+    12-14s on the 58k-post search, 13.0s on a 24k-post one, 7.2s on an 18.5k-post
+    favorites search -- page 1 and page 500 took the same time, which is the tell.
+    Root cause: `bunny_db_search_list_posts` sorted by
+    `COALESCE(p.created_at_site, p.cached_at)`, a two-column expression on `posts`
+    with no index that could cover it, while the query's own `WHERE` clause scopes to
+    `search_results.search_id` -- two different tables, so no single index could
+    satisfy both without denormalizing. Confirmed via `EXPLAIN QUERY PLAN` (reproduced
+    locally against a synthetic 1.5M-row database): SQLite had to pull every row
+    matching `search_id`, sort *all* of them in a temp B-tree, and only then apply
+    `LIMIT`/`OFFSET` -- a full materialize-and-sort per request, no matter how small a
+    page was actually asked for. Same root shape as M39/M40, just hiding behind the
+    single most commonly hit endpoint in the app (opening any saved search) rather
+    than an edge case.
+    - Fix: a new `search_results.post_sort_key` column (migration 15) denormalizes
+      that same `COALESCE(...)` value onto `search_results` itself, set once by
+      `bunny_db_search_add_result` when a post is first linked to a search (frozen
+      after that, same as every other field on that row) and backfilled for existing
+      rows by the migration. A new `(search_id, post_sort_key)` index lets
+      `bunny_db_search_list_posts` satisfy its `WHERE`/`ORDER BY` from one index walk
+      with no sort step at all -- confirmed via `EXPLAIN QUERY PLAN` (the
+      `USE TEMP B-TREE FOR ORDER BY` line disappears entirely once the index exists).
+      `bunny_db_pool_search_list_posts` has the same underlying shape (joins
+      `search_results`, sorts by an unindexed expression) but wasn't confirmed slow
+      live -- e621 pools are typically much smaller than a tag search or a whole
+      favorites list -- and its sort key mixes in `post_pools.position` too, which
+      doesn't denormalize onto `search_results` as cleanly; left alone for now.
+    - Not yet deployed to the live server (per the user's standing "fixes over
+      deploys for now" instruction) -- the 12-14s numbers above are pre-fix, measured
+      against the server's current build.
+  - **Other findings, not acted on here:**
+    - `handle_queue_process` (`/queue/process`) processes every pending queued action
+      synchronously in one HTTP request/thread, one real network call each --
+      mass-favorite/mass-vote (`post_grid_screen.dart`'s multi-select actions) can
+      queue dozens at once. Already flagged in that handler's own code comment as a
+      known risk; this is exactly what M43 (queueing downloads/mass actions properly)
+      is meant to fix, not duplicated here.
+    - `bunny_db_count_unseen` (a full, unscoped scan of every post in `posts`) exists
+      and is tested, but has zero callers anywhere in `core`, the server, or the
+      Dart app -- dead code today, but a landmine if something wires it up later
+      without noticing its shape.
+    - `bunny_db_search_list` (`GET /searches`, listing all 733 saved searches) ran in
+      0.52s live -- not hanging, but has two correlated subqueries per row
+      (`unseen_count`/`total_count`); worth a second look if the saved-search count
+      keeps climbing.
+    - Every other registered route was read through and is either bounded by nature
+      (single-post lookups, the in-memory task queue/log ring buffer, one-page-at-a-
+      time live previews) or already fixed by M37/M39/M40.
 
 - [ ] **M47 — Keep the device awake while browsing posts**
   Reported by the user: wants a wake lock active while browsing so the screen doesn't
