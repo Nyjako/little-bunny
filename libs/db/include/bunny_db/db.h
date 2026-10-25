@@ -161,8 +161,7 @@ bunny_db_result_t bunny_db_post_get(bunny_db_t *db, bunny_db_site_t site, int64_
 
 /* Same as bunny_db_post_get, but keyed on the local db id rather than
  * (site, external_id) -- what the action queue below has to work with, since
- * it stores the local id (matching bunny_db_favorite_add/download_record's
- * own convention). */
+ * it stores the local id (matching bunny_db_favorite_add's own convention). */
 bunny_db_result_t bunny_db_post_get_by_id(bunny_db_t *db, int64_t post_id, bunny_db_post_t *out_post);
 
 /* Associates a cached post with a search's result set (e.g. after running that
@@ -287,11 +286,6 @@ bunny_db_result_t bunny_db_blacklist_remove(bunny_db_t *db, bunny_db_site_t site
  * query NOT EXISTS clause) for a live upsert loop with no listing query of
  * its own to attach one to. */
 bunny_db_result_t bunny_db_post_is_blacklisted(bunny_db_t *db, int64_t post_id, bool *out_is_blacklisted);
-
-/* --- Downloads -------------------------------------------------------------- */
-
-bunny_db_result_t bunny_db_download_record(bunny_db_t *db, int64_t post_id, const char *file_path, const char *checksum_md5, bool verified, int64_t *out_id);
-bunny_db_result_t bunny_db_download_list_for_post(bunny_db_t *db, int64_t post_id, bunny_db_download_list_t *out_list);
 
 /* --- Tag stats -------------------------------------------------------------- */
 

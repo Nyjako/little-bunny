@@ -183,22 +183,6 @@ typedef struct
     bunny_db_int64_list_t children; /* child external ids */
 } bunny_db_post_relationships_t;
 
-typedef struct
-{
-    int64_t id;
-    int64_t post_id;
-    char *file_path;
-    char *checksum_md5;
-    bool checksum_verified;
-    char *downloaded_at;
-} bunny_db_download_t;
-
-typedef struct
-{
-    bunny_db_download_t *items;
-    size_t count;
-} bunny_db_download_list_t;
-
 typedef enum
 {
     BUNNY_DB_ACTION_FAVORITE_ADD,
@@ -248,8 +232,6 @@ void bunny_db_post_tag_list_free(bunny_db_post_tag_list_t *list);
 void bunny_db_string_list_free(bunny_db_string_list_t *list);
 void bunny_db_int64_list_free(bunny_db_int64_list_t *list);
 void bunny_db_post_relationships_free(bunny_db_post_relationships_t *relationships);
-void bunny_db_download_free(bunny_db_download_t *download);
-void bunny_db_download_list_free(bunny_db_download_list_t *list);
 void bunny_db_action_free(bunny_db_action_t *action);
 void bunny_db_action_list_free(bunny_db_action_list_t *list);
 

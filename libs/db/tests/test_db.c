@@ -1008,28 +1008,6 @@ void test_search_mark_all_seen_only_affects_that_searchs_posts(void)
     bunny_db_post_free(&fetched3);
 }
 
-void test_download_record_and_list(void)
-{
-    bunny_db_post_upsert_t post;
-    make_test_post(&post, 601, 1);
-    int64_t id = 0;
-    bunny_db_post_upsert(g_db, &post, &id);
-
-    int64_t download_id = 0;
-    bunny_db_result_t result = bunny_db_download_record(g_db, id, "/downloads/someartist/601.jpg", "abc123", true, &download_id);
-    TEST_ASSERT_EQUAL(BUNNY_DB_OK, result);
-    TEST_ASSERT_TRUE(download_id > 0);
-
-    bunny_db_download_list_t downloads;
-    result = bunny_db_download_list_for_post(g_db, id, &downloads);
-    TEST_ASSERT_EQUAL(BUNNY_DB_OK, result);
-    TEST_ASSERT_EQUAL(1, (int)downloads.count);
-    TEST_ASSERT_EQUAL_STRING("/downloads/someartist/601.jpg", downloads.items[0].file_path);
-    TEST_ASSERT_EQUAL_STRING("abc123", downloads.items[0].checksum_md5);
-    TEST_ASSERT_TRUE(downloads.items[0].checksum_verified);
-    bunny_db_download_list_free(&downloads);
-}
-
 void test_post_get_by_id(void)
 {
     bunny_db_post_upsert_t post;
@@ -2121,7 +2099,6 @@ int main(void)
     RUN_TEST(test_search_list_posts_orders_newest_first_by_site_date);
     RUN_TEST(test_search_list_posts_orders_a_post_with_no_site_date_by_cached_at_instead);
     RUN_TEST(test_search_list_posts_paginates);
-    RUN_TEST(test_download_record_and_list);
     RUN_TEST(test_post_get_by_id);
     RUN_TEST(test_post_get_by_id_not_found);
     RUN_TEST(test_action_queue_add_and_list_pending);
