@@ -85,13 +85,32 @@ class _TagBrowseScreenState extends State<TagBrowseScreen> {
   /// the app bar stays empty.
   BunnyPoolInfo? _poolInfo;
 
+  /// Non-null when a saved search already matches this exact (site, query)
+  /// pair (M38) -- swaps the app bar's "add" action for a checkmark instead
+  /// of letting the user create a second, functionally-identical search.
+  /// Always null when [TagBrowseScreen.customFetch] is set (no query string
+  /// to match against in the first place).
+  BunnySearch? _existingMatch;
+
   @override
   void initState() {
     super.initState();
     _loadInitial();
     _loadDisplaySettings();
     _loadPoolInfo();
+    _loadExistingMatch();
     _scrollController.addListener(_maybeLoadMore);
+  }
+
+  Future<void> _loadExistingMatch() async {
+    if (widget.customFetch != null) {
+      return;
+    }
+    final searches = await widget.repository.listSearches();
+    if (!mounted) {
+      return;
+    }
+    setState(() => _existingMatch = searches.where((search) => search.site == widget.site && search.query == widget.query).firstOrNull);
   }
 
   Future<void> _loadPoolInfo() async {
@@ -248,6 +267,9 @@ class _TagBrowseScreenState extends State<TagBrowseScreen> {
     );
   }
 
+  /// Stays on this screen after creating (unlike before M38, which popped
+  /// back immediately) and refreshes [_existingMatch] instead, so the app
+  /// bar's action swaps from "add" to the checkmark in place.
   Future<void> _addToSearches() async {
     final created = await Navigator.push<bool>(
       context,
@@ -257,8 +279,34 @@ class _TagBrowseScreenState extends State<TagBrowseScreen> {
       ),
     );
     if (created == true && mounted) {
-      Navigator.pop(context);
+      await _loadExistingMatch();
     }
+  }
+
+  Future<void> _removeFromSearches(AppLocalizations l10n) async {
+    final match = _existingMatch;
+    if (match == null) {
+      return;
+    }
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(l10n.searchesRemoveDialogTitle),
+        content: Text(l10n.searchesRemoveDialogContent(match.label)),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: Text(l10n.commonCancel)),
+          TextButton(onPressed: () => Navigator.pop(context, true), child: Text(l10n.commonRemove)),
+        ],
+      ),
+    );
+    if (confirmed != true) {
+      return;
+    }
+    await widget.repository.deleteSearch(match.id);
+    if (!mounted) {
+      return;
+    }
+    setState(() => _existingMatch = null);
   }
 
   /// The pool's own description + clickable chips for any "pool #`<N>`"
@@ -304,7 +352,13 @@ class _TagBrowseScreenState extends State<TagBrowseScreen> {
       appBar: AppBar(
         toolbarHeight: isWideScreen(context) ? compactToolbarHeight : null,
         title: Text(widget.title ?? widget.query),
-        actions: widget.customFetch == null ? [IconButton(icon: const Icon(Icons.add), tooltip: l10n.tagBrowseAddToSearchesTooltip, onPressed: _addToSearches)] : null,
+        actions: widget.customFetch == null
+            ? [
+                _existingMatch != null
+                    ? IconButton(icon: const Icon(Icons.check_circle), tooltip: l10n.tagBrowseAlreadySavedTooltip, onPressed: () => _removeFromSearches(l10n))
+                    : IconButton(icon: const Icon(Icons.add), tooltip: l10n.tagBrowseAddToSearchesTooltip, onPressed: _addToSearches),
+              ]
+            : null,
       ),
       body: Column(
         children: [
