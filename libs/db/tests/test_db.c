@@ -892,6 +892,40 @@ void test_search_list_posts_orders_newest_first_by_site_date(void)
     bunny_db_post_list_free(&results);
 }
 
+void test_search_list_posts_orders_a_post_with_no_site_date_by_cached_at_instead(void)
+{
+    /* M46: the sort key search_results.post_sort_key denormalizes is
+     * COALESCE(created_at_site, cached_at), set once when a post is first
+     * linked to a search -- this confirms the cached_at fallback still
+     * drives ordering correctly, not just the common created_at_site path
+     * test_search_list_posts_orders_newest_first_by_site_date already
+     * covers. */
+    int64_t search_id = 0;
+    bunny_db_search_create(g_db, BUNNY_DB_SITE_E621, "wolves", "wolf", 24, NULL, &search_id);
+
+    bunny_db_post_upsert_t old_dated_post;
+    bunny_db_post_upsert_t no_date_post;
+    make_test_post(&old_dated_post, 703, 1);
+    make_test_post(&no_date_post, 704, 1);
+    old_dated_post.created_at_site = "2020-01-01T00:00:00Z";
+    no_date_post.created_at_site = NULL; /* falls back to cached_at, which defaults to "now" */
+
+    int64_t old_dated_id = 0;
+    int64_t no_date_id = 0;
+    bunny_db_post_upsert(g_db, &old_dated_post, &old_dated_id);
+    bunny_db_search_add_result(g_db, search_id, old_dated_id, NULL);
+    bunny_db_post_upsert(g_db, &no_date_post, &no_date_id);
+    bunny_db_search_add_result(g_db, search_id, no_date_id, NULL);
+
+    bunny_db_post_list_t results;
+    bunny_db_result_t result = bunny_db_search_list_posts(g_db, search_id, false, true, 1, &results);
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, result);
+    TEST_ASSERT_EQUAL(2, (int)results.count);
+    TEST_ASSERT_EQUAL(no_date_id, results.items[0].id); /* cached_at (~now) beats the 2020 site date */
+    TEST_ASSERT_EQUAL(old_dated_id, results.items[1].id);
+    bunny_db_post_list_free(&results);
+}
+
 void test_search_list_posts_paginates(void)
 {
     int64_t search_id = 0;
@@ -2085,6 +2119,7 @@ int main(void)
     RUN_TEST(test_search_list_posts_excludes_blacklisted_tags);
     RUN_TEST(test_search_results_and_list_posts);
     RUN_TEST(test_search_list_posts_orders_newest_first_by_site_date);
+    RUN_TEST(test_search_list_posts_orders_a_post_with_no_site_date_by_cached_at_instead);
     RUN_TEST(test_search_list_posts_paginates);
     RUN_TEST(test_download_record_and_list);
     RUN_TEST(test_post_get_by_id);
