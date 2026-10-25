@@ -234,17 +234,6 @@ abstract interface class BunnyRepository {
   /// re-calling this is how the new comment appears.
   Future<List<BunnyComment>> getPostComments(int postId);
 
-  /// Records that [filePath] was downloaded for a post, for the download
-  /// manager's "already downloaded" indicator and history. This is pure
-  /// bookkeeping -- the actual HTTP fetch, disk write, and checksum
-  /// computation happen entirely client-side (never proxied through the
-  /// server) before this is called. Returns the new download row's id.
-  Future<int> recordDownload(int postId, String filePath, {String? checksumMd5, bool verified = false});
-
-  /// A post's download history, newest first. Empty for a post never
-  /// downloaded.
-  Future<List<BunnyDownload>> listDownloadsForPost(int postId);
-
   /// Manually triggers a sync pass (runs every due search). The server also
   /// does this on its own schedule (M5.3); this is for an explicit
   /// "refresh now" action. Runs in the background (server mode: enqueued

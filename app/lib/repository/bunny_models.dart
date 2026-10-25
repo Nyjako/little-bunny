@@ -281,21 +281,6 @@ class BunnyComment {
   const BunnyComment({required this.id, this.creatorName, this.body, this.createdAt});
 }
 
-/// A record that a post's file was downloaded to disk -- bookkeeping only,
-/// the actual HTTP fetch/disk write/checksum computation never go through
-/// this (see [BunnyRepository.recordDownload]'s doc comment). Mirrors
-/// `bunny_db_download_t`.
-class BunnyDownload {
-  final int id;
-  final int postId;
-  final String? filePath;
-  final String? checksumMd5;
-  final bool checksumVerified;
-  final String? downloadedAt;
-
-  const BunnyDownload({required this.id, required this.postId, this.filePath, this.checksumMd5, required this.checksumVerified, this.downloadedAt});
-}
-
 /// A pool's own metadata, fetched live (e621 only) -- used to auto-fill a
 /// pool search's label at creation time, and to show the pool's own
 /// description (M26). Mirrors `bunny_core_pool_info_t`.

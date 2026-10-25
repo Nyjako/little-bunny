@@ -312,10 +312,14 @@ class _PostDetailPageState extends State<_PostDetailPage> {
   bool _commentAnonymous = false;
   bool _postingComment = false;
 
+  /// Whether a file already sits at [DownloadManager.isDownloaded]'s
+  /// deterministic local path -- a per-device filesystem fact (M42), not a
+  /// server-tracked one (a download recorded from one device used to show
+  /// as already-downloaded on every other device sharing the same server).
   /// Reassigned after a successful download so the button's filled/checkmark
   /// state (M9.4) updates without a full screen reload -- same "not late
   /// final" reasoning as [_commentsFuture].
-  late Future<List<BunnyDownload>> _downloadsFuture;
+  late Future<bool> _isDownloadedFuture;
   bool _downloading = false;
 
   /// Mutable local copy of [widget.post], so favorite/vote taps can update
@@ -347,7 +351,7 @@ class _PostDetailPageState extends State<_PostDetailPage> {
     final refreshedPost = _refreshPost();
     _tagsFuture = refreshedPost.then((_) => widget.repository.getPostTagsByCategory(widget.post.id));
     _sourcesFuture = refreshedPost.then((_) => widget.repository.getPostSources(widget.post.id));
-    _downloadsFuture = widget.repository.listDownloadsForPost(widget.post.id);
+    _isDownloadedFuture = _checkIsDownloaded();
     if (widget.post.site == BunnySite.e621) {
       _relationshipsFuture = widget.repository.getPostRelationships(widget.post.id);
       _poolIdsFuture = widget.repository.getPostPoolIds(widget.post.id);
@@ -518,6 +522,14 @@ class _PostDetailPageState extends State<_PostDetailPage> {
     });
   }
 
+  Future<bool> _checkIsDownloaded() async {
+    final folder = await widget.downloadSettingsStore.loadDestinationFolder();
+    if (folder == null) {
+      return false;
+    }
+    return widget.downloadManager.isDownloaded(_post, folder);
+  }
+
   Future<void> _downloadFile(AppLocalizations l10n) async {
     setState(() => _downloading = true);
     final folder = await widget.downloadSettingsStore.loadDestinationFolder();
@@ -542,7 +554,7 @@ class _PostDetailPageState extends State<_PostDetailPage> {
     setState(() {
       _downloading = false;
       if (downloaded) {
-        _downloadsFuture = widget.repository.listDownloadsForPost(_post.id);
+        _isDownloadedFuture = Future.value(true);
       }
     });
     final message = switch (result.outcome) {
@@ -555,10 +567,10 @@ class _PostDetailPageState extends State<_PostDetailPage> {
 
   Widget _downloadButton(AppLocalizations l10n) {
     final canDownload = _post.fileUrl != null;
-    return FutureBuilder<List<BunnyDownload>>(
-      future: _downloadsFuture,
+    return FutureBuilder<bool>(
+      future: _isDownloadedFuture,
       builder: (context, snapshot) {
-        final alreadyDownloaded = (snapshot.data ?? const []).isNotEmpty;
+        final alreadyDownloaded = snapshot.data ?? false;
         return IconButton(
           icon: _downloading
               ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))

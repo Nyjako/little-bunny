@@ -88,6 +88,14 @@ static const bunny_db_migration_t BUNNY_DB_MIGRATIONS[] = {
          "UPDATE search_results SET post_sort_key = "
          "(SELECT COALESCE(p.created_at_site, p.cached_at) FROM posts p WHERE p.id = search_results.post_id);"
          "CREATE INDEX IF NOT EXISTS idx_search_results_search_id_sort_key ON search_results(search_id, post_sort_key);"},
+    /* "Downloaded" was wrongly tracked as a shared, server-side fact (M42),
+     * when it's inherently per-device/per-filesystem -- a download recorded
+     * on one device showed as already-downloaded on every other device
+     * sharing the same server. Clients now check local file existence at
+     * DownloadManager's own deterministic destination path instead, so the
+     * table (and its index, dropped implicitly with it) has no remaining
+     * reader or writer. */
+    {16, "DROP TABLE IF EXISTS downloads;"},
 };
 // clang-format on
 

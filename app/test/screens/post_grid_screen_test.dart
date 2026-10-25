@@ -514,7 +514,6 @@ void main() {
       });
       await tester.pumpAndSettle();
 
-      expect(repository.recordDownloadCalls, hasLength(1)); // only post 1 succeeded
       expect(find.text('1 downloaded, 0 checksum mismatch, 2 failed'), findsOneWidget);
       expect(find.text('Foxes'), findsOneWidget); // selection mode exited
     });

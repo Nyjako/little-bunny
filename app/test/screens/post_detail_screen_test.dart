@@ -20,6 +20,19 @@ import '../fakes/fake_bunny_repository.dart';
 import '../fakes/fake_video_player_platform.dart';
 import '../fakes/test_app.dart';
 
+/// Stubs [DownloadManager.isDownloaded] to always report a file already on
+/// disk, rather than seeding a real file and letting the real `dart:io`
+/// `File.exists()` call run -- a real check never resolves inside
+/// `testWidgets`'s FakeAsync zone when kicked off from `initState` (unlike
+/// `runAsync`-wrapped calls made later, directly from the test body), so
+/// faking the manager's answer is simpler than fighting that zone.
+class _AlreadyDownloadedManager extends DownloadManager {
+  const _AlreadyDownloadedManager();
+
+  @override
+  Future<bool> isDownloaded(BunnyPost post, String destinationFolder) async => true;
+}
+
 BunnyPost _post({
   String? fileExt,
   String? fileUrl,
@@ -842,7 +855,6 @@ void main() {
       await tester.pump();
 
       expect(find.text('Downloaded and checksum verified'), findsOneWidget);
-      expect(repository.recordDownloadCalls, hasLength(1));
       expect(find.byIcon(Icons.download_done), findsOneWidget);
     });
 
@@ -1022,16 +1034,24 @@ void main() {
       });
 
       expect(find.text('Download failed'), findsOneWidget);
-      expect(repository.recordDownloadCalls, isEmpty);
       expect(find.byIcon(Icons.download_done), findsNothing);
     });
 
-    testWidgets('shows the already-downloaded icon when the post has prior download history', (WidgetTester tester) async {
+    testWidgets('shows the already-downloaded icon when a file already sits at the deterministic local path (M42)', (WidgetTester tester) async {
       final repository = FakeBunnyRepository();
       final post = _post(fileExt: 'jpg');
-      repository.downloadsByPostId[post.id] = [const BunnyDownload(id: 1, postId: 1, filePath: '/downloads/1.jpg', checksumVerified: true)];
 
-      await tester.pumpWidget(wrapWithLocalization(PostDetailScreen(post: post, repository: repository, displaySettingsStore: const DisplaySettingsStore(), downloadSettingsStore: const DownloadSettingsStore())));
+      await tester.pumpWidget(
+        wrapWithLocalization(
+          PostDetailScreen(
+            post: post,
+            repository: repository,
+            displaySettingsStore: const DisplaySettingsStore(),
+            downloadSettingsStore: const DownloadSettingsStore(),
+            downloadManager: const _AlreadyDownloadedManager(),
+          ),
+        ),
+      );
       await tester.pumpAndSettle();
 
       expect(find.byIcon(Icons.download_done), findsOneWidget);

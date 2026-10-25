@@ -42,12 +42,14 @@ site libraries never depend back on the core.
 
 `bunny_db` (`libs/db`) wraps SQLite behind an opaque `bunny_db_t` handle and a CRUD API
 per concern (`bunny_db_account_*`, `bunny_db_search_*`, `bunny_db_post_*`,
-`bunny_db_favorite_*`, `bunny_db_download_*`, `bunny_db_top_favorited_tags`). Nothing
+`bunny_db_favorite_*`, `bunny_db_top_favorited_tags`). Nothing
 outside `libs/db/src` touches `sqlite3.h` directly. Schema (`libs/db/src/schema.h`) is a
 single idempotent `CREATE TABLE IF NOT EXISTS ...` block applied on every `bunny_db_open()`,
 covering accounts, searches, a post cache with normalized `tags`/`post_tags` tables (so
 tag-based queries like the top-favorited-tags stat don't need to parse JSON at query time),
-search-result membership, seen state, a favorites mirror, and downloads.
+search-result membership, seen state, and a favorites mirror. "Downloaded" is deliberately
+*not* tracked here (M42) -- it's a per-device filesystem fact, not a server-side one; see
+"Downloads are client-side" above.
 
 Posts are cached via **upsert** keyed on `(site, external_id)`: re-fetching a post updates
 the existing row (and replaces its tag associations) rather than duplicating it, so the

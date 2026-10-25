@@ -514,25 +514,6 @@ void test_full_account_search_sync_favorite_flow(void)
     TEST_ASSERT_NOT_NULL(strstr(response.data, "\"name\":\"e621: one\""));
     free(response.data);
     memset(&response, 0, sizeof(response));
-
-    status = do_request("GET", "/posts/1/downloads", NULL, &response, true, NULL);
-    TEST_ASSERT_EQUAL(200, status);
-    TEST_ASSERT_EQUAL_STRING("[]", response.data);
-    free(response.data);
-    memset(&response, 0, sizeof(response));
-
-    status = do_request("POST", "/posts/1/downloads", "{\"file_path\":\"/downloads/wolf/1.png\",\"checksum_md5\":\"aaa\",\"verified\":true}", &response, true, NULL);
-    TEST_ASSERT_EQUAL(200, status);
-    TEST_ASSERT_NOT_NULL(strstr(response.data, "\"id\":1"));
-    free(response.data);
-    memset(&response, 0, sizeof(response));
-
-    status = do_request("GET", "/posts/1/downloads", NULL, &response, true, NULL);
-    TEST_ASSERT_EQUAL(200, status);
-    TEST_ASSERT_NOT_NULL(strstr(response.data, "\"file_path\":\"/downloads/wolf/1.png\""));
-    TEST_ASSERT_NOT_NULL(strstr(response.data, "\"checksum_md5\":\"aaa\""));
-    TEST_ASSERT_NOT_NULL(strstr(response.data, "\"checksum_verified\":true"));
-    free(response.data);
 }
 
 /* The underlying "a forced single-search sync ignores the due check, unlike

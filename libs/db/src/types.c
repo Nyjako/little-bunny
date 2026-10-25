@@ -184,30 +184,6 @@ void bunny_db_post_relationships_free(bunny_db_post_relationships_t *relationshi
     memset(relationships, 0, sizeof(*relationships));
 }
 
-void bunny_db_download_free(bunny_db_download_t *download)
-{
-    if (!download) {
-        return;
-    }
-    free(download->file_path);
-    free(download->checksum_md5);
-    free(download->downloaded_at);
-    memset(download, 0, sizeof(*download));
-}
-
-void bunny_db_download_list_free(bunny_db_download_list_t *list)
-{
-    if (!list) {
-        return;
-    }
-    for (size_t i = 0; i < list->count; i++) {
-        bunny_db_download_free(&list->items[i]);
-    }
-    free(list->items);
-    list->items = NULL;
-    list->count = 0;
-}
-
 const char *bunny_db_action_type_to_string(bunny_db_action_type_t action_type)
 {
     switch (action_type) {
