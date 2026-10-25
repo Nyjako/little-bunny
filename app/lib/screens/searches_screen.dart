@@ -11,6 +11,7 @@ import '../settings/display_settings_store.dart';
 import '../settings/download_settings_store.dart';
 import '../settings/repository_settings_store.dart';
 import '../settings/theme_settings_store.dart';
+import '../util/duplicate_searches.dart';
 import '../util/responsive.dart';
 import '../widgets/update_dialog.dart';
 import 'accounts_screen.dart';
@@ -106,6 +107,11 @@ class _SearchesScreenState extends State<SearchesScreen> with SingleTickerProvid
   Future<({List<BunnySearch> searches, List<BunnyGroup> groups})>? _dataFuture;
   late final TabController _tabController;
   SearchSortOrder _sortOrder = SearchSortOrder.mostUnseen;
+
+  /// Session-only (M41) -- re-shown on the next [_refresh] rather than
+  /// persisted, so dismissing it doesn't hide a *different* set of
+  /// duplicates that shows up later.
+  bool _duplicatesBannerDismissed = false;
 
   @override
   void initState() {
@@ -228,6 +234,7 @@ class _SearchesScreenState extends State<SearchesScreen> with SingleTickerProvid
   void _refresh() {
     setState(() {
       _dataFuture = _loadData();
+      _duplicatesBannerDismissed = false;
     });
   }
 
@@ -579,6 +586,108 @@ class _SearchesScreenState extends State<SearchesScreen> with SingleTickerProvid
     return ListView(children: entries.map(_entryTile).toList());
   }
 
+  /// Flags pre-existing (site, query) duplicates (M41) -- M38's own create-
+  /// time check only stops new ones. Dismissing this is session-only (see
+  /// [_duplicatesBannerDismissed]'s own doc comment); it doesn't touch any
+  /// search data by itself, only [_resolveDuplicates] does that.
+  Widget _duplicatesBanner(AppLocalizations l10n, List<List<BunnySearch>> duplicateGroups, List<BunnyGroup> groups) {
+    return Material(
+      color: Theme.of(context).colorScheme.surfaceContainerHighest,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        child: Row(
+          children: [
+            Expanded(child: Text(l10n.searchesDuplicatesBannerMessage(duplicateGroups.length))),
+            TextButton(onPressed: () => _resolveDuplicates(l10n, duplicateGroups, groups), child: Text(l10n.searchesDuplicatesBannerReviewAction)),
+            IconButton(
+              icon: const Icon(Icons.close),
+              tooltip: l10n.searchesDuplicatesBannerDismissTooltip,
+              onPressed: () => setState(() => _duplicatesBannerDismissed = true),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// One member of a duplicate group's own detail row in the resolve
+  /// dialog -- enough to tell divergent duplicates apart (interval, pinned,
+  /// group) without opening the full edit form for each one.
+  Widget _duplicateCandidateTile(AppLocalizations l10n, BunnySearch search, List<BunnyGroup> groups, VoidCallback onKeep) {
+    String? groupName;
+    for (final group in groups) {
+      if (group.id == search.groupId) {
+        groupName = group.name;
+        break;
+      }
+    }
+    return ListTile(
+      title: Text(search.label),
+      subtitle: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(l10n.searchesResolveDuplicatesIntervalLabel(search.intervalHours)),
+          if (search.pinned) Text(l10n.searchesResolveDuplicatesPinnedLabel),
+          if (groupName != null) Text(l10n.searchesResolveDuplicatesGroupLabel(groupName)),
+        ],
+      ),
+      isThreeLine: search.pinned || groupName != null,
+      trailing: TextButton(onPressed: onKeep, child: Text(l10n.searchesResolveDuplicatesKeepButton)),
+    );
+  }
+
+  /// Merges every other member of [group] into [keeper] -- see
+  /// [BunnyRepository.mergeDuplicateSearch]'s own doc comment for what
+  /// "merge" means here (synced posts move over, settings aren't
+  /// reconciled). Sequential rather than parallel: a mass-action volume
+  /// (at most a handful of duplicates per group) that doesn't need the
+  /// batching this app's mass-download/favorite actions already use.
+  Future<void> _keepDuplicate(BunnySearch keeper, List<BunnySearch> group) async {
+    for (final other in group) {
+      if (other.id != keeper.id) {
+        await _repository!.mergeDuplicateSearch(keeper.id, other.id);
+      }
+    }
+  }
+
+  Future<void> _resolveDuplicates(AppLocalizations l10n, List<List<BunnySearch>> initialGroups, List<BunnyGroup> groups) async {
+    await showDialog<void>(
+      context: context,
+      builder: (context) {
+        var remainingGroups = initialGroups;
+        return StatefulBuilder(
+          builder: (context, setDialogState) => AlertDialog(
+            title: Text(l10n.searchesResolveDuplicatesDialogTitle),
+            content: SizedBox(
+              width: double.maxFinite,
+              child: ListView(
+                shrinkWrap: true,
+                children: [
+                  for (final group in remainingGroups) ...[
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 8),
+                      child: Text(l10n.searchesResolveDuplicatesGroupHeading(group.first.site.toWireString(), group.first.query), style: Theme.of(context).textTheme.titleSmall),
+                    ),
+                    for (final search in group)
+                      _duplicateCandidateTile(l10n, search, groups, () async {
+                        await _keepDuplicate(search, group);
+                        setDialogState(() => remainingGroups = remainingGroups.where((g) => g != group).toList());
+                        if (remainingGroups.isEmpty && context.mounted) {
+                          Navigator.pop(context);
+                        }
+                      }),
+                  ],
+                ],
+              ),
+            ),
+            actions: [TextButton(onPressed: () => Navigator.pop(context), child: Text(l10n.searchesResolveDuplicatesDoneButton))],
+          ),
+        );
+      },
+    );
+    _refresh();
+  }
+
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
@@ -687,9 +796,17 @@ class _SearchesScreenState extends State<SearchesScreen> with SingleTickerProvid
           final groups = snapshot.data!.groups;
           final searches = _sortedEntries(_buildEntries(all.where((search) => !search.isPool && !search.isFavorites).toList(), groups));
           final pools = _sortedEntries(_buildEntries(all.where((search) => search.isPool).toList(), groups));
-          return TabBarView(
-            controller: _tabController,
-            children: [_searchList(searches, l10n.searchesEmptyState), _searchList(pools, l10n.searchesPoolsEmptyState)],
+          final duplicateGroups = findDuplicateSearchGroups(all);
+          return Column(
+            children: [
+              if (duplicateGroups.isNotEmpty && !_duplicatesBannerDismissed) _duplicatesBanner(l10n, duplicateGroups, groups),
+              Expanded(
+                child: TabBarView(
+                  controller: _tabController,
+                  children: [_searchList(searches, l10n.searchesEmptyState), _searchList(pools, l10n.searchesPoolsEmptyState)],
+                ),
+              ),
+            ],
           );
         },
       ),

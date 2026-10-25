@@ -141,6 +141,24 @@ class FakeBunnyRepository implements BunnyRepository {
     postsBySearchId.remove(searchId);
   }
 
+  /// Each entry is the `(keeperId, duplicateId)` passed to
+  /// [mergeDuplicateSearch].
+  final List<(int, int)> mergeDuplicateSearchCalls = [];
+
+  @override
+  Future<void> mergeDuplicateSearch(int keeperId, int duplicateId) async {
+    mergeDuplicateSearchCalls.add((keeperId, duplicateId));
+    final duplicatePosts = postsBySearchId.remove(duplicateId) ?? const [];
+    final keeperPosts = postsBySearchId.putIfAbsent(keeperId, () => []);
+    final keeperPostIds = keeperPosts.map((post) => post.id).toSet();
+    for (final post in duplicatePosts) {
+      if (keeperPostIds.add(post.id)) {
+        keeperPosts.add(post);
+      }
+    }
+    searches.removeWhere((search) => search.id == duplicateId);
+  }
+
   @override
   Future<void> setSearchPinned(int searchId, bool pinned) async {
     final index = searches.indexWhere((search) => search.id == searchId);

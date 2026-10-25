@@ -233,6 +233,44 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String searchesDuplicatesBannerMessage(int count) {
+    return '$count duplicate searches found.';
+  }
+
+  @override
+  String get searchesDuplicatesBannerReviewAction => 'Review';
+
+  @override
+  String get searchesDuplicatesBannerDismissTooltip => 'Dismiss';
+
+  @override
+  String get searchesResolveDuplicatesDialogTitle => 'Duplicate searches';
+
+  @override
+  String searchesResolveDuplicatesGroupHeading(String site, String query) {
+    return '$site: $query';
+  }
+
+  @override
+  String get searchesResolveDuplicatesKeepButton => 'Keep this one';
+
+  @override
+  String searchesResolveDuplicatesIntervalLabel(int hours) {
+    return 'Every ${hours}h';
+  }
+
+  @override
+  String get searchesResolveDuplicatesPinnedLabel => 'Pinned';
+
+  @override
+  String searchesResolveDuplicatesGroupLabel(String name) {
+    return 'Group: $name';
+  }
+
+  @override
+  String get searchesResolveDuplicatesDoneButton => 'Close';
+
+  @override
   String get tagStatsScreenTitle => 'Tag stats';
 
   @override

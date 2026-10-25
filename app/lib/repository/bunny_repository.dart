@@ -59,6 +59,14 @@ abstract interface class BunnyRepository {
 
   Future<void> deleteSearch(int searchId);
 
+  /// Folds a pre-existing (site, query) duplicate into [keeperId] (M41 --
+  /// M38's own create-time check only stops new ones): [duplicateId]'s
+  /// synced posts move over to [keeperId], then [duplicateId] is deleted.
+  /// Which of the two to treat as the keeper is the caller's decision --
+  /// this doesn't try to reconcile divergent settings (interval, pinned,
+  /// group, ...) between them.
+  Future<void> mergeDuplicateSearch(int keeperId, int duplicateId);
+
   /// Pins/unpins a search, toggled directly from the searches list row
   /// (M14.1) rather than through the full edit form.
   Future<void> setSearchPinned(int searchId, bool pinned);
