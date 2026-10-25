@@ -334,6 +334,30 @@ static int handle_put_search(struct mg_connection *conn, server_context_t *ctx, 
     return status;
 }
 
+/* Folds a pre-existing (site, query) duplicate into search_id (M41 -- which
+ * one is the "keeper" is the caller's decision, made in SearchesScreen). */
+static int handle_merge_duplicate_search(struct mg_connection *conn, server_context_t *ctx, int64_t search_id)
+{
+    cJSON *body = server_json_read_request_body(conn);
+    int duplicate_id = bunny_json_get_int_or(body, "duplicate_id", 0);
+    cJSON_Delete(body);
+    if (duplicate_id <= 0) {
+        return server_json_respond_error(conn, BUNNY_CORE_ERR_INVALID_ARG);
+    }
+
+    bunny_core_result_t result = bunny_core_search_merge_duplicate(ctx->core, search_id, duplicate_id);
+
+    if (result != BUNNY_CORE_OK) {
+        return server_json_respond_error(conn, result);
+    }
+
+    cJSON *response = cJSON_CreateObject();
+    cJSON_AddBoolToObject(response, "ok", true);
+    int status = server_json_respond(conn, 200, response);
+    cJSON_Delete(response);
+    return status;
+}
+
 static int searches_handler(struct mg_connection *conn, void *cbdata)
 {
     server_context_t *ctx = (server_context_t *)cbdata;
@@ -371,6 +395,9 @@ static int searches_handler(struct mg_connection *conn, void *cbdata)
         }
         if (strcmp(method, "POST") == 0 && server_route_parse_id_with_suffix(sub_path, "viewed", &search_id)) {
             return handle_touch_search_viewed(conn, ctx, search_id);
+        }
+        if (strcmp(method, "POST") == 0 && server_route_parse_id_with_suffix(sub_path, "merge_duplicate", &search_id)) {
+            return handle_merge_duplicate_search(conn, ctx, search_id);
         }
         if (strcmp(method, "PUT") == 0 && server_route_parse_id(sub_path, &search_id)) {
             return handle_put_search(conn, ctx, search_id);

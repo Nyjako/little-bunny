@@ -66,6 +66,14 @@ bunny_db_result_t bunny_db_settings_set_pool_positions_backfilled(bunny_db_t *db
 
 bunny_db_result_t bunny_db_search_create(bunny_db_t *db, bunny_db_site_t site, const char *label, const char *query, int interval_hours, const bunny_db_search_options_t *options, int64_t *out_id);
 bunny_db_result_t bunny_db_search_delete(bunny_db_t *db, int64_t search_id);
+
+/* Folds a pre-existing (site, query) duplicate (M41 -- M38's own create-time
+ * check only stops new ones) into keeper_id: moves duplicate_id's
+ * search_results rows over, then deletes duplicate_id. Which of the two to
+ * treat as the keeper is the caller's decision -- see bunny_db_search_merge_
+ * duplicate's own doc comment in searches.c. */
+bunny_db_result_t bunny_db_search_merge_duplicate(bunny_db_t *db, int64_t keeper_id, int64_t duplicate_id);
+
 bunny_db_result_t bunny_db_search_list(bunny_db_t *db, bunny_db_search_list_t *out_list);
 bunny_db_result_t bunny_db_search_touch_last_run(bunny_db_t *db, int64_t search_id);
 

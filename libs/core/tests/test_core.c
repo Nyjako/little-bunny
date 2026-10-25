@@ -124,6 +124,11 @@ void test_backup_database_rejects_null_args(void)
     TEST_ASSERT_EQUAL(BUNNY_CORE_ERR_INVALID_ARG, bunny_core_backup_database(g_core, NULL));
 }
 
+void test_search_merge_duplicate_rejects_a_null_core(void)
+{
+    TEST_ASSERT_EQUAL(BUNNY_CORE_ERR_INVALID_ARG, bunny_core_search_merge_duplicate(NULL, 1, 2));
+}
+
 /* Every other test in this file runs against setUp's ":memory:" core, which
  * never opens a read pool at all (see bunny_core_open's open_read_pool --
  * ":memory:" has no shared storage for a pool of connections to see). This
@@ -183,6 +188,7 @@ int main(void)
     RUN_TEST(test_account_delete);
     RUN_TEST(test_backup_database_creates_a_timestamped_file);
     RUN_TEST(test_backup_database_rejects_null_args);
+    RUN_TEST(test_search_merge_duplicate_rejects_a_null_core);
     RUN_TEST(test_read_pool_sees_writes_on_a_real_file_backed_database);
     return UNITY_END();
 }
