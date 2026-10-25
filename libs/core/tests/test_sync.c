@@ -932,11 +932,14 @@ void test_tag_autocomplete_finds_tags_from_synced_posts(void)
     bunny_core_search_create(g_core, BUNNY_DB_SITE_E621, "wolves", "wolf", 24, NULL, &search_id);
     bunny_core_sync_due_searches(g_core, NULL);
 
+    /* "somea" rather than the fixture's shorter "one" tag -- a prefix below
+     * the M39 minimum is rejected before it ever reaches the database, see
+     * test_tag_autocomplete_returns_empty_list_for_a_short_prefix below. */
     bunny_db_tag_stat_list_t tags;
-    bunny_core_result_t result = bunny_core_tag_autocomplete(g_core, BUNNY_DB_SITE_E621, "on", 10, &tags);
+    bunny_core_result_t result = bunny_core_tag_autocomplete(g_core, BUNNY_DB_SITE_E621, "somea", 10, &tags);
     TEST_ASSERT_EQUAL(BUNNY_CORE_OK, result);
     TEST_ASSERT_EQUAL(1, (int)tags.count);
-    TEST_ASSERT_EQUAL_STRING("one", tags.items[0].name);
+    TEST_ASSERT_EQUAL_STRING("someartist", tags.items[0].name);
     bunny_db_tag_stat_list_free(&tags);
 
     free(fixture);
@@ -948,6 +951,57 @@ void test_tag_autocomplete_returns_empty_list_for_no_match(void)
     bunny_core_result_t result = bunny_core_tag_autocomplete(g_core, BUNNY_DB_SITE_E621, "nonexistent", 10, &tags);
     TEST_ASSERT_EQUAL(BUNNY_CORE_OK, result);
     TEST_ASSERT_EQUAL(0, (int)tags.count);
+    bunny_db_tag_stat_list_free(&tags);
+}
+
+void test_tag_autocomplete_returns_empty_list_for_a_short_prefix(void)
+{
+    char *fixture = read_fixture("e621_posts_search.json");
+    TEST_ASSERT_NOT_NULL(fixture);
+    g_e621_state.bodies[0] = fixture;
+    g_e621_state.body_count = 1;
+
+    int64_t search_id = 0;
+    bunny_core_search_create(g_core, BUNNY_DB_SITE_E621, "wolves", "wolf", 24, NULL, &search_id);
+    bunny_core_sync_due_searches(g_core, NULL);
+
+    /* "one" is a real, synced tag -- a 2-character prefix would match it at
+     * the database layer (see test_tag_autocomplete_prefix_match in
+     * test_db.c), but M39's throttle rejects anything under 5 characters
+     * before the query ever runs. */
+    bunny_db_tag_stat_list_t tags;
+    bunny_core_result_t result = bunny_core_tag_autocomplete(g_core, BUNNY_DB_SITE_E621, "on", 10, &tags);
+    TEST_ASSERT_EQUAL(BUNNY_CORE_OK, result);
+    TEST_ASSERT_EQUAL(0, (int)tags.count);
+    bunny_db_tag_stat_list_free(&tags);
+
+    free(fixture);
+}
+
+void test_tag_autocomplete_caps_the_result_count_to_five(void)
+{
+    const char *fixture = "{\"posts\":["
+                          "{\"id\":1,\"created_at\":\"2024-01-01T00:00:00.000-05:00\","
+                          "\"file\":{\"width\":100,\"height\":100,\"ext\":\"png\",\"size\":1000,\"md5\":\"aaa\",\"url\":\"https://static1.e621.net/data/1.png\"},"
+                          "\"preview\":{\"width\":50,\"height\":50,\"url\":\"https://static1.e621.net/data/preview/1.png\"},"
+                          "\"score\":{\"up\":1,\"down\":0,\"total\":1},"
+                          "\"tags\":{\"general\":[\"somea1\",\"somea2\",\"somea3\",\"somea4\",\"somea5\",\"somea6\"],\"species\":[],"
+                          "\"character\":[],\"copyright\":[],\"artist\":[],\"invalid\":[],\"lore\":[],\"meta\":[]},"
+                          "\"rating\":\"s\",\"fav_count\":1,\"sources\":[],\"description\":\"a test post\",\"comment_count\":0,\"is_favorited\":false,\"pools\":[]}"
+                          "]}";
+    g_e621_state.bodies[0] = fixture;
+    g_e621_state.body_count = 1;
+
+    int64_t search_id = 0;
+    bunny_core_search_create(g_core, BUNNY_DB_SITE_E621, "wolves", "wolf", 24, NULL, &search_id);
+    bunny_core_sync_due_searches(g_core, NULL);
+
+    /* 6 distinct tags share the "somea" prefix -- a requested limit of 100
+     * must still come back capped at 5 (M39). */
+    bunny_db_tag_stat_list_t tags;
+    bunny_core_result_t result = bunny_core_tag_autocomplete(g_core, BUNNY_DB_SITE_E621, "somea", 100, &tags);
+    TEST_ASSERT_EQUAL(BUNNY_CORE_OK, result);
+    TEST_ASSERT_EQUAL(5, (int)tags.count);
     bunny_db_tag_stat_list_free(&tags);
 }
 
@@ -1514,6 +1568,8 @@ int main(void)
     RUN_TEST(test_sync_e621_search_with_zero_matches_still_flips_to_incremental_mode);
     RUN_TEST(test_tag_autocomplete_finds_tags_from_synced_posts);
     RUN_TEST(test_tag_autocomplete_returns_empty_list_for_no_match);
+    RUN_TEST(test_tag_autocomplete_returns_empty_list_for_a_short_prefix);
+    RUN_TEST(test_tag_autocomplete_caps_the_result_count_to_five);
     RUN_TEST(test_mark_seen_flips_is_seen_on_a_synced_post);
     RUN_TEST(test_mark_seen_rejects_a_nonexistent_post);
     RUN_TEST(test_sync_inkbunny_search_upserts_post);

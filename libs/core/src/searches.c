@@ -197,14 +197,27 @@ bunny_core_result_t bunny_core_post_get_by_id(bunny_core_t *core, int64_t post_i
     return bunny_core_map_db_result(result);
 }
 
+/* A prefix shorter than this matches far too many tags for the (site, name)
+ * index to narrow usefully -- each candidate tag still needs its own
+ * post_tags join to count matches, which is what actually hung the server on
+ * a one- or two-letter keystroke (M39). Below the minimum, skip the query
+ * entirely rather than let the caller pay for it. */
+#define BUNNY_CORE_TAG_AUTOCOMPLETE_MIN_PREFIX_LEN 5
+#define BUNNY_CORE_TAG_AUTOCOMPLETE_MAX_RESULTS 5
+
 bunny_core_result_t bunny_core_tag_autocomplete(bunny_core_t *core, bunny_db_site_t site, const char *prefix, int limit, bunny_db_tag_stat_list_t *out_list)
 {
-    if (!core) {
+    if (!core || !out_list) {
         return BUNNY_CORE_ERR_INVALID_ARG;
     }
+    if (!prefix || strlen(prefix) < BUNNY_CORE_TAG_AUTOCOMPLETE_MIN_PREFIX_LEN) {
+        memset(out_list, 0, sizeof(*out_list));
+        return BUNNY_CORE_OK;
+    }
+    int capped_limit = (limit <= 0 || limit > BUNNY_CORE_TAG_AUTOCOMPLETE_MAX_RESULTS) ? BUNNY_CORE_TAG_AUTOCOMPLETE_MAX_RESULTS : limit;
     size_t slot;
     bunny_db_t *read_db = bunny_core_db_read_lock(core, &slot);
-    bunny_db_result_t result = bunny_db_tag_autocomplete(read_db, site, prefix, limit, out_list);
+    bunny_db_result_t result = bunny_db_tag_autocomplete(read_db, site, prefix, capped_limit, out_list);
     bunny_core_db_read_unlock(core, slot);
     return bunny_core_map_db_result(result);
 }
