@@ -26,6 +26,17 @@ void main() {
     expect(find.text('Nothing here yet.'), findsNWidgets(4));
   });
 
+  testWidgets('shows a "building" message instead of a timestamp when nothing has been computed yet (M55)', (WidgetTester tester) async {
+    final repository = FakeBunnyRepository();
+    repository.statsReport = const BunnyStatsReport(computedAt: null, topFavoritedTags: [], topUsedTags: [], topPools: [], topViewedSearches: []);
+
+    await tester.pumpWidget(wrap(repository));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Building the report for the first time -- check back shortly.'), findsOneWidget);
+    expect(find.textContaining('Updated'), findsNothing);
+  });
+
   testWidgets('lists each section with its own entries and counts (M40)', (WidgetTester tester) async {
     final repository = FakeBunnyRepository();
     repository.statsReport = const BunnyStatsReport(

@@ -194,6 +194,18 @@ static void run_slot(task_queue_t *queue, const task_slot_t *slot)
             server_sync_status_clear(queue->status);
             break;
         }
+        case TASK_TYPE_BUILD_STATS_REPORT: {
+            /* Deliberately doesn't touch server_sync_status -- that's
+             * specifically for search-sync progress (source/search_label
+             * fields that don't apply here), not a generic "something's
+             * running" flag. */
+            server_log("INFO", "task queue: building the tag-stats report");
+            bunny_core_stats_report_t report;
+            bunny_core_refresh_stats_report(queue->core, &report);
+            bunny_core_stats_report_free(&report);
+            server_log("INFO", "task queue: tag-stats report build finished");
+            break;
+        }
     }
 }
 
@@ -363,6 +375,15 @@ bool task_queue_enqueue_background_action_queue(task_queue_t *queue)
     bunny_mutex_lock(&queue->mutex);
     bool already_covered = find_slot_by_type(queue, TASK_TYPE_PROCESS_ACTION_QUEUE) >= 0;
     bool ok = already_covered || insert_slot(queue, TASK_TYPE_PROCESS_ACTION_QUEUE, TASK_PRIORITY_MEDIUM, goblin_copy_cstr("Process favorite/vote/comment queue"), 0);
+    bunny_mutex_unlock(&queue->mutex);
+    return ok;
+}
+
+bool task_queue_enqueue_stats_report_build(task_queue_t *queue)
+{
+    bunny_mutex_lock(&queue->mutex);
+    bool already_covered = find_slot_by_type(queue, TASK_TYPE_BUILD_STATS_REPORT) >= 0;
+    bool ok = already_covered || insert_slot(queue, TASK_TYPE_BUILD_STATS_REPORT, TASK_PRIORITY_LOW, goblin_copy_cstr("Build tag-stats report"), 0);
     bunny_mutex_unlock(&queue->mutex);
     return ok;
 }

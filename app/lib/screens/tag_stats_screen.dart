@@ -11,9 +11,15 @@ import 'tag_browse_screen.dart';
 /// tags, top pools (by favorited post count), and most-visited searches.
 /// Replaces M10.2/M14.4's per-site/"Favorites vs All" tabbed screen, which
 /// ran four full-table aggregate queries fresh on every page open -- that's
-/// what hung it. The report is cached server-side for up to 24h
-/// ([BunnyRepository.getStatsReport]); the app bar's refresh action forces a
-/// recompute ([BunnyRepository.refreshStatsReport]).
+/// what hung it. The report is cached for up to 24h; as of M55, both
+/// loading the screen ([BunnyRepository.getStatsReport]) and the app bar's
+/// refresh action ([BunnyRepository.refreshStatsReport]) only ever show
+/// whatever's cached right now rather than waiting for a fresh build, so
+/// [BunnyStatsReport.computedAt] can come back null the very first time
+/// (nothing built yet) -- the screen shows [AppLocalizations.
+/// tagStatsBuildingLabel] instead of a timestamp in that case, and the user
+/// is expected to just come back to this screen later to see the result,
+/// same as any other background job in this app.
 class TagStatsScreen extends StatefulWidget {
   final BunnyRepository repository;
   final DisplaySettingsStore displaySettingsStore;
@@ -134,7 +140,13 @@ class _TagStatsScreenState extends State<TagStatsScreen> {
           final report = snapshot.data!;
           return ListView(
             children: [
-              Padding(padding: const EdgeInsets.fromLTRB(16, 12, 16, 0), child: Text(l10n.tagStatsLastUpdatedLabel(report.computedAt), style: Theme.of(context).textTheme.bodySmall)),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                child: Text(
+                  report.computedAt == null ? l10n.tagStatsBuildingLabel : l10n.tagStatsLastUpdatedLabel(report.computedAt!),
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+              ),
               _section(l10n, l10n.tagStatsTopFavoritedTagsLabel, report.topFavoritedTags, (stat) => _openTag(stat.name), (stat) => stat.name),
               const Divider(height: 1),
               _section(l10n, l10n.tagStatsTopUsedTagsLabel, report.topUsedTags, (stat) => _openTag(stat.name), (stat) => stat.name),

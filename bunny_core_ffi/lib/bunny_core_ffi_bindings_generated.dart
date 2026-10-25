@@ -904,9 +904,13 @@ class BunnyCoreFfiBindings {
       >();
 
   /// Ranks cached tags (from already-synced posts) by usage count, for a
-  /// search box's autocomplete -- a thin pass-through to bunny_db, same shape
-  /// as the search CRUD above. `prefix`'s characters are matched literally, not
-  /// as SQL LIKE wildcards.
+  /// search box's autocomplete. `prefix`'s characters are matched literally,
+  /// not as SQL LIKE wildcards. A `prefix` shorter than 5 characters returns an
+  /// empty list without querying the database at all, and the result count is
+  /// always capped at 5 regardless of `limit` -- both throttles exist because a
+  /// short prefix matches far too many tags for the LIKE index to narrow
+  /// usefully, which could otherwise hang the server on a single keystroke
+  /// (M39).
   bunny_core_result_t bunny_core_tag_autocomplete(
     ffi.Pointer<bunny_core_t> core,
     bunny_db_site_t site,
@@ -1029,37 +1033,61 @@ class BunnyCoreFfiBindings {
   late final _bunny_core_stats_report_free = _bunny_core_stats_report_freePtr
       .asFunction<void Function(ffi.Pointer<bunny_core_stats_report_t>)>();
 
-  /// Returns the cached report if one exists and is younger than 24 hours;
-  /// otherwise recomputes it (same as bunny_core_refresh_stats_report) and
-  /// caches the fresh result before returning it.
-  bunny_core_result_t bunny_core_get_stats_report(
+  /// Reads whatever report is currently cached WITHOUT ever building or
+  /// recomputing one (M55) -- each section is a full-table aggregate, and on
+  /// a large enough database bunny_core_refresh_stats_report below can run for
+  /// minutes, which is exactly what hung the server when this used to build
+  /// synchronously on a cache miss. `*out_has_cache` is false (and `*out_report`
+  /// left zeroed) if nothing has ever been cached; `*out_is_stale` is true
+  /// whenever there's no cache at all, or the cached one is 24+ hours old --
+  /// callers that want the report kept warm should check `*out_is_stale` and
+  /// enqueue a `bunny_core_refresh_stats_report` call on a background worker
+  /// themselves (see server/src/task_queue.c's TASK_TYPE_BUILD_STATS_REPORT),
+  /// never call it inline on whatever thread is answering a live request.
+  bunny_core_result_t bunny_core_get_cached_stats_report(
     ffi.Pointer<bunny_core_t> core,
     ffi.Pointer<bunny_core_stats_report_t> out_report,
+    ffi.Pointer<ffi.Bool> out_has_cache,
+    ffi.Pointer<ffi.Bool> out_is_stale,
   ) {
     return bunny_core_result_t.fromValue(
-      _bunny_core_get_stats_report(core, out_report),
+      _bunny_core_get_cached_stats_report(
+        core,
+        out_report,
+        out_has_cache,
+        out_is_stale,
+      ),
     );
   }
 
-  late final _bunny_core_get_stats_reportPtr =
+  late final _bunny_core_get_cached_stats_reportPtr =
       _lookup<
         ffi.NativeFunction<
           ffi.UnsignedInt Function(
             ffi.Pointer<bunny_core_t>,
             ffi.Pointer<bunny_core_stats_report_t>,
+            ffi.Pointer<ffi.Bool>,
+            ffi.Pointer<ffi.Bool>,
           )
         >
-      >('bunny_core_get_stats_report');
-  late final _bunny_core_get_stats_report = _bunny_core_get_stats_reportPtr
-      .asFunction<
-        int Function(
-          ffi.Pointer<bunny_core_t>,
-          ffi.Pointer<bunny_core_stats_report_t>,
-        )
-      >();
+      >('bunny_core_get_cached_stats_report');
+  late final _bunny_core_get_cached_stats_report =
+      _bunny_core_get_cached_stats_reportPtr
+          .asFunction<
+            int Function(
+              ffi.Pointer<bunny_core_t>,
+              ffi.Pointer<bunny_core_stats_report_t>,
+              ffi.Pointer<ffi.Bool>,
+              ffi.Pointer<ffi.Bool>,
+            )
+          >();
 
-  /// Forces a recompute regardless of the cached report's age -- the tag-stats
-  /// screen's manual refresh action.
+  /// Recomputes the report from scratch and caches the fresh result,
+  /// regardless of the previously-cached one's age -- this is the slow,
+  /// potentially multi-minute call bunny_core_get_cached_stats_report's own
+  /// doc comment warns about. Only ever call this from a background worker
+  /// thread, never from a thread that's also expected to answer other
+  /// requests promptly.
   bunny_core_result_t bunny_core_refresh_stats_report(
     ffi.Pointer<bunny_core_t> core,
     ffi.Pointer<bunny_core_stats_report_t> out_report,
@@ -2561,7 +2589,7 @@ final class bunny_core_stats_report_t extends ffi.Struct {
 
   external bunny_db_tag_stat_list_t top_viewed_searches;
 
-  /// ISO 8601 UTC; never NULL once a report has been built
+  /// ISO 8601 UTC; NULL if no report has ever been built yet
   external ffi.Pointer<ffi.Char> computed_at;
 }
 

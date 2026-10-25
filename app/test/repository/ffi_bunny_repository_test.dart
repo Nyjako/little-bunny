@@ -26,17 +26,19 @@ void main() {
     expect(await repository.tagAutocomplete(BunnySite.e621, 'any'), isEmpty);
   });
 
-  test('getStatsReport returns an empty report when nothing is cached (M40)', () async {
+  test('getStatsReport returns an empty, unbuilt report when nothing is cached (M40/M55)', () async {
     final report = await repository.getStatsReport();
+    expect(report.computedAt, isNull);
     expect(report.topFavoritedTags, isEmpty);
     expect(report.topUsedTags, isEmpty);
     expect(report.topPools, isEmpty);
     expect(report.topViewedSearches, isEmpty);
   });
 
-  test('refreshStatsReport also returns an empty report when nothing is cached (M40)', () async {
+  test('refreshStatsReport actually builds (and blocks for) a fresh report, unlike getStatsReport (M55)', () async {
     final report = await repository.refreshStatsReport();
-    expect(report.topFavoritedTags, isEmpty);
+    expect(report.computedAt, isNotNull); // a real build just happened, unlike getStatsReport's cache-only read
+    expect(report.topFavoritedTags, isEmpty); // still empty -- nothing's actually favorited/synced
   });
 
   test('markPostSeen rejects a post id with no cached post', () async {

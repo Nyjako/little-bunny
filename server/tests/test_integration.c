@@ -477,26 +477,38 @@ void test_full_account_search_sync_favorite_flow(void)
     free(response.data);
     memset(&response, 0, sizeof(response));
 
-    /* M10.2/M40: post 1 (tags "one"/"someartist") was favorited a few
-     * requests ago, so both tags now show up in the unified report's
+    /* M10.2/M40/M55: post 1 (tags "one"/"someartist") was favorited a few
+     * requests ago, so both tags end up in the unified report's
      * top_favorited_tags, site-prefixed since the report merges e621 and
-     * Inkbunny into one ranking. top_used_tags is a superset of
-     * top_favorited_tags (a non-favorited post still counting there is
-     * covered at the C level) -- same two tags show up in both here since
-     * this fixture's only post is favorited either way. */
+     * Inkbunny into one ranking. The very first GET has nothing cached yet
+     * -- it just enqueues a background build (M55, so a slow build never
+     * blocks this request) and returns an empty report immediately, same
+     * shape as "no report has ever been computed." */
     status = do_request("GET", "/stats_report", NULL, &response, true, NULL);
     TEST_ASSERT_EQUAL(200, status);
-    TEST_ASSERT_NOT_NULL(strstr(response.data, "\"computed_at\""));
-    TEST_ASSERT_NOT_NULL(strstr(response.data, "\"top_favorited_tags\":[{\"name\":\"e621: one\""));
-    TEST_ASSERT_NOT_NULL(strstr(response.data, "\"name\":\"e621: someartist\""));
-    /* top_used_tags also picks up tags from posts synced by earlier steps in
-     * this same end-to-end flow -- just checking presence, not position. */
-    TEST_ASSERT_NOT_NULL(strstr(response.data, "\"top_used_tags\""));
-    TEST_ASSERT_NOT_NULL(strstr(response.data, "\"name\":\"e621: one\""));
+    TEST_ASSERT_NOT_NULL(strstr(response.data, "\"computed_at\":null"));
+    TEST_ASSERT_NOT_NULL(strstr(response.data, "\"top_favorited_tags\":[]"));
     free(response.data);
     memset(&response, 0, sizeof(response));
 
-    /* A manual refresh (M40) recomputes rather than erroring/no-op-ing. */
+    /* Once the background build finishes, a later GET serves the real,
+     * now-cached data -- still never blocking inside the request itself.
+     * top_used_tags also picks up tags from posts synced by earlier steps
+     * in this same end-to-end flow -- just checking presence, not
+     * position. */
+    TEST_ASSERT_TRUE(poll_until_response_contains("GET", "/stats_report", "\"name\":\"e621: one\""));
+    status = do_request("GET", "/stats_report", NULL, &response, true, NULL);
+    TEST_ASSERT_EQUAL(200, status);
+    TEST_ASSERT_NOT_NULL(strstr(response.data, "\"top_favorited_tags\":[{\"name\":\"e621: one\""));
+    TEST_ASSERT_NOT_NULL(strstr(response.data, "\"name\":\"e621: someartist\""));
+    TEST_ASSERT_NOT_NULL(strstr(response.data, "\"top_used_tags\""));
+    free(response.data);
+    memset(&response, 0, sizeof(response));
+
+    /* A manual refresh (M40/M55) always enqueues a rebuild (unlike GET,
+     * which only does when the cache is missing/stale) but, same as GET,
+     * returns immediately with whatever's cached right now rather than
+     * blocking for the rebuild to finish. */
     status = do_request("POST", "/stats_report", NULL, &response, true, NULL);
     TEST_ASSERT_EQUAL(200, status);
     TEST_ASSERT_NOT_NULL(strstr(response.data, "\"name\":\"e621: one\""));

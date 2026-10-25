@@ -38,6 +38,8 @@ static const char *type_to_string(task_type_t type)
             return "sync_due";
         case TASK_TYPE_PROCESS_ACTION_QUEUE:
             return "process_action_queue";
+        case TASK_TYPE_BUILD_STATS_REPORT:
+            return "build_stats_report";
         default:
             return "unknown";
     }

@@ -10,6 +10,7 @@
 #include "auth.h"
 #include "json_helpers.h"
 #include "route_utils.h"
+#include "task_queue.h"
 
 static int handle_get_tags_autocomplete(struct mg_connection *conn, server_context_t *ctx, const char *query_string)
 {
@@ -65,7 +66,11 @@ static cJSON *tag_stat_list_to_json(const bunny_db_tag_stat_list_t *list)
 static int respond_with_stats_report(struct mg_connection *conn, const bunny_core_stats_report_t *report)
 {
     cJSON *response = cJSON_CreateObject();
-    cJSON_AddStringToObject(response, "computed_at", report->computed_at);
+    if (report->computed_at) {
+        cJSON_AddStringToObject(response, "computed_at", report->computed_at);
+    } else {
+        cJSON_AddNullToObject(response, "computed_at");
+    }
     cJSON_AddItemToObject(response, "top_favorited_tags", tag_stat_list_to_json(&report->top_favorited_tags));
     cJSON_AddItemToObject(response, "top_used_tags", tag_stat_list_to_json(&report->top_used_tags));
     cJSON_AddItemToObject(response, "top_pools", tag_stat_list_to_json(&report->top_pools));
@@ -76,17 +81,32 @@ static int respond_with_stats_report(struct mg_connection *conn, const bunny_cor
     return status;
 }
 
-/* GET returns the tag-stats screen's unified report (M40), cached for up to
- * 24h; POST forces a recompute (the screen's manual refresh action). Both
- * share this one handler/route since they differ only in which bunny_core
- * entry point builds the report. */
+/* Both GET and POST only ever read whatever's already cached (M55) --
+ * neither blocks a civetweb worker thread building the report inline, which
+ * is what used to hang the server on a large enough database (the same
+ * class of bug M39/M40/M46 already fixed elsewhere). GET enqueues a
+ * background rebuild only when the cache is missing or stale; POST (the
+ * screen's manual refresh action) always enqueues one, as a "force" --
+ * either way the enqueue is fire-and-forget (task_queue dedupes against an
+ * already-pending/running build, see TASK_TYPE_BUILD_STATS_REPORT in
+ * task_queue.c) and the response is whatever was cached *before* this
+ * request, which may still be stale or even entirely empty the very first
+ * time. The client is expected to just re-fetch later to see the result,
+ * the same way it already would for any other background task. */
 static int handle_stats_report(struct mg_connection *conn, server_context_t *ctx, const char *method)
 {
     bunny_core_stats_report_t report;
-    bunny_core_result_t result = strcmp(method, "POST") == 0 ? bunny_core_refresh_stats_report(ctx->core, &report) : bunny_core_get_stats_report(ctx->core, &report);
+    bool has_cache = false;
+    bool is_stale = false;
+    bunny_core_result_t result = bunny_core_get_cached_stats_report(ctx->core, &report, &has_cache, &is_stale);
 
     if (result != BUNNY_CORE_OK) {
         return server_json_respond_error(conn, result);
+    }
+
+    bool force_refresh = strcmp(method, "POST") == 0;
+    if (force_refresh || !has_cache || is_stale) {
+        task_queue_enqueue_stats_report_build(ctx->task_queue);
     }
 
     int status = respond_with_stats_report(conn, &report);

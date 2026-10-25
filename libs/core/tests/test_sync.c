@@ -1731,25 +1731,49 @@ void test_stats_report_top_viewed_searches_reflects_view_count(void)
     bunny_core_stats_report_free(&report);
 }
 
-void test_stats_report_get_serves_the_cached_report_until_explicitly_refreshed(void)
+void test_get_cached_stats_report_returns_no_cache_before_anything_is_built(void)
+{
+    /* M55: never builds/blocks on its own -- a cache miss is reported as
+     * such (not silently built inline), so the caller can decide whether to
+     * kick off a background build instead. */
+    bunny_core_stats_report_t report;
+    bool has_cache = true;
+    bool is_stale = false;
+    TEST_ASSERT_EQUAL(BUNNY_CORE_OK, bunny_core_get_cached_stats_report(g_core, &report, &has_cache, &is_stale));
+    TEST_ASSERT_FALSE(has_cache);
+    TEST_ASSERT_TRUE(is_stale);
+    TEST_ASSERT_NULL(report.computed_at);
+    TEST_ASSERT_EQUAL(0, (int)report.top_viewed_searches.count);
+    bunny_core_stats_report_free(&report);
+}
+
+void test_get_cached_stats_report_serves_the_cached_report_until_explicitly_refreshed(void)
 {
     int64_t search_id = 0;
     bunny_core_search_create(g_core, BUNNY_DB_SITE_E621, "Some search", "wolf", 24, NULL, &search_id);
     bunny_core_search_touch_last_viewed(g_core, search_id);
 
+    bunny_core_stats_report_t built;
+    TEST_ASSERT_EQUAL(BUNNY_CORE_OK, bunny_core_refresh_stats_report(g_core, &built));
+    bunny_core_stats_report_free(&built);
+
     bunny_core_stats_report_t first;
-    TEST_ASSERT_EQUAL(BUNNY_CORE_OK, bunny_core_get_stats_report(g_core, &first));
-    TEST_ASSERT_NOT_NULL(find_stat(&first.top_viewed_searches, "e621: Some search"));
+    bool has_cache = false;
+    bool is_stale = true;
+    TEST_ASSERT_EQUAL(BUNNY_CORE_OK, bunny_core_get_cached_stats_report(g_core, &first, &has_cache, &is_stale));
+    TEST_ASSERT_TRUE(has_cache);
+    TEST_ASSERT_FALSE(is_stale);
     bunny_db_tag_stat_t *first_stat = find_stat(&first.top_viewed_searches, "e621: Some search");
+    TEST_ASSERT_NOT_NULL(first_stat);
     TEST_ASSERT_EQUAL(1, first_stat->count);
     bunny_core_stats_report_free(&first);
 
-    /* Viewed again, but bunny_core_get_stats_report should still serve the
-     * cache built above rather than noticing. */
+    /* Viewed again, but bunny_core_get_cached_stats_report should still
+     * serve the cache built above rather than noticing or rebuilding. */
     bunny_core_search_touch_last_viewed(g_core, search_id);
 
     bunny_core_stats_report_t second;
-    TEST_ASSERT_EQUAL(BUNNY_CORE_OK, bunny_core_get_stats_report(g_core, &second));
+    TEST_ASSERT_EQUAL(BUNNY_CORE_OK, bunny_core_get_cached_stats_report(g_core, &second, &has_cache, &is_stale));
     bunny_db_tag_stat_t *second_stat = find_stat(&second.top_viewed_searches, "e621: Some search");
     TEST_ASSERT_NOT_NULL(second_stat);
     TEST_ASSERT_EQUAL(1, second_stat->count); /* still cached, not 2 */
@@ -1763,9 +1787,9 @@ void test_stats_report_get_serves_the_cached_report_until_explicitly_refreshed(v
     TEST_ASSERT_EQUAL(2, refreshed_stat->count);
     bunny_core_stats_report_free(&refreshed);
 
-    /* And bunny_core_get_stats_report now serves that fresh cache too. */
+    /* And bunny_core_get_cached_stats_report now serves that fresh cache too. */
     bunny_core_stats_report_t third;
-    TEST_ASSERT_EQUAL(BUNNY_CORE_OK, bunny_core_get_stats_report(g_core, &third));
+    TEST_ASSERT_EQUAL(BUNNY_CORE_OK, bunny_core_get_cached_stats_report(g_core, &third, &has_cache, &is_stale));
     bunny_db_tag_stat_t *third_stat = find_stat(&third.top_viewed_searches, "e621: Some search");
     TEST_ASSERT_NOT_NULL(third_stat);
     TEST_ASSERT_EQUAL(2, third_stat->count);
@@ -1836,6 +1860,7 @@ int main(void)
     RUN_TEST(test_stats_report_top_favorited_tags_only_counts_favorited_posts);
     RUN_TEST(test_stats_report_top_pools_ranks_by_favorited_post_count);
     RUN_TEST(test_stats_report_top_viewed_searches_reflects_view_count);
-    RUN_TEST(test_stats_report_get_serves_the_cached_report_until_explicitly_refreshed);
+    RUN_TEST(test_get_cached_stats_report_returns_no_cache_before_anything_is_built);
+    RUN_TEST(test_get_cached_stats_report_serves_the_cached_report_until_explicitly_refreshed);
     return UNITY_END();
 }

@@ -206,16 +206,29 @@ class BunnyTagStat {
 
 /// The tag-stats screen's unified report (M40), replacing what used to be
 /// four separate per-site/per-kind queries fetched fresh on every page open.
-/// Server-side (`bunny_core_get_stats_report`), this is cached for up to 24h
-/// and rebuilt in full on a manual refresh ([BunnyRepository.
-/// refreshStatsReport]) -- there's no per-section refresh. [topFavoritedTags]/
-/// [topUsedTags]/[topViewedSearches] merge both sites into one ranking, each
-/// entry's [BunnyTagStat.name] prefixed with its site ("e621: ", "inkbunny: ")
-/// since the same tag/label text can exist on both; [topPools] is e621-only
-/// (Inkbunny has no pool concept) and its [BunnyTagStat.name] is the
-/// `pool:<id>` sentinel also used by [TagBrowseScreen], not a display label.
+/// Server-side, this is cached for up to 24h and rebuilt in full on a manual
+/// refresh ([BunnyRepository.refreshStatsReport]) -- there's no per-section
+/// refresh. As of M55, both [BunnyRepository.getStatsReport] and
+/// [refreshStatsReport] only ever read whatever's currently cached and kick
+/// off a background rebuild server-side if it's missing or stale -- neither
+/// call blocks waiting for a fresh build, so the data returned can lag
+/// behind what's actually just been triggered; see [computedAt]'s own doc
+/// comment. [topFavoritedTags]/[topUsedTags]/[topViewedSearches] merge both
+/// sites into one ranking, each entry's [BunnyTagStat.name] prefixed with
+/// its site ("e621: ", "inkbunny: ") since the same tag/label text can exist
+/// on both; [topPools] is e621-only (Inkbunny has no pool concept) and its
+/// [BunnyTagStat.name] is the `pool:<id>` sentinel also used by
+/// [TagBrowseScreen], not a display label.
 class BunnyStatsReport {
-  final String computedAt;
+  /// `null` means no report has ever been built yet (M55) -- the server
+  /// never blocks a request building one inline (each section is a
+  /// full-table aggregate that can take minutes on a large database), so
+  /// the very first [BunnyRepository.getStatsReport]/[refreshStatsReport]
+  /// call after a fresh install, or right after the server's cache has
+  /// expired, can come back with every section still empty while a
+  /// background build is kicked off server-side. A later fetch serves
+  /// whatever that build produced.
+  final String? computedAt;
   final List<BunnyTagStat> topFavoritedTags;
   final List<BunnyTagStat> topUsedTags;
   final List<BunnyTagStat> topPools;
