@@ -2182,3 +2182,42 @@ this file is the single source of truth for "what's done" across sessions.
     right arguments, right handling of the result) without a device, but the
     `saf_util`/`saf_stream` plugins' actual native Android behavior still needs
     verification on a real device, which this environment has no way to do.
+
+- [x] **M40 — Precompute and cache the Tag Stats screen's report, unifying both sites**
+  Reported by the user: the tag stats page would hang or fail to open. It ran up to
+  four full-table aggregate queries (`bunny_db_top_favorited_tags`/`top_used_tags`,
+  plus two new ones added here) completely fresh on every single page open, with no
+  caching at all -- on a database with a lot of posts/favorites, this blocked for long
+  enough to look broken. The screen's own per-site/"Favorites vs All" tabs also meant
+  four separate round-trips just to see every view.
+  - New sections: `bunny_db_top_favorited_pools` (pools ranked by how many of their
+    posts are favorited -- the clearest "which pools do I actually like" signal
+    available, per the user's own suggestion; e621 only, Inkbunny has no pool
+    concept) and `bunny_db_top_viewed_searches` (searches ranked by a new
+    `searches.view_count` column, incremented alongside `last_viewed_at` by
+    `bunny_db_search_touch_last_viewed` -- the existing column only ever tracked the
+    *most recent* view, not how many there'd been).
+  - `bunny_core_get_stats_report`/`bunny_core_refresh_stats_report` (new
+    `libs/core/src/stats_report.c`) build one unified `bunny_core_stats_report_t`:
+    `top_favorited_tags`/`top_used_tags`/`top_viewed_searches` each merge both
+    sites' own top-20 into one combined top-20, every entry's name prefixed with its
+    site ("e621: ", "inkbunny: ") since the same tag/label text can legitimately
+    exist on both; `top_pools` is e621-only, its `name` the `pool:<id>` sentinel
+    already used everywhere else a pool is addressed by query text. The whole report
+    is cached as one JSON blob (`stats_report_cache`, a new single-row table) for 24h;
+    `bunny_core_get_stats_report` serves the cache until it's stale, `bunny_core_
+    refresh_stats_report` always recomputes (the screen's manual refresh action).
+  - Server: the old `/tags/top_favorited`/`/tags/top_used` routes are gone, replaced
+    by one `/stats_report` route (`GET` serves the cached-or-fresh report, `POST`
+    forces a refresh) in `routes_tags.c`.
+  - `TagStatsScreen` no longer has site/favorites-vs-all tabs -- one scrollable list
+    with the four sections above, an app-bar refresh action, and a "last updated"
+    timestamp. Tapping a merged tag or pool entry opens `TagBrowseScreen` for it
+    (parsing the site back out of the prefix, or using the pool sentinel directly);
+    "most-visited searches" entries are informational only, not tappable -- the user
+    already has quick access to those via the main Searches list.
+  - `bunny_core_ffi`'s FFI bindings were regenerated (`dart run ffigen`) for the new
+    `bunny_core_stats_report_t` struct and its three functions, with new isolate
+    dispatch glue (`getStatsReport`/`refreshStatsReport`) alongside the existing
+    `topFavoritedTags`/`topUsedTags` calls (kept as internal-only API, no longer
+    surfaced to the app directly -- the report builder still calls them per-site).
