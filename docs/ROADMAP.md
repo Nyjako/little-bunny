@@ -2331,14 +2331,29 @@ this file is the single source of truth for "what's done" across sessions.
   the app can receive completion events through, and batch-enqueue endpoints for mass
   actions.
 
-- [ ] **M44 — Render pool cross-references as inline clickable text, not separate chips below**
+- [x] **M44 — Render pool cross-references as inline clickable text, not separate chips below**
   Follow-up to M26 (which added the pool description + a `Wrap` of `ActionChip`s below
-  it for every "pool #N" reference found). The user wants the references inline within
-  the description text itself instead, at the exact position they're mentioned --
-  styled as a plain blue link reading literally `pool:id` would be an acceptable
-  rendering. Needs turning `_poolHeader`'s plain `Text(description)` in
-  `tag_browse_screen.dart` into a rich-text span that finds each "pool #N" match and
-  swaps it for a tappable link inline, instead of appending chips afterward.
+  it for every "pool #N" reference found). The references now render inline, in place,
+  within the description text itself -- not reformatted, the exact substring matched
+  (e.g. "pool #456") renders as a tappable link right where it already sits in the
+  sentence, instead of a separate row of chips below.
+  - New pure function `parsePoolDescriptionSegments` (`app/lib/util/pool_description.dart`)
+    splits a description into plain-text and reference segments, using the exact same
+    "pool #" + one-or-more-digits convention `bunny_core`'s own `parse_pool_references`
+    (`libs/core/src/sync.c`) already extracts `BunnyPoolInfo.referencedPoolIds` with --
+    this just also needs *where* each match sits in the text, not only the id list.
+  - New shared widget `PoolDescriptionText` (`app/lib/widgets/pool_description_text.dart`)
+    renders those segments via `Text.rich`, with each reference segment a `TextSpan`
+    carrying its own `TapGestureRecognizer`. Used by both places that showed the old
+    chips-below layout: `TagBrowseScreen`'s pool header and `PostGridScreen`'s pool-info
+    dialog (the "related pools" label these replaced was dropped entirely as now-dead
+    code; `tagBrowseRelatedPoolChip`'s "Pool #{id}" formatting is still used elsewhere,
+    for `TagStatsScreen`'s "top pools" section, so that string itself stayed).
+  - Found and fixed a real bug in the parser's own first draft while writing its unit
+    tests: a "pool #" not followed by a digit (not a real reference) advanced the same
+    cursor used for both "where to resume scanning" and "where the next text segment
+    starts," silently dropping everything in front of the false match. Fixed by
+    splitting those into two separate cursors.
 
 - [ ] **M45 — Fix pinned searches mixing with unpinned after deep navigation**
   Reported by the user: starting from the main `SearchesScreen`, opening a search, then

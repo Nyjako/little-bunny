@@ -5,6 +5,7 @@ import 'package:little_bunny/screens/post_detail_screen.dart';
 import 'package:little_bunny/screens/tag_browse_screen.dart';
 import 'package:little_bunny/settings/display_settings_store.dart';
 import 'package:little_bunny/settings/download_settings_store.dart';
+import 'package:little_bunny/widgets/pool_description_text.dart';
 import 'package:little_bunny/widgets/post_grid_tile.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -117,10 +118,10 @@ void main() {
       await tester.pumpWidget(wrapPool(repository));
       await tester.pumpAndSettle();
 
-      expect(find.text('A comic about wolves.'), findsOneWidget);
+      expect(find.textContaining('A comic about wolves.'), findsOneWidget);
     });
 
-    testWidgets('shows a tappable chip for each referenced pool and navigates to it', (WidgetTester tester) async {
+    testWidgets('renders a "pool #<N>" reference as an inline tappable link and navigates to it (M44)', (WidgetTester tester) async {
       final repository = FakeBunnyRepository();
       repository.previewSearchResults['e621:pool:123 order:id:1'] = [_post(1)];
       repository.previewSearchResults['e621:pool:456 order:id:1'] = [_post(2)];
@@ -130,10 +131,11 @@ void main() {
       await tester.pumpWidget(wrapPool(repository));
       await tester.pumpAndSettle();
 
-      expect(find.text('Related pools'), findsOneWidget);
-      expect(find.text('Pool #456'), findsOneWidget);
+      // Rendered inline, in the exact casing the description itself used --
+      // not reformatted into a separate "Pool #456" chip below.
+      expect(find.textContaining('See pool #456.'), findsOneWidget);
 
-      await tester.tap(find.text('Pool #456'));
+      await tester.tapOnText(find.textRange.ofSubstring('pool #456'));
       await tester.pumpAndSettle();
 
       expect(find.byKey(const ValueKey(2)), findsOneWidget);
@@ -147,7 +149,7 @@ void main() {
       await tester.pumpWidget(wrapPool(repository));
       await tester.pumpAndSettle();
 
-      expect(find.text('Related pools'), findsNothing);
+      expect(find.byType(PoolDescriptionText), findsNothing);
     });
 
     testWidgets('shows no header at all for a non-pool browse', (WidgetTester tester) async {
@@ -157,7 +159,7 @@ void main() {
       await tester.pumpWidget(wrap(repository));
       await tester.pumpAndSettle();
 
-      expect(find.text('Related pools'), findsNothing);
+      expect(find.byType(PoolDescriptionText), findsNothing);
     });
 
     testWidgets('skips the e621-only pool-info lookup for an Inkbunny pool browse (M28)', (WidgetTester tester) async {
@@ -175,8 +177,8 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(repository.fetchPoolCallCount, 0);
-      expect(find.text('should never show up here'), findsNothing);
-      expect(find.text('Related pools'), findsNothing);
+      expect(find.textContaining('should never show up here'), findsNothing);
+      expect(find.byType(PoolDescriptionText), findsNothing);
     });
   });
 

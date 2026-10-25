@@ -181,7 +181,6 @@
   "tagBrowseEmptyState": "No posts found for this search.",
   "tagBrowseAddToSearchesTooltip": "Save as a search",
   "tagBrowseAlreadySavedTooltip": "Already saved -- tap to remove",
-  "tagBrowseRelatedPoolsLabel": "Related pools",
   "tagBrowseRelatedPoolChip": "Pool #{poolId}",
   "@tagBrowseRelatedPoolChip": {
     "placeholders": {"poolId": {"type": "int"}}

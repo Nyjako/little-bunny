@@ -7,6 +7,7 @@ import '../services/download_manager.dart';
 import '../settings/display_settings_store.dart';
 import '../settings/download_settings_store.dart';
 import '../util/responsive.dart';
+import '../widgets/pool_description_text.dart';
 import '../widgets/post_grid_tile.dart';
 import 'post_detail_screen.dart';
 import 'tag_browse_screen.dart';
@@ -159,26 +160,15 @@ class _PostGridScreenState extends State<PostGridScreen> {
             children: [
               Text(l10n.postGridPoolInfoPostCount(info.postCount), style: Theme.of(context).textTheme.labelMedium),
               const SizedBox(height: 8),
-              Text(hasDescription ? description : l10n.postGridPoolInfoNoDescription),
-              if (info.referencedPoolIds.isNotEmpty) ...[
-                const SizedBox(height: 12),
-                Text(l10n.tagBrowseRelatedPoolsLabel, style: Theme.of(context).textTheme.labelMedium),
-                const SizedBox(height: 4),
-                Wrap(
-                  spacing: 4,
-                  children: info.referencedPoolIds
-                      .map(
-                        (poolId) => ActionChip(
-                          label: Text(l10n.tagBrowseRelatedPoolChip(poolId)),
-                          onPressed: () {
-                            Navigator.pop(context);
-                            _openRelatedPool(poolId);
-                          },
-                        ),
-                      )
-                      .toList(),
-                ),
-              ],
+              hasDescription
+                  ? PoolDescriptionText(
+                      description: description,
+                      onOpenPool: (poolId) {
+                        Navigator.pop(context);
+                        _openRelatedPool(poolId);
+                      },
+                    )
+                  : Text(l10n.postGridPoolInfoNoDescription),
             ],
           ),
         ),

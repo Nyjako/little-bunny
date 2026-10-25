@@ -766,12 +766,6 @@ abstract class AppLocalizations {
   /// **'Already saved -- tap to remove'**
   String get tagBrowseAlreadySavedTooltip;
 
-  /// No description provided for @tagBrowseRelatedPoolsLabel.
-  ///
-  /// In en, this message translates to:
-  /// **'Related pools'**
-  String get tagBrowseRelatedPoolsLabel;
-
   /// No description provided for @tagBrowseRelatedPoolChip.
   ///
   /// In en, this message translates to:
