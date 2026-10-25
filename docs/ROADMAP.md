@@ -2313,3 +2313,147 @@ this file is the single source of truth for "what's done" across sessions.
   no shared state to get stale or conflict across devices. Needs a migration path for
   `recordDownload`/`listDownloadsForPost` call sites (and the `downloads` table/schema
   itself) once the local-existence-check replacement is designed.
+
+- [ ] **M43 — Queue downloads (and mass download/favorite/upvote) server-side instead of blocking the app**
+  Reported by the user: downloading currently means sitting on the post screen waiting
+  for the file, checksum, and any auto-favorite/auto-upvote to all finish before moving
+  on. Wanted instead: tap download and forget about it -- the request (and its
+  favorite/upvote side effects) goes to the server's existing task queue (the same
+  `action_queue` table/`task_queue.c` worker `favorite_add`/`vote`/`comment` actions
+  already go through, M4.3) rather than blocking the client, with a push notification
+  once it actually completes. Same treatment for *mass* download/favorite/upvote (not
+  just a single post) -- and when a mass download has auto-favorite/auto-upvote
+  enabled, those should always apply to every post in the batch, not conditionally.
+  Needs: a new `download` action type in `action_queue` (today it only downloads
+  client-side via `DownloadManager`, with no server-side equivalent at all -- this is
+  a bigger shift than just reusing the existing queue, since the file itself has to
+  land on the *client's* filesystem, not the server's), a push-notification channel
+  the app can receive completion events through, and batch-enqueue endpoints for mass
+  actions.
+
+- [ ] **M44 — Render pool cross-references as inline clickable text, not separate chips below**
+  Follow-up to M26 (which added the pool description + a `Wrap` of `ActionChip`s below
+  it for every "pool #N" reference found). The user wants the references inline within
+  the description text itself instead, at the exact position they're mentioned --
+  styled as a plain blue link reading literally `pool:id` would be an acceptable
+  rendering. Needs turning `_poolHeader`'s plain `Text(description)` in
+  `tag_browse_screen.dart` into a rich-text span that finds each "pool #N" match and
+  swaps it for a tappable link inline, instead of appending chips afterward.
+
+- [ ] **M45 — Fix pinned searches mixing with unpinned after deep navigation**
+  Reported by the user: starting from the main `SearchesScreen`, opening a search, then
+  an author from one of its posts, then a pool from that author, etc. several layers
+  deep, then navigating all the way back to the main searches list -- pinned searches
+  end up mixed in with unpinned ones instead of staying sorted first. Not yet
+  investigated; likely something about `_sorted`/`_sortedEntries`'s pin-first pass not
+  re-running (or running against stale data) when the screen is popped back to rather
+  than freshly built.
+
+- [ ] **M46 — Deep audit for other endpoints that might send/compute too much and hang the server**
+  The user's explicit ask after M39/M40 fixed the two hangs they'd actually hit (tag
+  autocomplete, tag stats): go look for other spots with the same shape -- an
+  unbounded/full-table query, or a client loop with no page cap, that could still hang
+  the server or the app under enough data. Not yet started. Candidate places to check:
+  every `bunny_db_*` query without a `LIMIT`, every Dart-side "fetch all pages until
+  empty" loop (`TagBrowseScreen`'s infinite scroll, favorites sync, pool order sync),
+  and any report/stat-style endpoint added after this audit that might reintroduce the
+  same class of bug M39/M40 just fixed.
+
+- [ ] **M47 — Keep the device awake while browsing posts**
+  Reported by the user: wants a wake lock active while browsing so the screen doesn't
+  sleep mid-session. `wakelock_plus` is already present as a *transitive* dependency
+  (per `pubspec.lock`, not yet declared directly in `pubspec.yaml`) -- may not need a
+  new dependency, just wiring it up (enable on entering a post-browsing screen, disable
+  on leaving) and adding the direct `pubspec.yaml` entry.
+
+- [ ] **M48 — Show a loading-percentage indicator for images/gifs**
+  While an image or gif is still loading, show progress (e.g. a percentage in the
+  middle of the loading spinner) instead of just an indeterminate spinner.
+
+- [ ] **M49 — Add a GIF frame counter overlay (N/X)**
+  For a gif, display current-frame/total-frame count (e.g. "N/X") somewhere on
+  screen -- the user's stated reason is it's otherwise hard to tell where the loop
+  repeats.
+
+- [ ] **M50 — Rich-text parsing for descriptions (auto-links, `{{author}}`, `[[tag]]`)**
+  Post/pool/wiki descriptions should have plain URLs auto-linked and turned into
+  clickable elements, plus recognize `{{author}}` and `[[tag]]` reference syntax
+  (the same `[[...]]`/`{{...}}` convention e621.wiki's own wiki pages use for cross-
+  references, see M53 below -- likely the same parser/renderer should serve both).
+
+- [ ] **M51 — Add a slideshow mode**
+  User picks one or more saved searches, an interval (how often the post changes), and
+  how many posts to pull; the server selects that many posts at random with no
+  repeats, sends them to the device, which preloads all of them and opens fullscreen,
+  advancing on the configured timer. On reaching the end, reshuffle and keep going
+  until the user closes the slideshow. Videos/gifs are included and still switch on
+  the same timer as everything else (not "play to completion first").
+
+- [ ] **M52 — Add a tag long-press context menu**
+  Long-pressing a tag while viewing a post should open a small menu: Search / Add to
+  saved searches / Add to blacklist / Add to current search / Remove from current
+  search / Show wiki / Copy to clipboard. "Add to current search"/"Remove from current
+  search" only make sense once there's a notion of an active/editable search context
+  to add/remove tags from -- the user noted "more on this later" for both, so the
+  exact UX for those two needs revisiting when this is actually implemented; the other
+  five (Search, Add to saved searches, Add to blacklist, Show wiki, Copy) are
+  self-contained and can land first. "Show wiki" depends on M53.
+
+- [ ] **M53 — Integrate e621.wiki for tag wiki info (tags/wiki pages/aliases/implications)**
+  e621.wiki (<https://e621.wiki/>) hosts third-party docs/tooling for e621's real API,
+  including an OpenAPI spec (fetched once as `docs/API - e621.yaml` -- gitignored,
+  not ours to redistribute, kept locally for reference only) and an MCP server at
+  `mcp.e621.wiki` (also reachable at `e621.wiki/mcp`) exposing the same API --
+  whichever of the two (direct REST calls vs. going through the MCP server) turns out
+  to work best is an open implementation choice. The actual e621 endpoints involved
+  (confirmed live by the user, example shapes recorded here so they're not lost):
+  - `GET /tags.json?search[name_matches]=<text>` -- `id`, `name`, `post_count`,
+    `related_tags`, `related_tags_updated_at`, `category`, `is_locked`, `created_at`,
+    `updated_at`.
+  - `GET /wiki_pages.json?search[title]=<text>` -- `id`, `created_at`, `updated_at`,
+    `title`, `body`, `creator_id`, `is_locked`, `updater_id`, `is_deleted`,
+    `other_names`, `parent`, `creator_name`, `category_id`, `featured_posts`. Not every
+    tag has a wiki page. `body` needs its own parser: `[[text]]` is a link to another
+    wiki page, `{{author}}` is an author reference (shared syntax with M50), and
+    `thumb #id` means an inline image thumbnail for post `id` -- fetch via e621's own
+    `GET /posts/<id>.json` if that post isn't already cached locally.
+  - `GET /tag_aliases.json?limit=320&search[name_matches]=<text>` -- `id`,
+    `antecedent_name`, `reason`, `creator_id`, `created_at`, `forum_post_id`,
+    `updated_at`, `forum_topic_id`, `consequent_name`, `status`, `post_count`,
+    `approver_id`.
+  - `GET /tag_implications.json?limit=320&search[name_matches]=<text>` -- `id`,
+    `reason`, `creator_id`, `created_at`, `forum_post_id`, `antecedent_name`,
+    `consequent_name`, `status`, `forum_topic_id`, `updated_at`, `descendant_names`,
+    `approver_id`.
+  Inkbunny has no wiki/tag-info endpoints of its own at all -- per the user, fall back
+  to e621's wiki for Inkbunny tags too rather than omitting the feature there entirely.
+
+- [ ] **M54 — Advanced/custom tag search syntax, with live autocomplete, in both search creation and the blacklist editor**
+  Full e621 search grammar, not just a flat space-separated tag list -- the user
+  pasted e621's own cheatsheet verbatim as the spec, recorded here so it isn't lost:
+  - Space-separated tags are AND'd together (max 40 tags/search); words within one tag
+    use underscores.
+  - `~tag` means OR (`~cat ~dog` = cat or dog or both) -- may not combine well with
+    other syntax.
+  - `-tag` negates/excludes it.
+  - `tag_*` wildcards (one per search; may not combine well with other syntax, results
+    may be incomplete) -- `-tag_*` (negated wildcard) has no such limit, any number
+    allowed.
+  - `( ~a ~b ) ( ~c ~d )` groups -- a required space right after `(` and right before
+    `)` (so a tag that itself contains a literal paren isn't misread as a group).
+    Groups can themselves carry a `-`/`~` prefix, and can nest up to 10 levels deep.
+  - Tags can have aliases (e.g. `cat` -> `domestic cat`) and implications (tags that
+    automatically include other, broader tags -- `hyper_breasts` implies
+    `huge_breasts` implies `big_breasts` implies `breasts`) -- searching the broader/
+    implied tag directly is often better than enumerating every specific one.
+    `breasts -huge_breasts` is the pattern for "has the broad tag but not via that one
+    specific implying chain."
+  - Deleted posts are excluded from results by default.
+  Needs: a query parser/builder on top of this grammar (not just the current flat
+  tag-token splitter in `tag_query.dart`), autocomplete that understands a token's
+  position within the grammar (e.g. typing `-chick` mid-query should suggest
+  `-chicken`, preserving the `-`), the ability to save a resulting complex query as a
+  normal saved search (today's `CreateSearchScreen` already accepts an arbitrary query
+  string, so this may mostly be a client-side authoring/autocomplete problem rather
+  than a storage one), and the *same* syntax + autocomplete support added to the
+  blacklist editor, which today only accepts single bare tags.
