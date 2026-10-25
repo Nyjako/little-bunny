@@ -1335,6 +1335,110 @@ void test_tag_autocomplete_escapes_literal_underscore(void)
     bunny_db_tag_stat_list_free(&results);
 }
 
+void test_top_favorited_pools_ranks_by_favorited_post_count(void)
+{
+    int64_t pool5[] = {5};
+    int64_t pool9[] = {9};
+
+    bunny_db_post_upsert_t post1, post2, post3;
+    make_test_post(&post1, 841, 1);
+    make_test_post(&post2, 842, 1);
+    make_test_post(&post3, 843, 1);
+    post1.pool_ids = pool5;
+    post1.pool_count = 1;
+    post2.pool_ids = pool5;
+    post2.pool_count = 1;
+    post3.pool_ids = pool9;
+    post3.pool_count = 1;
+
+    int64_t id1 = 0, id2 = 0, id3 = 0;
+    bunny_db_post_upsert(g_db, &post1, &id1);
+    bunny_db_post_upsert(g_db, &post2, &id2);
+    bunny_db_post_upsert(g_db, &post3, &id3);
+
+    /* Pool 5 gets both its posts favorited; pool 9 gets its one post
+     * favorited too, so it should still rank behind pool 5's higher count. */
+    bunny_db_favorite_add(g_db, id1, -1);
+    bunny_db_favorite_add(g_db, id2, -1);
+    bunny_db_favorite_add(g_db, id3, -1);
+
+    bunny_db_tag_stat_list_t results;
+    bunny_db_result_t result = bunny_db_top_favorited_pools(g_db, BUNNY_DB_SITE_E621, 10, &results);
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, result);
+    TEST_ASSERT_EQUAL(2, (int)results.count);
+    TEST_ASSERT_EQUAL_STRING("pool:5", results.items[0].name);
+    TEST_ASSERT_EQUAL(2, results.items[0].count);
+    TEST_ASSERT_EQUAL_STRING("pool:9", results.items[1].name);
+    TEST_ASSERT_EQUAL(1, results.items[1].count);
+    bunny_db_tag_stat_list_free(&results);
+}
+
+void test_top_favorited_pools_ignores_posts_in_a_pool_that_arent_favorited(void)
+{
+    int64_t pool_ids[] = {3};
+    bunny_db_post_upsert_t post;
+    make_test_post(&post, 844, 1);
+    post.pool_ids = pool_ids;
+    post.pool_count = 1;
+    bunny_db_post_upsert(g_db, &post, NULL);
+
+    bunny_db_tag_stat_list_t results;
+    bunny_db_result_t result = bunny_db_top_favorited_pools(g_db, BUNNY_DB_SITE_E621, 10, &results);
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, result);
+    TEST_ASSERT_EQUAL(0, (int)results.count);
+    bunny_db_tag_stat_list_free(&results);
+}
+
+void test_top_viewed_searches_ranks_by_view_count_and_excludes_never_viewed(void)
+{
+    int64_t viewed_id = 0, never_viewed_id = 0;
+    bunny_db_search_create(g_db, BUNNY_DB_SITE_E621, "Often viewed", "wolf", 24, NULL, &viewed_id);
+    bunny_db_search_create(g_db, BUNNY_DB_SITE_E621, "Never viewed", "cat", 24, NULL, &never_viewed_id);
+
+    bunny_db_search_touch_last_viewed(g_db, viewed_id);
+    bunny_db_search_touch_last_viewed(g_db, viewed_id);
+
+    bunny_db_tag_stat_list_t results;
+    bunny_db_result_t result = bunny_db_top_viewed_searches(g_db, BUNNY_DB_SITE_E621, 10, &results);
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, result);
+    TEST_ASSERT_EQUAL(1, (int)results.count);
+    TEST_ASSERT_EQUAL_STRING("Often viewed", results.items[0].name);
+    TEST_ASSERT_EQUAL(2, results.items[0].count);
+    bunny_db_tag_stat_list_free(&results);
+}
+
+void test_stats_report_cache_round_trips_and_defaults_to_null(void)
+{
+    char *json = NULL;
+    char *computed_at = NULL;
+    bunny_db_result_t result = bunny_db_get_cached_stats_report(g_db, &json, &computed_at);
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, result);
+    TEST_ASSERT_NULL(json);
+    TEST_ASSERT_NULL(computed_at);
+
+    result = bunny_db_set_cached_stats_report(g_db, "{\"top_favorited_tags\":[]}", "2026-01-01T00:00:00Z");
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, result);
+
+    result = bunny_db_get_cached_stats_report(g_db, &json, &computed_at);
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, result);
+    TEST_ASSERT_EQUAL_STRING("{\"top_favorited_tags\":[]}", json);
+    TEST_ASSERT_EQUAL_STRING("2026-01-01T00:00:00Z", computed_at);
+    free(json);
+    free(computed_at);
+
+    /* A second set replaces the single row wholesale rather than erroring on
+     * the id=1 PRIMARY KEY conflict. */
+    result = bunny_db_set_cached_stats_report(g_db, "{\"top_favorited_tags\":[1]}", "2026-01-02T00:00:00Z");
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, result);
+
+    result = bunny_db_get_cached_stats_report(g_db, &json, &computed_at);
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, result);
+    TEST_ASSERT_EQUAL_STRING("{\"top_favorited_tags\":[1]}", json);
+    TEST_ASSERT_EQUAL_STRING("2026-01-02T00:00:00Z", computed_at);
+    free(json);
+    free(computed_at);
+}
+
 void test_migrations_apply_cleanly_and_are_idempotent_on_reopen(void)
 {
     /* setUp's :memory: db already proves migrations apply to a fresh
@@ -1996,6 +2100,10 @@ int main(void)
     RUN_TEST(test_tag_autocomplete_orders_by_usage_then_name);
     RUN_TEST(test_tag_autocomplete_is_per_site);
     RUN_TEST(test_tag_autocomplete_escapes_literal_underscore);
+    RUN_TEST(test_top_favorited_pools_ranks_by_favorited_post_count);
+    RUN_TEST(test_top_favorited_pools_ignores_posts_in_a_pool_that_arent_favorited);
+    RUN_TEST(test_top_viewed_searches_ranks_by_view_count_and_excludes_never_viewed);
+    RUN_TEST(test_stats_report_cache_round_trips_and_defaults_to_null);
     RUN_TEST(test_migrations_apply_cleanly_and_are_idempotent_on_reopen);
     RUN_TEST(test_search_create_defaults_uses_default_interval_to_false);
     RUN_TEST(test_search_update_toggles_uses_default_interval);

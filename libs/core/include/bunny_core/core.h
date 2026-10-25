@@ -145,9 +145,43 @@ bunny_core_result_t bunny_core_tag_autocomplete(bunny_core_t *core, bunny_db_sit
 bunny_core_result_t bunny_core_top_favorited_tags(bunny_core_t *core, bunny_db_site_t site, int limit, bunny_db_tag_stat_list_t *out_list);
 
 /* Same ranking across every synced post on `site`, not just favorited ones
- * (M14.4) -- the Tag Stats screen's "All" view, alongside its "Favorites"
- * view above. */
+ * (M14.4) -- feeds bunny_core_get_stats_report below, merged across both
+ * sites. No longer surfaced as its own per-site screen (M40 removed the
+ * tag-stats screen's site tabs). */
 bunny_core_result_t bunny_core_top_used_tags(bunny_core_t *core, bunny_db_site_t site, int limit, bunny_db_tag_stat_list_t *out_list);
+
+/* The tag-stats screen's unified report (M40), replacing what used to be
+ * four separate per-site/per-kind queries run fresh on every page open --
+ * each of those is a full-table aggregate (bunny_db_top_favorited_tags,
+ * bunny_db_top_used_tags, bunny_db_top_favorited_pools,
+ * bunny_db_top_viewed_searches), and running all four live every time the
+ * screen opened is what hung it. A section's name/count entries use the
+ * generic bunny_db_tag_stat_t shape even for pools/searches (see
+ * bunny_db_top_favorited_pools/bunny_db_top_viewed_searches' own doc
+ * comments for what `name` means in each) -- `top_pools` is e621-only
+ * (Inkbunny has no pool concept), the other three sections merge both
+ * sites' own rankings into one combined top-N, each `name` prefixed with
+ * its site ("e621: ", "inkbunny: ") since the same tag/label text can
+ * legitimately exist on both. */
+typedef struct
+{
+    bunny_db_tag_stat_list_t top_favorited_tags;
+    bunny_db_tag_stat_list_t top_used_tags;
+    bunny_db_tag_stat_list_t top_pools;
+    bunny_db_tag_stat_list_t top_viewed_searches;
+    char *computed_at; /* ISO 8601 UTC; never NULL once a report has been built */
+} bunny_core_stats_report_t;
+
+void bunny_core_stats_report_free(bunny_core_stats_report_t *report);
+
+/* Returns the cached report if one exists and is younger than 24 hours;
+ * otherwise recomputes it (same as bunny_core_refresh_stats_report) and
+ * caches the fresh result before returning it. */
+bunny_core_result_t bunny_core_get_stats_report(bunny_core_t *core, bunny_core_stats_report_t *out_report);
+
+/* Forces a recompute regardless of the cached report's age -- the tag-stats
+ * screen's manual refresh action. */
+bunny_core_result_t bunny_core_refresh_stats_report(bunny_core_t *core, bunny_core_stats_report_t *out_report);
 
 /* Marks a post seen (global per post, not per search) -- lets a post detail
  * view clear the unseen marker bunny_core_search_list_posts's unseen_only
