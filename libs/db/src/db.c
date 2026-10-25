@@ -63,6 +63,31 @@ static const bunny_db_migration_t BUNNY_DB_MIGRATIONS[] = {
      * scheduler's first tick (server mode) or FfiBunnyRepository.open
      * (standalone mode). */
     {13, "ALTER TABLE server_settings ADD COLUMN pool_positions_backfilled INTEGER NOT NULL DEFAULT 0;"},
+    /* Feeds the "most-visited searches" section of the cached stats report
+     * (M40) -- last_viewed_at (migration 7) only has the most recent view,
+     * not how many there have been, so ranking by visit frequency needs its
+     * own counter. bunny_db_search_mark_viewed increments this in the same
+     * UPDATE that already sets last_viewed_at. */
+    {14, "ALTER TABLE searches ADD COLUMN view_count INTEGER NOT NULL DEFAULT 0;"},
+    /* bunny_db_search_list_posts previously sorted by COALESCE(p.created_at_site,
+     * p.cached_at) -- a two-column expression on `posts`, with no index that could
+     * cover it. Since the query's own WHERE clause (sr.search_id = ?) scopes to
+     * `search_results`, not `posts`, SQLite had no way to use an index for the ORDER
+     * BY either: it had to materialize and sort *every* row matching that search_id
+     * before LIMIT/OFFSET could apply, no matter how small a page was actually
+     * requested. Confirmed live (M46's audit) at 12-14s for a single page of a
+     * 58k-post search, scaling with the search's total size, not the requested page
+     * -- page 1 and page 500 took the same time. Denormalizing the sort key onto
+     * search_results itself (this column, backfilled below) lets a composite index
+     * on (search_id, post_sort_key) satisfy both the WHERE and the ORDER BY directly,
+     * so SQLite can walk straight to the requested page instead of sorting
+     * everything first. bunny_db_search_add_result populates this for every row
+     * added from here on; it's effectively immutable after that (see its own doc
+     * comment for why that's fine). */
+    {15, "ALTER TABLE search_results ADD COLUMN post_sort_key TEXT;"
+         "UPDATE search_results SET post_sort_key = "
+         "(SELECT COALESCE(p.created_at_site, p.cached_at) FROM posts p WHERE p.id = search_results.post_id);"
+         "CREATE INDEX IF NOT EXISTS idx_search_results_search_id_sort_key ON search_results(search_id, post_sort_key);"},
 };
 // clang-format on
 

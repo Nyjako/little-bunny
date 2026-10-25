@@ -111,10 +111,16 @@
   },
 
   "tagStatsScreenTitle": "Tag stats",
-  "tagStatsEmptyState": "No favorited posts yet -- favorite some to see their tags here.",
-  "tagStatsAllEmptyState": "No synced posts yet -- sync a search to see their tags here.",
-  "tagStatsFavoritesLabel": "Favorites",
-  "tagStatsAllLabel": "All",
+  "tagStatsRefreshTooltip": "Refresh now",
+  "tagStatsLastUpdatedLabel": "Updated {time}",
+  "@tagStatsLastUpdatedLabel": {
+    "placeholders": {"time": {"type": "String"}}
+  },
+  "tagStatsTopFavoritedTagsLabel": "Top favorited tags",
+  "tagStatsTopUsedTagsLabel": "Top used tags",
+  "tagStatsTopPoolsLabel": "Top pools (by favorited posts)",
+  "tagStatsTopViewedSearchesLabel": "Most-visited searches",
+  "tagStatsSectionEmptyState": "Nothing here yet.",
 
   "createSearchScreenTitle": "New search",
   "createSearchLabelField": "Label",
@@ -130,6 +136,7 @@
   "createPoolSearchDialogTitle": "Add pool",
   "createPoolSearchIdLabel": "Pool ID",
   "createPoolSearchSubmit": "Add",
+  "createPoolSearchAlreadyExists": "This pool is already saved.",
 
   "editSearchScreenTitle": "Edit search",
   "editSearchSiteLabel": "Site: {site}",
@@ -172,6 +179,7 @@
 
   "tagBrowseEmptyState": "No posts found for this search.",
   "tagBrowseAddToSearchesTooltip": "Save as a search",
+  "tagBrowseAlreadySavedTooltip": "Already saved -- tap to remove",
   "tagBrowseRelatedPoolsLabel": "Related pools",
   "tagBrowseRelatedPoolChip": "Pool #{poolId}",
   "@tagBrowseRelatedPoolChip": {

@@ -411,42 +411,48 @@ void main() {
       expect(stats.first.count, 3);
     });
 
-    test('topFavoritedTags sends site/limit as query params and maps results (M10.2)', () async {
+    test('getStatsReport sends GET and maps the unified report (M40)', () async {
       respond = (_) => http.Response(
-        jsonEncode([
-          {'name': 'wolf', 'count': 5},
-          {'name': 'forest', 'count': 2},
-        ]),
+        jsonEncode({
+          'computed_at': '2026-01-01T00:00:00Z',
+          'top_favorited_tags': [
+            {'name': 'e621: wolf', 'count': 5},
+          ],
+          'top_used_tags': [
+            {'name': 'e621: forest', 'count': 2},
+          ],
+          'top_pools': [
+            {'name': 'pool:5', 'count': 3},
+          ],
+          'top_viewed_searches': [
+            {'name': 'e621: My search', 'count': 4},
+          ],
+        }),
         200,
       );
 
-      final stats = await buildRepository().topFavoritedTags(BunnySite.e621, limit: 20);
+      final report = await buildRepository().getStatsReport();
 
       expect(capturedMethod, 'GET');
-      expect(capturedUri.path, '/tags/top_favorited');
-      expect(capturedUri.queryParameters, {'site': 'e621', 'limit': '20'});
-      expect(stats, hasLength(2));
-      expect(stats.first.name, 'wolf');
-      expect(stats.first.count, 5);
+      expect(capturedUri.path, '/stats_report');
+      expect(report.computedAt, '2026-01-01T00:00:00Z');
+      expect(report.topFavoritedTags.single.name, 'e621: wolf');
+      expect(report.topUsedTags.single.count, 2);
+      expect(report.topPools.single.name, 'pool:5');
+      expect(report.topViewedSearches.single.count, 4);
     });
 
-    test('topUsedTags sends site/limit as query params and maps results (M14.4)', () async {
+    test('refreshStatsReport sends POST and maps the unified report (M40)', () async {
       respond = (_) => http.Response(
-        jsonEncode([
-          {'name': 'wolf', 'count': 5},
-          {'name': 'forest', 'count': 2},
-        ]),
+        jsonEncode({'computed_at': '2026-01-02T00:00:00Z', 'top_favorited_tags': [], 'top_used_tags': [], 'top_pools': [], 'top_viewed_searches': []}),
         200,
       );
 
-      final stats = await buildRepository().topUsedTags(BunnySite.e621, limit: 20);
+      final report = await buildRepository().refreshStatsReport();
 
-      expect(capturedMethod, 'GET');
-      expect(capturedUri.path, '/tags/top_used');
-      expect(capturedUri.queryParameters, {'site': 'e621', 'limit': '20'});
-      expect(stats, hasLength(2));
-      expect(stats.first.name, 'wolf');
-      expect(stats.first.count, 5);
+      expect(capturedMethod, 'POST');
+      expect(capturedUri.path, '/stats_report');
+      expect(report.computedAt, '2026-01-02T00:00:00Z');
     });
 
     test('getPostTagsByCategory sends GET to the right path and maps results', () async {

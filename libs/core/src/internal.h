@@ -187,6 +187,19 @@ static inline bool bunny_core_parse_pool_id_from_query(const char *query, int64_
     return true;
 }
 
+/* Same "fav:<username>"/"favorited_by:me" sentinel-query convention the app
+ * side's BunnySearch.isFavorites already documents -- mirrors it exactly so
+ * a favorites search is recognizable server/core-side too (M37: favorites
+ * and pool searches are both exempt from blacklist filtering, which needs
+ * to tell them apart from an ordinary search). */
+static inline bool bunny_core_is_favorites_query(bunny_db_site_t site, const char *query)
+{
+    if (site == BUNNY_DB_SITE_E621) {
+        return strncmp(query, "fav:", 4) == 0;
+    }
+    return strcmp(query, "favorited_by:me") == 0;
+}
+
 /* Shared by sync.c and queue.c (libs/core/src/site_clients.c). Both build a
  * client for a search/action's site using the stored account if present. */
 

@@ -182,8 +182,13 @@ bunny_db_result_t bunny_db_search_has_result(bunny_db_t *db, int64_t search_id, 
  * page -- a search with thousands of cached posts (e.g. a long-running
  * favorites search) was otherwise returned in a single unbounded response,
  * which could take minutes to query/serialize/transfer and routinely timed
- * out client-side. */
-bunny_db_result_t bunny_db_search_list_posts(bunny_db_t *db, int64_t search_id, bool unseen_only, int page, bunny_db_post_list_t *out_list);
+ * out client-side.
+ *
+ * apply_blacklist (M37) should be false for a favorites search (see
+ * bunny_core_is_favorites_query) -- a user's own favorites are meant to
+ * show everything they favorited, not a filtered subset. Every other
+ * search (including a plain tag search) passes true. */
+bunny_db_result_t bunny_db_search_list_posts(bunny_db_t *db, int64_t search_id, bool unseen_only, bool apply_blacklist, int page, bunny_db_post_list_t *out_list);
 
 /* A post's tags with their categories, for a post detail view's sectioned
  * tag display (Artists/Characters/Copyrights/Species/General/Meta for e621;
@@ -226,7 +231,9 @@ bunny_db_result_t bunny_db_list_distinct_pool_ids(bunny_db_t *db, bunny_db_int64
  * own `position` (ascending, e621's own reading order) instead of newest-
  * first by creation date, falling back to creation date (ascending, so a
  * still-undetermined tail at least reads oldest-first like the rest of the
- * pool) for any post whose position isn't known yet. */
+ * pool) for any post whose position isn't known yet. Never applies the
+ * blacklist (M37, no apply_blacklist param here at all) -- a pool search is
+ * meant to show every post actually in the pool. */
 bunny_db_result_t bunny_db_pool_search_list_posts(bunny_db_t *db, int64_t search_id, int64_t pool_id, bool unseen_only, int page, bunny_db_post_list_t *out_list);
 
 /* --- Seen state (global per post, not per search) ------------------------- */
@@ -256,17 +263,30 @@ bunny_db_result_t bunny_db_favorite_list(bunny_db_t *db, bunny_db_post_list_t *o
 
 bunny_db_result_t bunny_db_vote_set(bunny_db_t *db, int64_t post_id, int score /* -1 or 1 */);
 
-/* --- Tag blacklist (M13.3) ---------------------------------------------------
+/* --- Tag blacklist (M13.3, M37) -----------------------------------------------
  * A per-site list of exact tag names -- not foreign-keyed into tags(id),
  * since a tag someone wants to blacklist may never have been synced
  * locally. bunny_db_search_list_posts (below) excludes any post carrying a
- * blacklisted tag; bunny_core_preview_search's underlying post-listing
- * query is a separate function and is deliberately left unaffected, so
- * tag/pool browsing never hides anything by default. */
+ * blacklisted tag UNLESS that search is itself a favorites search (the
+ * apply_blacklist param, M37) -- the user's own favorites and every pool
+ * search (bunny_db_pool_search_list_posts, never filtered at all) are
+ * exempt by design: both are meant to show everything you already favorited
+ * or that's actually in the pool, not a filtered subset. An ordinary live
+ * tag/author browse (bunny_core_preview_search) applies the same exemptions
+ * (skips filtering for a pool or favorites query) but otherwise DOES filter
+ * now -- see bunny_db_post_is_blacklisted below, used for exactly that case
+ * since that function's own live-upsert loop has no listing query to attach
+ * a NOT EXISTS clause to. */
 
 bunny_db_result_t bunny_db_blacklist_list(bunny_db_t *db, bunny_db_site_t site, bunny_db_string_list_t *out_list);
 bunny_db_result_t bunny_db_blacklist_add(bunny_db_t *db, bunny_db_site_t site, const char *tag);
 bunny_db_result_t bunny_db_blacklist_remove(bunny_db_t *db, bunny_db_site_t site, const char *tag);
+
+/* True if any of post_id's tags is blacklisted for its own site -- a
+ * single-post check (as opposed to bunny_db_search_list_posts' own listing-
+ * query NOT EXISTS clause) for a live upsert loop with no listing query of
+ * its own to attach one to. */
+bunny_db_result_t bunny_db_post_is_blacklisted(bunny_db_t *db, int64_t post_id, bool *out_is_blacklisted);
 
 /* --- Downloads -------------------------------------------------------------- */
 
@@ -294,6 +314,30 @@ bunny_db_result_t bunny_db_top_used_tags(bunny_db_t *db, bunny_db_site_t site, i
  * contain any characters, including literal `%`/`_`/`\` -- they're matched
  * literally, not treated as SQL LIKE wildcards. */
 bunny_db_result_t bunny_db_tag_autocomplete(bunny_db_t *db, bunny_db_site_t site, const char *prefix, int limit, bunny_db_tag_stat_list_t *out_list);
+
+/* Pools on `site` ranked by how many of their posts are favorited, descending
+ * (M40) -- reuses bunny_db_tag_stat_t's generic {name, count} shape: `name`
+ * is the `pool:<id>` sentinel already used everywhere else a pool is
+ * addressed as a query string (see bunny_core_parse_pool_id_from_query), not
+ * a tag name. e621 only; Inkbunny has no pool concept, so a call with
+ * BUNNY_DB_SITE_INKBUNNY always returns an empty list. */
+bunny_db_result_t bunny_db_top_favorited_pools(bunny_db_t *db, bunny_db_site_t site, int limit, bunny_db_tag_stat_list_t *out_list);
+
+/* Saved searches on `site` ranked by bunny_db_search_touch_last_viewed's own
+ * view_count, descending (M40) -- again reuses bunny_db_tag_stat_t's
+ * {name, count} shape: `name` is the search's label, `count` its view count.
+ * Searches never viewed (view_count = 0) are excluded rather than padding
+ * out the list with an arbitrary tie-break order among them. */
+bunny_db_result_t bunny_db_top_viewed_searches(bunny_db_t *db, bunny_db_site_t site, int limit, bunny_db_tag_stat_list_t *out_list);
+
+/* The tag-stats screen's cached unified report (M40) -- a single opaque JSON
+ * blob bunny_core builds/parses; this table doesn't need to know its shape.
+ * Both out params are set to NULL (not an error) when nothing has been
+ * cached yet. Caller owns both returned strings. */
+bunny_db_result_t bunny_db_get_cached_stats_report(bunny_db_t *db, char **out_json, char **out_computed_at);
+
+/* Replaces the cached report wholesale (there's only ever one). */
+bunny_db_result_t bunny_db_set_cached_stats_report(bunny_db_t *db, const char *json, const char *computed_at);
 
 /* --- Action queue -------------------------------------------------------------
  * Proxies favorite/vote/comment calls to the sites (M4.3): an action is

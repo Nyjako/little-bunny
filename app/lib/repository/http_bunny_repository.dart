@@ -74,6 +74,16 @@ BunnyPost _postFromJson(Map<String, Object?> j) => BunnyPost(
 
 BunnyTagStat _tagStatFromJson(Map<String, Object?> j) => BunnyTagStat(name: j['name'] as String, count: (j['count'] as num).toInt());
 
+List<BunnyTagStat> _tagStatListFromJson(Object? list) => (list as List).cast<Map<String, Object?>>().map(_tagStatFromJson).toList();
+
+BunnyStatsReport _statsReportFromJson(Map<String, Object?> j) => BunnyStatsReport(
+  computedAt: j['computed_at'] as String,
+  topFavoritedTags: _tagStatListFromJson(j['top_favorited_tags']),
+  topUsedTags: _tagStatListFromJson(j['top_used_tags']),
+  topPools: _tagStatListFromJson(j['top_pools']),
+  topViewedSearches: _tagStatListFromJson(j['top_viewed_searches']),
+);
+
 BunnyPostTag _postTagFromJson(Map<String, Object?> j) => BunnyPostTag(name: j['name'] as String, category: j['category'] as String?);
 
 BunnyPostRelationships _relationshipsFromJson(Map<String, Object?> j) => BunnyPostRelationships(
@@ -394,21 +404,21 @@ class HttpBunnyRepository implements BunnyRepository {
   }
 
   @override
-  Future<List<BunnyTagStat>> topFavoritedTags(BunnySite site, {int limit = 20}) async {
-    final response = await _client.get(_uri('/tags/top_favorited', {'site': site.toWireString(), 'limit': limit.toString()}), headers: _headers);
+  Future<BunnyStatsReport> getStatsReport() async {
+    final response = await _client.get(_uri('/stats_report'), headers: _headers);
     if (response.statusCode != 200) {
       _throwError(response);
     }
-    return _decodeList(response).map(_tagStatFromJson).toList();
+    return _statsReportFromJson(_decodeObject(response));
   }
 
   @override
-  Future<List<BunnyTagStat>> topUsedTags(BunnySite site, {int limit = 20}) async {
-    final response = await _client.get(_uri('/tags/top_used', {'site': site.toWireString(), 'limit': limit.toString()}), headers: _headers);
+  Future<BunnyStatsReport> refreshStatsReport() async {
+    final response = await _client.post(_uri('/stats_report'), headers: _headers);
     if (response.statusCode != 200) {
       _throwError(response);
     }
-    return _decodeList(response).map(_tagStatFromJson).toList();
+    return _statsReportFromJson(_decodeObject(response));
   }
 
   @override

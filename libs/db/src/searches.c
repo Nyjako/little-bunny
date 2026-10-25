@@ -167,7 +167,10 @@ bunny_db_result_t bunny_db_search_touch_last_viewed(bunny_db_t *db, int64_t sear
         return BUNNY_DB_ERR_INVALID_ARG;
     }
 
-    const char *sql = "UPDATE searches SET last_viewed_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE id = ?;";
+    /* view_count (M40) tracks visit frequency for the stats report's
+     * "most-visited searches" section -- last_viewed_at alone only has the
+     * most recent visit, not how many there have been. */
+    const char *sql = "UPDATE searches SET last_viewed_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), view_count = view_count + 1 WHERE id = ?;";
     sqlite3_stmt *stmt = NULL;
     if (sqlite3_prepare_v2(db->handle, sql, -1, &stmt, NULL) != SQLITE_OK) {
         return BUNNY_DB_ERR_QUERY_FAILED;

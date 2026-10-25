@@ -508,29 +508,47 @@ abstract class AppLocalizations {
   /// **'Tag stats'**
   String get tagStatsScreenTitle;
 
-  /// No description provided for @tagStatsEmptyState.
+  /// No description provided for @tagStatsRefreshTooltip.
   ///
   /// In en, this message translates to:
-  /// **'No favorited posts yet -- favorite some to see their tags here.'**
-  String get tagStatsEmptyState;
+  /// **'Refresh now'**
+  String get tagStatsRefreshTooltip;
 
-  /// No description provided for @tagStatsAllEmptyState.
+  /// No description provided for @tagStatsLastUpdatedLabel.
   ///
   /// In en, this message translates to:
-  /// **'No synced posts yet -- sync a search to see their tags here.'**
-  String get tagStatsAllEmptyState;
+  /// **'Updated {time}'**
+  String tagStatsLastUpdatedLabel(String time);
 
-  /// No description provided for @tagStatsFavoritesLabel.
+  /// No description provided for @tagStatsTopFavoritedTagsLabel.
   ///
   /// In en, this message translates to:
-  /// **'Favorites'**
-  String get tagStatsFavoritesLabel;
+  /// **'Top favorited tags'**
+  String get tagStatsTopFavoritedTagsLabel;
 
-  /// No description provided for @tagStatsAllLabel.
+  /// No description provided for @tagStatsTopUsedTagsLabel.
   ///
   /// In en, this message translates to:
-  /// **'All'**
-  String get tagStatsAllLabel;
+  /// **'Top used tags'**
+  String get tagStatsTopUsedTagsLabel;
+
+  /// No description provided for @tagStatsTopPoolsLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Top pools (by favorited posts)'**
+  String get tagStatsTopPoolsLabel;
+
+  /// No description provided for @tagStatsTopViewedSearchesLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Most-visited searches'**
+  String get tagStatsTopViewedSearchesLabel;
+
+  /// No description provided for @tagStatsSectionEmptyState.
+  ///
+  /// In en, this message translates to:
+  /// **'Nothing here yet.'**
+  String get tagStatsSectionEmptyState;
 
   /// No description provided for @createSearchScreenTitle.
   ///
@@ -609,6 +627,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Add'**
   String get createPoolSearchSubmit;
+
+  /// No description provided for @createPoolSearchAlreadyExists.
+  ///
+  /// In en, this message translates to:
+  /// **'This pool is already saved.'**
+  String get createPoolSearchAlreadyExists;
 
   /// No description provided for @editSearchScreenTitle.
   ///
@@ -729,6 +753,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Save as a search'**
   String get tagBrowseAddToSearchesTooltip;
+
+  /// No description provided for @tagBrowseAlreadySavedTooltip.
+  ///
+  /// In en, this message translates to:
+  /// **'Already saved -- tap to remove'**
+  String get tagBrowseAlreadySavedTooltip;
 
   /// No description provided for @tagBrowseRelatedPoolsLabel.
   ///

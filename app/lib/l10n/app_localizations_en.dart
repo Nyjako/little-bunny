@@ -236,18 +236,27 @@ class AppLocalizationsEn extends AppLocalizations {
   String get tagStatsScreenTitle => 'Tag stats';
 
   @override
-  String get tagStatsEmptyState =>
-      'No favorited posts yet -- favorite some to see their tags here.';
+  String get tagStatsRefreshTooltip => 'Refresh now';
 
   @override
-  String get tagStatsAllEmptyState =>
-      'No synced posts yet -- sync a search to see their tags here.';
+  String tagStatsLastUpdatedLabel(String time) {
+    return 'Updated $time';
+  }
 
   @override
-  String get tagStatsFavoritesLabel => 'Favorites';
+  String get tagStatsTopFavoritedTagsLabel => 'Top favorited tags';
 
   @override
-  String get tagStatsAllLabel => 'All';
+  String get tagStatsTopUsedTagsLabel => 'Top used tags';
+
+  @override
+  String get tagStatsTopPoolsLabel => 'Top pools (by favorited posts)';
+
+  @override
+  String get tagStatsTopViewedSearchesLabel => 'Most-visited searches';
+
+  @override
+  String get tagStatsSectionEmptyState => 'Nothing here yet.';
 
   @override
   String get createSearchScreenTitle => 'New search';
@@ -287,6 +296,9 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get createPoolSearchSubmit => 'Add';
+
+  @override
+  String get createPoolSearchAlreadyExists => 'This pool is already saved.';
 
   @override
   String get editSearchScreenTitle => 'Edit search';
@@ -359,6 +371,9 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get tagBrowseAddToSearchesTooltip => 'Save as a search';
+
+  @override
+  String get tagBrowseAlreadySavedTooltip => 'Already saved -- tap to remove';
 
   @override
   String get tagBrowseRelatedPoolsLabel => 'Related pools';

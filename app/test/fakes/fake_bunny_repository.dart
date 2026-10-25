@@ -15,7 +15,6 @@ class FakeBunnyRepository implements BunnyRepository {
   final List<BunnySearch> searches = [];
   final Map<int, List<BunnyPost>> postsBySearchId = {};
   final List<BunnyTagStat> tagStats = [];
-  final Map<BunnySite, List<BunnyTagStat>> topFavoritedTagsBySite = {};
   final Map<int, List<BunnyPostTag>> tagsByPostId = {};
   final Map<int, List<String>> sourcesByPostId = {};
   final Map<int, BunnyPostRelationships> relationshipsByPostId = {};
@@ -240,18 +239,24 @@ class FakeBunnyRepository implements BunnyRepository {
     return matches.length > limit ? matches.sublist(0, limit) : matches;
   }
 
-  @override
-  Future<List<BunnyTagStat>> topFavoritedTags(BunnySite site, {int limit = 20}) async {
-    final matches = topFavoritedTagsBySite[site] ?? const [];
-    return matches.length > limit ? matches.sublist(0, limit) : matches;
-  }
+  /// Defaults to an empty report with a fixed [BunnyStatsReport.computedAt]
+  /// -- tests that care about specific sections overwrite this wholesale
+  /// rather than building it up field-by-field, since M40's report is a
+  /// single opaque unit server-side too (no per-section fetch/refresh).
+  BunnyStatsReport statsReport = const BunnyStatsReport(computedAt: '2026-01-01T00:00:00Z', topFavoritedTags: [], topUsedTags: [], topPools: [], topViewedSearches: []);
 
-  final Map<BunnySite, List<BunnyTagStat>> topUsedTagsBySite = {};
+  /// Set by [refreshStatsReport] -- lets a test assert a manual refresh
+  /// actually happened (distinct from [getStatsReport], which never mutates
+  /// this) without needing a real cache/TTL to observe the difference.
+  int refreshStatsReportCallCount = 0;
 
   @override
-  Future<List<BunnyTagStat>> topUsedTags(BunnySite site, {int limit = 20}) async {
-    final matches = topUsedTagsBySite[site] ?? const [];
-    return matches.length > limit ? matches.sublist(0, limit) : matches;
+  Future<BunnyStatsReport> getStatsReport() async => statsReport;
+
+  @override
+  Future<BunnyStatsReport> refreshStatsReport() async {
+    refreshStatsReportCallCount++;
+    return statsReport;
   }
 
   BunnyPost _markedSeen(BunnyPost post) => BunnyPost(

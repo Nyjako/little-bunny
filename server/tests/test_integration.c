@@ -339,9 +339,11 @@ void test_full_account_search_sync_favorite_flow(void)
     free(response.data);
     memset(&response, 0, sizeof(response));
 
-    status = do_request("GET", "/tags/autocomplete?site=e621&prefix=on", NULL, &response, true, NULL);
+    /* "somea", not the shorter "one" -- M39 throttles autocomplete to
+     * prefixes of 5+ characters. */
+    status = do_request("GET", "/tags/autocomplete?site=e621&prefix=somea", NULL, &response, true, NULL);
     TEST_ASSERT_EQUAL(200, status);
-    TEST_ASSERT_NOT_NULL(strstr(response.data, "\"name\":\"one\""));
+    TEST_ASSERT_NOT_NULL(strstr(response.data, "\"name\":\"someartist\""));
     free(response.data);
     memset(&response, 0, sizeof(response));
 
@@ -475,22 +477,29 @@ void test_full_account_search_sync_favorite_flow(void)
     free(response.data);
     memset(&response, 0, sizeof(response));
 
-    /* M10.2: post 1 (tags "one"/"someartist") was favorited a few requests
-     * ago, so both tags now show up here with count 1. */
-    status = do_request("GET", "/tags/top_favorited?site=e621", NULL, &response, true, NULL);
+    /* M10.2/M40: post 1 (tags "one"/"someartist") was favorited a few
+     * requests ago, so both tags now show up in the unified report's
+     * top_favorited_tags, site-prefixed since the report merges e621 and
+     * Inkbunny into one ranking. top_used_tags is a superset of
+     * top_favorited_tags (a non-favorited post still counting there is
+     * covered at the C level) -- same two tags show up in both here since
+     * this fixture's only post is favorited either way. */
+    status = do_request("GET", "/stats_report", NULL, &response, true, NULL);
     TEST_ASSERT_EQUAL(200, status);
-    TEST_ASSERT_NOT_NULL(strstr(response.data, "\"name\":\"one\""));
-    TEST_ASSERT_NOT_NULL(strstr(response.data, "\"name\":\"someartist\""));
+    TEST_ASSERT_NOT_NULL(strstr(response.data, "\"computed_at\""));
+    TEST_ASSERT_NOT_NULL(strstr(response.data, "\"top_favorited_tags\":[{\"name\":\"e621: one\""));
+    TEST_ASSERT_NOT_NULL(strstr(response.data, "\"name\":\"e621: someartist\""));
+    /* top_used_tags also picks up tags from posts synced by earlier steps in
+     * this same end-to-end flow -- just checking presence, not position. */
+    TEST_ASSERT_NOT_NULL(strstr(response.data, "\"top_used_tags\""));
+    TEST_ASSERT_NOT_NULL(strstr(response.data, "\"name\":\"e621: one\""));
     free(response.data);
     memset(&response, 0, sizeof(response));
 
-    /* M14.4: same tags show up here too, since the "all" view is a superset
-     * of the "favorites" one -- this route's own exclusive behavior (a
-     * non-favorited post still counting) is covered at the C level. */
-    status = do_request("GET", "/tags/top_used?site=e621", NULL, &response, true, NULL);
+    /* A manual refresh (M40) recomputes rather than erroring/no-op-ing. */
+    status = do_request("POST", "/stats_report", NULL, &response, true, NULL);
     TEST_ASSERT_EQUAL(200, status);
-    TEST_ASSERT_NOT_NULL(strstr(response.data, "\"name\":\"one\""));
-    TEST_ASSERT_NOT_NULL(strstr(response.data, "\"name\":\"someartist\""));
+    TEST_ASSERT_NOT_NULL(strstr(response.data, "\"name\":\"e621: one\""));
     free(response.data);
     memset(&response, 0, sizeof(response));
 

@@ -123,20 +123,14 @@ abstract interface class BunnyRepository {
     int limit = 10,
   });
 
-  /// Ranks tags of currently-favorited [site] posts by how many favorited
-  /// posts carry them, descending -- feeds a "most favorited tags" browse
-  /// screen (M10.2). Scoped to one site at a time, same as [tagAutocomplete].
-  Future<List<BunnyTagStat>> topFavoritedTags(
-    BunnySite site, {
-    int limit = 20,
-  });
+  /// The Tag Stats screen's unified report (M40) -- cached server-side for
+  /// up to 24h, rebuilt on demand by [refreshStatsReport]. See
+  /// [BunnyStatsReport]'s own doc comment for what each section means.
+  Future<BunnyStatsReport> getStatsReport();
 
-  /// Same ranking across every synced [site] post, not just favorited ones
-  /// (M14.4) -- the Tag Stats screen's "All" view.
-  Future<List<BunnyTagStat>> topUsedTags(
-    BunnySite site, {
-    int limit = 20,
-  });
+  /// Forces [getStatsReport] to recompute the report regardless of the
+  /// cached one's age -- the screen's manual refresh action.
+  Future<BunnyStatsReport> refreshStatsReport();
 
   /// Marks a post seen (global per post, not per search) -- clears the
   /// unseen marker [listSearchPosts]'s `unseenOnly` filter and

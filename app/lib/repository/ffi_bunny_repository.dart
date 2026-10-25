@@ -61,6 +61,16 @@ BunnyPost _postFromMap(Map<String, Object?> m) => BunnyPost(
 
 BunnyTagStat _tagStatFromMap(Map<String, Object?> m) => BunnyTagStat(name: m['name'] as String, count: m['count'] as int);
 
+List<BunnyTagStat> _tagStatListFromMaps(Object? list) => (list as List).cast<Map<String, Object?>>().map(_tagStatFromMap).toList();
+
+BunnyStatsReport _statsReportFromMap(Map<String, Object?> m) => BunnyStatsReport(
+  computedAt: m['computedAt'] as String,
+  topFavoritedTags: _tagStatListFromMaps(m['topFavoritedTags']),
+  topUsedTags: _tagStatListFromMaps(m['topUsedTags']),
+  topPools: _tagStatListFromMaps(m['topPools']),
+  topViewedSearches: _tagStatListFromMaps(m['topViewedSearches']),
+);
+
 BunnyPostTag _postTagFromMap(Map<String, Object?> m) => BunnyPostTag(name: m['name'] as String, category: m['category'] as String?);
 
 BunnyPostRelationships _relationshipsFromMap(Map<String, Object?> m) => BunnyPostRelationships(
@@ -251,15 +261,15 @@ class FfiBunnyRepository implements BunnyRepository {
   }
 
   @override
-  Future<List<BunnyTagStat>> topFavoritedTags(BunnySite site, {int limit = 20}) async {
-    final items = await _wrapped(() => _native.topFavoritedTags(site.toWireString(), limit));
-    return items.map(_tagStatFromMap).toList();
+  Future<BunnyStatsReport> getStatsReport() async {
+    final map = await _wrapped(() => _native.getStatsReport());
+    return _statsReportFromMap(map);
   }
 
   @override
-  Future<List<BunnyTagStat>> topUsedTags(BunnySite site, {int limit = 20}) async {
-    final items = await _wrapped(() => _native.topUsedTags(site.toWireString(), limit));
-    return items.map(_tagStatFromMap).toList();
+  Future<BunnyStatsReport> refreshStatsReport() async {
+    final map = await _wrapped(() => _native.refreshStatsReport());
+    return _statsReportFromMap(map);
   }
 
   @override

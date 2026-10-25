@@ -98,7 +98,27 @@ void main() {
 
   testWidgets('typing a query word shows debounced tag suggestions for that word only', (WidgetTester tester) async {
     final repository = FakeBunnyRepository();
-    repository.tagStats.addAll(const [BunnyTagStat(name: 'fox', count: 10), BunnyTagStat(name: 'wolf', count: 5)]);
+    repository.tagStats.addAll(const [BunnyTagStat(name: 'foxtail', count: 10), BunnyTagStat(name: 'wolfpack', count: 5)]);
+
+    await tester.pumpWidget(_wrap(repository));
+    await tester.pumpAndSettle();
+
+    await tester.enterText(find.widgetWithText(TextFormField, 'Query'), 'canine foxta');
+    await tester.pump(const Duration(milliseconds: 350));
+
+    expect(find.text('foxtail (10)'), findsOneWidget);
+    expect(find.text('wolfpack (5)'), findsNothing);
+
+    await tester.tap(find.text('foxtail (10)'));
+    await tester.pump();
+
+    final field = tester.widget<TextFormField>(find.widgetWithText(TextFormField, 'Query'));
+    expect(field.controller!.text, 'canine foxtail ');
+  });
+
+  testWidgets('a tag shorter than the minimum autocomplete prefix (M39) shows no suggestions', (WidgetTester tester) async {
+    final repository = FakeBunnyRepository();
+    repository.tagStats.addAll(const [BunnyTagStat(name: 'fox', count: 10)]);
 
     await tester.pumpWidget(_wrap(repository));
     await tester.pumpAndSettle();
@@ -106,33 +126,26 @@ void main() {
     await tester.enterText(find.widgetWithText(TextFormField, 'Query'), 'canine fo');
     await tester.pump(const Duration(milliseconds: 350));
 
-    expect(find.text('fox (10)'), findsOneWidget);
-    expect(find.text('wolf (5)'), findsNothing);
-
-    await tester.tap(find.text('fox (10)'));
-    await tester.pump();
-
-    final field = tester.widget<TextFormField>(find.widgetWithText(TextFormField, 'Query'));
-    expect(field.controller!.text, 'canine fox ');
+    expect(find.text('fox (10)'), findsNothing);
   });
 
   testWidgets('negated tags still autocomplete and keep their - prefix (M9.6.7)', (WidgetTester tester) async {
     final repository = FakeBunnyRepository();
-    repository.tagStats.addAll(const [BunnyTagStat(name: 'dog', count: 7)]);
+    repository.tagStats.addAll(const [BunnyTagStat(name: 'dogsled', count: 7)]);
 
     await tester.pumpWidget(_wrap(repository));
     await tester.pumpAndSettle();
 
-    await tester.enterText(find.widgetWithText(TextFormField, 'Query'), 'cat -do');
+    await tester.enterText(find.widgetWithText(TextFormField, 'Query'), 'cat -dogsl');
     await tester.pump(const Duration(milliseconds: 350));
 
-    expect(find.text('dog (7)'), findsOneWidget);
+    expect(find.text('dogsled (7)'), findsOneWidget);
 
-    await tester.tap(find.text('dog (7)'));
+    await tester.tap(find.text('dogsled (7)'));
     await tester.pump();
 
     final field = tester.widget<TextFormField>(find.widgetWithText(TextFormField, 'Query'));
-    expect(field.controller!.text, 'cat -dog ');
+    expect(field.controller!.text, 'cat -dogsled ');
   });
 
   testWidgets('a wildcard token skips autocomplete entirely (M9.6.7)', (WidgetTester tester) async {

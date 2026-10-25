@@ -165,22 +165,27 @@ bunny_core_result_t bunny_core_search_list_posts(bunny_core_t *core, int64_t sea
     /* A pool search (M26) orders by e621's own post_ids order instead of
      * the normal newest-first-by-creation-date -- same connection/lock as
      * the actual post listing below, so this doesn't cost a second round
-     * trip through the pool. */
+     * trip through the pool. A favorites search (M37) is exempt from the
+     * blacklist, same as a pool search (which bunny_db_pool_search_list_posts
+     * never filters at all, regardless of this flag). */
     bunny_db_search_list_t searches;
     bunny_db_result_t search_list_result = bunny_db_search_list(read_db, &searches);
     int64_t pool_id = 0;
     bool is_pool = false;
+    bool is_favorites = false;
     if (search_list_result == BUNNY_DB_OK) {
         for (size_t i = 0; i < searches.count; i++) {
             if (searches.items[i].id == search_id) {
                 is_pool = bunny_core_parse_pool_id_from_query(searches.items[i].query, &pool_id);
+                is_favorites = bunny_core_is_favorites_query(searches.items[i].site, searches.items[i].query);
                 break;
             }
         }
         bunny_db_search_list_free(&searches);
     }
 
-    bunny_db_result_t result = is_pool ? bunny_db_pool_search_list_posts(read_db, search_id, pool_id, unseen_only, page, out_list) : bunny_db_search_list_posts(read_db, search_id, unseen_only, page, out_list);
+    bunny_db_result_t result = is_pool ? bunny_db_pool_search_list_posts(read_db, search_id, pool_id, unseen_only, page, out_list)
+                                        : bunny_db_search_list_posts(read_db, search_id, unseen_only, !is_favorites, page, out_list);
     bunny_core_db_read_unlock(core, slot);
     return bunny_core_map_db_result(result);
 }
@@ -197,14 +202,27 @@ bunny_core_result_t bunny_core_post_get_by_id(bunny_core_t *core, int64_t post_i
     return bunny_core_map_db_result(result);
 }
 
+/* A prefix shorter than this matches far too many tags for the (site, name)
+ * index to narrow usefully -- each candidate tag still needs its own
+ * post_tags join to count matches, which is what actually hung the server on
+ * a one- or two-letter keystroke (M39). Below the minimum, skip the query
+ * entirely rather than let the caller pay for it. */
+#define BUNNY_CORE_TAG_AUTOCOMPLETE_MIN_PREFIX_LEN 5
+#define BUNNY_CORE_TAG_AUTOCOMPLETE_MAX_RESULTS 5
+
 bunny_core_result_t bunny_core_tag_autocomplete(bunny_core_t *core, bunny_db_site_t site, const char *prefix, int limit, bunny_db_tag_stat_list_t *out_list)
 {
-    if (!core) {
+    if (!core || !out_list) {
         return BUNNY_CORE_ERR_INVALID_ARG;
     }
+    if (!prefix || strlen(prefix) < BUNNY_CORE_TAG_AUTOCOMPLETE_MIN_PREFIX_LEN) {
+        memset(out_list, 0, sizeof(*out_list));
+        return BUNNY_CORE_OK;
+    }
+    int capped_limit = (limit <= 0 || limit > BUNNY_CORE_TAG_AUTOCOMPLETE_MAX_RESULTS) ? BUNNY_CORE_TAG_AUTOCOMPLETE_MAX_RESULTS : limit;
     size_t slot;
     bunny_db_t *read_db = bunny_core_db_read_lock(core, &slot);
-    bunny_db_result_t result = bunny_db_tag_autocomplete(read_db, site, prefix, limit, out_list);
+    bunny_db_result_t result = bunny_db_tag_autocomplete(read_db, site, prefix, capped_limit, out_list);
     bunny_core_db_read_unlock(core, slot);
     return bunny_core_map_db_result(result);
 }

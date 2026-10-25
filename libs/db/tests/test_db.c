@@ -803,14 +803,14 @@ void test_search_list_posts_excludes_blacklisted_tags(void)
     bunny_db_search_add_result(g_db, search_id, id2, NULL);
 
     bunny_db_post_list_t before;
-    bunny_db_search_list_posts(g_db, search_id, false, 1, &before);
+    bunny_db_search_list_posts(g_db, search_id, false, true, 1, &before);
     TEST_ASSERT_EQUAL(2, (int)before.count);
     bunny_db_post_list_free(&before);
 
     bunny_db_blacklist_add(g_db, BUNNY_DB_SITE_E621, "young");
 
     bunny_db_post_list_t after;
-    bunny_db_result_t result = bunny_db_search_list_posts(g_db, search_id, false, 1, &after);
+    bunny_db_result_t result = bunny_db_search_list_posts(g_db, search_id, false, true, 1, &after);
     TEST_ASSERT_EQUAL(BUNNY_DB_OK, result);
     TEST_ASSERT_EQUAL(1, (int)after.count);
     TEST_ASSERT_EQUAL(id1, after.items[0].id);
@@ -819,7 +819,7 @@ void test_search_list_posts_excludes_blacklisted_tags(void)
     /* A blacklist entry for a different site never affects this search. */
     bunny_db_blacklist_add(g_db, BUNNY_DB_SITE_INKBUNNY, "forest");
     bunny_db_post_list_t still_one;
-    bunny_db_search_list_posts(g_db, search_id, false, 1, &still_one);
+    bunny_db_search_list_posts(g_db, search_id, false, true, 1, &still_one);
     TEST_ASSERT_EQUAL(1, (int)still_one.count);
     bunny_db_post_list_free(&still_one);
 }
@@ -845,7 +845,7 @@ void test_search_results_and_list_posts(void)
     TEST_ASSERT_EQUAL(BUNNY_DB_OK, result);
 
     bunny_db_post_list_t all_results;
-    result = bunny_db_search_list_posts(g_db, search_id, false, 1, &all_results);
+    result = bunny_db_search_list_posts(g_db, search_id, false, true, 1, &all_results);
     TEST_ASSERT_EQUAL(BUNNY_DB_OK, result);
     TEST_ASSERT_EQUAL(2, (int)all_results.count);
     bunny_db_post_list_free(&all_results);
@@ -853,7 +853,7 @@ void test_search_results_and_list_posts(void)
     bunny_db_post_mark_seen(g_db, id1);
 
     bunny_db_post_list_t unseen_results;
-    result = bunny_db_search_list_posts(g_db, search_id, true, 1, &unseen_results);
+    result = bunny_db_search_list_posts(g_db, search_id, true, true, 1, &unseen_results);
     TEST_ASSERT_EQUAL(BUNNY_DB_OK, result);
     TEST_ASSERT_EQUAL(1, (int)unseen_results.count);
     TEST_ASSERT_EQUAL(id2, unseen_results.items[0].id);
@@ -884,11 +884,45 @@ void test_search_list_posts_orders_newest_first_by_site_date(void)
     bunny_db_search_add_result(g_db, search_id, newer_id, NULL);
 
     bunny_db_post_list_t results;
-    bunny_db_result_t result = bunny_db_search_list_posts(g_db, search_id, false, 1, &results);
+    bunny_db_result_t result = bunny_db_search_list_posts(g_db, search_id, false, true, 1, &results);
     TEST_ASSERT_EQUAL(BUNNY_DB_OK, result);
     TEST_ASSERT_EQUAL(2, (int)results.count);
     TEST_ASSERT_EQUAL(newer_id, results.items[0].id);
     TEST_ASSERT_EQUAL(older_id, results.items[1].id);
+    bunny_db_post_list_free(&results);
+}
+
+void test_search_list_posts_orders_a_post_with_no_site_date_by_cached_at_instead(void)
+{
+    /* M46: the sort key search_results.post_sort_key denormalizes is
+     * COALESCE(created_at_site, cached_at), set once when a post is first
+     * linked to a search -- this confirms the cached_at fallback still
+     * drives ordering correctly, not just the common created_at_site path
+     * test_search_list_posts_orders_newest_first_by_site_date already
+     * covers. */
+    int64_t search_id = 0;
+    bunny_db_search_create(g_db, BUNNY_DB_SITE_E621, "wolves", "wolf", 24, NULL, &search_id);
+
+    bunny_db_post_upsert_t old_dated_post;
+    bunny_db_post_upsert_t no_date_post;
+    make_test_post(&old_dated_post, 703, 1);
+    make_test_post(&no_date_post, 704, 1);
+    old_dated_post.created_at_site = "2020-01-01T00:00:00Z";
+    no_date_post.created_at_site = NULL; /* falls back to cached_at, which defaults to "now" */
+
+    int64_t old_dated_id = 0;
+    int64_t no_date_id = 0;
+    bunny_db_post_upsert(g_db, &old_dated_post, &old_dated_id);
+    bunny_db_search_add_result(g_db, search_id, old_dated_id, NULL);
+    bunny_db_post_upsert(g_db, &no_date_post, &no_date_id);
+    bunny_db_search_add_result(g_db, search_id, no_date_id, NULL);
+
+    bunny_db_post_list_t results;
+    bunny_db_result_t result = bunny_db_search_list_posts(g_db, search_id, false, true, 1, &results);
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, result);
+    TEST_ASSERT_EQUAL(2, (int)results.count);
+    TEST_ASSERT_EQUAL(no_date_id, results.items[0].id); /* cached_at (~now) beats the 2020 site date */
+    TEST_ASSERT_EQUAL(old_dated_id, results.items[1].id);
     bunny_db_post_list_free(&results);
 }
 
@@ -914,21 +948,21 @@ void test_search_list_posts_paginates(void)
     }
 
     bunny_db_post_list_t page1;
-    TEST_ASSERT_EQUAL(BUNNY_DB_OK, bunny_db_search_list_posts(g_db, search_id, false, 1, &page1));
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, bunny_db_search_list_posts(g_db, search_id, false, true, 1, &page1));
     TEST_ASSERT_EQUAL(200, (int)page1.count);
     TEST_ASSERT_EQUAL(3000 + 204, page1.items[0].external_id); /* newest first */
     TEST_ASSERT_EQUAL(3000 + 5, page1.items[199].external_id);
     bunny_db_post_list_free(&page1);
 
     bunny_db_post_list_t page2;
-    TEST_ASSERT_EQUAL(BUNNY_DB_OK, bunny_db_search_list_posts(g_db, search_id, false, 2, &page2));
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, bunny_db_search_list_posts(g_db, search_id, false, true, 2, &page2));
     TEST_ASSERT_EQUAL(5, (int)page2.count);
     TEST_ASSERT_EQUAL(3000 + 4, page2.items[0].external_id);
     TEST_ASSERT_EQUAL(3000 + 0, page2.items[4].external_id);
     bunny_db_post_list_free(&page2);
 
     bunny_db_post_list_t page3;
-    TEST_ASSERT_EQUAL(BUNNY_DB_OK, bunny_db_search_list_posts(g_db, search_id, false, 3, &page3));
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, bunny_db_search_list_posts(g_db, search_id, false, true, 3, &page3));
     TEST_ASSERT_EQUAL(0, (int)page3.count);
     bunny_db_post_list_free(&page3);
 }
@@ -1333,6 +1367,110 @@ void test_tag_autocomplete_escapes_literal_underscore(void)
     TEST_ASSERT_EQUAL(1, (int)results.count);
     TEST_ASSERT_EQUAL_STRING("digital_media", results.items[0].name);
     bunny_db_tag_stat_list_free(&results);
+}
+
+void test_top_favorited_pools_ranks_by_favorited_post_count(void)
+{
+    int64_t pool5[] = {5};
+    int64_t pool9[] = {9};
+
+    bunny_db_post_upsert_t post1, post2, post3;
+    make_test_post(&post1, 841, 1);
+    make_test_post(&post2, 842, 1);
+    make_test_post(&post3, 843, 1);
+    post1.pool_ids = pool5;
+    post1.pool_count = 1;
+    post2.pool_ids = pool5;
+    post2.pool_count = 1;
+    post3.pool_ids = pool9;
+    post3.pool_count = 1;
+
+    int64_t id1 = 0, id2 = 0, id3 = 0;
+    bunny_db_post_upsert(g_db, &post1, &id1);
+    bunny_db_post_upsert(g_db, &post2, &id2);
+    bunny_db_post_upsert(g_db, &post3, &id3);
+
+    /* Pool 5 gets both its posts favorited; pool 9 gets its one post
+     * favorited too, so it should still rank behind pool 5's higher count. */
+    bunny_db_favorite_add(g_db, id1, -1);
+    bunny_db_favorite_add(g_db, id2, -1);
+    bunny_db_favorite_add(g_db, id3, -1);
+
+    bunny_db_tag_stat_list_t results;
+    bunny_db_result_t result = bunny_db_top_favorited_pools(g_db, BUNNY_DB_SITE_E621, 10, &results);
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, result);
+    TEST_ASSERT_EQUAL(2, (int)results.count);
+    TEST_ASSERT_EQUAL_STRING("pool:5", results.items[0].name);
+    TEST_ASSERT_EQUAL(2, results.items[0].count);
+    TEST_ASSERT_EQUAL_STRING("pool:9", results.items[1].name);
+    TEST_ASSERT_EQUAL(1, results.items[1].count);
+    bunny_db_tag_stat_list_free(&results);
+}
+
+void test_top_favorited_pools_ignores_posts_in_a_pool_that_arent_favorited(void)
+{
+    int64_t pool_ids[] = {3};
+    bunny_db_post_upsert_t post;
+    make_test_post(&post, 844, 1);
+    post.pool_ids = pool_ids;
+    post.pool_count = 1;
+    bunny_db_post_upsert(g_db, &post, NULL);
+
+    bunny_db_tag_stat_list_t results;
+    bunny_db_result_t result = bunny_db_top_favorited_pools(g_db, BUNNY_DB_SITE_E621, 10, &results);
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, result);
+    TEST_ASSERT_EQUAL(0, (int)results.count);
+    bunny_db_tag_stat_list_free(&results);
+}
+
+void test_top_viewed_searches_ranks_by_view_count_and_excludes_never_viewed(void)
+{
+    int64_t viewed_id = 0, never_viewed_id = 0;
+    bunny_db_search_create(g_db, BUNNY_DB_SITE_E621, "Often viewed", "wolf", 24, NULL, &viewed_id);
+    bunny_db_search_create(g_db, BUNNY_DB_SITE_E621, "Never viewed", "cat", 24, NULL, &never_viewed_id);
+
+    bunny_db_search_touch_last_viewed(g_db, viewed_id);
+    bunny_db_search_touch_last_viewed(g_db, viewed_id);
+
+    bunny_db_tag_stat_list_t results;
+    bunny_db_result_t result = bunny_db_top_viewed_searches(g_db, BUNNY_DB_SITE_E621, 10, &results);
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, result);
+    TEST_ASSERT_EQUAL(1, (int)results.count);
+    TEST_ASSERT_EQUAL_STRING("Often viewed", results.items[0].name);
+    TEST_ASSERT_EQUAL(2, results.items[0].count);
+    bunny_db_tag_stat_list_free(&results);
+}
+
+void test_stats_report_cache_round_trips_and_defaults_to_null(void)
+{
+    char *json = NULL;
+    char *computed_at = NULL;
+    bunny_db_result_t result = bunny_db_get_cached_stats_report(g_db, &json, &computed_at);
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, result);
+    TEST_ASSERT_NULL(json);
+    TEST_ASSERT_NULL(computed_at);
+
+    result = bunny_db_set_cached_stats_report(g_db, "{\"top_favorited_tags\":[]}", "2026-01-01T00:00:00Z");
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, result);
+
+    result = bunny_db_get_cached_stats_report(g_db, &json, &computed_at);
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, result);
+    TEST_ASSERT_EQUAL_STRING("{\"top_favorited_tags\":[]}", json);
+    TEST_ASSERT_EQUAL_STRING("2026-01-01T00:00:00Z", computed_at);
+    free(json);
+    free(computed_at);
+
+    /* A second set replaces the single row wholesale rather than erroring on
+     * the id=1 PRIMARY KEY conflict. */
+    result = bunny_db_set_cached_stats_report(g_db, "{\"top_favorited_tags\":[1]}", "2026-01-02T00:00:00Z");
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, result);
+
+    result = bunny_db_get_cached_stats_report(g_db, &json, &computed_at);
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, result);
+    TEST_ASSERT_EQUAL_STRING("{\"top_favorited_tags\":[1]}", json);
+    TEST_ASSERT_EQUAL_STRING("2026-01-02T00:00:00Z", computed_at);
+    free(json);
+    free(computed_at);
 }
 
 void test_migrations_apply_cleanly_and_are_idempotent_on_reopen(void)
@@ -1981,6 +2119,7 @@ int main(void)
     RUN_TEST(test_search_list_posts_excludes_blacklisted_tags);
     RUN_TEST(test_search_results_and_list_posts);
     RUN_TEST(test_search_list_posts_orders_newest_first_by_site_date);
+    RUN_TEST(test_search_list_posts_orders_a_post_with_no_site_date_by_cached_at_instead);
     RUN_TEST(test_search_list_posts_paginates);
     RUN_TEST(test_download_record_and_list);
     RUN_TEST(test_post_get_by_id);
@@ -1996,6 +2135,10 @@ int main(void)
     RUN_TEST(test_tag_autocomplete_orders_by_usage_then_name);
     RUN_TEST(test_tag_autocomplete_is_per_site);
     RUN_TEST(test_tag_autocomplete_escapes_literal_underscore);
+    RUN_TEST(test_top_favorited_pools_ranks_by_favorited_post_count);
+    RUN_TEST(test_top_favorited_pools_ignores_posts_in_a_pool_that_arent_favorited);
+    RUN_TEST(test_top_viewed_searches_ranks_by_view_count_and_excludes_never_viewed);
+    RUN_TEST(test_stats_report_cache_round_trips_and_defaults_to_null);
     RUN_TEST(test_migrations_apply_cleanly_and_are_idempotent_on_reopen);
     RUN_TEST(test_search_create_defaults_uses_default_interval_to_false);
     RUN_TEST(test_search_update_toggles_uses_default_interval);

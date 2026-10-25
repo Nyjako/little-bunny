@@ -176,6 +176,18 @@ static const char *const BUNNY_DB_SCHEMA_SQL = "PRAGMA foreign_keys = ON;"
                                                "    default_sync_interval_hours INTEGER NOT NULL DEFAULT 24"
                                                ");"
                                                "INSERT OR IGNORE INTO server_settings (id, default_sync_interval_hours) VALUES (1, 24);"
+                                               /* Single-row cache (M40) for the tag-stats screen's unified report --
+                                                * computing it (favorited/used tags, favorited pools, most-viewed
+                                                * searches, each a full-table aggregate) on every page open is what
+                                                * hung the screen in the first place. report_json is the whole
+                                                * report, pre-serialized by bunny_core -- this table doesn't need to
+                                                * know its shape, only cache it. No row at all means "never
+                                                * computed." */
+                                               "CREATE TABLE IF NOT EXISTS stats_report_cache ("
+                                               "    id INTEGER PRIMARY KEY CHECK (id = 1),"
+                                               "    computed_at TEXT NOT NULL,"
+                                               "    report_json TEXT NOT NULL"
+                                               ");"
                                                "CREATE INDEX IF NOT EXISTS idx_post_tags_tag_id ON post_tags(tag_id);"
                                                "CREATE INDEX IF NOT EXISTS idx_search_results_search_id ON search_results(search_id);"
                                                "CREATE INDEX IF NOT EXISTS idx_downloads_post_id ON downloads(post_id);"

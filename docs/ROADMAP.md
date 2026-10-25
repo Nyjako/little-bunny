@@ -2182,3 +2182,324 @@ this file is the single source of truth for "what's done" across sessions.
     right arguments, right handling of the result) without a device, but the
     `saf_util`/`saf_stream` plugins' actual native Android behavior still needs
     verification on a real device, which this environment has no way to do.
+
+- [x] **M37 — Apply the blacklist to live tag/author browsing; keep pools and
+  favorites exempt everywhere**
+  Reported by the user: opening an author from a post (`TagBrowseScreen`'s live,
+  stateless preview, `bunny_core_preview_search`) showed blacklisted-tag posts --
+  blacklist filtering had only ever applied to a saved search's own cached listing
+  (`bunny_db_search_list_posts`), by original design (M13.3). The user wants live
+  browsing to filter like everything else, but explicitly does NOT want pools or
+  favorites filtered at all, anywhere -- those should always show everything
+  actually in the pool or favorited.
+  - New `bunny_core_is_favorites_query(site, query)` (`internal.h`) mirrors the app
+    side's `BunnySearch.isFavorites` sentinel check server/core-side.
+  - `bunny_db_search_list_posts` gained an `apply_blacklist` param; `bunny_core_
+    search_list_posts` passes `false` for a favorites search, `true` otherwise.
+    `bunny_db_pool_search_list_posts` dropped its blacklist clause entirely --
+    never filtered, no flag needed.
+  - New `bunny_db_post_is_blacklisted(db, post_id)` -- a single-post check (no
+    listing query to attach a `NOT EXISTS` clause to) used by `bunny_core_
+    preview_search`'s live upsert loop, skipped for a pool or favorites browse.
+  - No app-side/API changes at all -- every decision is made server-side from the
+    search's own stored query/site, nothing new for a client to pass.
+
+- [x] **M38 — Prevent duplicate saved searches/pools for the same (site, query)**
+  Reported by the user: tapping an already-saved tag/author (`TagBrowseScreen`'s
+  "add to searches" action), or re-adding a pool already saved (`SearchesScreen`'s
+  "add pool" dialog), silently created a second, functionally-identical search --
+  nothing in either flow checked for an existing match first.
+  - `TagBrowseScreen` now loads `listSearches()` on init and looks for a saved
+    search with the same `(site, query)` pair. The app bar's "+" add action swaps
+    to a checkmark when a match exists; tapping it asks (via a confirm dialog) to
+    remove that search instead of creating a duplicate. Creating a new search no
+    longer pops this screen -- it reloads the match so the checkmark appears in
+    place immediately.
+  - `SearchesScreen._createPoolSearch` gained the same check for the
+    `pool:<id>` sentinel query: if a search with that exact `(site, query)`
+    already exists, the dialog shows a message and refuses to create a second
+    one, skipping the pool-name lookup entirely.
+  - Known gap: manually typing a query into `CreateSearchScreen`'s own entry form
+    (the main FAB) still has no duplicate check -- left for a future pass, since
+    it's a bigger UI undertaking than either flow above and wasn't one of the
+    cases the user actually hit.
+
+- [x] **M39 — Throttle tag autocomplete to stop it hanging the server**
+  Reported by the user: tag autocomplete could hang the server. `bunny_db_tag_autocomplete`
+  runs `SELECT ... FROM tags LEFT JOIN post_tags ... WHERE site = ? AND name LIKE ?
+  GROUP BY t.id ORDER BY n DESC ... LIMIT ?` -- a prefix match that's indexable via
+  `tags`' own `UNIQUE (site, name)`, but only once the prefix itself has narrowed the
+  candidate tags down. A one- or two-character prefix (fired on every keystroke,
+  debounced but still frequent) matches thousands of tags on a large site, each
+  needing its own `post_tags` join to count -- that's what actually hung the server.
+  - `bunny_core_tag_autocomplete` (`libs/core/src/searches.c`) now rejects any
+    `prefix` shorter than 5 characters outright, returning an empty list without
+    touching the database at all, and caps the result count at 5 regardless of the
+    `limit` the caller asks for. `bunny_db_tag_autocomplete` itself is untouched --
+    it stays a flexible, unthrottled primitive for any other caller/test, since the
+    throttle is a UI-autocomplete-specific policy decision, not a database-layer one.
+  - Both the server's HTTP route (`/tags/autocomplete`) and the FFI path used by a
+    standalone (no-server) build go through `bunny_core_tag_autocomplete`, so both
+    get the same protection.
+  - `CreateSearchScreen`/`EditSearchScreen` (Flutter) now also skip firing the
+    autocomplete request client-side for a sub-5-character tag (`tag_query.dart`'s
+    new `tagAutocompleteMinPrefixLength`), so a short prefix never leaves the device
+    in the first place, on top of the server-side guarantee.
+  - Already sorted by post count descending (`ORDER BY n DESC, t.name ASC`) --
+    no change needed there.
+
+- [x] **M40 — Precompute and cache the Tag Stats screen's report, unifying both sites**
+  Reported by the user: the tag stats page would hang or fail to open. It ran up to
+  four full-table aggregate queries (`bunny_db_top_favorited_tags`/`top_used_tags`,
+  plus two new ones added here) completely fresh on every single page open, with no
+  caching at all -- on a database with a lot of posts/favorites, this blocked for long
+  enough to look broken. The screen's own per-site/"Favorites vs All" tabs also meant
+  four separate round-trips just to see every view.
+  - New sections: `bunny_db_top_favorited_pools` (pools ranked by how many of their
+    posts are favorited -- the clearest "which pools do I actually like" signal
+    available, per the user's own suggestion; e621 only, Inkbunny has no pool
+    concept) and `bunny_db_top_viewed_searches` (searches ranked by a new
+    `searches.view_count` column, incremented alongside `last_viewed_at` by
+    `bunny_db_search_touch_last_viewed` -- the existing column only ever tracked the
+    *most recent* view, not how many there'd been).
+  - `bunny_core_get_stats_report`/`bunny_core_refresh_stats_report` (new
+    `libs/core/src/stats_report.c`) build one unified `bunny_core_stats_report_t`:
+    `top_favorited_tags`/`top_used_tags`/`top_viewed_searches` each merge both
+    sites' own top-20 into one combined top-20, every entry's name prefixed with its
+    site ("e621: ", "inkbunny: ") since the same tag/label text can legitimately
+    exist on both; `top_pools` is e621-only, its `name` the `pool:<id>` sentinel
+    already used everywhere else a pool is addressed by query text. The whole report
+    is cached as one JSON blob (`stats_report_cache`, a new single-row table) for 24h;
+    `bunny_core_get_stats_report` serves the cache until it's stale, `bunny_core_
+    refresh_stats_report` always recomputes (the screen's manual refresh action).
+  - Server: the old `/tags/top_favorited`/`/tags/top_used` routes are gone, replaced
+    by one `/stats_report` route (`GET` serves the cached-or-fresh report, `POST`
+    forces a refresh) in `routes_tags.c`.
+  - `TagStatsScreen` no longer has site/favorites-vs-all tabs -- one scrollable list
+    with the four sections above, an app-bar refresh action, and a "last updated"
+    timestamp. Tapping a merged tag or pool entry opens `TagBrowseScreen` for it
+    (parsing the site back out of the prefix, or using the pool sentinel directly);
+    "most-visited searches" entries are informational only, not tappable -- the user
+    already has quick access to those via the main Searches list.
+  - `bunny_core_ffi`'s FFI bindings were regenerated (`dart run ffigen`) for the new
+    `bunny_core_stats_report_t` struct and its three functions, with new isolate
+    dispatch glue (`getStatsReport`/`refreshStatsReport`) alongside the existing
+    `topFavoritedTags`/`topUsedTags` calls (kept as internal-only API, no longer
+    surfaced to the app directly -- the report builder still calls them per-site).
+
+- [ ] **M41 — Detect/clean up saved searches or pools that duplicated each other before M38**
+  M38 (above) only stops *new* duplicates from being created going forward -- it has no
+  effect on any `(site, query)` duplicates that were already saved before that check
+  existed. The user confirmed the client-side prevention approach is fine as the
+  ongoing guard, but asked for the pre-existing duplicates to be handled too, exact
+  mechanism still open: candidates include a one-time startup/sync-time scan that
+  finds searches sharing a `(site, query)` and offers to merge them (keeping one,
+  reassigning/dropping `search_results` rows for the others) or just flags them for
+  the user to resolve manually in `SearchesScreen`, rather than silently auto-deleting
+  anything a user may be relying on (e.g. divergent `interval_hours`/group membership
+  between the duplicates).
+
+- [ ] **M42 — Stop tracking "downloaded" state server-side; check local file existence instead**
+  Reported by the user: a post downloaded on one device shows as downloaded on every
+  other device too, because `bunny_db_download_record`/`bunny_db_download_list_for_post`
+  store download state centrally on the shared server -- but "downloaded" is inherently
+  a per-device, per-filesystem fact, not something the server can meaningfully own.
+  The user's proposed fix: drop download tracking from the database entirely.
+  `DownloadManager.downloadPost` already computes a fully deterministic destination
+  path (artist subfolder + fixed filename pattern, same path every time, always
+  overwrites -- see M36's own notes) given a post and the user's chosen destination
+  folder, so each client can instead just check whether a file already exists at that
+  predicted path to show "downloaded" status locally, with no server round-trip and
+  no shared state to get stale or conflict across devices. Needs a migration path for
+  `recordDownload`/`listDownloadsForPost` call sites (and the `downloads` table/schema
+  itself) once the local-existence-check replacement is designed.
+
+- [ ] **M43 — Queue downloads (and mass download/favorite/upvote) server-side instead of blocking the app**
+  Reported by the user: downloading currently means sitting on the post screen waiting
+  for the file, checksum, and any auto-favorite/auto-upvote to all finish before moving
+  on. Wanted instead: tap download and forget about it -- the request (and its
+  favorite/upvote side effects) goes to the server's existing task queue (the same
+  `action_queue` table/`task_queue.c` worker `favorite_add`/`vote`/`comment` actions
+  already go through, M4.3) rather than blocking the client, with a push notification
+  once it actually completes. Same treatment for *mass* download/favorite/upvote (not
+  just a single post) -- and when a mass download has auto-favorite/auto-upvote
+  enabled, those should always apply to every post in the batch, not conditionally.
+  Needs: a new `download` action type in `action_queue` (today it only downloads
+  client-side via `DownloadManager`, with no server-side equivalent at all -- this is
+  a bigger shift than just reusing the existing queue, since the file itself has to
+  land on the *client's* filesystem, not the server's), a push-notification channel
+  the app can receive completion events through, and batch-enqueue endpoints for mass
+  actions.
+
+- [ ] **M44 — Render pool cross-references as inline clickable text, not separate chips below**
+  Follow-up to M26 (which added the pool description + a `Wrap` of `ActionChip`s below
+  it for every "pool #N" reference found). The user wants the references inline within
+  the description text itself instead, at the exact position they're mentioned --
+  styled as a plain blue link reading literally `pool:id` would be an acceptable
+  rendering. Needs turning `_poolHeader`'s plain `Text(description)` in
+  `tag_browse_screen.dart` into a rich-text span that finds each "pool #N" match and
+  swaps it for a tappable link inline, instead of appending chips afterward.
+
+- [ ] **M45 — Fix pinned searches mixing with unpinned after deep navigation**
+  Reported by the user: starting from the main `SearchesScreen`, opening a search, then
+  an author from one of its posts, then a pool from that author, etc. several layers
+  deep, then navigating all the way back to the main searches list -- pinned searches
+  end up mixed in with unpinned ones instead of staying sorted first. Not yet
+  investigated; likely something about `_sorted`/`_sortedEntries`'s pin-first pass not
+  re-running (or running against stale data) when the screen is popped back to rather
+  than freshly built.
+
+- [x] **M46 — Deep audit for other endpoints that might hang the server; fix the worst one found**
+  The user's explicit ask after M39/M40 fixed the two hangs they'd actually hit (tag
+  autocomplete, tag stats): go look for other spots with the same shape. Done by
+  reading every registered route/`bunny_db_*` query for an unbounded operation, then
+  live-testing the suspects against the user's real server (733 saved searches,
+  largest at 58,465 posts).
+  - **Found and fixed: every search/favorites post listing was slow, scaling with the
+    search's total size, not the page requested.** `GET /searches/{id}/posts` took
+    12-14s on the 58k-post search, 13.0s on a 24k-post one, 7.2s on an 18.5k-post
+    favorites search -- page 1 and page 500 took the same time, which is the tell.
+    Root cause: `bunny_db_search_list_posts` sorted by
+    `COALESCE(p.created_at_site, p.cached_at)`, a two-column expression on `posts`
+    with no index that could cover it, while the query's own `WHERE` clause scopes to
+    `search_results.search_id` -- two different tables, so no single index could
+    satisfy both without denormalizing. Confirmed via `EXPLAIN QUERY PLAN` (reproduced
+    locally against a synthetic 1.5M-row database): SQLite had to pull every row
+    matching `search_id`, sort *all* of them in a temp B-tree, and only then apply
+    `LIMIT`/`OFFSET` -- a full materialize-and-sort per request, no matter how small a
+    page was actually asked for. Same root shape as M39/M40, just hiding behind the
+    single most commonly hit endpoint in the app (opening any saved search) rather
+    than an edge case.
+    - Fix: a new `search_results.post_sort_key` column (migration 15) denormalizes
+      that same `COALESCE(...)` value onto `search_results` itself, set once by
+      `bunny_db_search_add_result` when a post is first linked to a search (frozen
+      after that, same as every other field on that row) and backfilled for existing
+      rows by the migration. A new `(search_id, post_sort_key)` index lets
+      `bunny_db_search_list_posts` satisfy its `WHERE`/`ORDER BY` from one index walk
+      with no sort step at all -- confirmed via `EXPLAIN QUERY PLAN` (the
+      `USE TEMP B-TREE FOR ORDER BY` line disappears entirely once the index exists).
+      `bunny_db_pool_search_list_posts` has the same underlying shape (joins
+      `search_results`, sorts by an unindexed expression) but wasn't confirmed slow
+      live -- e621 pools are typically much smaller than a tag search or a whole
+      favorites list -- and its sort key mixes in `post_pools.position` too, which
+      doesn't denormalize onto `search_results` as cleanly; left alone for now.
+    - Not yet deployed to the live server (per the user's standing "fixes over
+      deploys for now" instruction) -- the 12-14s numbers above are pre-fix, measured
+      against the server's current build.
+  - **Other findings, not acted on here:**
+    - `handle_queue_process` (`/queue/process`) processes every pending queued action
+      synchronously in one HTTP request/thread, one real network call each --
+      mass-favorite/mass-vote (`post_grid_screen.dart`'s multi-select actions) can
+      queue dozens at once. Already flagged in that handler's own code comment as a
+      known risk; this is exactly what M43 (queueing downloads/mass actions properly)
+      is meant to fix, not duplicated here.
+    - `bunny_db_count_unseen` (a full, unscoped scan of every post in `posts`) exists
+      and is tested, but has zero callers anywhere in `core`, the server, or the
+      Dart app -- dead code today, but a landmine if something wires it up later
+      without noticing its shape.
+    - `bunny_db_search_list` (`GET /searches`, listing all 733 saved searches) ran in
+      0.52s live -- not hanging, but has two correlated subqueries per row
+      (`unseen_count`/`total_count`); worth a second look if the saved-search count
+      keeps climbing.
+    - Every other registered route was read through and is either bounded by nature
+      (single-post lookups, the in-memory task queue/log ring buffer, one-page-at-a-
+      time live previews) or already fixed by M37/M39/M40.
+
+- [ ] **M47 — Keep the device awake while browsing posts**
+  Reported by the user: wants a wake lock active while browsing so the screen doesn't
+  sleep mid-session. `wakelock_plus` is already present as a *transitive* dependency
+  (per `pubspec.lock`, not yet declared directly in `pubspec.yaml`) -- may not need a
+  new dependency, just wiring it up (enable on entering a post-browsing screen, disable
+  on leaving) and adding the direct `pubspec.yaml` entry.
+
+- [ ] **M48 — Show a loading-percentage indicator for images/gifs**
+  While an image or gif is still loading, show progress (e.g. a percentage in the
+  middle of the loading spinner) instead of just an indeterminate spinner.
+
+- [ ] **M49 — Add a GIF frame counter overlay (N/X)**
+  For a gif, display current-frame/total-frame count (e.g. "N/X") somewhere on
+  screen -- the user's stated reason is it's otherwise hard to tell where the loop
+  repeats.
+
+- [ ] **M50 — Rich-text parsing for descriptions (auto-links, `{{author}}`, `[[tag]]`)**
+  Post/pool/wiki descriptions should have plain URLs auto-linked and turned into
+  clickable elements, plus recognize `{{author}}` and `[[tag]]` reference syntax
+  (the same `[[...]]`/`{{...}}` convention e621.wiki's own wiki pages use for cross-
+  references, see M53 below -- likely the same parser/renderer should serve both).
+
+- [ ] **M51 — Add a slideshow mode**
+  User picks one or more saved searches, an interval (how often the post changes), and
+  how many posts to pull; the server selects that many posts at random with no
+  repeats, sends them to the device, which preloads all of them and opens fullscreen,
+  advancing on the configured timer. On reaching the end, reshuffle and keep going
+  until the user closes the slideshow. Videos/gifs are included and still switch on
+  the same timer as everything else (not "play to completion first").
+
+- [ ] **M52 — Add a tag long-press context menu**
+  Long-pressing a tag while viewing a post should open a small menu: Search / Add to
+  saved searches / Add to blacklist / Add to current search / Remove from current
+  search / Show wiki / Copy to clipboard. "Add to current search"/"Remove from current
+  search" only make sense once there's a notion of an active/editable search context
+  to add/remove tags from -- the user noted "more on this later" for both, so the
+  exact UX for those two needs revisiting when this is actually implemented; the other
+  five (Search, Add to saved searches, Add to blacklist, Show wiki, Copy) are
+  self-contained and can land first. "Show wiki" depends on M53.
+
+- [ ] **M53 — Integrate e621.wiki for tag wiki info (tags/wiki pages/aliases/implications)**
+  e621.wiki (<https://e621.wiki/>) hosts third-party docs/tooling for e621's real API,
+  including an OpenAPI spec (fetched once as `docs/API - e621.yaml` -- gitignored,
+  not ours to redistribute, kept locally for reference only) and an MCP server at
+  `mcp.e621.wiki` (also reachable at `e621.wiki/mcp`) exposing the same API --
+  whichever of the two (direct REST calls vs. going through the MCP server) turns out
+  to work best is an open implementation choice. The actual e621 endpoints involved
+  (confirmed live by the user, example shapes recorded here so they're not lost):
+  - `GET /tags.json?search[name_matches]=<text>` -- `id`, `name`, `post_count`,
+    `related_tags`, `related_tags_updated_at`, `category`, `is_locked`, `created_at`,
+    `updated_at`.
+  - `GET /wiki_pages.json?search[title]=<text>` -- `id`, `created_at`, `updated_at`,
+    `title`, `body`, `creator_id`, `is_locked`, `updater_id`, `is_deleted`,
+    `other_names`, `parent`, `creator_name`, `category_id`, `featured_posts`. Not every
+    tag has a wiki page. `body` needs its own parser: `[[text]]` is a link to another
+    wiki page, `{{author}}` is an author reference (shared syntax with M50), and
+    `thumb #id` means an inline image thumbnail for post `id` -- fetch via e621's own
+    `GET /posts/<id>.json` if that post isn't already cached locally.
+  - `GET /tag_aliases.json?limit=320&search[name_matches]=<text>` -- `id`,
+    `antecedent_name`, `reason`, `creator_id`, `created_at`, `forum_post_id`,
+    `updated_at`, `forum_topic_id`, `consequent_name`, `status`, `post_count`,
+    `approver_id`.
+  - `GET /tag_implications.json?limit=320&search[name_matches]=<text>` -- `id`,
+    `reason`, `creator_id`, `created_at`, `forum_post_id`, `antecedent_name`,
+    `consequent_name`, `status`, `forum_topic_id`, `updated_at`, `descendant_names`,
+    `approver_id`.
+  Inkbunny has no wiki/tag-info endpoints of its own at all -- per the user, fall back
+  to e621's wiki for Inkbunny tags too rather than omitting the feature there entirely.
+
+- [ ] **M54 — Advanced/custom tag search syntax, with live autocomplete, in both search creation and the blacklist editor**
+  Full e621 search grammar, not just a flat space-separated tag list -- the user
+  pasted e621's own cheatsheet verbatim as the spec, recorded here so it isn't lost:
+  - Space-separated tags are AND'd together (max 40 tags/search); words within one tag
+    use underscores.
+  - `~tag` means OR (`~cat ~dog` = cat or dog or both) -- may not combine well with
+    other syntax.
+  - `-tag` negates/excludes it.
+  - `tag_*` wildcards (one per search; may not combine well with other syntax, results
+    may be incomplete) -- `-tag_*` (negated wildcard) has no such limit, any number
+    allowed.
+  - `( ~a ~b ) ( ~c ~d )` groups -- a required space right after `(` and right before
+    `)` (so a tag that itself contains a literal paren isn't misread as a group).
+    Groups can themselves carry a `-`/`~` prefix, and can nest up to 10 levels deep.
+  - Tags can have aliases (e.g. `cat` -> `domestic cat`) and implications (tags that
+    automatically include other, broader tags -- `hyper_breasts` implies
+    `huge_breasts` implies `big_breasts` implies `breasts`) -- searching the broader/
+    implied tag directly is often better than enumerating every specific one.
+    `breasts -huge_breasts` is the pattern for "has the broad tag but not via that one
+    specific implying chain."
+  - Deleted posts are excluded from results by default.
+  Needs: a query parser/builder on top of this grammar (not just the current flat
+  tag-token splitter in `tag_query.dart`), autocomplete that understands a token's
+  position within the grammar (e.g. typing `-chick` mid-query should suggest
+  `-chicken`, preserving the `-`), the ability to save a resulting complex query as a
+  normal saved search (today's `CreateSearchScreen` already accepts an arbitrary query
+  string, so this may mostly be a client-side authoring/autocomplete problem rather
+  than a storage one), and the *same* syntax + autocomplete support added to the
+  blacklist editor, which today only accepts single bare tags.

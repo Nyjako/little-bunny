@@ -721,6 +721,17 @@ bunny_core_result_t bunny_core_preview_search(bunny_core_t *core, bunny_db_site_
     bunny_core_post_array arr;
     bunny_core_post_array_init(&arr);
 
+    /* A pool browse or favorites browse is exempt from the blacklist (M37),
+     * same exemption bunny_core_search_list_posts applies for a saved
+     * search -- both are meant to show everything actually in the pool or
+     * favorited, not a filtered subset. An ordinary tag/author browse
+     * (neither of those) now DOES apply the blacklist, unlike before M37,
+     * when this whole function left every preview unfiltered. */
+    int64_t preview_pool_id = 0;
+    bool is_pool_browse = bunny_core_parse_pool_id_from_query(query, &preview_pool_id);
+    bool is_favorites_browse = bunny_core_is_favorites_query(site, query);
+    bool skip_blacklist = is_pool_browse || is_favorites_browse;
+
     if (site == BUNNY_DB_SITE_E621) {
         e621_client_t *client = bunny_core_build_e621_client(core);
         if (!client) {
@@ -749,7 +760,11 @@ bunny_core_result_t bunny_core_preview_search(bunny_core_t *core, bunny_db_site_
             bunny_db_post_t item;
             memset(&item, 0, sizeof(item));
             bool ok = upsert_e621_post(core->db, &posts.items[i], &post_id) == BUNNY_CORE_OK && bunny_db_post_get_by_id(core->db, post_id, &item) == BUNNY_DB_OK;
-            if (ok) {
+            bool blacklisted = false;
+            if (ok && !skip_blacklist) {
+                bunny_db_post_is_blacklisted(core->db, post_id, &blacklisted);
+            }
+            if (ok && !blacklisted) {
                 bunny_core_post_array_push(&arr, item);
             }
         }
@@ -763,20 +778,15 @@ bunny_core_result_t bunny_core_preview_search(bunny_core_t *core, bunny_db_site_
             return BUNNY_CORE_ERR_SITE;
         }
 
-        /* Same "pool:<id>" sentinel the saved-search sync path detects
-         * (sync_inkbunny_search, M28) -- TagBrowseScreen's stateless pool
-         * preview (M9.6.3) reuses this same preview_search call for both
-         * sites, so without this check "pool:<id>" would be sent as
-         * literal free-text keywords instead of the dedicated pool_id
-         * param, returning garbage (or nothing) rather than the pool's
-         * actual submissions. */
-        int64_t pool_id = 0;
-        bool is_pool_browse = bunny_core_parse_pool_id_from_query(query, &pool_id);
-
+        /* is_pool_browse (above) is the same "pool:<id>" sentinel the
+         * saved-search sync path detects (sync_inkbunny_search, M28) --
+         * without it, "pool:<id>" would be sent as literal free-text
+         * keywords instead of the dedicated pool_id param, returning
+         * garbage (or nothing) rather than the pool's actual submissions. */
         inkbunny_search_params_t params;
         memset(&params, 0, sizeof(params));
         if (is_pool_browse) {
-            params.pool_id = pool_id;
+            params.pool_id = preview_pool_id;
         } else {
             params.text = query;
         }
@@ -797,7 +807,11 @@ bunny_core_result_t bunny_core_preview_search(bunny_core_t *core, bunny_db_site_
             bunny_db_post_t item;
             memset(&item, 0, sizeof(item));
             bool ok = upsert_inkbunny_submission(core->db, &submissions.items[i], &post_id) == BUNNY_CORE_OK && bunny_db_post_get_by_id(core->db, post_id, &item) == BUNNY_DB_OK;
-            if (ok) {
+            bool blacklisted = false;
+            if (ok && !skip_blacklist) {
+                bunny_db_post_is_blacklisted(core->db, post_id, &blacklisted);
+            }
+            if (ok && !blacklisted) {
                 bunny_core_post_array_push(&arr, item);
             }
         }
