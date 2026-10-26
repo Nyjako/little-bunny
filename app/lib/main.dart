@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io' show Platform;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
@@ -11,6 +12,7 @@ import 'repository/bunny_repository_factory.dart';
 import 'screens/lock_screen.dart';
 import 'screens/searches_screen.dart';
 import 'screens/setup_screen.dart';
+import 'services/android_foreground_service_queue_notifier.dart';
 import 'services/download_manager.dart';
 import 'services/download_queue_service.dart';
 import 'services/flutter_local_notifications_queue_notifier.dart';
@@ -31,9 +33,14 @@ Future<void> main() async {
   // Best-effort (M43) -- a platform this plugin doesn't support, or a denied
   // permission, must never block app startup; see the notifier's own doc
   // comment for why every one of its methods already swallows its own
-  // exceptions.
-  final notifier = FlutterLocalNotificationsQueueNotifier();
-  await notifier.initialize();
+  // exceptions. Still initialized on Android even though
+  // AndroidForegroundServiceQueueNotifier (M57) handles the actual queue
+  // notifications there -- this is what requests the POST_NOTIFICATIONS
+  // runtime permission and creates the shared "download_queue" channel the
+  // native foreground service's own notification reuses.
+  final flnNotifier = FlutterLocalNotificationsQueueNotifier();
+  await flnNotifier.initialize();
+  final notifier = Platform.isAndroid ? AndroidForegroundServiceQueueNotifier() : flnNotifier;
   final downloadQueueService = DownloadQueueService(downloadManager: const DownloadManager(), downloadSettingsStore: const DownloadSettingsStore(), notifier: notifier);
   runApp(
     LittleBunnyApp(
