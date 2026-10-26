@@ -10,7 +10,14 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
+
+#ifdef _WIN32
+#include <io.h>
+#define access _access
+#define W_OK 2
+#else
 #include <unistd.h>
+#endif
 
 static bool check_data_dir_writable(const char *data_dir)
 {
