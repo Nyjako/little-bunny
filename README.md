@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="app/assets/icon/icon.png" alt="LittleBunny logo" width="120">
+</p>
+
 # LittleBunny
 
 [![Test](https://github.com/Nyjako/little-bunny/actions/workflows/test.yml/badge.svg?branch=dev)](https://github.com/Nyjako/little-bunny/actions/workflows/test.yml)
