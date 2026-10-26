@@ -6,11 +6,13 @@ import '../repository/bunny_repository.dart';
 import '../services/download_queue_service.dart';
 import '../settings/display_settings_store.dart';
 import '../settings/download_settings_store.dart';
+import '../util/post_navigation.dart';
 import '../util/responsive.dart';
-import '../widgets/pool_description_text.dart';
 import '../widgets/post_grid_tile.dart';
+import '../widgets/rich_markup_text.dart';
 import 'create_search_screen.dart';
 import 'post_detail_screen.dart';
+import 'wiki_page_screen.dart';
 
 /// Click-through browsing for a tag or artist name tapped elsewhere in the
 /// app (M8.5.10): runs a stateless live search (`BunnyRepository.
@@ -152,6 +154,51 @@ class _TagBrowseScreenState extends State<TagBrowseScreen> {
       ),
     );
   }
+
+  /// A pool description (M26) is always e621 text (`fetchPool` always hits
+  /// e621's own endpoint, see [_loadPoolInfo]), so every cross-reference in
+  /// one -- author, wiki, post, or another pool -- is e621-only too (M50).
+  void _openAuthor(String authorName) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => TagBrowseScreen(
+          site: BunnySite.e621,
+          query: authorName,
+          repository: widget.repository,
+          displaySettingsStore: widget.displaySettingsStore,
+          downloadSettingsStore: widget.downloadSettingsStore,
+          downloadQueueService: widget.downloadQueueService,
+        ),
+      ),
+    );
+  }
+
+  void _openWikiPage(String title) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => WikiPageScreen(
+          title: title,
+          repository: widget.repository,
+          displaySettingsStore: widget.displaySettingsStore,
+          downloadSettingsStore: widget.downloadSettingsStore,
+          downloadQueueService: widget.downloadQueueService,
+        ),
+      ),
+    );
+  }
+
+  Future<void> _openPostLink(AppLocalizations l10n, BunnySite site, int externalId) => openExternalPost(
+    context: context,
+    l10n: l10n,
+    repository: widget.repository,
+    site: site,
+    externalId: externalId,
+    displaySettingsStore: widget.displaySettingsStore,
+    downloadSettingsStore: widget.downloadSettingsStore,
+    downloadQueueService: widget.downloadQueueService,
+  );
 
   @override
   void dispose() {
@@ -315,11 +362,12 @@ class _TagBrowseScreenState extends State<TagBrowseScreen> {
     setState(() => _existingMatch = null);
   }
 
-  /// The pool's own description (M26), with any "pool #`<N>`" cross-
-  /// references in it rendered as inline tappable links instead of a
-  /// separate row of chips below (M44) -- null when this isn't a pool
-  /// browse, the fetch hasn't resolved yet, or the pool has no description.
-  Widget? _poolHeader() {
+  /// The pool's own description (M26), with any cross-references in it
+  /// (pool #`<N>`, author/wiki/post references, and auto-linked URLs, M50)
+  /// rendered inline instead of a separate row of chips below (M44) -- null
+  /// when this isn't a pool browse, the fetch hasn't resolved yet, or the
+  /// pool has no description.
+  Widget? _poolHeader(AppLocalizations l10n) {
     final info = _poolInfo;
     final description = info?.description;
     if (description == null || description.isEmpty) {
@@ -329,7 +377,16 @@ class _TagBrowseScreenState extends State<TagBrowseScreen> {
       padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
-        children: [PoolDescriptionText(description: description, onOpenPool: _openRelatedPool), const Divider(height: 1)],
+        children: [
+          RichMarkupText(
+            text: description,
+            onOpenAuthor: _openAuthor,
+            onOpenWiki: _openWikiPage,
+            onOpenPost: (site, externalId) => _openPostLink(l10n, site, externalId),
+            onOpenPool: _openRelatedPool,
+          ),
+          const Divider(height: 1),
+        ],
       ),
     );
   }
@@ -337,7 +394,7 @@ class _TagBrowseScreenState extends State<TagBrowseScreen> {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
-    final poolHeader = _poolHeader();
+    final poolHeader = _poolHeader(l10n);
     return Scaffold(
       appBar: AppBar(
         toolbarHeight: isWideScreen(context) ? compactToolbarHeight : null,

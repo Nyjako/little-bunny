@@ -410,6 +410,64 @@ void main() {
 
       expect(find.text('Related post'), findsOneWidget);
     });
+
+    testWidgets('tapping a pool #<id> reference opens that pool', (WidgetTester tester) async {
+      final repository = FakeBunnyRepository();
+      final post = _post(fileExt: 'jpg', description: 'Part of pool #77.');
+      repository.previewSearchResults['e621:pool:77 order:id:1'] = [];
+
+      await tester.pumpWidget(wrapWithLocalization(PostDetailScreen(post: post, repository: repository, displaySettingsStore: const DisplaySettingsStore(), downloadSettingsStore: const DownloadSettingsStore(), downloadQueueService: _downloadQueueService())));
+      await tester.pumpAndSettle();
+
+      _tapLinkText(tester, 'pool #77');
+      await tester.pumpAndSettle();
+
+      expect(find.byType(TagBrowseScreen), findsOneWidget);
+    });
+
+    testWidgets('tapping a pasted e621 post URL opens that post in-app, not a browser', (WidgetTester tester) async {
+      final repository = FakeBunnyRepository();
+      final post = _post(fileExt: 'jpg', description: 'Original here: https://e621.net/posts/999');
+      repository.fetchPostResults['e621:999'] = 2;
+      repository.postsById[2] = _post(id: 2, externalId: 999, title: 'Original post', description: '');
+
+      await tester.pumpWidget(wrapWithLocalization(PostDetailScreen(post: post, repository: repository, displaySettingsStore: const DisplaySettingsStore(), downloadSettingsStore: const DownloadSettingsStore(), downloadQueueService: _downloadQueueService())));
+      await tester.pumpAndSettle();
+
+      _tapLinkText(tester, 'https://e621.net/posts/999');
+      await tester.pumpAndSettle();
+
+      expect(find.text('Original post'), findsOneWidget);
+    });
+
+    testWidgets('tapping a pasted Inkbunny submission URL opens that post in-app', (WidgetTester tester) async {
+      final repository = FakeBunnyRepository();
+      final post = _post(fileExt: 'jpg', description: 'Crossposted from https://inkbunny.net/s/4242');
+      repository.fetchPostResults['inkbunny:4242'] = 2;
+      repository.postsById[2] = _post(id: 2, site: BunnySite.inkbunny, externalId: 4242, title: 'Inkbunny original', description: '');
+
+      await tester.pumpWidget(wrapWithLocalization(PostDetailScreen(post: post, repository: repository, displaySettingsStore: const DisplaySettingsStore(), downloadSettingsStore: const DownloadSettingsStore(), downloadQueueService: _downloadQueueService())));
+      await tester.pumpAndSettle();
+
+      _tapLinkText(tester, 'https://inkbunny.net/s/4242');
+      await tester.pumpAndSettle();
+
+      expect(find.text('Inkbunny original'), findsOneWidget);
+    });
+
+    testWidgets('tapping a pasted e621 pool URL opens that pool in-app', (WidgetTester tester) async {
+      final repository = FakeBunnyRepository();
+      final post = _post(fileExt: 'jpg', description: 'See https://e621.net/pools/88 for the series.');
+      repository.previewSearchResults['e621:pool:88 order:id:1'] = [];
+
+      await tester.pumpWidget(wrapWithLocalization(PostDetailScreen(post: post, repository: repository, displaySettingsStore: const DisplaySettingsStore(), downloadSettingsStore: const DownloadSettingsStore(), downloadQueueService: _downloadQueueService())));
+      await tester.pumpAndSettle();
+
+      _tapLinkText(tester, 'https://e621.net/pools/88');
+      await tester.pumpAndSettle();
+
+      expect(find.byType(TagBrowseScreen), findsOneWidget);
+    });
   });
 
   // A sync pass only ever stores what Inkbunny's own search/listing endpoint

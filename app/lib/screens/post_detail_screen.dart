@@ -924,11 +924,20 @@ class _PostDetailPageState extends State<_PostDetailPage> {
     },
   );
 
-  Future<void> _openExternalPost(AppLocalizations l10n, int externalId) => openExternalPost(
+  /// Parent/child relationship chips are always same-site as the post
+  /// they're shown on (M13.3).
+  Future<void> _openExternalPost(AppLocalizations l10n, int externalId) => _openPostLink(l10n, widget.post.site, externalId);
+
+  /// A `thumb #<id>`/pool-permalink-URL post reference in a description
+  /// (M50) carries its own site -- always e621 for `thumb #<id>` (M53's own
+  /// wiki-body convention), but whichever domain actually matched for a
+  /// captured post URL -- so unlike [_openExternalPost] above, this never
+  /// assumes [widget.post.site].
+  Future<void> _openPostLink(AppLocalizations l10n, BunnySite site, int externalId) => openExternalPost(
     context: context,
     l10n: l10n,
     repository: widget.repository,
-    site: widget.post.site,
+    site: site,
     externalId: externalId,
     displaySettingsStore: widget.displaySettingsStore,
     downloadSettingsStore: widget.downloadSettingsStore,
@@ -1175,7 +1184,8 @@ class _PostDetailPageState extends State<_PostDetailPage> {
                     text: post.description!,
                     onOpenAuthor: _openTagBrowse,
                     onOpenWiki: _openTagWiki,
-                    onOpenThumbnail: (postId) => _openExternalPost(l10n, postId),
+                    onOpenPost: (site, postId) => _openPostLink(l10n, site, postId),
+                    onOpenPool: (poolId) => _openPool(l10n, poolId),
                   ),
                 ],
                 const Divider(),

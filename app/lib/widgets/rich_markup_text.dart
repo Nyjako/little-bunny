@@ -2,20 +2,25 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../repository/bunny_models.dart';
 import '../util/rich_markup.dart';
 
 /// Renders a post/pool/wiki description (M50/M53) with `{{author}}`,
-/// `[[title]]`, `thumb #<id>`, and bare URLs linkified inline. A segment
-/// whose callback wasn't supplied (e.g. [onOpenThumbnail] outside a wiki
-/// page) falls back to inert, plain-styled text rather than a dead link.
+/// `[[title]]`, `thumb #<id>`/`pool #<id>`, and bare URLs linkified
+/// inline -- a URL recognized as an e621/Inkbunny post or pool permalink
+/// opens in-app via [onOpenPost]/[onOpenPool] instead of launching an
+/// external browser. A segment whose callback wasn't supplied (e.g.
+/// [onOpenPool] for a caller that never shows pool references) falls back
+/// to inert, plain-styled text rather than a dead link.
 class RichMarkupText extends StatelessWidget {
   final String text;
   final TextStyle? style;
   final void Function(String authorName)? onOpenAuthor;
   final void Function(String title)? onOpenWiki;
-  final void Function(int postId)? onOpenThumbnail;
+  final void Function(BunnySite site, int postId)? onOpenPost;
+  final void Function(int poolId)? onOpenPool;
 
-  const RichMarkupText({super.key, required this.text, this.style, this.onOpenAuthor, this.onOpenWiki, this.onOpenThumbnail});
+  const RichMarkupText({super.key, required this.text, this.style, this.onOpenAuthor, this.onOpenWiki, this.onOpenPost, this.onOpenPool});
 
   Future<void> _launchUrl(String url) async {
     final uri = Uri.tryParse(url);
@@ -43,9 +48,12 @@ class RichMarkupText extends StatelessWidget {
             RichMarkupWikiSegment(title: final title, matchedText: final matchedText) => onOpenWiki == null
                 ? TextSpan(text: matchedText)
                 : TextSpan(text: matchedText, style: linkStyle, recognizer: TapGestureRecognizer()..onTap = () => onOpenWiki!(title)),
-            RichMarkupThumbSegment(postId: final postId, matchedText: final matchedText) => onOpenThumbnail == null
+            RichMarkupPostSegment(site: final site, postId: final postId, matchedText: final matchedText) => onOpenPost == null
                 ? TextSpan(text: matchedText)
-                : TextSpan(text: matchedText, style: linkStyle, recognizer: TapGestureRecognizer()..onTap = () => onOpenThumbnail!(postId)),
+                : TextSpan(text: matchedText, style: linkStyle, recognizer: TapGestureRecognizer()..onTap = () => onOpenPost!(site, postId)),
+            RichMarkupPoolSegment(poolId: final poolId, matchedText: final matchedText) => onOpenPool == null
+                ? TextSpan(text: matchedText)
+                : TextSpan(text: matchedText, style: linkStyle, recognizer: TapGestureRecognizer()..onTap = () => onOpenPool!(poolId)),
           };
         }).toList(),
       ),

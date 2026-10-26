@@ -2541,14 +2541,37 @@ this file is the single source of truth for "what's done" across sessions.
     sentence punctuation (`.,;:!?)]}`) off an auto-linked URL. A segment whose
     callback isn't supplied by the caller renders as inert plain text rather than a
     dead link.
-  - Deliberately a *new*, separate parser from M44's existing `pool_description.dart`
-    (pool-# references only) rather than merging the two -- avoids any risk to that
-    already-shipped, well-tested parser. **Scope trim**: pool descriptions still only
-    get M44's pool-# handling; only post descriptions were wired up to the new
-    parser (`PostDetailScreen`). Revisit folding pool descriptions onto the shared
-    parser later if it's worth the risk.
+  - Initially landed as a *new*, separate parser from M44's existing
+    `pool_description.dart` (pool-# references only), to avoid risking that
+    already-shipped parser -- only post descriptions were wired up to the new one at
+    first. Revisited immediately after: the user asked for pool descriptions to get
+    the same clickable-link treatment too (they previously had zero URL auto-linking
+    at all, only the pool-# convention), so `parseRichMarkup` absorbed M44's
+    `pool #<id>` pattern as a 5th alternative (`RichMarkupPoolSegment`) and
+    `pool_description.dart`/`pool_description_text.dart`/their tests were deleted
+    outright once nothing referenced them anymore. `TagBrowseScreen`'s pool header and
+    `PostGridScreen`'s pool-info dialog both now render via `RichMarkupText` with full
+    author/wiki/post/pool callbacks, not just pool references.
+  - **Follow-up: capture post/pool links, not just auto-link them.** A bare URL that
+    matches a known e621/Inkbunny post or pool permalink
+    (`e621.net/posts/<id>`, the older `/post/show/<id>` form, `e926.net`'s mirror,
+    `e621.net/pools/<id>`, `inkbunny.net/s/<id>`) now parses straight into a
+    `RichMarkupPostSegment`/`RichMarkupPoolSegment` instead of a generic
+    `RichMarkupUrlSegment`, so tapping it opens the post/pool in-app (reusing the
+    same blacklist-confirming `openExternalPost()` for posts) instead of launching an
+    external browser. `RichMarkupThumbSegment` was folded into
+    `RichMarkupPostSegment` (now carrying a `BunnySite`, always e621 for `thumb #<id>`
+    but whichever domain matched for a captured URL) since both represent the same
+    "open this post" action; `RichMarkupText`'s `onOpenThumbnail` callback was renamed
+    `onOpenPost(BunnySite, int)` accordingly. An Inkbunny pool permalink is
+    deliberately *not* recognized -- pool metadata/descriptions in this app only ever
+    come from e621's own pool endpoint (see [BunnyPoolInfo]), so there's no
+    `BunnyPoolInfo`-backed pool concept on the Inkbunny side to open one into, and the
+    author wasn't confident enough of Inkbunny's real pool-viewing URL shape to guess
+    at a pattern for it.
   - `WikiPageScreen` (M52/M53, see below) is the other consumer -- its page body is
-    rendered through the same `RichMarkupText`.
+    rendered through the same `RichMarkupText`, so wiki bodies get the same in-app
+    post/pool link capture too.
 
 - [ ] **M51 — Add a slideshow mode**
   User picks one or more saved searches, an interval (how often the post changes), and

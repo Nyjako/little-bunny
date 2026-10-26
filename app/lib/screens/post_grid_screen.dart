@@ -6,11 +6,13 @@ import '../repository/bunny_repository.dart';
 import '../services/download_queue_service.dart';
 import '../settings/display_settings_store.dart';
 import '../settings/download_settings_store.dart';
+import '../util/post_navigation.dart';
 import '../util/responsive.dart';
-import '../widgets/pool_description_text.dart';
 import '../widgets/post_grid_tile.dart';
+import '../widgets/rich_markup_text.dart';
 import 'post_detail_screen.dart';
 import 'tag_browse_screen.dart';
+import 'wiki_page_screen.dart';
 
 /// Shows a [BunnySearch]'s cached posts as a thumbnail grid, with an unseen
 /// marker overlay and an "unseen only" filter (M8.3). Tapping a post opens
@@ -133,6 +135,63 @@ class _PostGridScreenState extends State<PostGridScreen> {
     );
   }
 
+  /// A pool description (M26) is always e621 text (`fetchPool` always hits
+  /// e621's own endpoint, see [_loadPoolInfo]), so every cross-reference in
+  /// one -- author, wiki, post, or another pool -- is e621-only too (M50).
+  /// Each callback pops this dialog before navigating, same as the original
+  /// pool-reference-only behavior.
+  void _openAuthorFromDialog(String authorName) {
+    Navigator.pop(context);
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => TagBrowseScreen(
+          site: BunnySite.e621,
+          query: authorName,
+          repository: widget.repository,
+          displaySettingsStore: widget.displaySettingsStore,
+          downloadSettingsStore: widget.downloadSettingsStore,
+          downloadQueueService: widget.downloadQueueService,
+        ),
+      ),
+    );
+  }
+
+  void _openWikiPageFromDialog(String title) {
+    Navigator.pop(context);
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => WikiPageScreen(
+          title: title,
+          repository: widget.repository,
+          displaySettingsStore: widget.displaySettingsStore,
+          downloadSettingsStore: widget.downloadSettingsStore,
+          downloadQueueService: widget.downloadQueueService,
+        ),
+      ),
+    );
+  }
+
+  Future<void> _openPostLinkFromDialog(AppLocalizations l10n, BunnySite site, int externalId) async {
+    Navigator.pop(context);
+    await openExternalPost(
+      context: context,
+      l10n: l10n,
+      repository: widget.repository,
+      site: site,
+      externalId: externalId,
+      displaySettingsStore: widget.displaySettingsStore,
+      downloadSettingsStore: widget.downloadSettingsStore,
+      downloadQueueService: widget.downloadQueueService,
+    );
+  }
+
+  void _openRelatedPoolFromDialog(int poolId) {
+    Navigator.pop(context);
+    _openRelatedPool(poolId);
+  }
+
   void _showPoolInfo(AppLocalizations l10n) {
     final info = _poolInfo;
     if (info == null) {
@@ -152,12 +211,12 @@ class _PostGridScreenState extends State<PostGridScreen> {
               Text(l10n.postGridPoolInfoPostCount(info.postCount), style: Theme.of(context).textTheme.labelMedium),
               const SizedBox(height: 8),
               hasDescription
-                  ? PoolDescriptionText(
-                      description: description,
-                      onOpenPool: (poolId) {
-                        Navigator.pop(context);
-                        _openRelatedPool(poolId);
-                      },
+                  ? RichMarkupText(
+                      text: description,
+                      onOpenAuthor: _openAuthorFromDialog,
+                      onOpenWiki: _openWikiPageFromDialog,
+                      onOpenPost: (site, externalId) => _openPostLinkFromDialog(l10n, site, externalId),
+                      onOpenPool: _openRelatedPoolFromDialog,
                     )
                   : Text(l10n.postGridPoolInfoNoDescription),
             ],

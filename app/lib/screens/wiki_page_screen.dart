@@ -76,16 +76,32 @@ class _WikiPageScreenState extends State<WikiPageScreen> {
     );
   }
 
-  void _openThumbnail(AppLocalizations l10n, int postId) {
+  void _openPost(AppLocalizations l10n, BunnySite site, int postId) {
     openExternalPost(
       context: context,
       l10n: l10n,
       repository: widget.repository,
-      site: BunnySite.e621,
+      site: site,
       externalId: postId,
       displaySettingsStore: widget.displaySettingsStore,
       downloadSettingsStore: widget.downloadSettingsStore,
       downloadQueueService: widget.downloadQueueService,
+    );
+  }
+
+  void _openPool(int poolId) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => TagBrowseScreen(
+          site: BunnySite.e621,
+          query: 'pool:$poolId',
+          repository: widget.repository,
+          displaySettingsStore: widget.displaySettingsStore,
+          downloadSettingsStore: widget.downloadSettingsStore,
+          downloadQueueService: widget.downloadQueueService,
+        ),
+      ),
     );
   }
 
@@ -120,7 +136,8 @@ class _WikiPageScreenState extends State<WikiPageScreen> {
                   text: page.body!,
                   onOpenAuthor: _openAuthor,
                   onOpenWiki: _openWiki,
-                  onOpenThumbnail: (postId) => _openThumbnail(l10n, postId),
+                  onOpenPost: (site, postId) => _openPost(l10n, site, postId),
+                  onOpenPool: _openPool,
                 ),
               ],
             ),

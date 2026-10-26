@@ -14,9 +14,9 @@ import '../fakes/test_app.dart';
 
 DownloadQueueService _downloadQueueService() => DownloadQueueService(downloadManager: const DownloadManager(), downloadSettingsStore: const DownloadSettingsStore());
 
-BunnyPost _post({int id = 2, int externalId = 55, String title = 'A post'}) => BunnyPost(
+BunnyPost _post({int id = 2, int externalId = 55, String title = 'A post', BunnySite site = BunnySite.e621}) => BunnyPost(
   id: id,
-  site: BunnySite.e621,
+  site: site,
   externalId: externalId,
   artist: 'someartist',
   title: title,
@@ -138,5 +138,63 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Example post'), findsOneWidget);
+  });
+
+  testWidgets('tapping a pool reference opens that pool', (WidgetTester tester) async {
+    final repository = FakeBunnyRepository();
+    repository.wikiPageByTitle['wolf'] = const BunnyWikiPage(id: 1, title: 'wolf', body: 'Part of pool #12.', isLocked: false);
+    repository.previewSearchResults['e621:pool:12 order:id:1'] = [];
+
+    await tester.pumpWidget(_wrap(repository));
+    await tester.pumpAndSettle();
+
+    _tapLinkText(tester, 'pool #12');
+    await tester.pumpAndSettle();
+
+    expect(find.byType(TagBrowseScreen), findsOneWidget);
+  });
+
+  testWidgets('tapping a pasted e621 post URL opens that post in-app', (WidgetTester tester) async {
+    final repository = FakeBunnyRepository();
+    repository.wikiPageByTitle['wolf'] = const BunnyWikiPage(id: 1, title: 'wolf', body: 'See https://e621.net/posts/321 for an example.', isLocked: false);
+    repository.fetchPostResults['e621:321'] = 2;
+    repository.postsById[2] = _post(title: 'Example post');
+
+    await tester.pumpWidget(_wrap(repository));
+    await tester.pumpAndSettle();
+
+    _tapLinkText(tester, 'https://e621.net/posts/321');
+    await tester.pumpAndSettle();
+
+    expect(find.text('Example post'), findsOneWidget);
+  });
+
+  testWidgets('tapping a pasted Inkbunny submission URL opens that post in-app, not an e621 one', (WidgetTester tester) async {
+    final repository = FakeBunnyRepository();
+    repository.wikiPageByTitle['wolf'] = const BunnyWikiPage(id: 1, title: 'wolf', body: 'Also posted at https://inkbunny.net/s/8888', isLocked: false);
+    repository.fetchPostResults['inkbunny:8888'] = 2;
+    repository.postsById[2] = _post(site: BunnySite.inkbunny, title: 'Inkbunny example');
+
+    await tester.pumpWidget(_wrap(repository));
+    await tester.pumpAndSettle();
+
+    _tapLinkText(tester, 'https://inkbunny.net/s/8888');
+    await tester.pumpAndSettle();
+
+    expect(find.text('Inkbunny example'), findsOneWidget);
+  });
+
+  testWidgets('tapping a pasted e621 pool URL opens that pool in-app', (WidgetTester tester) async {
+    final repository = FakeBunnyRepository();
+    repository.wikiPageByTitle['wolf'] = const BunnyWikiPage(id: 1, title: 'wolf', body: 'See https://e621.net/pools/34 for the series.', isLocked: false);
+    repository.previewSearchResults['e621:pool:34 order:id:1'] = [];
+
+    await tester.pumpWidget(_wrap(repository));
+    await tester.pumpAndSettle();
+
+    _tapLinkText(tester, 'https://e621.net/pools/34');
+    await tester.pumpAndSettle();
+
+    expect(find.byType(TagBrowseScreen), findsOneWidget);
   });
 }

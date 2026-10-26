@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:little_bunny/repository/bunny_models.dart';
 import 'package:little_bunny/util/rich_markup.dart';
 
 void main() {
@@ -30,12 +31,21 @@ void main() {
       expect(wiki.matchedText, '[[canine]]');
     });
 
-    test('a thumb reference mid-sentence splits into text/thumb/text', () {
+    test('a thumb reference mid-sentence splits into text/post/text, always e621', () {
       final segments = parseRichMarkup('Related: thumb #12345 above.');
       expect(segments, hasLength(3));
-      final thumb = segments[1] as RichMarkupThumbSegment;
-      expect(thumb.postId, 12345);
-      expect(thumb.matchedText, 'thumb #12345');
+      final post = segments[1] as RichMarkupPostSegment;
+      expect(post.site, BunnySite.e621);
+      expect(post.postId, 12345);
+      expect(post.matchedText, 'thumb #12345');
+    });
+
+    test('a pool reference mid-sentence splits into text/pool/text', () {
+      final segments = parseRichMarkup('See pool #456 for the sequel.');
+      expect(segments, hasLength(3));
+      final pool = segments[1] as RichMarkupPoolSegment;
+      expect(pool.poolId, 456);
+      expect(pool.matchedText, 'pool #456');
     });
 
     test('a bare URL is linkified', () {
@@ -61,6 +71,60 @@ void main() {
       expect((segments[2] as RichMarkupTextSegment).text, ')');
     });
 
+    group('post/pool permalink URLs are recognized for in-app opening', () {
+      test('an e621.net post URL becomes a post segment', () {
+        final segments = parseRichMarkup('See https://e621.net/posts/12345 for the original.');
+        final post = segments[1] as RichMarkupPostSegment;
+        expect(post.site, BunnySite.e621);
+        expect(post.postId, 12345);
+        expect(post.matchedText, 'https://e621.net/posts/12345');
+      });
+
+      test('an e621.net old-style post URL (/post/show/<id>) becomes a post segment', () {
+        final segments = parseRichMarkup('https://e621.net/post/show/777');
+        final post = segments[0] as RichMarkupPostSegment;
+        expect(post.site, BunnySite.e621);
+        expect(post.postId, 777);
+      });
+
+      test('an e926.net post URL (safe-mode mirror) becomes a post segment', () {
+        final segments = parseRichMarkup('https://e926.net/posts/555');
+        final post = segments[0] as RichMarkupPostSegment;
+        expect(post.site, BunnySite.e621);
+        expect(post.postId, 555);
+      });
+
+      test('an e621.net pool URL becomes a pool segment', () {
+        final segments = parseRichMarkup('https://e621.net/pools/99');
+        final pool = segments[0] as RichMarkupPoolSegment;
+        expect(pool.poolId, 99);
+      });
+
+      test('an inkbunny.net submission URL becomes a post segment for Inkbunny', () {
+        final segments = parseRichMarkup('https://inkbunny.net/s/1234567');
+        final post = segments[0] as RichMarkupPostSegment;
+        expect(post.site, BunnySite.inkbunny);
+        expect(post.postId, 1234567);
+      });
+
+      test('a www. prefix is still recognized', () {
+        final segments = parseRichMarkup('https://www.e621.net/posts/42');
+        final post = segments[0] as RichMarkupPostSegment;
+        expect(post.site, BunnySite.e621);
+        expect(post.postId, 42);
+      });
+
+      test('an unrelated URL on the same domain stays a plain link', () {
+        final segments = parseRichMarkup('https://e621.net/help/show');
+        expect(segments[0], isA<RichMarkupUrlSegment>());
+      });
+
+      test('an unrelated domain entirely stays a plain link', () {
+        final segments = parseRichMarkup('https://example.com/posts/12345');
+        expect(segments[0], isA<RichMarkupUrlSegment>());
+      });
+    });
+
     test('markup at the very start has no leading text segment', () {
       final segments = parseRichMarkup('{{someartist}} drew this.');
       expect(segments, hasLength(2));
@@ -74,14 +138,16 @@ void main() {
     });
 
     test('multiple different markup kinds in one description', () {
-      final segments = parseRichMarkup('{{artist}} drew [[a_tag]], see thumb #1 or https://example.com.');
+      final segments = parseRichMarkup('{{artist}} drew [[a_tag]], see thumb #1 or pool #2 or https://example.com.');
       final kinds = segments.map((s) => s.runtimeType).toList();
       expect(kinds, [
         RichMarkupAuthorSegment,
         RichMarkupTextSegment,
         RichMarkupWikiSegment,
         RichMarkupTextSegment,
-        RichMarkupThumbSegment,
+        RichMarkupPostSegment,
+        RichMarkupTextSegment,
+        RichMarkupPoolSegment,
         RichMarkupTextSegment,
         RichMarkupUrlSegment,
         RichMarkupTextSegment,
@@ -96,6 +162,11 @@ void main() {
     test('"thumb #" with no digits after it is left as plain text', () {
       final segments = parseRichMarkup('A thumb #for display.');
       expect(segments, [isA<RichMarkupTextSegment>().having((s) => s.text, 'text', 'A thumb #for display.')]);
+    });
+
+    test('"pool #" with no digits after it is left as plain text', () {
+      final segments = parseRichMarkup('A pool #for cats.');
+      expect(segments, [isA<RichMarkupTextSegment>().having((s) => s.text, 'text', 'A pool #for cats.')]);
     });
   });
 }

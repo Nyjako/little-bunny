@@ -7,8 +7,8 @@ import 'package:little_bunny/services/download_manager.dart';
 import 'package:little_bunny/services/download_queue_service.dart';
 import 'package:little_bunny/settings/display_settings_store.dart';
 import 'package:little_bunny/settings/download_settings_store.dart';
-import 'package:little_bunny/widgets/pool_description_text.dart';
 import 'package:little_bunny/widgets/post_grid_tile.dart';
+import 'package:little_bunny/widgets/rich_markup_text.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../fakes/fake_bunny_repository.dart';
@@ -145,6 +145,35 @@ void main() {
       expect(find.byKey(const ValueKey(2)), findsOneWidget);
     });
 
+    testWidgets('tapping a pasted e621 post URL in a pool description opens that post in-app (M50)', (WidgetTester tester) async {
+      final repository = FakeBunnyRepository();
+      repository.previewSearchResults['e621:pool:123 order:id:1'] = [_post(1)];
+      repository.poolInfoById[123] = const BunnyPoolInfo(id: 123, name: 'a pool', description: 'Original: https://e621.net/posts/999', postCount: 1);
+      repository.fetchPostResults['e621:999'] = 10;
+      repository.postsById[10] = BunnyPost(
+        id: 10,
+        site: BunnySite.e621,
+        externalId: 999,
+        title: 'Direct link post',
+        score: 0,
+        favCount: 0,
+        commentCount: 0,
+        width: 100,
+        height: 100,
+        cachedAt: '2026-01-01T00:00:00Z',
+        isSeen: false,
+        isFavorited: false,
+      );
+
+      await tester.pumpWidget(wrapPool(repository));
+      await tester.pumpAndSettle();
+
+      await tester.tapOnText(find.textRange.ofSubstring('https://e621.net/posts/999'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Direct link post'), findsOneWidget);
+    });
+
     testWidgets('shows no header at all when the pool has neither a description nor references', (WidgetTester tester) async {
       final repository = FakeBunnyRepository();
       repository.previewSearchResults['e621:pool:123 order:id:1'] = [_post(1)];
@@ -153,7 +182,7 @@ void main() {
       await tester.pumpWidget(wrapPool(repository));
       await tester.pumpAndSettle();
 
-      expect(find.byType(PoolDescriptionText), findsNothing);
+      expect(find.byType(RichMarkupText), findsNothing);
     });
 
     testWidgets('shows no header at all for a non-pool browse', (WidgetTester tester) async {
@@ -163,7 +192,7 @@ void main() {
       await tester.pumpWidget(wrap(repository));
       await tester.pumpAndSettle();
 
-      expect(find.byType(PoolDescriptionText), findsNothing);
+      expect(find.byType(RichMarkupText), findsNothing);
     });
 
     testWidgets('skips the e621-only pool-info lookup for an Inkbunny pool browse (M28)', (WidgetTester tester) async {
@@ -182,7 +211,7 @@ void main() {
 
       expect(repository.fetchPoolCallCount, 0);
       expect(find.textContaining('should never show up here'), findsNothing);
-      expect(find.byType(PoolDescriptionText), findsNothing);
+      expect(find.byType(RichMarkupText), findsNothing);
     });
   });
 
