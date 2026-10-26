@@ -15,3 +15,6 @@
 
 #define GOBLIN_FILEIO_IMPLEMENTATION
 #include <goblin/fileio.h>
+
+#define GOBLIN_ENV_IMPLEMENTATION
+#include <goblin/env.h>
