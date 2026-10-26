@@ -81,6 +81,11 @@ bunny_core_result_t bunny_core_account_verify(bunny_core_t *core, bunny_db_site_
 
 bunny_core_result_t bunny_core_search_create(bunny_core_t *core, bunny_db_site_t site, const char *label, const char *query, int interval_hours, const bunny_db_search_options_t *options, int64_t *out_id);
 bunny_core_result_t bunny_core_search_delete(bunny_core_t *core, int64_t search_id);
+
+/* Folds a pre-existing (site, query) duplicate into keeper_id (M41) -- a thin
+ * pass-through to bunny_db_search_merge_duplicate. */
+bunny_core_result_t bunny_core_search_merge_duplicate(bunny_core_t *core, int64_t keeper_id, int64_t duplicate_id);
+
 bunny_core_result_t bunny_core_search_list(bunny_core_t *core, bunny_db_search_list_t *out_list);
 /* page is 1-indexed -- see bunny_db_search_list_posts' own doc comment for
  * why this is paginated at all (an unbounded response for a search with
@@ -173,18 +178,30 @@ typedef struct
     bunny_db_tag_stat_list_t top_used_tags;
     bunny_db_tag_stat_list_t top_pools;
     bunny_db_tag_stat_list_t top_viewed_searches;
-    char *computed_at; /* ISO 8601 UTC; never NULL once a report has been built */
+    char *computed_at; /* ISO 8601 UTC; NULL if no report has ever been built yet */
 } bunny_core_stats_report_t;
 
 void bunny_core_stats_report_free(bunny_core_stats_report_t *report);
 
-/* Returns the cached report if one exists and is younger than 24 hours;
- * otherwise recomputes it (same as bunny_core_refresh_stats_report) and
- * caches the fresh result before returning it. */
-bunny_core_result_t bunny_core_get_stats_report(bunny_core_t *core, bunny_core_stats_report_t *out_report);
+/* Reads whatever report is currently cached WITHOUT ever building or
+ * recomputing one (M55) -- each section is a full-table aggregate, and on
+ * a large enough database bunny_core_refresh_stats_report below can run for
+ * minutes, which is exactly what hung the server when this used to build
+ * synchronously on a cache miss. `*out_has_cache` is false (and `*out_report`
+ * left zeroed) if nothing has ever been cached; `*out_is_stale` is true
+ * whenever there's no cache at all, or the cached one is 24+ hours old --
+ * callers that want the report kept warm should check `*out_is_stale` and
+ * enqueue a `bunny_core_refresh_stats_report` call on a background worker
+ * themselves (see server/src/task_queue.c's TASK_TYPE_BUILD_STATS_REPORT),
+ * never call it inline on whatever thread is answering a live request. */
+bunny_core_result_t bunny_core_get_cached_stats_report(bunny_core_t *core, bunny_core_stats_report_t *out_report, bool *out_has_cache, bool *out_is_stale);
 
-/* Forces a recompute regardless of the cached report's age -- the tag-stats
- * screen's manual refresh action. */
+/* Recomputes the report from scratch and caches the fresh result,
+ * regardless of the previously-cached one's age -- this is the slow,
+ * potentially multi-minute call bunny_core_get_cached_stats_report's own
+ * doc comment warns about. Only ever call this from a background worker
+ * thread, never from a thread that's also expected to answer other
+ * requests promptly. */
 bunny_core_result_t bunny_core_refresh_stats_report(bunny_core_t *core, bunny_core_stats_report_t *out_report);
 
 /* Marks a post seen (global per post, not per search) -- lets a post detail
@@ -218,16 +235,6 @@ bunny_core_result_t bunny_core_post_get_relationships(bunny_core_t *core, int64_
 /* The e621 pool ids a post belongs to (empty for Inkbunny, or an e621 post
  * in no pools) -- a thin pass-through to bunny_db. */
 bunny_core_result_t bunny_core_post_get_pool_ids(bunny_core_t *core, int64_t post_id, bunny_db_int64_list_t *out_list);
-
-/* Records that a file was downloaded for a post -- a thin pass-through to
- * bunny_db_download_record. The actual HTTP fetch, disk write, and checksum
- * computation are entirely client-side (never proxied through the server);
- * this call only persists the bookkeeping row afterward. */
-bunny_core_result_t bunny_core_record_download(bunny_core_t *core, int64_t post_id, const char *file_path, const char *checksum_md5, bool verified, int64_t *out_id);
-
-/* A post's download history, newest first -- a thin pass-through to
- * bunny_db_download_list_for_post. Empty for a post never downloaded. */
-bunny_core_result_t bunny_core_list_downloads_for_post(bunny_core_t *core, int64_t post_id, bunny_db_download_list_t *out_list);
 
 /* --- Tag blacklist (M13.3) -- thin pass-throughs to bunny_db_blacklist_*.
  * See bunny_db/db.h for which post-listing query the blacklist does (and
@@ -440,6 +447,13 @@ typedef struct
  * itself or listing pending actions fails; out_stats may be NULL. No retry
  * scheduling -- a failed action stays failed. */
 bunny_core_result_t bunny_core_process_queue(bunny_core_t *core, bunny_core_queue_stats_t *out_stats);
+
+/* --- Diagnostics ----------------------------------------------------------
+ * Backs `bunny_server --db-stats`/`--health` (server/src/main.c) -- thin
+ * read-locked pass-throughs to bunny_db_table_stats/bunny_db_integrity_check,
+ * same pattern as bunny_core_search_list -> bunny_db_search_list. */
+bunny_core_result_t bunny_core_table_stats(bunny_core_t *core, bunny_db_tag_stat_list_t *out_list);
+bunny_core_result_t bunny_core_integrity_check(bunny_core_t *core, bool *out_ok);
 
 #ifdef __cplusplus
 }

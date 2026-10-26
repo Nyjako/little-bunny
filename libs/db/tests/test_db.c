@@ -293,6 +293,15 @@ void test_search_delete(void)
     bunny_db_search_list_free(&list);
 }
 
+void test_search_merge_duplicate_rejects_merging_a_search_into_itself(void)
+{
+    int64_t id = 0;
+    bunny_db_search_create(g_db, BUNNY_DB_SITE_E621, "wolves", "wolf", 24, NULL, &id);
+
+    bunny_db_result_t result = bunny_db_search_merge_duplicate(g_db, id, id);
+    TEST_ASSERT_EQUAL(BUNNY_DB_ERR_INVALID_ARG, result);
+}
+
 void test_search_touch_last_run(void)
 {
     int64_t id = 0;
@@ -434,6 +443,43 @@ static void make_test_post(bunny_db_post_upsert_t *post, int64_t external_id, in
     post->width = 1920;
     post->height = 1080;
     post->created_at_site = "2026-01-01T00:00:00Z";
+}
+
+void test_search_merge_duplicate_moves_results_and_deletes_the_duplicate(void)
+{
+    int64_t keeper_id = 0;
+    int64_t duplicate_id = 0;
+    bunny_db_search_create(g_db, BUNNY_DB_SITE_E621, "wolves", "wolf", 24, NULL, &keeper_id);
+    bunny_db_search_create(g_db, BUNNY_DB_SITE_E621, "wolves (copy)", "wolf", 48, NULL, &duplicate_id);
+
+    bunny_db_post_upsert_t post1;
+    bunny_db_post_upsert_t post2;
+    make_test_post(&post1, 701, 1);
+    make_test_post(&post2, 702, 1);
+    int64_t post1_id = 0;
+    int64_t post2_id = 0;
+    bunny_db_post_upsert(g_db, &post1, &post1_id);
+    bunny_db_post_upsert(g_db, &post2, &post2_id);
+
+    /* post1 is in both (the PK-conflict case the OR IGNORE move has to
+     * handle); post2 is only in the duplicate. */
+    bunny_db_search_add_result(g_db, keeper_id, post1_id, NULL);
+    bunny_db_search_add_result(g_db, duplicate_id, post1_id, NULL);
+    bunny_db_search_add_result(g_db, duplicate_id, post2_id, NULL);
+
+    bunny_db_result_t result = bunny_db_search_merge_duplicate(g_db, keeper_id, duplicate_id);
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, result);
+
+    bunny_db_search_list_t list;
+    bunny_db_search_list(g_db, &list);
+    TEST_ASSERT_EQUAL(1, (int)list.count);
+    TEST_ASSERT_EQUAL(keeper_id, list.items[0].id);
+    bunny_db_search_list_free(&list);
+
+    bunny_db_post_list_t posts;
+    bunny_db_search_list_posts(g_db, keeper_id, false, false, 1, &posts);
+    TEST_ASSERT_EQUAL(2, (int)posts.count);
+    bunny_db_post_list_free(&posts);
 }
 
 void test_search_has_result(void)
@@ -1006,28 +1052,6 @@ void test_search_mark_all_seen_only_affects_that_searchs_posts(void)
     bunny_db_post_free(&fetched1);
     bunny_db_post_free(&fetched2);
     bunny_db_post_free(&fetched3);
-}
-
-void test_download_record_and_list(void)
-{
-    bunny_db_post_upsert_t post;
-    make_test_post(&post, 601, 1);
-    int64_t id = 0;
-    bunny_db_post_upsert(g_db, &post, &id);
-
-    int64_t download_id = 0;
-    bunny_db_result_t result = bunny_db_download_record(g_db, id, "/downloads/someartist/601.jpg", "abc123", true, &download_id);
-    TEST_ASSERT_EQUAL(BUNNY_DB_OK, result);
-    TEST_ASSERT_TRUE(download_id > 0);
-
-    bunny_db_download_list_t downloads;
-    result = bunny_db_download_list_for_post(g_db, id, &downloads);
-    TEST_ASSERT_EQUAL(BUNNY_DB_OK, result);
-    TEST_ASSERT_EQUAL(1, (int)downloads.count);
-    TEST_ASSERT_EQUAL_STRING("/downloads/someartist/601.jpg", downloads.items[0].file_path);
-    TEST_ASSERT_EQUAL_STRING("abc123", downloads.items[0].checksum_md5);
-    TEST_ASSERT_TRUE(downloads.items[0].checksum_verified);
-    bunny_db_download_list_free(&downloads);
 }
 
 void test_post_get_by_id(void)
@@ -2082,6 +2106,44 @@ void test_wal_mode_lets_a_separate_connection_read_without_blocking(void)
     rmdir(dir);
 }
 
+void test_table_stats_counts_rows_per_table(void)
+{
+    int64_t search_id = 0;
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, bunny_db_search_create(g_db, BUNNY_DB_SITE_E621, "wolves", "wolf", 24, NULL, &search_id));
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, bunny_db_account_set(g_db, BUNNY_DB_SITE_E621, "someuser", "somesecret"));
+
+    bunny_db_tag_stat_list_t stats;
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, bunny_db_table_stats(g_db, &stats));
+
+    bool found_searches = false;
+    bool found_accounts = false;
+    bool found_posts = false;
+    for (size_t i = 0; i < stats.count; i++) {
+        if (strcmp(stats.items[i].name, "searches") == 0) {
+            TEST_ASSERT_EQUAL(1, stats.items[i].count);
+            found_searches = true;
+        } else if (strcmp(stats.items[i].name, "accounts") == 0) {
+            TEST_ASSERT_EQUAL(1, stats.items[i].count);
+            found_accounts = true;
+        } else if (strcmp(stats.items[i].name, "posts") == 0) {
+            TEST_ASSERT_EQUAL(0, stats.items[i].count);
+            found_posts = true;
+        }
+    }
+    TEST_ASSERT_TRUE_MESSAGE(found_searches, "expected a 'searches' row in the table stats");
+    TEST_ASSERT_TRUE_MESSAGE(found_accounts, "expected an 'accounts' row in the table stats");
+    TEST_ASSERT_TRUE_MESSAGE(found_posts, "expected a 'posts' row (0 count) in the table stats");
+
+    bunny_db_tag_stat_list_free(&stats);
+}
+
+void test_integrity_check_passes_on_a_fresh_database(void)
+{
+    bool ok = false;
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, bunny_db_integrity_check(g_db, &ok));
+    TEST_ASSERT_TRUE(ok);
+}
+
 int main(void)
 {
     UNITY_BEGIN();
@@ -2102,6 +2164,8 @@ int main(void)
     RUN_TEST(test_search_set_pinned);
     RUN_TEST(test_search_default_interval);
     RUN_TEST(test_search_delete);
+    RUN_TEST(test_search_merge_duplicate_moves_results_and_deletes_the_duplicate);
+    RUN_TEST(test_search_merge_duplicate_rejects_merging_a_search_into_itself);
     RUN_TEST(test_search_touch_last_run);
     RUN_TEST(test_search_touch_last_viewed);
     RUN_TEST(test_search_update_sync_progress);
@@ -2121,7 +2185,6 @@ int main(void)
     RUN_TEST(test_search_list_posts_orders_newest_first_by_site_date);
     RUN_TEST(test_search_list_posts_orders_a_post_with_no_site_date_by_cached_at_instead);
     RUN_TEST(test_search_list_posts_paginates);
-    RUN_TEST(test_download_record_and_list);
     RUN_TEST(test_post_get_by_id);
     RUN_TEST(test_post_get_by_id_not_found);
     RUN_TEST(test_action_queue_add_and_list_pending);
@@ -2170,5 +2233,7 @@ int main(void)
     RUN_TEST(test_post_sample_url_round_trips_and_is_nullable);
     RUN_TEST(test_post_upsert_replaces_sample_url_wholesale_on_resync);
     RUN_TEST(test_wal_mode_lets_a_separate_connection_read_without_blocking);
+    RUN_TEST(test_table_stats_counts_rows_per_table);
+    RUN_TEST(test_integrity_check_passes_on_a_fresh_database);
     return UNITY_END();
 }

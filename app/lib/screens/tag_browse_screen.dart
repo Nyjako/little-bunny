@@ -3,9 +3,11 @@ import 'package:flutter/material.dart';
 import '../l10n/app_localizations.dart';
 import '../repository/bunny_models.dart';
 import '../repository/bunny_repository.dart';
+import '../services/download_queue_service.dart';
 import '../settings/display_settings_store.dart';
 import '../settings/download_settings_store.dart';
 import '../util/responsive.dart';
+import '../widgets/pool_description_text.dart';
 import '../widgets/post_grid_tile.dart';
 import 'create_search_screen.dart';
 import 'post_detail_screen.dart';
@@ -24,6 +26,7 @@ class TagBrowseScreen extends StatefulWidget {
   final BunnyRepository repository;
   final DisplaySettingsStore displaySettingsStore;
   final DownloadSettingsStore downloadSettingsStore;
+  final DownloadQueueService downloadQueueService;
 
   /// Pre-fills the label field when the user chooses to save this browse as
   /// a search (e.g. a pool's own title, M9.6.3) -- `null` leaves the label
@@ -49,6 +52,7 @@ class TagBrowseScreen extends StatefulWidget {
     required this.repository,
     required this.displaySettingsStore,
     required this.downloadSettingsStore,
+    required this.downloadQueueService,
     this.initialLabel,
     this.customFetch,
     this.title,
@@ -143,6 +147,7 @@ class _TagBrowseScreenState extends State<TagBrowseScreen> {
           repository: widget.repository,
           displaySettingsStore: widget.displaySettingsStore,
           downloadSettingsStore: widget.downloadSettingsStore,
+          downloadQueueService: widget.downloadQueueService,
         ),
       ),
     );
@@ -261,6 +266,7 @@ class _TagBrowseScreenState extends State<TagBrowseScreen> {
           repository: widget.repository,
           displaySettingsStore: widget.displaySettingsStore,
           downloadSettingsStore: widget.downloadSettingsStore,
+          downloadQueueService: widget.downloadQueueService,
           siblingPosts: posts,
         ),
       ),
@@ -309,37 +315,21 @@ class _TagBrowseScreenState extends State<TagBrowseScreen> {
     setState(() => _existingMatch = null);
   }
 
-  /// The pool's own description + clickable chips for any "pool #`<N>`"
-  /// cross-references found in it (M26) -- null when this isn't a pool
-  /// browse, the fetch hasn't resolved yet, or the pool has neither.
-  Widget? _poolHeader(AppLocalizations l10n) {
+  /// The pool's own description (M26), with any "pool #`<N>`" cross-
+  /// references in it rendered as inline tappable links instead of a
+  /// separate row of chips below (M44) -- null when this isn't a pool
+  /// browse, the fetch hasn't resolved yet, or the pool has no description.
+  Widget? _poolHeader() {
     final info = _poolInfo;
-    if (info == null) {
-      return null;
-    }
-    final description = info.description;
-    final hasDescription = description != null && description.isNotEmpty;
-    final hasReferences = info.referencedPoolIds.isNotEmpty;
-    if (!hasDescription && !hasReferences) {
+    final description = info?.description;
+    if (description == null || description.isEmpty) {
       return null;
     }
     return Padding(
       padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          if (hasDescription) Text(description),
-          if (hasReferences) ...[
-            if (hasDescription) const SizedBox(height: 8),
-            Text(l10n.tagBrowseRelatedPoolsLabel, style: Theme.of(context).textTheme.labelMedium),
-            const SizedBox(height: 4),
-            Wrap(
-              spacing: 4,
-              children: info.referencedPoolIds.map((poolId) => ActionChip(label: Text(l10n.tagBrowseRelatedPoolChip(poolId)), onPressed: () => _openRelatedPool(poolId))).toList(),
-            ),
-          ],
-          const Divider(height: 1),
-        ],
+        children: [PoolDescriptionText(description: description, onOpenPool: _openRelatedPool), const Divider(height: 1)],
       ),
     );
   }
@@ -347,7 +337,7 @@ class _TagBrowseScreenState extends State<TagBrowseScreen> {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
-    final poolHeader = _poolHeader(l10n);
+    final poolHeader = _poolHeader();
     return Scaffold(
       appBar: AppBar(
         toolbarHeight: isWideScreen(context) ? compactToolbarHeight : null,

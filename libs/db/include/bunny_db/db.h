@@ -66,6 +66,14 @@ bunny_db_result_t bunny_db_settings_set_pool_positions_backfilled(bunny_db_t *db
 
 bunny_db_result_t bunny_db_search_create(bunny_db_t *db, bunny_db_site_t site, const char *label, const char *query, int interval_hours, const bunny_db_search_options_t *options, int64_t *out_id);
 bunny_db_result_t bunny_db_search_delete(bunny_db_t *db, int64_t search_id);
+
+/* Folds a pre-existing (site, query) duplicate (M41 -- M38's own create-time
+ * check only stops new ones) into keeper_id: moves duplicate_id's
+ * search_results rows over, then deletes duplicate_id. Which of the two to
+ * treat as the keeper is the caller's decision -- see bunny_db_search_merge_
+ * duplicate's own doc comment in searches.c. */
+bunny_db_result_t bunny_db_search_merge_duplicate(bunny_db_t *db, int64_t keeper_id, int64_t duplicate_id);
+
 bunny_db_result_t bunny_db_search_list(bunny_db_t *db, bunny_db_search_list_t *out_list);
 bunny_db_result_t bunny_db_search_touch_last_run(bunny_db_t *db, int64_t search_id);
 
@@ -161,8 +169,7 @@ bunny_db_result_t bunny_db_post_get(bunny_db_t *db, bunny_db_site_t site, int64_
 
 /* Same as bunny_db_post_get, but keyed on the local db id rather than
  * (site, external_id) -- what the action queue below has to work with, since
- * it stores the local id (matching bunny_db_favorite_add/download_record's
- * own convention). */
+ * it stores the local id (matching bunny_db_favorite_add's own convention). */
 bunny_db_result_t bunny_db_post_get_by_id(bunny_db_t *db, int64_t post_id, bunny_db_post_t *out_post);
 
 /* Associates a cached post with a search's result set (e.g. after running that
@@ -288,11 +295,6 @@ bunny_db_result_t bunny_db_blacklist_remove(bunny_db_t *db, bunny_db_site_t site
  * its own to attach one to. */
 bunny_db_result_t bunny_db_post_is_blacklisted(bunny_db_t *db, int64_t post_id, bool *out_is_blacklisted);
 
-/* --- Downloads -------------------------------------------------------------- */
-
-bunny_db_result_t bunny_db_download_record(bunny_db_t *db, int64_t post_id, const char *file_path, const char *checksum_md5, bool verified, int64_t *out_id);
-bunny_db_result_t bunny_db_download_list_for_post(bunny_db_t *db, int64_t post_id, bunny_db_download_list_t *out_list);
-
 /* --- Tag stats -------------------------------------------------------------- */
 
 /* Tags of currently-favorited posts on `site`, ordered by how many favorited
@@ -338,6 +340,19 @@ bunny_db_result_t bunny_db_get_cached_stats_report(bunny_db_t *db, char **out_js
 
 /* Replaces the cached report wholesale (there's only ever one). */
 bunny_db_result_t bunny_db_set_cached_stats_report(bunny_db_t *db, const char *json, const char *computed_at);
+
+/* Row count per user table (sqlite_master's internal "sqlite_%" tables
+ * excluded), alphabetical -- backs `bunny_server --db-stats`. Reuses
+ * bunny_db_tag_stat_t (name/count) rather than a new struct, since that's
+ * exactly this shape already. */
+bunny_db_result_t bunny_db_table_stats(bunny_db_t *db, bunny_db_tag_stat_list_t *out_list);
+
+/* `PRAGMA integrity_check;` -- *out_ok is true iff SQLite reports back
+ * exactly "ok" (any other single-row or multi-row result lists specific
+ * corruption, which this collapses to false; `bunny_server --health` only
+ * needs pass/fail). BUNNY_DB_OK is still returned on a clean "not ok"
+ * result -- only a genuine query failure returns an error code. */
+bunny_db_result_t bunny_db_integrity_check(bunny_db_t *db, bool *out_ok);
 
 /* --- Action queue -------------------------------------------------------------
  * Proxies favorite/vote/comment calls to the sites (M4.3): an action is

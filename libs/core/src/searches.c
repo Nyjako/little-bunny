@@ -142,6 +142,17 @@ bunny_core_result_t bunny_core_search_delete(bunny_core_t *core, int64_t search_
     return bunny_core_map_db_result(result);
 }
 
+bunny_core_result_t bunny_core_search_merge_duplicate(bunny_core_t *core, int64_t keeper_id, int64_t duplicate_id)
+{
+    if (!core) {
+        return BUNNY_CORE_ERR_INVALID_ARG;
+    }
+    bunny_core_db_lock(core);
+    bunny_db_result_t result = bunny_db_search_merge_duplicate(core->db, keeper_id, duplicate_id);
+    bunny_core_db_unlock(core);
+    return bunny_core_map_db_result(result);
+}
+
 bunny_core_result_t bunny_core_search_list(bunny_core_t *core, bunny_db_search_list_t *out_list)
 {
     if (!core) {

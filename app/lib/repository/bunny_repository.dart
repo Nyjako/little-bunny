@@ -59,6 +59,14 @@ abstract interface class BunnyRepository {
 
   Future<void> deleteSearch(int searchId);
 
+  /// Folds a pre-existing (site, query) duplicate into [keeperId] (M41 --
+  /// M38's own create-time check only stops new ones): [duplicateId]'s
+  /// synced posts move over to [keeperId], then [duplicateId] is deleted.
+  /// Which of the two to treat as the keeper is the caller's decision --
+  /// this doesn't try to reconcile divergent settings (interval, pinned,
+  /// group, ...) between them.
+  Future<void> mergeDuplicateSearch(int keeperId, int duplicateId);
+
   /// Pins/unpins a search, toggled directly from the searches list row
   /// (M14.1) rather than through the full edit form.
   Future<void> setSearchPinned(int searchId, bool pinned);
@@ -123,13 +131,32 @@ abstract interface class BunnyRepository {
     int limit = 10,
   });
 
-  /// The Tag Stats screen's unified report (M40) -- cached server-side for
-  /// up to 24h, rebuilt on demand by [refreshStatsReport]. See
-  /// [BunnyStatsReport]'s own doc comment for what each section means.
+  /// The Tag Stats screen's unified report (M40) -- cached for up to 24h.
+  /// On [HttpBunnyRepository] (M55), this only ever reads whatever's cached
+  /// right now; if it's missing or stale, the server kicks off a background
+  /// rebuild and this still returns immediately with the (possibly empty,
+  /// possibly stale) data it already had, rather than blocking a civetweb
+  /// worker thread until a fresh build finishes -- the problem this exists
+  /// to avoid is one slow build blocking *other users'/devices'* unrelated
+  /// requests, which only applies to the shared networked server, not
+  /// [FfiBunnyRepository]'s single local user, so standalone mode's
+  /// `getStatsReport` is likewise cache-only/non-blocking but never
+  /// triggers its own rebuild -- only [refreshStatsReport] does, and does
+  /// so by blocking (see its own doc comment for why that's fine there).
+  /// See [BunnyStatsReport]'s own doc comment for the empty-report shape.
   Future<BunnyStatsReport> getStatsReport();
 
-  /// Forces [getStatsReport] to recompute the report regardless of the
-  /// cached one's age -- the screen's manual refresh action.
+  /// The screen's manual refresh action. On [HttpBunnyRepository] (M55),
+  /// always tells the server to kick off a background rebuild regardless of
+  /// the cached report's age, but -- same as [getStatsReport] -- returns
+  /// immediately with whatever's cached right now rather than waiting for
+  /// that rebuild to finish; a later [getStatsReport] call is what actually
+  /// observes the result. [FfiBunnyRepository] has no separate background
+  /// worker to delegate to, so it still blocks its own dedicated isolate
+  /// until the rebuild finishes and returns the fresh result directly --
+  /// acceptable there since it's one explicit action by the one local user,
+  /// not a shared server that other requests need to stay responsive
+  /// through.
   Future<BunnyStatsReport> refreshStatsReport();
 
   /// Marks a post seen (global per post, not per search) -- clears the
@@ -214,17 +241,6 @@ abstract interface class BunnyRepository {
   /// screen's comments section; posting a new one via [queueComment] then
   /// re-calling this is how the new comment appears.
   Future<List<BunnyComment>> getPostComments(int postId);
-
-  /// Records that [filePath] was downloaded for a post, for the download
-  /// manager's "already downloaded" indicator and history. This is pure
-  /// bookkeeping -- the actual HTTP fetch, disk write, and checksum
-  /// computation happen entirely client-side (never proxied through the
-  /// server) before this is called. Returns the new download row's id.
-  Future<int> recordDownload(int postId, String filePath, {String? checksumMd5, bool verified = false});
-
-  /// A post's download history, newest first. Empty for a post never
-  /// downloaded.
-  Future<List<BunnyDownload>> listDownloadsForPost(int postId);
 
   /// Manually triggers a sync pass (runs every due search). The server also
   /// does this on its own schedule (M5.3); this is for an explicit

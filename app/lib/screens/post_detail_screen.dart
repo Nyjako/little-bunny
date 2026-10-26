@@ -4,17 +4,21 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:video_player/video_player.dart';
+import 'package:wakelock_plus/wakelock_plus.dart';
 
 import '../l10n/app_localizations.dart';
 import '../repository/bunny_models.dart';
 import '../repository/bunny_repository.dart';
 import '../services/download_manager.dart';
+import '../services/download_queue_service.dart';
 import '../settings/display_settings_store.dart';
 import '../settings/download_settings_store.dart';
 import '../util/image_headers.dart';
 import '../util/media_type.dart';
 import '../util/mouse_drag_scroll_behavior.dart';
 import '../util/responsive.dart';
+import '../widgets/download_progress_indicator.dart';
+import '../widgets/gif_player.dart';
 import '../widgets/rating_badge.dart';
 import 'full_screen_post_viewer_screen.dart';
 import 'tag_browse_screen.dart';
@@ -83,6 +87,8 @@ class PostDetailScreen extends StatefulWidget {
   /// fake HTTP client via [DownloadManager.client].
   final DownloadManager downloadManager;
 
+  final DownloadQueueService downloadQueueService;
+
   /// The post list this post was opened from (e.g. a grid's currently loaded
   /// posts) -- both the posts this screen itself pages through (M22) and,
   /// filtered down to image posts only, the sub-gallery [_PostDetailPage]
@@ -98,6 +104,7 @@ class PostDetailScreen extends StatefulWidget {
     required this.repository,
     required this.displaySettingsStore,
     required this.downloadSettingsStore,
+    required this.downloadQueueService,
     this.downloadManager = const DownloadManager(),
     this.siblingPosts,
   });
@@ -130,6 +137,11 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
     // PageView pre-built it as the next/previous page).
     _markSeenWithRetry(_posts[_initialIndex].id);
     _loadPreloadCountThenPreload();
+    // M47: keeps the screen from sleeping mid-session while looking at a
+    // post (and while swiping through siblingPosts) -- disabled again in
+    // dispose() once this screen is actually left, not just backgrounded by
+    // e.g. the fullscreen viewer being pushed on top of it.
+    WakelockPlus.enable();
   }
 
   /// [precacheImage] needs a [BuildContext] -- by the time this resolves
@@ -169,6 +181,7 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
   @override
   void dispose() {
     _pageController.dispose();
+    WakelockPlus.disable();
     super.dispose();
   }
 
@@ -252,6 +265,7 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
             displaySettingsStore: widget.displaySettingsStore,
             downloadSettingsStore: widget.downloadSettingsStore,
             downloadManager: widget.downloadManager,
+            downloadQueueService: widget.downloadQueueService,
             siblingPosts: widget.siblingPosts,
             onFullScreenPostChanged: _jumpToPost,
           ),
@@ -270,6 +284,7 @@ class _PostDetailPage extends StatefulWidget {
   final DisplaySettingsStore displaySettingsStore;
   final DownloadSettingsStore downloadSettingsStore;
   final DownloadManager downloadManager;
+  final DownloadQueueService downloadQueueService;
   final List<BunnyPost>? siblingPosts;
 
   /// Called live as the user swipes inside [FullScreenPostViewerScreen]
@@ -286,6 +301,7 @@ class _PostDetailPage extends StatefulWidget {
     required this.displaySettingsStore,
     required this.downloadSettingsStore,
     required this.downloadManager,
+    required this.downloadQueueService,
     this.siblingPosts,
     this.onFullScreenPostChanged,
   });
@@ -312,11 +328,14 @@ class _PostDetailPageState extends State<_PostDetailPage> {
   bool _commentAnonymous = false;
   bool _postingComment = false;
 
+  /// Whether a file already sits at [DownloadManager.isDownloaded]'s
+  /// deterministic local path -- a per-device filesystem fact (M42), not a
+  /// server-tracked one (a download recorded from one device used to show
+  /// as already-downloaded on every other device sharing the same server).
   /// Reassigned after a successful download so the button's filled/checkmark
   /// state (M9.4) updates without a full screen reload -- same "not late
   /// final" reasoning as [_commentsFuture].
-  late Future<List<BunnyDownload>> _downloadsFuture;
-  bool _downloading = false;
+  late Future<bool> _isDownloadedFuture;
 
   /// Mutable local copy of [widget.post], so favorite/vote taps can update
   /// the displayed score/favCount/isFavorited immediately (M8.5.14) without
@@ -347,7 +366,7 @@ class _PostDetailPageState extends State<_PostDetailPage> {
     final refreshedPost = _refreshPost();
     _tagsFuture = refreshedPost.then((_) => widget.repository.getPostTagsByCategory(widget.post.id));
     _sourcesFuture = refreshedPost.then((_) => widget.repository.getPostSources(widget.post.id));
-    _downloadsFuture = widget.repository.listDownloadsForPost(widget.post.id);
+    _isDownloadedFuture = _checkIsDownloaded();
     if (widget.post.site == BunnySite.e621) {
       _relationshipsFuture = widget.repository.getPostRelationships(widget.post.id);
       _poolIdsFuture = widget.repository.getPostPoolIds(widget.post.id);
@@ -518,53 +537,37 @@ class _PostDetailPageState extends State<_PostDetailPage> {
     });
   }
 
-  Future<void> _downloadFile(AppLocalizations l10n) async {
-    setState(() => _downloading = true);
+  Future<bool> _checkIsDownloaded() async {
     final folder = await widget.downloadSettingsStore.loadDestinationFolder();
     if (folder == null) {
-      if (!mounted) {
-        return;
-      }
-      setState(() => _downloading = false);
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(l10n.postDetailDownloadFailed)));
-      return;
+      return false;
     }
-    final autoFavorite = await widget.downloadSettingsStore.loadAutoFavoriteOnDownload();
-    final autoUpvote = await widget.downloadSettingsStore.loadAutoUpvoteOnDownload();
-    final result = await widget.downloadManager.downloadPost(_post, widget.repository, folder, autoFavorite: autoFavorite, autoUpvote: autoUpvote);
-    final downloaded = result.outcome == DownloadOutcome.verified || result.outcome == DownloadOutcome.checksumMismatch;
-    if ((autoFavorite || autoUpvote) && downloaded) {
-      await widget.repository.processQueue();
-    }
-    if (!mounted) {
-      return;
-    }
-    setState(() {
-      _downloading = false;
-      if (downloaded) {
-        _downloadsFuture = widget.repository.listDownloadsForPost(_post.id);
-      }
-    });
-    final message = switch (result.outcome) {
-      DownloadOutcome.verified => l10n.postDetailDownloadVerified,
-      DownloadOutcome.checksumMismatch => l10n.postDetailDownloadMismatch,
-      DownloadOutcome.noFileUrl || DownloadOutcome.failed => l10n.postDetailDownloadFailed,
-    };
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+    return widget.downloadManager.isDownloaded(_post, folder);
+  }
+
+  /// Enqueues and returns immediately (M43) -- the actual fetch/write/
+  /// checksum work now lives entirely inside [DownloadQueueService],
+  /// reported through its notifier rather than this screen's own state.
+  /// [_isDownloadedFuture] deliberately isn't refreshed here: there's no
+  /// "download finished" callback to hook anymore by design (the whole
+  /// point is this screen doesn't wait), so the download-done icon only
+  /// updates the next time this screen is (re)opened, not live while
+  /// staying on the same post's page -- an accepted, documented limitation.
+  void _queueDownload(AppLocalizations l10n) {
+    widget.downloadQueueService.enqueue(_post, widget.repository);
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(l10n.postDetailDownloadQueued)));
   }
 
   Widget _downloadButton(AppLocalizations l10n) {
     final canDownload = _post.fileUrl != null;
-    return FutureBuilder<List<BunnyDownload>>(
-      future: _downloadsFuture,
+    return FutureBuilder<bool>(
+      future: _isDownloadedFuture,
       builder: (context, snapshot) {
-        final alreadyDownloaded = (snapshot.data ?? const []).isNotEmpty;
+        final alreadyDownloaded = snapshot.data ?? false;
         return IconButton(
-          icon: _downloading
-              ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
-              : Icon(alreadyDownloaded ? Icons.download_done : Icons.download),
+          icon: Icon(alreadyDownloaded ? Icons.download_done : Icons.download),
           tooltip: l10n.postDetailDownloadTooltip,
-          onPressed: canDownload && !_downloading ? () => _downloadFile(l10n) : null,
+          onPressed: canDownload ? () => _queueDownload(l10n) : null,
         );
       },
     );
@@ -699,11 +702,30 @@ class _PostDetailPageState extends State<_PostDetailPage> {
     final maxHeight = MediaQuery.sizeOf(context).height * 0.6;
     Widget bounded(Widget child) => ConstrainedBox(constraints: BoxConstraints(maxHeight: maxHeight), child: AspectRatio(aspectRatio: aspectRatio, child: child));
     if (_imageExtensions.contains(ext)) {
-      return GestureDetector(
-        key: const Key('postDetailImageTapTarget'),
-        onTap: _openFullScreenViewer,
-        child: bounded(CachedNetworkImage(imageUrl: post.fileUrl!, httpHeaders: imageHeadersFor(post.site), fit: BoxFit.contain)),
-      );
+      // Image's own loadingBuilder (standard ImageStream/ImageChunkEvent
+      // machinery), not CachedNetworkImage's progressIndicatorBuilder --
+      // the latter switches CachedNetworkImage's internal rendering onto a
+      // different, flutter_cache_manager-streaming-backed path that never
+      // settles under `flutter_test` (confirmed: it hung even the simplest
+      // tests in this screen's own test suite, unrelated to gifs at all).
+      // This uses the exact same CachedNetworkImageProvider plain
+      // CachedNetworkImage already resolves through, which is already
+      // proven compatible with this test suite's existing pumpAndSettle
+      // calls.
+      final content = isGifExt(ext)
+          ? GifPlayer(imageUrl: post.fileUrl!, httpHeaders: imageHeadersFor(post.site))
+          : Image(
+              image: CachedNetworkImageProvider(post.fileUrl!, headers: imageHeadersFor(post.site)),
+              fit: BoxFit.contain,
+              loadingBuilder: (context, child, loadingProgress) {
+                if (loadingProgress == null) {
+                  return child;
+                }
+                final total = loadingProgress.expectedTotalBytes;
+                return DownloadProgressIndicator(progress: total != null ? loadingProgress.cumulativeBytesLoaded / total : null);
+              },
+            );
+      return GestureDetector(key: const Key('postDetailImageTapTarget'), onTap: _openFullScreenViewer, child: bounded(content));
     }
     if (isVideoExt(ext)) {
       return FutureBuilder<void>(
@@ -745,6 +767,7 @@ class _PostDetailPageState extends State<_PostDetailPage> {
           repository: widget.repository,
           displaySettingsStore: widget.displaySettingsStore,
           downloadSettingsStore: widget.downloadSettingsStore,
+          downloadQueueService: widget.downloadQueueService,
         ),
       ),
     );
@@ -860,6 +883,7 @@ class _PostDetailPageState extends State<_PostDetailPage> {
             repository: widget.repository,
             displaySettingsStore: widget.displaySettingsStore,
             downloadSettingsStore: widget.downloadSettingsStore,
+            downloadQueueService: widget.downloadQueueService,
           ),
         ),
       );
@@ -934,6 +958,7 @@ class _PostDetailPageState extends State<_PostDetailPage> {
           repository: widget.repository,
           displaySettingsStore: widget.displaySettingsStore,
           downloadSettingsStore: widget.downloadSettingsStore,
+          downloadQueueService: widget.downloadQueueService,
           initialLabel: label,
         ),
       ),

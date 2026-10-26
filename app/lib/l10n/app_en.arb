@@ -18,6 +18,9 @@
   "setupServerUrlInvalid": "Enter a valid URL",
   "setupBearerTokenLabel": "Bearer token",
   "setupCertFingerprintLabel": "Certificate SHA-256 fingerprint",
+  "setupPasteConnectionInfo": "Paste connection info",
+  "setupScanQrCode": "Scan QR code",
+  "setupConnectionQrInvalid": "Couldn't read connection info from that",
   "setupReconfigureTitle": "Switch connection",
   "setupSwitchWarningTitle": "Switch data source?",
   "setupSwitchWarningMessage": "Standalone and networked mode use separate data stores -- your current searches/accounts won't automatically carry over. Use Settings → Backup to export/import searches if you want to bring them along.",
@@ -110,12 +113,36 @@
     "placeholders": {"total": {"type": "int"}}
   },
 
+  "searchesDuplicatesBannerMessage": "{count} duplicate searches found.",
+  "@searchesDuplicatesBannerMessage": {
+    "placeholders": {"count": {"type": "int"}}
+  },
+  "searchesDuplicatesBannerReviewAction": "Review",
+  "searchesDuplicatesBannerDismissTooltip": "Dismiss",
+  "searchesResolveDuplicatesDialogTitle": "Duplicate searches",
+  "searchesResolveDuplicatesGroupHeading": "{site}: {query}",
+  "@searchesResolveDuplicatesGroupHeading": {
+    "placeholders": {"site": {"type": "String"}, "query": {"type": "String"}}
+  },
+  "searchesResolveDuplicatesKeepButton": "Keep this one",
+  "searchesResolveDuplicatesIntervalLabel": "Every {hours}h",
+  "@searchesResolveDuplicatesIntervalLabel": {
+    "placeholders": {"hours": {"type": "int"}}
+  },
+  "searchesResolveDuplicatesPinnedLabel": "Pinned",
+  "searchesResolveDuplicatesGroupLabel": "Group: {name}",
+  "@searchesResolveDuplicatesGroupLabel": {
+    "placeholders": {"name": {"type": "String"}}
+  },
+  "searchesResolveDuplicatesDoneButton": "Close",
+
   "tagStatsScreenTitle": "Tag stats",
   "tagStatsRefreshTooltip": "Refresh now",
   "tagStatsLastUpdatedLabel": "Updated {time}",
   "@tagStatsLastUpdatedLabel": {
     "placeholders": {"time": {"type": "String"}}
   },
+  "tagStatsBuildingLabel": "Building the report for the first time -- check back shortly.",
   "tagStatsTopFavoritedTagsLabel": "Top favorited tags",
   "tagStatsTopUsedTagsLabel": "Top used tags",
   "tagStatsTopPoolsLabel": "Top pools (by favorited posts)",
@@ -161,26 +188,16 @@
   "postGridMassUpvoteTooltip": "Upvote selected",
   "postGridMassDownvoteTooltip": "Downvote selected",
   "postGridMassDownloadTooltip": "Download selected",
-  "postGridMassDownloadProgress": "{done}/{total} downloaded",
-  "@postGridMassDownloadProgress": {
+  "postGridMassDownloadQueued": "{count} queued for download",
+  "@postGridMassDownloadQueued": {
     "placeholders": {
-      "done": {"type": "int"},
-      "total": {"type": "int"}
-    }
-  },
-  "postGridMassDownloadSummary": "{succeeded} downloaded, {mismatched} checksum mismatch, {failed} failed",
-  "@postGridMassDownloadSummary": {
-    "placeholders": {
-      "succeeded": {"type": "int"},
-      "mismatched": {"type": "int"},
-      "failed": {"type": "int"}
+      "count": {"type": "int"}
     }
   },
 
   "tagBrowseEmptyState": "No posts found for this search.",
   "tagBrowseAddToSearchesTooltip": "Save as a search",
   "tagBrowseAlreadySavedTooltip": "Already saved -- tap to remove",
-  "tagBrowseRelatedPoolsLabel": "Related pools",
   "tagBrowseRelatedPoolChip": "Pool #{poolId}",
   "@tagBrowseRelatedPoolChip": {
     "placeholders": {"poolId": {"type": "int"}}
@@ -267,6 +284,12 @@
   "serverLogsEmptyState": "No log lines yet.",
   "serverLogsRefreshTooltip": "Refresh",
   "settingsTaskQueueEntry": "Task queue",
+  "settingsShareConnectionQr": "Share connection QR",
+  "connectionQrScreenTitle": "Connection QR",
+  "connectionQrLoadError": "Couldn't load the connection QR: {error}",
+  "@connectionQrLoadError": {
+    "placeholders": {"error": {"type": "String"}}
+  },
   "taskQueueScreenTitle": "Task queue",
   "taskQueueEmptyState": "Nothing queued right now.",
   "taskQueuePriorityHigh": "High",
@@ -353,9 +376,7 @@
   "settingsBlacklistSyncE621Failed": "Couldn't sync from e621 -- check that an e621 account is configured",
 
   "postDetailDownloadTooltip": "Download",
-  "postDetailDownloadVerified": "Downloaded and checksum verified",
-  "postDetailDownloadMismatch": "Downloaded, but the checksum didn't match",
-  "postDetailDownloadFailed": "Download failed",
+  "postDetailDownloadQueued": "Queued for download",
 
   "updateAvailableTitle": "Update available ({tagName})",
   "@updateAvailableTitle": {

@@ -178,6 +178,24 @@ abstract class AppLocalizations {
   /// **'Certificate SHA-256 fingerprint'**
   String get setupCertFingerprintLabel;
 
+  /// No description provided for @setupPasteConnectionInfo.
+  ///
+  /// In en, this message translates to:
+  /// **'Paste connection info'**
+  String get setupPasteConnectionInfo;
+
+  /// No description provided for @setupScanQrCode.
+  ///
+  /// In en, this message translates to:
+  /// **'Scan QR code'**
+  String get setupScanQrCode;
+
+  /// No description provided for @setupConnectionQrInvalid.
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t read connection info from that'**
+  String get setupConnectionQrInvalid;
+
   /// No description provided for @setupReconfigureTitle.
   ///
   /// In en, this message translates to:
@@ -502,6 +520,66 @@ abstract class AppLocalizations {
   /// **'{total} posts'**
   String searchesGroupSubtitle(int total);
 
+  /// No description provided for @searchesDuplicatesBannerMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} duplicate searches found.'**
+  String searchesDuplicatesBannerMessage(int count);
+
+  /// No description provided for @searchesDuplicatesBannerReviewAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Review'**
+  String get searchesDuplicatesBannerReviewAction;
+
+  /// No description provided for @searchesDuplicatesBannerDismissTooltip.
+  ///
+  /// In en, this message translates to:
+  /// **'Dismiss'**
+  String get searchesDuplicatesBannerDismissTooltip;
+
+  /// No description provided for @searchesResolveDuplicatesDialogTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Duplicate searches'**
+  String get searchesResolveDuplicatesDialogTitle;
+
+  /// No description provided for @searchesResolveDuplicatesGroupHeading.
+  ///
+  /// In en, this message translates to:
+  /// **'{site}: {query}'**
+  String searchesResolveDuplicatesGroupHeading(String site, String query);
+
+  /// No description provided for @searchesResolveDuplicatesKeepButton.
+  ///
+  /// In en, this message translates to:
+  /// **'Keep this one'**
+  String get searchesResolveDuplicatesKeepButton;
+
+  /// No description provided for @searchesResolveDuplicatesIntervalLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Every {hours}h'**
+  String searchesResolveDuplicatesIntervalLabel(int hours);
+
+  /// No description provided for @searchesResolveDuplicatesPinnedLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Pinned'**
+  String get searchesResolveDuplicatesPinnedLabel;
+
+  /// No description provided for @searchesResolveDuplicatesGroupLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Group: {name}'**
+  String searchesResolveDuplicatesGroupLabel(String name);
+
+  /// No description provided for @searchesResolveDuplicatesDoneButton.
+  ///
+  /// In en, this message translates to:
+  /// **'Close'**
+  String get searchesResolveDuplicatesDoneButton;
+
   /// No description provided for @tagStatsScreenTitle.
   ///
   /// In en, this message translates to:
@@ -519,6 +597,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Updated {time}'**
   String tagStatsLastUpdatedLabel(String time);
+
+  /// No description provided for @tagStatsBuildingLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Building the report for the first time -- check back shortly.'**
+  String get tagStatsBuildingLabel;
 
   /// No description provided for @tagStatsTopFavoritedTagsLabel.
   ///
@@ -730,17 +814,11 @@ abstract class AppLocalizations {
   /// **'Download selected'**
   String get postGridMassDownloadTooltip;
 
-  /// No description provided for @postGridMassDownloadProgress.
+  /// No description provided for @postGridMassDownloadQueued.
   ///
   /// In en, this message translates to:
-  /// **'{done}/{total} downloaded'**
-  String postGridMassDownloadProgress(int done, int total);
-
-  /// No description provided for @postGridMassDownloadSummary.
-  ///
-  /// In en, this message translates to:
-  /// **'{succeeded} downloaded, {mismatched} checksum mismatch, {failed} failed'**
-  String postGridMassDownloadSummary(int succeeded, int mismatched, int failed);
+  /// **'{count} queued for download'**
+  String postGridMassDownloadQueued(int count);
 
   /// No description provided for @tagBrowseEmptyState.
   ///
@@ -759,12 +837,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Already saved -- tap to remove'**
   String get tagBrowseAlreadySavedTooltip;
-
-  /// No description provided for @tagBrowseRelatedPoolsLabel.
-  ///
-  /// In en, this message translates to:
-  /// **'Related pools'**
-  String get tagBrowseRelatedPoolsLabel;
 
   /// No description provided for @tagBrowseRelatedPoolChip.
   ///
@@ -1144,6 +1216,24 @@ abstract class AppLocalizations {
   /// **'Task queue'**
   String get settingsTaskQueueEntry;
 
+  /// No description provided for @settingsShareConnectionQr.
+  ///
+  /// In en, this message translates to:
+  /// **'Share connection QR'**
+  String get settingsShareConnectionQr;
+
+  /// No description provided for @connectionQrScreenTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Connection QR'**
+  String get connectionQrScreenTitle;
+
+  /// No description provided for @connectionQrLoadError.
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t load the connection QR: {error}'**
+  String connectionQrLoadError(String error);
+
   /// No description provided for @taskQueueScreenTitle.
   ///
   /// In en, this message translates to:
@@ -1520,23 +1610,11 @@ abstract class AppLocalizations {
   /// **'Download'**
   String get postDetailDownloadTooltip;
 
-  /// No description provided for @postDetailDownloadVerified.
+  /// No description provided for @postDetailDownloadQueued.
   ///
   /// In en, this message translates to:
-  /// **'Downloaded and checksum verified'**
-  String get postDetailDownloadVerified;
-
-  /// No description provided for @postDetailDownloadMismatch.
-  ///
-  /// In en, this message translates to:
-  /// **'Downloaded, but the checksum didn\'t match'**
-  String get postDetailDownloadMismatch;
-
-  /// No description provided for @postDetailDownloadFailed.
-  ///
-  /// In en, this message translates to:
-  /// **'Download failed'**
-  String get postDetailDownloadFailed;
+  /// **'Queued for download'**
+  String get postDetailDownloadQueued;
 
   /// No description provided for @updateAvailableTitle.
   ///

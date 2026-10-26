@@ -14,6 +14,17 @@
          of showing the installer, which looks exactly like "nothing
          happened" after tapping the downloaded file. -->
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES"/>
+    <!-- Android 13+ (API 33+) requires this to show any notification at all,
+         including the download queue's progress notification (M43) --
+         declaring it here is necessary but not sufficient, the runtime
+         request (FlutterLocalNotificationsQueueNotifier.initialize) is still
+         needed too. -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
+    <!-- Lets SetupScreen's "Scan QR code" entry point (mobile_scanner) use
+         the camera to read a server's connection QR code. Declaring it
+         here is necessary but not sufficient -- mobile_scanner requests the
+         runtime permission itself when the camera preview starts. -->
+    <uses-permission android:name="android.permission.CAMERA"/>
     <application
         android:label="little_bunny"
         android:name="${applicationName}"

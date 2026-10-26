@@ -2287,58 +2287,132 @@ this file is the single source of truth for "what's done" across sessions.
     `topFavoritedTags`/`topUsedTags` calls (kept as internal-only API, no longer
     surfaced to the app directly -- the report builder still calls them per-site).
 
-- [ ] **M41 — Detect/clean up saved searches or pools that duplicated each other before M38**
+- [x] **M41 — Detect/clean up saved searches or pools that duplicated each other before M38**
   M38 (above) only stops *new* duplicates from being created going forward -- it has no
   effect on any `(site, query)` duplicates that were already saved before that check
   existed. The user confirmed the client-side prevention approach is fine as the
-  ongoing guard, but asked for the pre-existing duplicates to be handled too, exact
-  mechanism still open: candidates include a one-time startup/sync-time scan that
-  finds searches sharing a `(site, query)` and offers to merge them (keeping one,
-  reassigning/dropping `search_results` rows for the others) or just flags them for
-  the user to resolve manually in `SearchesScreen`, rather than silently auto-deleting
-  anything a user may be relying on (e.g. divergent `interval_hours`/group membership
-  between the duplicates).
+  ongoing guard, but asked for the pre-existing duplicates to be handled too.
+  Went with flag-for-manual-resolution rather than an automatic scan-and-merge: picking
+  which of two divergent duplicates (different `interval_hours`, `pinned`, `group_id`,
+  ...) to silently keep is exactly the kind of decision the roadmap entry above already
+  warned against making on the user's behalf.
+  - New `bunny_db_search_merge_duplicate(db, keeper_id, duplicate_id)` (`libs/db/src/
+    searches.c`) moves `duplicate_id`'s `search_results` rows onto `keeper_id` (`UPDATE
+    OR IGNORE`, since a post both searches already found would otherwise collide on the
+    `(search_id, post_id)` primary key -- the keeper's own existing row just wins) then
+    deletes `duplicate_id`. Deliberately doesn't touch the keeper's own settings --
+    which duplicate to treat as the keeper is the caller's decision, made explicitly in
+    the UI below, not something this function second-guesses. Thin pass-throughs at
+    `bunny_core_search_merge_duplicate` and `POST /searches/{keeperId}/merge_duplicate`
+    (body: `{"duplicate_id": N}`), same shape every other search mutation here uses.
+  - New pure `findDuplicateSearchGroups` (`app/lib/util/duplicate_searches.dart`) groups
+    an already-fetched `List<BunnySearch>` by `(site, query)` entirely client-side --
+    no new fetch needed, `SearchesScreen` already loads the full list once. A pool
+    search's identity is already fully encoded in its `query` (`pool:<id>`), so no
+    special-casing was needed for it to group the same way as a regular search.
+  - `SearchesScreen` shows a dismissible banner above the list when any duplicate group
+    exists ("N duplicate searches found" + a Review action); dismissal is session-only
+    (re-shown on the next manual/automatic refresh) rather than persisted, so it can't
+    end up permanently hiding a *different* set of duplicates that shows up later.
+    Review opens a dialog listing every group with enough per-member detail (interval,
+    pinned, group) to tell divergent duplicates apart, each with its own "Keep this
+    one" button that merges every other member of that group into it and removes the
+    resolved group from the dialog; the main list refreshes once the dialog closes.
+  - One FFI-layer gap closed in passing: `bunny_core_ffi_bindings_generated.dart` was
+    regenerated (`dart run ffigen`) for the new `bunny_core_search_merge_duplicate`
+    declaration, with new isolate dispatch glue (`mergeDuplicateSearch`) mirroring
+    `setSearchPinned`'s existing shape exactly.
 
-- [ ] **M42 — Stop tracking "downloaded" state server-side; check local file existence instead**
-  Reported by the user: a post downloaded on one device shows as downloaded on every
+- [x] **M42 — Stop tracking "downloaded" state server-side; check local file existence instead**
+  Reported by the user: a post downloaded on one device showed as downloaded on every
   other device too, because `bunny_db_download_record`/`bunny_db_download_list_for_post`
-  store download state centrally on the shared server -- but "downloaded" is inherently
+  stored download state centrally on the shared server -- but "downloaded" is inherently
   a per-device, per-filesystem fact, not something the server can meaningfully own.
-  The user's proposed fix: drop download tracking from the database entirely.
-  `DownloadManager.downloadPost` already computes a fully deterministic destination
-  path (artist subfolder + fixed filename pattern, same path every time, always
-  overwrites -- see M36's own notes) given a post and the user's chosen destination
-  folder, so each client can instead just check whether a file already exists at that
-  predicted path to show "downloaded" status locally, with no server round-trip and
-  no shared state to get stale or conflict across devices. Needs a migration path for
-  `recordDownload`/`listDownloadsForPost` call sites (and the `downloads` table/schema
-  itself) once the local-existence-check replacement is designed.
+  Removed download tracking from the database entirely rather than reworking it: the
+  `downloads` table, `bunny_db_download_*`/`bunny_core_record_download`/
+  `bunny_core_list_downloads_for_post`, the `/posts/{id}/downloads` server routes, and
+  every Dart-side `recordDownload`/`listDownloadsForPost`/`BunnyDownload` call site
+  (both repository implementations, the ffigen-generated bindings, `bunny_core_ffi`'s
+  own isolate glue) are all gone. A new migration (`libs/db/src/db.c`, version 16)
+  `DROP TABLE IF EXISTS downloads;` clears the table from existing production databases
+  too, not just new ones.
+  New `DownloadManager.isDownloaded(post, destinationFolder)` replaces the server round-
+  trip: it recomputes the exact same deterministic path `downloadPost` already writes to
+  (same artist-folder sanitization, same `$externalId.$ext` filename) and checks for it
+  locally -- `File(...).exists()` for a plain path, `SafUtil().child(folder, [artist,
+  filename])` (resolving to null vs. a real child) for an Android SAF `content://` tree,
+  since a SAF child's own URI is opaque and can't be read back without parent + name.
+  `PostDetailScreen` now resolves its "already downloaded" icon through this instead of
+  `listDownloadsForPost`, with no shared state to get stale or conflict across devices.
+  One wrinkle in the widget test covering this: `testWidgets`'s FakeAsync zone never lets
+  a real `dart:io` call started from `initState` actually resolve (unlike one kicked off
+  later from the test body inside `tester.runAsync`), so that one test stubs
+  `DownloadManager.isDownloaded` via a small subclass rather than seeding a real file on
+  disk and waiting on the real check.
 
-- [ ] **M43 — Queue downloads (and mass download/favorite/upvote) server-side instead of blocking the app**
+- [x] **M43 — Queue downloads (single and mass) instead of blocking the app on them**
   Reported by the user: downloading currently means sitting on the post screen waiting
   for the file, checksum, and any auto-favorite/auto-upvote to all finish before moving
-  on. Wanted instead: tap download and forget about it -- the request (and its
-  favorite/upvote side effects) goes to the server's existing task queue (the same
-  `action_queue` table/`task_queue.c` worker `favorite_add`/`vote`/`comment` actions
-  already go through, M4.3) rather than blocking the client, with a push notification
-  once it actually completes. Same treatment for *mass* download/favorite/upvote (not
-  just a single post) -- and when a mass download has auto-favorite/auto-upvote
-  enabled, those should always apply to every post in the batch, not conditionally.
-  Needs: a new `download` action type in `action_queue` (today it only downloads
-  client-side via `DownloadManager`, with no server-side equivalent at all -- this is
-  a bigger shift than just reusing the existing queue, since the file itself has to
-  land on the *client's* filesystem, not the server's), a push-notification channel
-  the app can receive completion events through, and batch-enqueue endpoints for mass
-  actions.
+  on. Originally scoped (above) as routing downloads through the *server's* existing
+  `action_queue`, with push-notification completion events -- renegotiated with the user
+  during planning, since that doesn't fit this app's actual architecture: M42 just made
+  "downloaded" a deliberately client-side, per-device fact, and there's no push-
+  notification infrastructure anywhere in this codebase to build on. The server's
+  `action_queue` already handles favorite/vote queuing fine as-is and needed no changes.
+  What shipped instead is purely client-side: a new `DownloadQueueService`
+  (`app/lib/services/download_queue_service.dart`, a `ChangeNotifier` -- the one
+  deliberate exception to this codebase's plain-`setState` convention, since its
+  lifetime isn't tied to any single screen's `State`) that tapping download (single,
+  `PostDetailScreen`, or mass, `PostGridScreen`) enqueues into and returns from
+  immediately; the queue drains strictly sequentially in the background, reporting
+  progress/summary through a local (on-device, not server-push) notification via
+  `flutter_local_notifications`. Mass download's auto-favorite/auto-upvote drain
+  (`repository.processQueue()`) now runs once per successfully-downloaded item rather
+  than once per whole batch, a deliberate, accepted behavior change -- the queue is now
+  open-ended (more items can be enqueued mid-flight), so there's no well-defined "last
+  item in the batch" to key a single drain off of.
+  Two scope boundaries the user set explicitly during planning:
+  - **This only downloads while the app process is actually running** -- no attempt,
+    not even best-effort, to keep a download going once the phone screen locks.
+    Reliably surviving a locked screen needs a real Android foreground service, a
+    meaningfully bigger lift (see M57 below), deliberately not built in this pass.
+  - What *is* built: if the app process gets killed/restarted for any reason (including
+    a locked screen eventually getting it killed by the OS), pending downloads survive
+    via a small disk-backed resume list (`pending_downloads.json` in
+    `getApplicationSupportDirectory()`), restored and re-enqueued from scratch (not a
+    byte-level resume -- the HTTP fetch was always one in-memory read, no partial-write
+    risk) on the next launch.
+  Also added as part of this pass: an atomic temp-file-then-rename write in
+  `DownloadManager.downloadPost`'s plain (non-SAF) branch, so a crash/kill mid-write
+  never leaves a half-written file at the user-visible destination path.
+  Explicitly deferred, not built in this pass: live icon-flip on `PostDetailScreen`
+  while staying on that exact post's page (the "already downloaded" icon only updates
+  on next visit); true byte-level resume of an interrupted fetch; parallelizing
+  downloads (stays strictly sequential, matching this app's other mass actions).
 
-- [ ] **M44 — Render pool cross-references as inline clickable text, not separate chips below**
+- [x] **M44 — Render pool cross-references as inline clickable text, not separate chips below**
   Follow-up to M26 (which added the pool description + a `Wrap` of `ActionChip`s below
-  it for every "pool #N" reference found). The user wants the references inline within
-  the description text itself instead, at the exact position they're mentioned --
-  styled as a plain blue link reading literally `pool:id` would be an acceptable
-  rendering. Needs turning `_poolHeader`'s plain `Text(description)` in
-  `tag_browse_screen.dart` into a rich-text span that finds each "pool #N" match and
-  swaps it for a tappable link inline, instead of appending chips afterward.
+  it for every "pool #N" reference found). The references now render inline, in place,
+  within the description text itself -- not reformatted, the exact substring matched
+  (e.g. "pool #456") renders as a tappable link right where it already sits in the
+  sentence, instead of a separate row of chips below.
+  - New pure function `parsePoolDescriptionSegments` (`app/lib/util/pool_description.dart`)
+    splits a description into plain-text and reference segments, using the exact same
+    "pool #" + one-or-more-digits convention `bunny_core`'s own `parse_pool_references`
+    (`libs/core/src/sync.c`) already extracts `BunnyPoolInfo.referencedPoolIds` with --
+    this just also needs *where* each match sits in the text, not only the id list.
+  - New shared widget `PoolDescriptionText` (`app/lib/widgets/pool_description_text.dart`)
+    renders those segments via `Text.rich`, with each reference segment a `TextSpan`
+    carrying its own `TapGestureRecognizer`. Used by both places that showed the old
+    chips-below layout: `TagBrowseScreen`'s pool header and `PostGridScreen`'s pool-info
+    dialog (the "related pools" label these replaced was dropped entirely as now-dead
+    code; `tagBrowseRelatedPoolChip`'s "Pool #{id}" formatting is still used elsewhere,
+    for `TagStatsScreen`'s "top pools" section, so that string itself stayed).
+  - Found and fixed a real bug in the parser's own first draft while writing its unit
+    tests: a "pool #" not followed by a digit (not a real reference) advanced the same
+    cursor used for both "where to resume scanning" and "where the next text segment
+    starts," silently dropping everything in front of the false match. Fixed by
+    splitting those into two separate cursors.
 
 - [ ] **M45 — Fix pinned searches mixing with unpinned after deep navigation**
   Reported by the user: starting from the main `SearchesScreen`, opening a search, then
@@ -2405,21 +2479,54 @@ this file is the single source of truth for "what's done" across sessions.
       (single-post lookups, the in-memory task queue/log ring buffer, one-page-at-a-
       time live previews) or already fixed by M37/M39/M40.
 
-- [ ] **M47 — Keep the device awake while browsing posts**
+- [x] **M47 — Keep the device awake while browsing posts**
   Reported by the user: wants a wake lock active while browsing so the screen doesn't
-  sleep mid-session. `wakelock_plus` is already present as a *transitive* dependency
-  (per `pubspec.lock`, not yet declared directly in `pubspec.yaml`) -- may not need a
-  new dependency, just wiring it up (enable on entering a post-browsing screen, disable
-  on leaving) and adding the direct `pubspec.yaml` entry.
+  sleep mid-session. `wakelock_plus` was already present as a *transitive* dependency
+  (via `cached_network_image`'s own chain) -- declared directly in `pubspec.yaml` now
+  that the app actually calls it. `PostDetailScreen` enables the wakelock in `initState`
+  and disables it in `dispose`, covering the whole browsing session including swiping
+  between `siblingPosts` and opening the fullscreen viewer on top of it (the wakelock
+  stays on the whole time `PostDetailScreen` itself is still on the navigator stack).
+  Tests needed `wakelockPlusPlatformInstance` (a `@visibleForTesting` top-level var in
+  the `wakelock_plus` package, not just `WakelockPlusPlatformInterface.instance` --
+  the package captures the latter into the former at import time, so only overriding
+  the former actually takes effect) swapped for a no-op fake; without it, the real
+  method-channel implementation throws under `flutter_test`, which widget tests using
+  `tester.runAsync` (the M43 download-button tests) surface as a real failure instead of
+  silently swallowing it the way simpler non-`runAsync` tests happened to.
 
-- [ ] **M48 — Show a loading-percentage indicator for images/gifs**
+- [x] **M48 — Show a loading-percentage indicator for images/gifs**
   While an image or gif is still loading, show progress (e.g. a percentage in the
-  middle of the loading spinner) instead of just an indeterminate spinner.
+  middle of the loading spinner) instead of just an indeterminate spinner. New
+  `DownloadProgressIndicator` widget (a `CircularProgressIndicator` with a `%` label
+  once the total size is known). Still images use `Image(image:
+  CachedNetworkImageProvider(...), loadingBuilder: ...)` -- *not*
+  `CachedNetworkImage`'s own `progressIndicatorBuilder`, which was tried first but
+  switches `CachedNetworkImage`'s internal rendering onto a different,
+  `flutter_cache_manager`-streaming-backed path that never settles under
+  `flutter_test`'s `pumpAndSettle` (confirmed: it broke nearly every test in
+  `PostDetailScreen`'s own suite, not just gif-related ones). `Image`'s own
+  `loadingBuilder` uses the standard `ImageStream`/`ImageChunkEvent` machinery the
+  already-working plain `CachedNetworkImage` already resolves through, so it's
+  test-compatible. Applied to both `PostDetailScreen`'s inline view and
+  `FullScreenPostViewerScreen`'s pinch-zoom gallery.
 
-- [ ] **M49 — Add a GIF frame counter overlay (N/X)**
+- [x] **M49 — Add a GIF frame counter overlay (N/X)**
   For a gif, display current-frame/total-frame count (e.g. "N/X") somewhere on
   screen -- the user's stated reason is it's otherwise hard to tell where the loop
-  repeats.
+  repeats. New `GifPlayer` widget (`app/lib/widgets/gif_player.dart`) decodes the GIF
+  frame-by-frame via `ui.Codec` directly, since `Image`/`CachedNetworkImage` drive GIF
+  animation internally with no hook for app code to observe which frame is currently
+  showing. Takes an injectable `BaseCacheManager` (same `client:`-injection reasoning
+  as `DownloadManager`/`HttpBunnyRepository`), defaulting to `DefaultCacheManager()`,
+  so tests can supply one that resolves synchronously from a real on-disk fixture file
+  instead of hitting the network -- `GifPlayer`'s own frame-advance loop is a plain
+  repeating `Timer`, which (like any perpetually-repeating animation) can't be waited
+  out with `pumpAndSettle`; its tests use bounded `pump()`s (or, where the actual
+  decoded frame content needs asserting on, `tester.runAsync` wrapping the triggering
+  `pumpWidget` call itself, same real-async-zone requirement as elsewhere in this
+  codebase's own tests). Replaces `CachedNetworkImage`/`Image` for `.gif` posts in both
+  `PostDetailScreen` and `FullScreenPostViewerScreen`.
 
 - [ ] **M50 — Rich-text parsing for descriptions (auto-links, `{{author}}`, `[[tag]]`)**
   Post/pool/wiki descriptions should have plain URLs auto-linked and turned into
@@ -2503,3 +2610,185 @@ this file is the single source of truth for "what's done" across sessions.
   string, so this may mostly be a client-side authoring/autocomplete problem rather
   than a storage one), and the *same* syntax + autocomplete support added to the
   blacklist editor, which today only accepts single bare tags.
+
+- [x] **M55 — Build the tag-stats report in the background instead of on the request thread**
+  Discovered right after deploying M46: on the user's real database (1.39GB,
+  nowhere close to the small fixtures/synthetic databases used while building
+  M40), the stats report's *first* build (cold cache, or the 24h TTL expiring)
+  took well over two minutes. Since `bunny_core_get_stats_report` used to build
+  inline on a cache miss, a request that triggered that build tied up a civetweb
+  worker thread for the entire two-plus minutes -- and since civetweb only has a
+  handful of worker threads total, a couple of overlapping slow requests (which
+  is exactly what happened testing this: three `/stats_report` calls fired close
+  together) was enough to starve the thread pool completely, including totally
+  unrelated requests like `/health`. Had to restart the live service to clear it.
+  The user's own framing: building the report should be a low-priority
+  background job -- request it, it starts building if it isn't already, other
+  requests stay more important, and whenever it finishes it finishes.
+  - `bunny_core_get_stats_report` is gone, replaced by `bunny_core_
+    get_cached_stats_report(core, &report, &has_cache, &is_stale)` -- reads
+    whatever's cached and returns immediately, *never* builds, *never* blocks.
+    `bunny_core_refresh_stats_report` (the actual, still-slow build) is unchanged,
+    but is now only ever meant to be called from a background worker, not inline
+    on a thread answering a live request.
+  - New `TASK_TYPE_BUILD_STATS_REPORT` (LOW priority, same existing task_queue
+    worker thread M24 already built for exactly this class of problem) runs that
+    build. `task_queue_enqueue_stats_report_build` dedupes the same way the
+    other LOW-priority background jobs do -- a no-op if a build is already
+    pending/running, never piles up duplicates.
+  - `GET /stats_report` reads the cache and enqueues a background build only if
+    the cache is missing or stale; `POST /stats_report` (manual refresh) always
+    enqueues one, as the "force" case -- but *both* just return whatever was
+    cached *before* this request, same as GET. Neither blocks.
+  - `BunnyStatsReport.computedAt` is now nullable -- `null` means no report has
+    ever been built. `TagStatsScreen` shows a "building the report for the first
+    time" message instead of a timestamp in that case, rather than hanging on an
+    indefinite spinner; the user is expected to just come back to the screen
+    later, same as any other background job in this app.
+  - `FfiBunnyRepository` (standalone mode) keeps `refreshStatsReport` blocking --
+    there's no separate background worker to delegate to there, and it's one
+    local user explicitly tapping refresh, not a shared server whose *other*
+    requests need to stay responsive through it. Only the networked server's
+    `/stats_report` route needed the fix.
+
+- [ ] **M56 — Offline/local smoke tests against a real, just-deployed server**
+  The user's idea, deliberately scoped as planned-for-later, not for immediate
+  implementation: a script (not a GitHub Actions job -- CI has no access to the
+  user's real server or its `.env` credentials) that runs locally right after a
+  new build is installed, to catch exactly the kind of thing that only shows up
+  against real data/hardware and slipped past this session's fixture-based test
+  suites -- e.g. M46's 12-14s search-listing hang and M55's 2+-minute stats-
+  report build, both only ever surfaced by manually curling the live server
+  with its real ~1.39GB database, never by `make test-c`/`make test-flutter`
+  against small fixtures. Candidate checks: response time on a handful of key
+  endpoints (flag anything unexpectedly slow), confirming `/stats_report`'s
+  background build actually completes and the cache updates, confirming the
+  server survives a batch of concurrent requests without exhausting civetweb's
+  worker pool the way M55's own manual testing did. Needs its own design pass
+  before implementation -- what "pass" means per check, how it authenticates
+  (presumably reads the same `.env` this session used by hand), whether it's a
+  shell script wrapping `curl` (matching this session's own ad hoc verification
+  style) or something more structured.
+
+- [ ] **M57 — Keep the download queue running through a locked Android screen**
+  Follow-up the user explicitly asked to track during M43's planning, deliberately not
+  built as part of that pass: M43's `DownloadQueueService` only progresses while the app
+  process is actually alive -- a locked screen that the OS eventually suspends/kills the
+  process over just means the queue resumes next launch via M43's disk-backed resume
+  list, same as any other kill. Reliably surviving a locked screen instead needs real
+  native plumbing Android requires for exactly this (a background task outliving the
+  activity): a foreground `Service` subclass, `startForeground()` with a persistent
+  notification (likely the same one `FlutterLocalNotificationsQueueNotifier` already
+  shows), a manifest `<service>` entry declaring a `foregroundServiceType` (probably
+  `dataSync`, Android 14+'s API for exactly this), plus the runtime permission Android
+  13+ requires to start a foreground service of that type. iOS has no equivalent
+  concept for arbitrary background HTTP work this way (background `URLSession` tasks
+  are the iOS-native mechanism, a separate, not-yet-scoped design), so this milestone is
+  Android-only; other platforms keep today's M43 behavior unchanged.
+
+- [x] **M58 — QR connection setup: scan/paste in the app, in-app share via the server, shrink the terminal code**
+  Follow-up the user raised during M43 planning, deliberately deferred to its own pass:
+  "we have no place to scan qr code on phone, or enter generated json in app when
+  connecting to server... generating qrcode/json directly in app so we can easily share
+  it when it is already connected... currently generated qrcode is pretty massive which
+  is not good for terminal." Four parts:
+  - **`bunny_server --qr` read the wrong data dir.** Reported separately: `--qr` printed
+    a different (wrong) `bearer_token`/`cert_sha256` every time, the same with or without
+    `sudo`. Root cause: the real server always runs under systemd with
+    `BUNNY_SERVER_DATA_DIR` explicitly set to `/var/lib/bunny-server`
+    (`DynamicUser`'s StateDirectory), but a manual `--qr` invocation has no such override
+    and fell through to the invoking user's own XDG data dir instead -- a different wrong
+    directory whether run plain or under `sudo` (`$HOME` becomes `/root`), silently
+    generating/reading throwaway credentials unrelated to the actually-running server.
+    `--qr` (`server/src/main.c`) now defaults `BUNNY_SERVER_DATA_DIR` to
+    `/var/lib/bunny-server` when unset, matching `deploy/dump_server_info.sh`'s own
+    hardcoded assumption -- still overridable via the env var. This also means `--qr` now
+    correctly requires `sudo` to read those files, rather than silently succeeding
+    against bogus data.
+  - **Shrunk the terminal QR.** `print_qr` (`server/src/qr.c`) switched from 2 ASCII
+    characters per module to Unicode half-block characters (`▀▄█` + space), printing 2
+    module-rows per terminal line and 1 character per module column -- quarters the
+    printed footprint. Pure rendering change, doesn't touch the JSON payload or the
+    `qrcodegen` encoding call.
+  - **Scan / paste on `SetupScreen`'s networked-mode fields.** New
+    `ConnectionQrPayload.tryParse` (`app/lib/util/connection_qr_payload.dart`) is the
+    shared parser for both entry points -- never throws, null on anything malformed, so a
+    bad scan/paste shows an inline error instead of crashing. "Paste connection info"
+    reads the clipboard directly, no new dependency. "Scan QR code" (new `mobile_scanner`
+    dependency, new `QrScanScreen`) is gated to Android/iOS/macOS, since that package
+    doesn't support Linux/Windows and this app ships both -- camera permission/usage
+    description added to the Android manifest, iOS and macOS `Info.plist`, and both
+    macOS entitlements files (camera access needs the entitlement under this app's
+    existing sandboxing, not just the `Info.plist` key).
+  - **Generate the connection QR in-app, rendered server-side.** The connected app
+    already has `serverUrl`/`bearerToken`/`certificateSha256Fingerprint` locally
+    (`NetworkedConfig`) -- no need for the server to re-resolve its own public IP/token.
+    New authenticated `POST /qr` route (`server/src/routes_qr.c`) takes those three
+    client-supplied values, builds the same JSON payload `--qr` already builds
+    (`server_qr_build_connection_json`, unchanged), and returns a PNG rendering of it via
+    a new `server_qr_render_png` (`qr.c`), rasterizing the `qrcodegen` module grid
+    through a newly-vendored `stb_image_write.h` (CPM, `DOWNLOAD_ONLY`, same pattern as
+    `qrcodegen` itself) -- so the app needs no QR-rendering library of its own.
+    `HttpBunnyRepository.fetchConnectionQrPng` calls the route; Settings' new "Share
+    connection QR" entry (networked mode only) opens a screen that fetches and displays
+    the PNG via `Image.memory`.
+
+- [x] **M59 — Real operator CLI tooling for `bunny_server` (`--help`/`--status`/`--health`/`--db-stats`/`--update`)**
+  The user wanted `bunny_server` to grow proper ops tooling beyond `--qr`/`--version`:
+  "--update, --status maybe --health that would do some checks on database and app
+  itself we have `dump_server_info.sh` we could add this to server itself... something
+  to check db stats that would print basically how many entries in each table." All five
+  new flags follow `--qr`'s existing one-shot pattern (`server/src/main.c`): default
+  `BUNNY_SERVER_DATA_DIR` to `/var/lib/bunny-server` if unset, load config, do the work,
+  never call `server_app_start`.
+  - **`--help`/`-h`** prints usage, the build number, the GitHub link, and a one-line
+    description of every flag.
+  - **`--status`** (new `server/src/status.c`) is a plain informational dump -- data dir,
+    port, poll interval, bearer token, cert fingerprint, public IP/derived server URL,
+    `bunny.db` file size, and whether an update is currently staged -- effectively
+    `deploy/dump_server_info.sh` folded into the binary. Reuses `qr.c`'s own
+    `fetch_public_ip`/`compute_cert_sha256` (un-`static`'d for this) rather than
+    duplicating that OpenSSL/curl logic.
+  - **`--health`** (new `server/src/health_check.c`) runs independent, read-only sanity
+    checks -- data dir writable, database opens and passes `PRAGMA integrity_check`
+    (new `bunny_db_integrity_check`/`bunny_core_integrity_check`), auth token and TLS
+    cert exist/parse/aren't expired -- printing PASS/FAIL per check and exiting 0/1,
+    suitable for monitoring/cron. Deliberately doesn't reuse `server_auth_load`/
+    `server_tls_ensure_cert` (which auto-generate on a missing file) -- a health check
+    must never have write side effects.
+  - **`--db-stats`** prints row counts per database table (new
+    `bunny_db_table_stats`/`bunny_core_table_stats`, reusing the existing
+    `bunny_db_tag_stat_t` name/count struct rather than inventing a new one).
+  - Confirmed with the user: `--status`/`--health`/`--db-stats` are read-only and safe to
+    run alongside the real live systemd service (SQLite's own WAL mode already permits
+    concurrent readers) -- no special handling needed, verified manually against a
+    running instance. **`--update`** is different, since it writes to the same
+    `data_dir/update-staging/`/`.last_update_check`/`update-ready` files the live
+    service's own scheduler tick can be concurrently touching: confirmed with the user
+    it should stop the systemd service itself first (`systemctl stop bunny-server`, via
+    direct fork/exec -- same no-shell pattern `updater.c`'s own `tar` invocation already
+    uses) and always restart it afterward (`systemctl start`) regardless of outcome,
+    gated on an explicit root check (`geteuid() == 0`) since both stopping/restarting the
+    service and reading `/var/lib/bunny-server`'s root-owned files need it. New
+    `bunny_updater_force_check_and_stage` (`updater.c`) bypasses the scheduler's own 24h
+    throttle by clearing the marker file before delegating to the existing
+    `bunny_updater_scheduler_tick` -- zero duplicated check/download/verify/stage logic.
+    Linux/systemd only, matching `updater.c`'s own existing scope (no self-update story
+    for a Windows service, and no equivalent Windows service to stop/start anyway).
+
+- [ ] **M60 — Real PIN entry for app-lock, distinct from the password fallback**
+  Follow-up to M7.4's existing `AppLockService`/`LockScreen`/`LockSetupScreen`: today
+  "PIN" and "password" are the same free-text field under the hood (any characters,
+  compared by string equality, unlocked via an explicit submit action) -- M7.4's own
+  biometric-first flow (`local_auth`, Android only so far) already covers "fingerprint
+  on the phone", but the typed fallback doesn't behave like a real PIN pad anywhere.
+  The user wants an actual PIN entry mode: digits-only input, and -- unlike a
+  password field, which always needs an explicit submit/click -- auto-checks as soon
+  as the 4th digit is entered (standard mobile lock-screen PIN UX). Needs its own
+  design pass before implementation: whether PIN and password become two distinct,
+  user-selectable lock modes (`LockSetupScreen` choosing between them) or whether PIN
+  only applies on mobile with password staying as-is on desktop (matching M7.4's
+  own platform-specific precedent for biometric availability), whether the PIN length
+  is fixed at 4 digits or configurable, and how `LockSetupScreen`'s existing
+  "re-enter current PIN/password to disable" flow adapts to a digits-only keypad
+  instead of a text field.

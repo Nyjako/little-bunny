@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:crypto/crypto.dart';
 import 'package:http/http.dart' as http;
+import 'package:path_provider/path_provider.dart';
 import 'package:saf_stream/saf_stream.dart';
 import 'package:saf_util/saf_util.dart';
 
@@ -49,8 +50,7 @@ class DownloadResult {
 /// from the single-post download button ([PostDetailScreen], M9.4) and the
 /// mass-download action (M9.5). Downloads are never proxied through the
 /// server (see `docs/architecture.md`): this fetches the file directly from
-/// the site's own CDN and only calls [BunnyRepository.recordDownload]
-/// afterward, purely for bookkeeping.
+/// the site's own CDN and writes it straight to [destinationFolder].
 class DownloadManager {
   /// Injectable for tests (a fake [http.Client]); `null` lazily creates a
   /// real one per call rather than holding it as const-incompatible state.
@@ -63,6 +63,26 @@ class DownloadManager {
       return 'unknown';
     }
     return artist.replaceAll(RegExp(r'[\\/:*?"<>|]'), '_');
+  }
+
+  /// Whether [post] already has a file sitting at the exact deterministic
+  /// path [downloadPost] would write to -- "downloaded" is a per-device
+  /// filesystem fact (M42), not something a shared server can meaningfully
+  /// track: a download recorded on one device used to show as already-
+  /// downloaded on every other device sharing the same server, even on a
+  /// device that never actually wrote the file. Mirrors [downloadPost]'s own
+  /// path computation exactly (same artist-folder sanitization, same
+  /// `$externalId.$ext` filename, same SAF-vs-plain-path branch) without
+  /// touching the network.
+  Future<bool> isDownloaded(BunnyPost post, String destinationFolder) async {
+    final artistFolder = _sanitizeArtist(post.artist);
+    final ext = post.fileExt ?? 'bin';
+    final filename = '${post.externalId}.$ext';
+    if (destinationFolder.startsWith('content://')) {
+      final child = await SafUtil().child(destinationFolder, [artistFolder, filename]);
+      return child != null;
+    }
+    return File('$destinationFolder/$artistFolder/$filename').exists();
   }
 
   /// [autoFavorite] (M10.1) queues a favorite-add for [post] once the file is
@@ -107,14 +127,27 @@ class DownloadManager {
         final directory = Directory('$destinationFolder/$artistFolder');
         await directory.create(recursive: true);
         filePath = '${directory.path}/${post.externalId}.$ext';
-        await File(filePath).writeAsBytes(bytes);
+        // Written to a temp file first, then moved into place, so a crash
+        // or kill mid-write (M43) never leaves a corrupt, half-written file
+        // sitting at the user-visible destination path -- `rename` is atomic
+        // within the same filesystem; the copy+delete fallback only matters
+        // if the OS temp dir and destination folder happen to be on
+        // different filesystems/volumes.
+        final tempDir = await getTemporaryDirectory();
+        final tempFile = File('${tempDir.path}/${post.site.toWireString()}_${post.externalId}.$ext.tmp');
+        await tempFile.writeAsBytes(bytes);
+        try {
+          await tempFile.rename(filePath);
+        } catch (_) {
+          await tempFile.copy(filePath);
+          await tempFile.delete();
+        }
       }
 
       final checksum = md5.convert(bytes).toString();
       final expected = post.fileMd5;
       final verified = expected == null || expected.toLowerCase() == checksum;
 
-      await repository.recordDownload(post.id, filePath, checksumMd5: checksum, verified: verified);
       if (autoFavorite) {
         await repository.queueFavoriteAdd(post.id);
       }

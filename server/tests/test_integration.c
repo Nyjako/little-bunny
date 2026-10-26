@@ -477,50 +477,43 @@ void test_full_account_search_sync_favorite_flow(void)
     free(response.data);
     memset(&response, 0, sizeof(response));
 
-    /* M10.2/M40: post 1 (tags "one"/"someartist") was favorited a few
-     * requests ago, so both tags now show up in the unified report's
+    /* M10.2/M40/M55: post 1 (tags "one"/"someartist") was favorited a few
+     * requests ago, so both tags end up in the unified report's
      * top_favorited_tags, site-prefixed since the report merges e621 and
-     * Inkbunny into one ranking. top_used_tags is a superset of
-     * top_favorited_tags (a non-favorited post still counting there is
-     * covered at the C level) -- same two tags show up in both here since
-     * this fixture's only post is favorited either way. */
+     * Inkbunny into one ranking. The very first GET has nothing cached yet
+     * -- it just enqueues a background build (M55, so a slow build never
+     * blocks this request) and returns an empty report immediately, same
+     * shape as "no report has ever been computed." */
     status = do_request("GET", "/stats_report", NULL, &response, true, NULL);
     TEST_ASSERT_EQUAL(200, status);
-    TEST_ASSERT_NOT_NULL(strstr(response.data, "\"computed_at\""));
-    TEST_ASSERT_NOT_NULL(strstr(response.data, "\"top_favorited_tags\":[{\"name\":\"e621: one\""));
-    TEST_ASSERT_NOT_NULL(strstr(response.data, "\"name\":\"e621: someartist\""));
-    /* top_used_tags also picks up tags from posts synced by earlier steps in
-     * this same end-to-end flow -- just checking presence, not position. */
-    TEST_ASSERT_NOT_NULL(strstr(response.data, "\"top_used_tags\""));
-    TEST_ASSERT_NOT_NULL(strstr(response.data, "\"name\":\"e621: one\""));
+    TEST_ASSERT_NOT_NULL(strstr(response.data, "\"computed_at\":null"));
+    TEST_ASSERT_NOT_NULL(strstr(response.data, "\"top_favorited_tags\":[]"));
     free(response.data);
     memset(&response, 0, sizeof(response));
 
-    /* A manual refresh (M40) recomputes rather than erroring/no-op-ing. */
+    /* Once the background build finishes, a later GET serves the real,
+     * now-cached data -- still never blocking inside the request itself.
+     * top_used_tags also picks up tags from posts synced by earlier steps
+     * in this same end-to-end flow -- just checking presence, not
+     * position. */
+    TEST_ASSERT_TRUE(poll_until_response_contains("GET", "/stats_report", "\"name\":\"e621: one\""));
+    status = do_request("GET", "/stats_report", NULL, &response, true, NULL);
+    TEST_ASSERT_EQUAL(200, status);
+    TEST_ASSERT_NOT_NULL(strstr(response.data, "\"top_favorited_tags\":[{\"name\":\"e621: one\""));
+    TEST_ASSERT_NOT_NULL(strstr(response.data, "\"name\":\"e621: someartist\""));
+    TEST_ASSERT_NOT_NULL(strstr(response.data, "\"top_used_tags\""));
+    free(response.data);
+    memset(&response, 0, sizeof(response));
+
+    /* A manual refresh (M40/M55) always enqueues a rebuild (unlike GET,
+     * which only does when the cache is missing/stale) but, same as GET,
+     * returns immediately with whatever's cached right now rather than
+     * blocking for the rebuild to finish. */
     status = do_request("POST", "/stats_report", NULL, &response, true, NULL);
     TEST_ASSERT_EQUAL(200, status);
     TEST_ASSERT_NOT_NULL(strstr(response.data, "\"name\":\"e621: one\""));
     free(response.data);
     memset(&response, 0, sizeof(response));
-
-    status = do_request("GET", "/posts/1/downloads", NULL, &response, true, NULL);
-    TEST_ASSERT_EQUAL(200, status);
-    TEST_ASSERT_EQUAL_STRING("[]", response.data);
-    free(response.data);
-    memset(&response, 0, sizeof(response));
-
-    status = do_request("POST", "/posts/1/downloads", "{\"file_path\":\"/downloads/wolf/1.png\",\"checksum_md5\":\"aaa\",\"verified\":true}", &response, true, NULL);
-    TEST_ASSERT_EQUAL(200, status);
-    TEST_ASSERT_NOT_NULL(strstr(response.data, "\"id\":1"));
-    free(response.data);
-    memset(&response, 0, sizeof(response));
-
-    status = do_request("GET", "/posts/1/downloads", NULL, &response, true, NULL);
-    TEST_ASSERT_EQUAL(200, status);
-    TEST_ASSERT_NOT_NULL(strstr(response.data, "\"file_path\":\"/downloads/wolf/1.png\""));
-    TEST_ASSERT_NOT_NULL(strstr(response.data, "\"checksum_md5\":\"aaa\""));
-    TEST_ASSERT_NOT_NULL(strstr(response.data, "\"checksum_verified\":true"));
-    free(response.data);
 }
 
 /* The underlying "a forced single-search sync ignores the due check, unlike
@@ -668,6 +661,33 @@ void test_search_pin_and_unpin(void)
     status = do_request("GET", "/searches", NULL, &response, true, NULL);
     TEST_ASSERT_EQUAL(200, status);
     TEST_ASSERT_NOT_NULL(strstr(response.data, "\"pinned\":false"));
+    free(response.data);
+}
+
+void test_search_merge_duplicate(void)
+{
+    response_buffer_t response = {0};
+
+    long status = do_request("POST", "/searches", "{\"site\":\"e621\",\"label\":\"wolves\",\"query\":\"wolf\",\"interval_hours\":24}", &response, true, NULL);
+    TEST_ASSERT_EQUAL(201, status);
+    free(response.data);
+    memset(&response, 0, sizeof(response));
+
+    status = do_request("POST", "/searches", "{\"site\":\"e621\",\"label\":\"wolves (dupe)\",\"query\":\"wolf\",\"interval_hours\":48}", &response, true, NULL);
+    TEST_ASSERT_EQUAL(201, status);
+    free(response.data);
+    memset(&response, 0, sizeof(response));
+
+    status = do_request("POST", "/searches/1/merge_duplicate", "{\"duplicate_id\":2}", &response, true, NULL);
+    TEST_ASSERT_EQUAL(200, status);
+    TEST_ASSERT_NOT_NULL(strstr(response.data, "\"ok\":true"));
+    free(response.data);
+    memset(&response, 0, sizeof(response));
+
+    status = do_request("GET", "/searches", NULL, &response, true, NULL);
+    TEST_ASSERT_EQUAL(200, status);
+    TEST_ASSERT_NOT_NULL(strstr(response.data, "\"id\":1"));
+    TEST_ASSERT_NULL(strstr(response.data, "\"id\":2"));
     free(response.data);
 }
 
@@ -1176,6 +1196,7 @@ int main(void)
     RUN_TEST(test_blacklist_add_list_remove);
     RUN_TEST(test_blacklist_e621_sync_imports_new_tags_and_skips_multi_tag_lines);
     RUN_TEST(test_search_pin_and_unpin);
+    RUN_TEST(test_search_merge_duplicate);
     RUN_TEST(test_group_crud_and_assign_search);
     RUN_TEST(test_search_touch_viewed);
     RUN_TEST(test_search_auto_favorite_create_and_update);

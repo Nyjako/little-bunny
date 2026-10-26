@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:little_bunny/repository/bunny_models.dart';
 import 'package:little_bunny/screens/accounts_screen.dart';
+import 'package:little_bunny/services/download_manager.dart';
+import 'package:little_bunny/services/download_queue_service.dart';
 import 'package:little_bunny/settings/display_settings_store.dart';
 import 'package:little_bunny/settings/download_settings_store.dart';
 
@@ -9,7 +11,12 @@ import '../fakes/fake_bunny_repository.dart';
 import '../fakes/test_app.dart';
 
 Widget _wrap(FakeBunnyRepository repository) => wrapWithLocalization(
-  AccountsScreen(repository: repository, displaySettingsStore: const DisplaySettingsStore(), downloadSettingsStore: const DownloadSettingsStore()),
+  AccountsScreen(
+    repository: repository,
+    displaySettingsStore: const DisplaySettingsStore(),
+    downloadSettingsStore: const DownloadSettingsStore(),
+    downloadQueueService: DownloadQueueService(downloadManager: const DownloadManager(), downloadSettingsStore: const DownloadSettingsStore()),
+  ),
 );
 
 void main() {

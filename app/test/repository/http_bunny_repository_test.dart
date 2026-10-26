@@ -240,6 +240,16 @@ void main() {
       expect(capturedUri.path, '/searches/7');
     });
 
+    test('mergeDuplicateSearch sends POST with the duplicate id in the body', () async {
+      respond = (_) => http.Response(jsonEncode({'ok': true}), 200);
+
+      await buildRepository().mergeDuplicateSearch(7, 8);
+
+      expect(capturedMethod, 'POST');
+      expect(capturedUri.path, '/searches/7/merge_duplicate');
+      expect(jsonDecode(capturedBody), {'duplicate_id': 8});
+    });
+
     test('updateSearch sends PUT with the new values', () async {
       respond = (_) => http.Response(jsonEncode({'ok': true}), 200);
 
@@ -453,6 +463,17 @@ void main() {
       expect(capturedMethod, 'POST');
       expect(capturedUri.path, '/stats_report');
       expect(report.computedAt, '2026-01-02T00:00:00Z');
+    });
+
+    test('getStatsReport maps a null computed_at to null, not a cast error (M55)', () async {
+      respond = (_) => http.Response(
+        jsonEncode({'computed_at': null, 'top_favorited_tags': [], 'top_used_tags': [], 'top_pools': [], 'top_viewed_searches': []}),
+        200,
+      );
+
+      final report = await buildRepository().getStatsReport();
+
+      expect(report.computedAt, isNull);
     });
 
     test('getPostTagsByCategory sends GET to the right path and maps results', () async {
@@ -674,34 +695,6 @@ void main() {
       expect(comments.single.body, 'Nice pic!');
     });
 
-    test('recordDownload sends POST with the download fields and returns the new id', () async {
-      respond = (_) => http.Response(jsonEncode({'id': 9}), 200);
-
-      final id = await buildRepository().recordDownload(2, '/downloads/wolf/1.png', checksumMd5: 'aaa', verified: true);
-
-      expect(capturedMethod, 'POST');
-      expect(capturedUri.path, '/posts/2/downloads');
-      expect(jsonDecode(capturedBody), {'file_path': '/downloads/wolf/1.png', 'checksum_md5': 'aaa', 'verified': true});
-      expect(id, 9);
-    });
-
-    test('listDownloadsForPost sends GET to the right path and maps the response', () async {
-      respond = (_) => http.Response(
-        jsonEncode([
-          {'id': 9, 'post_id': 2, 'file_path': '/downloads/wolf/1.png', 'checksum_md5': 'aaa', 'checksum_verified': true, 'downloaded_at': '2026-01-01T00:00:00Z'},
-        ]),
-        200,
-      );
-
-      final downloads = await buildRepository().listDownloadsForPost(2);
-
-      expect(capturedMethod, 'GET');
-      expect(capturedUri.path, '/posts/2/downloads');
-      expect(downloads, hasLength(1));
-      expect(downloads.single.filePath, '/downloads/wolf/1.png');
-      expect(downloads.single.checksumVerified, isTrue);
-    });
-
     test('markPostSeen sends POST to the right path', () async {
       respond = (_) => http.Response(jsonEncode({'ok': true}), 200);
 
@@ -824,6 +817,17 @@ void main() {
 
       expect(capturedUri.path, '/logs');
       expect(lines, ['line one', 'line two']);
+    });
+
+    test('fetchConnectionQrPng sends the right request body and returns the raw PNG bytes', () async {
+      respond = (_) => http.Response.bytes([1, 2, 3, 4], 200);
+
+      final bytes = await buildRepository().fetchConnectionQrPng(serverUrl: Uri.parse('https://1.2.3.4:8443'), bearerToken: 'sometok', certSha256: 'DEADBEEF');
+
+      expect(capturedMethod, 'POST');
+      expect(capturedUri.path, '/qr');
+      expect(jsonDecode(capturedBody), {'server_url': 'https://1.2.3.4:8443', 'bearer_token': 'sometok', 'cert_sha256': 'DEADBEEF'});
+      expect(bytes, [1, 2, 3, 4]);
     });
 
     test('a JSON error body surfaces its message in BunnyRepositoryException', () async {

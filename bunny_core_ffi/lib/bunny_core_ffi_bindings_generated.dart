@@ -235,30 +235,6 @@ class BunnyCoreFfiBindings {
             void Function(ffi.Pointer<bunny_db_post_relationships_t>)
           >();
 
-  void bunny_db_download_free(ffi.Pointer<bunny_db_download_t> download) {
-    return _bunny_db_download_free(download);
-  }
-
-  late final _bunny_db_download_freePtr =
-      _lookup<
-        ffi.NativeFunction<ffi.Void Function(ffi.Pointer<bunny_db_download_t>)>
-      >('bunny_db_download_free');
-  late final _bunny_db_download_free = _bunny_db_download_freePtr
-      .asFunction<void Function(ffi.Pointer<bunny_db_download_t>)>();
-
-  void bunny_db_download_list_free(ffi.Pointer<bunny_db_download_list_t> list) {
-    return _bunny_db_download_list_free(list);
-  }
-
-  late final _bunny_db_download_list_freePtr =
-      _lookup<
-        ffi.NativeFunction<
-          ffi.Void Function(ffi.Pointer<bunny_db_download_list_t>)
-        >
-      >('bunny_db_download_list_free');
-  late final _bunny_db_download_list_free = _bunny_db_download_list_freePtr
-      .asFunction<void Function(ffi.Pointer<bunny_db_download_list_t>)>();
-
   void bunny_db_action_free(ffi.Pointer<bunny_db_action_t> action) {
     return _bunny_db_action_free(action);
   }
@@ -520,6 +496,32 @@ class BunnyCoreFfiBindings {
       >('bunny_core_search_delete');
   late final _bunny_core_search_delete = _bunny_core_search_deletePtr
       .asFunction<int Function(ffi.Pointer<bunny_core_t>, int)>();
+
+  /// Folds a pre-existing (site, query) duplicate into keeper_id (M41) -- a thin
+  /// pass-through to bunny_db_search_merge_duplicate.
+  bunny_core_result_t bunny_core_search_merge_duplicate(
+    ffi.Pointer<bunny_core_t> core,
+    int keeper_id,
+    int duplicate_id,
+  ) {
+    return bunny_core_result_t.fromValue(
+      _bunny_core_search_merge_duplicate(core, keeper_id, duplicate_id),
+    );
+  }
+
+  late final _bunny_core_search_merge_duplicatePtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.UnsignedInt Function(
+            ffi.Pointer<bunny_core_t>,
+            ffi.Int64,
+            ffi.Int64,
+          )
+        >
+      >('bunny_core_search_merge_duplicate');
+  late final _bunny_core_search_merge_duplicate =
+      _bunny_core_search_merge_duplicatePtr
+          .asFunction<int Function(ffi.Pointer<bunny_core_t>, int, int)>();
 
   bunny_core_result_t bunny_core_search_list(
     ffi.Pointer<bunny_core_t> core,
@@ -904,9 +906,13 @@ class BunnyCoreFfiBindings {
       >();
 
   /// Ranks cached tags (from already-synced posts) by usage count, for a
-  /// search box's autocomplete -- a thin pass-through to bunny_db, same shape
-  /// as the search CRUD above. `prefix`'s characters are matched literally, not
-  /// as SQL LIKE wildcards.
+  /// search box's autocomplete. `prefix`'s characters are matched literally,
+  /// not as SQL LIKE wildcards. A `prefix` shorter than 5 characters returns an
+  /// empty list without querying the database at all, and the result count is
+  /// always capped at 5 regardless of `limit` -- both throttles exist because a
+  /// short prefix matches far too many tags for the LIKE index to narrow
+  /// usefully, which could otherwise hang the server on a single keystroke
+  /// (M39).
   bunny_core_result_t bunny_core_tag_autocomplete(
     ffi.Pointer<bunny_core_t> core,
     bunny_db_site_t site,
@@ -1029,37 +1035,61 @@ class BunnyCoreFfiBindings {
   late final _bunny_core_stats_report_free = _bunny_core_stats_report_freePtr
       .asFunction<void Function(ffi.Pointer<bunny_core_stats_report_t>)>();
 
-  /// Returns the cached report if one exists and is younger than 24 hours;
-  /// otherwise recomputes it (same as bunny_core_refresh_stats_report) and
-  /// caches the fresh result before returning it.
-  bunny_core_result_t bunny_core_get_stats_report(
+  /// Reads whatever report is currently cached WITHOUT ever building or
+  /// recomputing one (M55) -- each section is a full-table aggregate, and on
+  /// a large enough database bunny_core_refresh_stats_report below can run for
+  /// minutes, which is exactly what hung the server when this used to build
+  /// synchronously on a cache miss. `*out_has_cache` is false (and `*out_report`
+  /// left zeroed) if nothing has ever been cached; `*out_is_stale` is true
+  /// whenever there's no cache at all, or the cached one is 24+ hours old --
+  /// callers that want the report kept warm should check `*out_is_stale` and
+  /// enqueue a `bunny_core_refresh_stats_report` call on a background worker
+  /// themselves (see server/src/task_queue.c's TASK_TYPE_BUILD_STATS_REPORT),
+  /// never call it inline on whatever thread is answering a live request.
+  bunny_core_result_t bunny_core_get_cached_stats_report(
     ffi.Pointer<bunny_core_t> core,
     ffi.Pointer<bunny_core_stats_report_t> out_report,
+    ffi.Pointer<ffi.Bool> out_has_cache,
+    ffi.Pointer<ffi.Bool> out_is_stale,
   ) {
     return bunny_core_result_t.fromValue(
-      _bunny_core_get_stats_report(core, out_report),
+      _bunny_core_get_cached_stats_report(
+        core,
+        out_report,
+        out_has_cache,
+        out_is_stale,
+      ),
     );
   }
 
-  late final _bunny_core_get_stats_reportPtr =
+  late final _bunny_core_get_cached_stats_reportPtr =
       _lookup<
         ffi.NativeFunction<
           ffi.UnsignedInt Function(
             ffi.Pointer<bunny_core_t>,
             ffi.Pointer<bunny_core_stats_report_t>,
+            ffi.Pointer<ffi.Bool>,
+            ffi.Pointer<ffi.Bool>,
           )
         >
-      >('bunny_core_get_stats_report');
-  late final _bunny_core_get_stats_report = _bunny_core_get_stats_reportPtr
-      .asFunction<
-        int Function(
-          ffi.Pointer<bunny_core_t>,
-          ffi.Pointer<bunny_core_stats_report_t>,
-        )
-      >();
+      >('bunny_core_get_cached_stats_report');
+  late final _bunny_core_get_cached_stats_report =
+      _bunny_core_get_cached_stats_reportPtr
+          .asFunction<
+            int Function(
+              ffi.Pointer<bunny_core_t>,
+              ffi.Pointer<bunny_core_stats_report_t>,
+              ffi.Pointer<ffi.Bool>,
+              ffi.Pointer<ffi.Bool>,
+            )
+          >();
 
-  /// Forces a recompute regardless of the cached report's age -- the tag-stats
-  /// screen's manual refresh action.
+  /// Recomputes the report from scratch and caches the fresh result,
+  /// regardless of the previously-cached one's age -- this is the slow,
+  /// potentially multi-minute call bunny_core_get_cached_stats_report's own
+  /// doc comment warns about. Only ever call this from a background worker
+  /// thread, never from a thread that's also expected to answer other
+  /// requests promptly.
   bunny_core_result_t bunny_core_refresh_stats_report(
     ffi.Pointer<bunny_core_t> core,
     ffi.Pointer<bunny_core_stats_report_t> out_report,
@@ -1261,87 +1291,6 @@ class BunnyCoreFfiBindings {
           ffi.Pointer<bunny_db_int64_list_t>,
         )
       >();
-
-  /// Records that a file was downloaded for a post -- a thin pass-through to
-  /// bunny_db_download_record. The actual HTTP fetch, disk write, and checksum
-  /// computation are entirely client-side (never proxied through the server);
-  /// this call only persists the bookkeeping row afterward.
-  bunny_core_result_t bunny_core_record_download(
-    ffi.Pointer<bunny_core_t> core,
-    int post_id,
-    ffi.Pointer<ffi.Char> file_path,
-    ffi.Pointer<ffi.Char> checksum_md5,
-    bool verified,
-    ffi.Pointer<ffi.Int64> out_id,
-  ) {
-    return bunny_core_result_t.fromValue(
-      _bunny_core_record_download(
-        core,
-        post_id,
-        file_path,
-        checksum_md5,
-        verified,
-        out_id,
-      ),
-    );
-  }
-
-  late final _bunny_core_record_downloadPtr =
-      _lookup<
-        ffi.NativeFunction<
-          ffi.UnsignedInt Function(
-            ffi.Pointer<bunny_core_t>,
-            ffi.Int64,
-            ffi.Pointer<ffi.Char>,
-            ffi.Pointer<ffi.Char>,
-            ffi.Bool,
-            ffi.Pointer<ffi.Int64>,
-          )
-        >
-      >('bunny_core_record_download');
-  late final _bunny_core_record_download = _bunny_core_record_downloadPtr
-      .asFunction<
-        int Function(
-          ffi.Pointer<bunny_core_t>,
-          int,
-          ffi.Pointer<ffi.Char>,
-          ffi.Pointer<ffi.Char>,
-          bool,
-          ffi.Pointer<ffi.Int64>,
-        )
-      >();
-
-  /// A post's download history, newest first -- a thin pass-through to
-  /// bunny_db_download_list_for_post. Empty for a post never downloaded.
-  bunny_core_result_t bunny_core_list_downloads_for_post(
-    ffi.Pointer<bunny_core_t> core,
-    int post_id,
-    ffi.Pointer<bunny_db_download_list_t> out_list,
-  ) {
-    return bunny_core_result_t.fromValue(
-      _bunny_core_list_downloads_for_post(core, post_id, out_list),
-    );
-  }
-
-  late final _bunny_core_list_downloads_for_postPtr =
-      _lookup<
-        ffi.NativeFunction<
-          ffi.UnsignedInt Function(
-            ffi.Pointer<bunny_core_t>,
-            ffi.Int64,
-            ffi.Pointer<bunny_db_download_list_t>,
-          )
-        >
-      >('bunny_core_list_downloads_for_post');
-  late final _bunny_core_list_downloads_for_post =
-      _bunny_core_list_downloads_for_postPtr
-          .asFunction<
-            int Function(
-              ffi.Pointer<bunny_core_t>,
-              int,
-              ffi.Pointer<bunny_db_download_list_t>,
-            )
-          >();
 
   /// --- Tag blacklist (M13.3) -- thin pass-throughs to bunny_db_blacklist_*.
   /// See bunny_db/db.h for which post-listing query the blacklist does (and
@@ -2295,30 +2244,6 @@ final class bunny_db_post_relationships_t extends ffi.Struct {
   external bunny_db_int64_list_t children;
 }
 
-final class bunny_db_download_t extends ffi.Struct {
-  @ffi.Int64()
-  external int id;
-
-  @ffi.Int64()
-  external int post_id;
-
-  external ffi.Pointer<ffi.Char> file_path;
-
-  external ffi.Pointer<ffi.Char> checksum_md5;
-
-  @ffi.Bool()
-  external bool checksum_verified;
-
-  external ffi.Pointer<ffi.Char> downloaded_at;
-}
-
-final class bunny_db_download_list_t extends ffi.Struct {
-  external ffi.Pointer<bunny_db_download_t> items;
-
-  @ffi.Size()
-  external int count;
-}
-
 enum bunny_db_action_type_t {
   BUNNY_DB_ACTION_FAVORITE_ADD(0),
   BUNNY_DB_ACTION_FAVORITE_REMOVE(1),
@@ -2561,7 +2486,7 @@ final class bunny_core_stats_report_t extends ffi.Struct {
 
   external bunny_db_tag_stat_list_t top_viewed_searches;
 
-  /// ISO 8601 UTC; never NULL once a report has been built
+  /// ISO 8601 UTC; NULL if no report has ever been built yet
   external ffi.Pointer<ffi.Char> computed_at;
 }
 

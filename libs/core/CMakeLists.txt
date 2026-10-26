@@ -7,10 +7,10 @@ add_library(bunny_core STATIC
     src/sync.c
     src/queue.c
     src/verify.c
-    src/downloads.c
     src/blacklist.c
     src/backup.c
     src/stats_report.c
+    src/diagnostics.c
 )
 
 target_include_directories(bunny_core

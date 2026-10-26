@@ -6,10 +6,12 @@ import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:little_bunny/repository/bunny_models.dart';
 import 'package:little_bunny/services/download_manager.dart';
+import 'package:path_provider_platform_interface/path_provider_platform_interface.dart';
 import 'package:saf_stream/saf_stream_platform_interface.dart';
 import 'package:saf_util/saf_util_platform_interface.dart';
 
 import '../fakes/fake_bunny_repository.dart';
+import '../fakes/fake_path_provider.dart';
 import '../fakes/fake_saf_platform.dart';
 
 BunnyPost _post({BunnySite site = BunnySite.e621, String? artist, String? fileUrl = 'https://static1.e621.net/data/1.png', String? fileExt = 'png', String? fileMd5}) => BunnyPost(
@@ -35,6 +37,11 @@ void main() {
 
   setUp(() async {
     tempDir = await Directory.systemTemp.createTemp('download_manager_test');
+    // downloadPost (M43) now stages the write through getTemporaryDirectory()
+    // before moving it into place -- path_provider's real plugin isn't
+    // registered under a bare `flutter test` VM run, so every test needs
+    // this fake even though none of them touch it directly.
+    PathProviderPlatform.instance = FakePathProviderPlatform();
   });
 
   tearDown(() async {
@@ -50,7 +57,6 @@ void main() {
     final result = await manager.downloadPost(_post(fileUrl: null), repository, tempDir.path);
 
     expect(result.outcome, DownloadOutcome.noFileUrl);
-    expect(repository.recordDownloadCalls, isEmpty);
   });
 
   test('downloads and verifies a matching checksum, sanitizing the artist folder', () async {
@@ -64,8 +70,6 @@ void main() {
     expect(result.outcome, DownloadOutcome.verified);
     expect(result.filePath, '${tempDir.path}/some_bad_artist/42.png');
     expect(await File(result.filePath!).readAsBytes(), bytes);
-    expect(repository.recordDownloadCalls, hasLength(1));
-    expect(repository.recordDownloadCalls.single.$4, isTrue); // verified
   });
 
   test('falls back to "unknown" for a null artist', () async {
@@ -84,7 +88,6 @@ void main() {
     final result = await manager.downloadPost(_post(fileMd5: 'not-the-real-checksum'), repository, tempDir.path);
 
     expect(result.outcome, DownloadOutcome.checksumMismatch);
-    expect(repository.recordDownloadCalls.single.$4, isFalse); // verified
   });
 
   test('treats a post with no published checksum as verified', () async {
@@ -103,7 +106,6 @@ void main() {
     final result = await manager.downloadPost(_post(), repository, tempDir.path);
 
     expect(result.outcome, DownloadOutcome.failed);
-    expect(repository.recordDownloadCalls, isEmpty);
   });
 
   test('creates the destination directory recursively when it does not already exist', () async {
@@ -114,6 +116,31 @@ void main() {
     await manager.downloadPost(_post(artist: 'wolf'), repository, nestedDir.path);
 
     expect(await File('${nestedDir.path}/wolf/42.png').exists(), isTrue);
+  });
+
+  group('isDownloaded (M42 -- local file existence, not server-tracked)', () {
+    test('is false when no file sits at the deterministic path yet', () async {
+      final manager = const DownloadManager();
+
+      expect(await manager.isDownloaded(_post(artist: 'wolf'), tempDir.path), isFalse);
+    });
+
+    test('is true once downloadPost has written the file to its deterministic path', () async {
+      final manager = DownloadManager(client: MockClient((_) async => http.Response.bytes([1, 2, 3], 200)));
+      final repository = FakeBunnyRepository();
+
+      await manager.downloadPost(_post(artist: 'some/bad:artist'), repository, tempDir.path);
+
+      expect(await manager.isDownloaded(_post(artist: 'some/bad:artist'), tempDir.path), isTrue);
+    });
+
+    test('falls back to "unknown" for a null artist, same as downloadPost', () async {
+      final manager = const DownloadManager();
+      await Directory('${tempDir.path}/unknown').create(recursive: true);
+      await File('${tempDir.path}/unknown/42.png').writeAsBytes([1]);
+
+      expect(await manager.isDownloaded(_post(artist: null), tempDir.path), isTrue);
+    });
   });
 
   group('SAF write path (Android content:// destination, M36)', () {
@@ -137,6 +164,17 @@ void main() {
       expect(fakeSafUtil.mkdirpCalls, [('content://com.android.externalstorage.documents/tree/primary%3ADownload', 'some_bad_artist')]);
       expect(fakeSafStream.writeFileBytesCalls, [('content://com.android.externalstorage.documents/tree/primary%3ADownload/some_bad_artist', '42.png', 'image/png')]);
       expect(result.filePath, 'content://com.android.externalstorage.documents/tree/primary%3ADownload/some_bad_artist/42.png');
+    });
+
+    test('isDownloaded checks for the file as a SAF child of the artist subfolder, not dart:io', () async {
+      final manager = const DownloadManager();
+      const treeUri = 'content://com.android.externalstorage.documents/tree/primary%3ADownload';
+
+      expect(await manager.isDownloaded(_post(artist: 'wolf'), treeUri), isFalse);
+
+      fakeSafUtil.existingChildPaths.add('$treeUri/wolf/42.png');
+
+      expect(await manager.isDownloaded(_post(artist: 'wolf'), treeUri), isTrue);
     });
   });
 

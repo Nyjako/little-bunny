@@ -52,6 +52,16 @@ class AppLocalizationsEn extends AppLocalizations {
   String get setupCertFingerprintLabel => 'Certificate SHA-256 fingerprint';
 
   @override
+  String get setupPasteConnectionInfo => 'Paste connection info';
+
+  @override
+  String get setupScanQrCode => 'Scan QR code';
+
+  @override
+  String get setupConnectionQrInvalid =>
+      'Couldn\'t read connection info from that';
+
+  @override
   String get setupReconfigureTitle => 'Switch connection';
 
   @override
@@ -233,6 +243,44 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String searchesDuplicatesBannerMessage(int count) {
+    return '$count duplicate searches found.';
+  }
+
+  @override
+  String get searchesDuplicatesBannerReviewAction => 'Review';
+
+  @override
+  String get searchesDuplicatesBannerDismissTooltip => 'Dismiss';
+
+  @override
+  String get searchesResolveDuplicatesDialogTitle => 'Duplicate searches';
+
+  @override
+  String searchesResolveDuplicatesGroupHeading(String site, String query) {
+    return '$site: $query';
+  }
+
+  @override
+  String get searchesResolveDuplicatesKeepButton => 'Keep this one';
+
+  @override
+  String searchesResolveDuplicatesIntervalLabel(int hours) {
+    return 'Every ${hours}h';
+  }
+
+  @override
+  String get searchesResolveDuplicatesPinnedLabel => 'Pinned';
+
+  @override
+  String searchesResolveDuplicatesGroupLabel(String name) {
+    return 'Group: $name';
+  }
+
+  @override
+  String get searchesResolveDuplicatesDoneButton => 'Close';
+
+  @override
   String get tagStatsScreenTitle => 'Tag stats';
 
   @override
@@ -242,6 +290,10 @@ class AppLocalizationsEn extends AppLocalizations {
   String tagStatsLastUpdatedLabel(String time) {
     return 'Updated $time';
   }
+
+  @override
+  String get tagStatsBuildingLabel =>
+      'Building the report for the first time -- check back shortly.';
 
   @override
   String get tagStatsTopFavoritedTagsLabel => 'Top favorited tags';
@@ -353,17 +405,8 @@ class AppLocalizationsEn extends AppLocalizations {
   String get postGridMassDownloadTooltip => 'Download selected';
 
   @override
-  String postGridMassDownloadProgress(int done, int total) {
-    return '$done/$total downloaded';
-  }
-
-  @override
-  String postGridMassDownloadSummary(
-    int succeeded,
-    int mismatched,
-    int failed,
-  ) {
-    return '$succeeded downloaded, $mismatched checksum mismatch, $failed failed';
+  String postGridMassDownloadQueued(int count) {
+    return '$count queued for download';
   }
 
   @override
@@ -374,9 +417,6 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get tagBrowseAlreadySavedTooltip => 'Already saved -- tap to remove';
-
-  @override
-  String get tagBrowseRelatedPoolsLabel => 'Related pools';
 
   @override
   String tagBrowseRelatedPoolChip(int poolId) {
@@ -581,6 +621,17 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get settingsTaskQueueEntry => 'Task queue';
+
+  @override
+  String get settingsShareConnectionQr => 'Share connection QR';
+
+  @override
+  String get connectionQrScreenTitle => 'Connection QR';
+
+  @override
+  String connectionQrLoadError(String error) {
+    return 'Couldn\'t load the connection QR: $error';
+  }
 
   @override
   String get taskQueueScreenTitle => 'Task queue';
@@ -791,14 +842,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get postDetailDownloadTooltip => 'Download';
 
   @override
-  String get postDetailDownloadVerified => 'Downloaded and checksum verified';
-
-  @override
-  String get postDetailDownloadMismatch =>
-      'Downloaded, but the checksum didn\'t match';
-
-  @override
-  String get postDetailDownloadFailed => 'Download failed';
+  String get postDetailDownloadQueued => 'Queued for download';
 
   @override
   String updateAvailableTitle(String tagName) {

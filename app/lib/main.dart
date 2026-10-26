@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:fvp/fvp.dart' as fvp;
@@ -9,6 +11,9 @@ import 'repository/bunny_repository_factory.dart';
 import 'screens/lock_screen.dart';
 import 'screens/searches_screen.dart';
 import 'screens/setup_screen.dart';
+import 'services/download_manager.dart';
+import 'services/download_queue_service.dart';
+import 'services/flutter_local_notifications_queue_notifier.dart';
 import 'settings/app_lock_service.dart';
 import 'settings/display_settings_store.dart';
 import 'settings/download_settings_store.dart';
@@ -23,6 +28,13 @@ Future<void> main() async {
   // Android/iOS on video_player's official backend untouched.
   fvp.registerWith(options: {'platforms': ['windows', 'linux']});
   final secretStore = FlutterSecureStorageSecretStore();
+  // Best-effort (M43) -- a platform this plugin doesn't support, or a denied
+  // permission, must never block app startup; see the notifier's own doc
+  // comment for why every one of its methods already swallows its own
+  // exceptions.
+  final notifier = FlutterLocalNotificationsQueueNotifier();
+  await notifier.initialize();
+  final downloadQueueService = DownloadQueueService(downloadManager: const DownloadManager(), downloadSettingsStore: const DownloadSettingsStore(), notifier: notifier);
   runApp(
     LittleBunnyApp(
       settingsStore: RepositorySettingsStore(secretStore),
@@ -30,6 +42,7 @@ Future<void> main() async {
       themeSettingsStore: const ThemeSettingsStore(),
       displaySettingsStore: const DisplaySettingsStore(),
       downloadSettingsStore: const DownloadSettingsStore(),
+      downloadQueueService: downloadQueueService,
     ),
   );
 }
@@ -48,6 +61,7 @@ class LittleBunnyApp extends StatefulWidget {
   final ThemeSettingsStore themeSettingsStore;
   final DisplaySettingsStore displaySettingsStore;
   final DownloadSettingsStore downloadSettingsStore;
+  final DownloadQueueService downloadQueueService;
 
   const LittleBunnyApp({
     super.key,
@@ -56,6 +70,7 @@ class LittleBunnyApp extends StatefulWidget {
     required this.themeSettingsStore,
     required this.displaySettingsStore,
     required this.downloadSettingsStore,
+    required this.downloadQueueService,
   });
 
   @override
@@ -99,6 +114,7 @@ class _LittleBunnyAppState extends State<LittleBunnyApp> {
       _locked = locked;
       _loading = false;
     });
+    unawaited(widget.downloadQueueService.restore(repository));
   }
 
   Future<void> _loadThemeSettings() async {
@@ -132,6 +148,7 @@ class _LittleBunnyAppState extends State<LittleBunnyApp> {
       _repository = repository;
       _locked = locked;
     });
+    unawaited(widget.downloadQueueService.restore(repository));
   }
 
   void _onUnlocked() {
@@ -155,6 +172,7 @@ class _LittleBunnyAppState extends State<LittleBunnyApp> {
           themeSettingsStore: widget.themeSettingsStore,
           displaySettingsStore: widget.displaySettingsStore,
           downloadSettingsStore: widget.downloadSettingsStore,
+          downloadQueueService: widget.downloadQueueService,
           settingsStore: widget.settingsStore,
           onThemeModeChanged: (mode) => setState(() => _themeMode = mode),
           onThemeColorChanged: (color) => setState(() => _themeColor = color),

@@ -26,17 +26,19 @@ void main() {
     expect(await repository.tagAutocomplete(BunnySite.e621, 'any'), isEmpty);
   });
 
-  test('getStatsReport returns an empty report when nothing is cached (M40)', () async {
+  test('getStatsReport returns an empty, unbuilt report when nothing is cached (M40/M55)', () async {
     final report = await repository.getStatsReport();
+    expect(report.computedAt, isNull);
     expect(report.topFavoritedTags, isEmpty);
     expect(report.topUsedTags, isEmpty);
     expect(report.topPools, isEmpty);
     expect(report.topViewedSearches, isEmpty);
   });
 
-  test('refreshStatsReport also returns an empty report when nothing is cached (M40)', () async {
+  test('refreshStatsReport actually builds (and blocks for) a fresh report, unlike getStatsReport (M55)', () async {
     final report = await repository.refreshStatsReport();
-    expect(report.topFavoritedTags, isEmpty);
+    expect(report.computedAt, isNotNull); // a real build just happened, unlike getStatsReport's cache-only read
+    expect(report.topFavoritedTags, isEmpty); // still empty -- nothing's actually favorited/synced
   });
 
   test('markPostSeen rejects a post id with no cached post', () async {
@@ -81,14 +83,6 @@ void main() {
 
   test('getPostPoolIds returns an empty list for a nonexistent post', () async {
     expect(await repository.getPostPoolIds(1), isEmpty);
-  });
-
-  test('recordDownload rejects a post id with no cached post', () async {
-    await expectLater(repository.recordDownload(1, '/tmp/file.jpg'), throwsA(isA<BunnyRepositoryException>()));
-  });
-
-  test('listDownloadsForPost returns an empty list for a post with no recorded downloads', () async {
-    expect(await repository.listDownloadsForPost(1), isEmpty);
   });
 
   test('getPost rejects a post id with no cached post', () async {
@@ -140,6 +134,17 @@ void main() {
     expect(updated.single.intervalHours, 6);
     expect(updated.single.autoFavorite, isFalse);
     expect(updated.single.autoUpvote, isTrue);
+  });
+
+  test('mergeDuplicateSearch deletes the duplicate and keeps the keeper (M41)', () async {
+    final keeperId = await repository.createSearch(BunnySite.e621, 'wolves', 'wolf');
+    final duplicateId = await repository.createSearch(BunnySite.e621, 'wolves (dupe)', 'wolf', intervalHours: 48);
+
+    await repository.mergeDuplicateSearch(keeperId, duplicateId);
+
+    final searches = await repository.listSearches();
+    expect(searches, hasLength(1));
+    expect(searches.single.id, keeperId);
   });
 
   test('syncDueSearches completes with nothing to sync', () async {

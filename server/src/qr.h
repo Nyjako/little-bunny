@@ -1,7 +1,11 @@
 #ifndef BUNNY_SERVER_QR_H
 #define BUNNY_SERVER_QR_H
 
+#include <bunny_common/http.h>
+
 #include <stdbool.h>
+#include <stddef.h>
+#include <stdint.h>
 
 #include "config.h"
 
@@ -23,5 +27,27 @@ char *server_qr_build_connection_json(const char *server_url, const char *bearer
  * failure (logged to stderr) -- e.g. no internet access to resolve the
  * public IP. */
 bool server_print_connection_qr(const server_config_t *config);
+
+/* Rasterizes an already-encoded qrcodegen module grid (`qrcode`, as
+ * returned by `qrcodegen_encodeText`) as a PNG -- 8px per module, border=2
+ * (matching `print_qr`'s own border), black/white content as 8-bit
+ * grayscale. Used by the `/qr` route (routes_qr.c) so an already-connected
+ * app can display its own connection QR without the app needing its own
+ * QR-rendering library. On success, `*out_data` is malloc'd (caller frees)
+ * and `*out_len` is its length; returns false (leaving both untouched) on
+ * a PNG-encoding failure. */
+bool server_qr_render_png(const uint8_t *qrcode, uint8_t **out_data, size_t *out_len);
+
+/* Looks up this machine's own public IP the same way deploy/dump_server_info.sh
+ * does (`curl https://ipinfo.io/ip`) -- local-interface addresses are useless
+ * here, clients connect from outside this machine. Malloc'd, caller frees.
+ * NULL on any failure (e.g. no internet access). Shared by `--qr` and
+ * `--status` (status.c). */
+char *fetch_public_ip(const bunny_http_transport_t *transport, const char *user_agent);
+
+/* Reads data_dir/server.pem and returns its SHA-256 fingerprint as
+ * malloc'd uppercase hex (caller frees). NULL if the file is missing or
+ * unparseable. Shared by `--qr` and `--status` (status.c). */
+char *compute_cert_sha256(const char *data_dir);
 
 #endif /* BUNNY_SERVER_QR_H */

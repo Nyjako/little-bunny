@@ -12,6 +12,7 @@
 #include "routes_groups.h"
 #include "routes_logs.h"
 #include "routes_pools.h"
+#include "routes_qr.h"
 #include "routes_queue.h"
 #include "routes_search.h"
 #include "routes_searches.h"
@@ -159,6 +160,7 @@ server_app_t *server_app_start(const bunny_core_config_t *core_config, const cha
     server_routes_register_settings(app->mg_ctx, &app->ctx);
     server_routes_register_groups(app->mg_ctx, &app->ctx);
     server_routes_register_tasks(app->mg_ctx, &app->ctx);
+    server_routes_register_qr(app->mg_ctx, &app->ctx);
 
     if (!server_scheduler_start(&app->scheduler, &app->ctx, data_dir, poll_interval_sec, core_config->user_agent)) {
         mg_stop(app->mg_ctx);

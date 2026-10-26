@@ -64,7 +64,7 @@ BunnyTagStat _tagStatFromMap(Map<String, Object?> m) => BunnyTagStat(name: m['na
 List<BunnyTagStat> _tagStatListFromMaps(Object? list) => (list as List).cast<Map<String, Object?>>().map(_tagStatFromMap).toList();
 
 BunnyStatsReport _statsReportFromMap(Map<String, Object?> m) => BunnyStatsReport(
-  computedAt: m['computedAt'] as String,
+  computedAt: m['computedAt'] as String?,
   topFavoritedTags: _tagStatListFromMaps(m['topFavoritedTags']),
   topUsedTags: _tagStatListFromMaps(m['topUsedTags']),
   topPools: _tagStatListFromMaps(m['topPools']),
@@ -89,15 +89,6 @@ BunnyPoolInfo _poolInfoFromMap(Map<String, Object?> m) => BunnyPoolInfo(
 );
 
 BunnyComment _commentFromMap(Map<String, Object?> m) => BunnyComment(id: m['id'] as int, creatorName: m['creatorName'] as String?, body: m['body'] as String?, createdAt: m['createdAt'] as String?);
-
-BunnyDownload _downloadFromMap(Map<String, Object?> m) => BunnyDownload(
-  id: m['id'] as int,
-  postId: m['postId'] as int,
-  filePath: m['filePath'] as String?,
-  checksumMd5: m['checksumMd5'] as String?,
-  checksumVerified: m['checksumVerified'] as bool,
-  downloadedAt: m['downloadedAt'] as String?,
-);
 
 BunnyQueueStats _queueStatsFromMap(Map<String, Object?> m) => BunnyQueueStats(
   actionsProcessed: m['actionsProcessed'] as int,
@@ -194,6 +185,9 @@ class FfiBunnyRepository implements BunnyRepository {
 
   @override
   Future<void> deleteSearch(int searchId) => _wrapped(() => _native.deleteSearch(searchId));
+
+  @override
+  Future<void> mergeDuplicateSearch(int keeperId, int duplicateId) => _wrapped(() => _native.mergeDuplicateSearch(keeperId, duplicateId));
 
   @override
   Future<void> setSearchPinned(int searchId, bool pinned) => _wrapped(() => _native.setSearchPinned(searchId, pinned));
@@ -339,15 +333,6 @@ class FfiBunnyRepository implements BunnyRepository {
   Future<List<BunnyComment>> getPostComments(int postId) async {
     final items = await _wrapped(() => _native.listComments(postId));
     return items.map(_commentFromMap).toList();
-  }
-
-  @override
-  Future<int> recordDownload(int postId, String filePath, {String? checksumMd5, bool verified = false}) => _wrapped(() => _native.recordDownload(postId, filePath, checksumMd5, verified));
-
-  @override
-  Future<List<BunnyDownload>> listDownloadsForPost(int postId) async {
-    final items = await _wrapped(() => _native.listDownloadsForPost(postId));
-    return items.map(_downloadFromMap).toList();
   }
 
   @override

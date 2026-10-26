@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:crypto/crypto.dart';
 import 'package:http/http.dart' as http;
@@ -77,7 +78,7 @@ BunnyTagStat _tagStatFromJson(Map<String, Object?> j) => BunnyTagStat(name: j['n
 List<BunnyTagStat> _tagStatListFromJson(Object? list) => (list as List).cast<Map<String, Object?>>().map(_tagStatFromJson).toList();
 
 BunnyStatsReport _statsReportFromJson(Map<String, Object?> j) => BunnyStatsReport(
-  computedAt: j['computed_at'] as String,
+  computedAt: j['computed_at'] as String?,
   topFavoritedTags: _tagStatListFromJson(j['top_favorited_tags']),
   topUsedTags: _tagStatListFromJson(j['top_used_tags']),
   topPools: _tagStatListFromJson(j['top_pools']),
@@ -103,15 +104,6 @@ BunnyPoolInfo _poolInfoFromJson(Map<String, Object?> j) => BunnyPoolInfo(
 
 BunnyComment _commentFromJson(Map<String, Object?> j) =>
     BunnyComment(id: (j['id'] as num).toInt(), creatorName: j['creator_name'] as String?, body: j['body'] as String?, createdAt: j['created_at'] as String?);
-
-BunnyDownload _downloadFromJson(Map<String, Object?> j) => BunnyDownload(
-  id: (j['id'] as num).toInt(),
-  postId: (j['post_id'] as num).toInt(),
-  filePath: j['file_path'] as String?,
-  checksumMd5: j['checksum_md5'] as String?,
-  checksumVerified: j['checksum_verified'] as bool,
-  downloadedAt: j['downloaded_at'] as String?,
-);
 
 BunnyQueueStats _queueStatsFromJson(Map<String, Object?> j) => BunnyQueueStats(
   actionsProcessed: (j['actions_processed'] as num).toInt(),
@@ -284,6 +276,14 @@ class HttpBunnyRepository implements BunnyRepository {
   @override
   Future<void> setSearchPinned(int searchId, bool pinned) async {
     final response = await _client.post(_uri('/searches/$searchId/pin'), headers: _headers, body: jsonEncode({'pinned': pinned}));
+    if (response.statusCode != 200) {
+      _throwError(response);
+    }
+  }
+
+  @override
+  Future<void> mergeDuplicateSearch(int keeperId, int duplicateId) async {
+    final response = await _client.post(_uri('/searches/$keeperId/merge_duplicate'), headers: _headers, body: jsonEncode({'duplicate_id': duplicateId}));
     if (response.statusCode != 200) {
       _throwError(response);
     }
@@ -562,24 +562,6 @@ class HttpBunnyRepository implements BunnyRepository {
   }
 
   @override
-  Future<int> recordDownload(int postId, String filePath, {String? checksumMd5, bool verified = false}) async {
-    final response = await _client.post(_uri('/posts/$postId/downloads'), headers: _headers, body: jsonEncode({'file_path': filePath, 'checksum_md5': checksumMd5, 'verified': verified}));
-    if (response.statusCode != 200) {
-      _throwError(response);
-    }
-    return (_decodeObject(response)['id'] as num).toInt();
-  }
-
-  @override
-  Future<List<BunnyDownload>> listDownloadsForPost(int postId) async {
-    final response = await _client.get(_uri('/posts/$postId/downloads'), headers: _headers);
-    if (response.statusCode != 200) {
-      _throwError(response);
-    }
-    return _decodeList(response).map(_downloadFromJson).toList();
-  }
-
-  @override
   Future<void> syncDueSearches() async {
     final response = await _client.post(_uri('/sync'), headers: _headers);
     if (response.statusCode != 202) {
@@ -691,5 +673,24 @@ class HttpBunnyRepository implements BunnyRepository {
       _throwError(response);
     }
     return (jsonDecode(response.body) as List).cast<String>();
+  }
+
+  /// Renders this device's own already-configured connection info
+  /// (server_url/bearer_token/cert_sha256, whatever the caller already has
+  /// from [NetworkedConfig]) as a PNG QR code, via the server's `/qr`
+  /// route (server/src/routes_qr.c) -- so a second device can scan it to
+  /// connect, without this app needing its own QR-rendering library. Not a
+  /// [BunnyRepository] interface method, same reasoning as
+  /// [getServerLogs]'s doc comment above.
+  Future<Uint8List> fetchConnectionQrPng({required Uri serverUrl, required String bearerToken, required String certSha256}) async {
+    final response = await _client.post(
+      _uri('/qr'),
+      headers: _headers,
+      body: jsonEncode({'server_url': serverUrl.toString(), 'bearer_token': bearerToken, 'cert_sha256': certSha256}),
+    );
+    if (response.statusCode != 200) {
+      _throwError(response);
+    }
+    return response.bodyBytes;
   }
 }

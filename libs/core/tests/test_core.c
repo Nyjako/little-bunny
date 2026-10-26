@@ -124,6 +124,11 @@ void test_backup_database_rejects_null_args(void)
     TEST_ASSERT_EQUAL(BUNNY_CORE_ERR_INVALID_ARG, bunny_core_backup_database(g_core, NULL));
 }
 
+void test_search_merge_duplicate_rejects_a_null_core(void)
+{
+    TEST_ASSERT_EQUAL(BUNNY_CORE_ERR_INVALID_ARG, bunny_core_search_merge_duplicate(NULL, 1, 2));
+}
+
 /* Every other test in this file runs against setUp's ":memory:" core, which
  * never opens a read pool at all (see bunny_core_open's open_read_pool --
  * ":memory:" has no shared storage for a pool of connections to see). This
@@ -173,6 +178,42 @@ void test_read_pool_sees_writes_on_a_real_file_backed_database(void)
     rmdir(dir);
 }
 
+void test_table_stats_passes_through_to_bunny_db(void)
+{
+    TEST_ASSERT_EQUAL(BUNNY_CORE_OK, bunny_core_account_set(g_core, BUNNY_DB_SITE_E621, "someuser", "somesecret"));
+
+    bunny_db_tag_stat_list_t stats;
+    TEST_ASSERT_EQUAL(BUNNY_CORE_OK, bunny_core_table_stats(g_core, &stats));
+
+    bool found_accounts = false;
+    for (size_t i = 0; i < stats.count; i++) {
+        if (strcmp(stats.items[i].name, "accounts") == 0) {
+            TEST_ASSERT_EQUAL(1, stats.items[i].count);
+            found_accounts = true;
+        }
+    }
+    TEST_ASSERT_TRUE_MESSAGE(found_accounts, "expected an 'accounts' row in the table stats");
+
+    bunny_db_tag_stat_list_free(&stats);
+}
+
+void test_table_stats_rejects_a_null_core(void)
+{
+    TEST_ASSERT_EQUAL(BUNNY_CORE_ERR_INVALID_ARG, bunny_core_table_stats(NULL, NULL));
+}
+
+void test_integrity_check_passes_through_to_bunny_db(void)
+{
+    bool ok = false;
+    TEST_ASSERT_EQUAL(BUNNY_CORE_OK, bunny_core_integrity_check(g_core, &ok));
+    TEST_ASSERT_TRUE(ok);
+}
+
+void test_integrity_check_rejects_a_null_core(void)
+{
+    TEST_ASSERT_EQUAL(BUNNY_CORE_ERR_INVALID_ARG, bunny_core_integrity_check(NULL, NULL));
+}
+
 int main(void)
 {
     UNITY_BEGIN();
@@ -183,6 +224,11 @@ int main(void)
     RUN_TEST(test_account_delete);
     RUN_TEST(test_backup_database_creates_a_timestamped_file);
     RUN_TEST(test_backup_database_rejects_null_args);
+    RUN_TEST(test_search_merge_duplicate_rejects_a_null_core);
     RUN_TEST(test_read_pool_sees_writes_on_a_real_file_backed_database);
+    RUN_TEST(test_table_stats_passes_through_to_bunny_db);
+    RUN_TEST(test_table_stats_rejects_a_null_core);
+    RUN_TEST(test_integrity_check_passes_through_to_bunny_db);
+    RUN_TEST(test_integrity_check_rejects_a_null_core);
     return UNITY_END();
 }

@@ -249,11 +249,12 @@ bunny_core_result_t bunny_core_refresh_stats_report(bunny_core_t *core, bunny_co
     return BUNNY_CORE_OK;
 }
 
-bunny_core_result_t bunny_core_get_stats_report(bunny_core_t *core, bunny_core_stats_report_t *out_report)
+bunny_core_result_t bunny_core_get_cached_stats_report(bunny_core_t *core, bunny_core_stats_report_t *out_report, bool *out_has_cache, bool *out_is_stale)
 {
-    if (!core || !out_report) {
+    if (!core || !out_report || !out_has_cache || !out_is_stale) {
         return BUNNY_CORE_ERR_INVALID_ARG;
     }
+    memset(out_report, 0, sizeof(*out_report));
 
     size_t slot;
     bunny_db_t *read_db = bunny_core_db_read_lock(core, &slot);
@@ -262,14 +263,17 @@ bunny_core_result_t bunny_core_get_stats_report(bunny_core_t *core, bunny_core_s
     bunny_db_get_cached_stats_report(read_db, &json, &computed_at);
     bunny_core_db_read_unlock(core, slot);
 
-    if (json && !report_is_stale(computed_at)) {
-        deserialize_report(json, out_report);
-        out_report->computed_at = computed_at;
-        free(json);
+    if (!json) {
+        *out_has_cache = false;
+        *out_is_stale = true;
+        free(computed_at);
         return BUNNY_CORE_OK;
     }
 
+    *out_has_cache = true;
+    *out_is_stale = report_is_stale(computed_at);
+    deserialize_report(json, out_report);
+    out_report->computed_at = computed_at;
     free(json);
-    free(computed_at);
-    return bunny_core_refresh_stats_report(core, out_report);
+    return BUNNY_CORE_OK;
 }

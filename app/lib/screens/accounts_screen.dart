@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../l10n/app_localizations.dart';
 import '../repository/bunny_models.dart';
 import '../repository/bunny_repository.dart';
+import '../services/download_queue_service.dart';
 import '../settings/display_settings_store.dart';
 import '../settings/download_settings_store.dart';
 import 'login_form_screen.dart';
@@ -22,8 +23,9 @@ class AccountsScreen extends StatefulWidget {
   final BunnyRepository repository;
   final DisplaySettingsStore displaySettingsStore;
   final DownloadSettingsStore downloadSettingsStore;
+  final DownloadQueueService downloadQueueService;
 
-  const AccountsScreen({super.key, required this.repository, required this.displaySettingsStore, required this.downloadSettingsStore});
+  const AccountsScreen({super.key, required this.repository, required this.displaySettingsStore, required this.downloadSettingsStore, required this.downloadQueueService});
 
   @override
   State<AccountsScreen> createState() => _AccountsScreenState();
@@ -164,6 +166,7 @@ class _AccountsScreenState extends State<AccountsScreen> {
           repository: widget.repository,
           displaySettingsStore: widget.displaySettingsStore,
           downloadSettingsStore: widget.downloadSettingsStore,
+          downloadQueueService: widget.downloadQueueService,
         ),
       ),
     );
@@ -187,6 +190,7 @@ class _AccountsScreenState extends State<AccountsScreen> {
           repository: widget.repository,
           displaySettingsStore: widget.displaySettingsStore,
           downloadSettingsStore: widget.downloadSettingsStore,
+          downloadQueueService: widget.downloadQueueService,
         ),
       ),
     );
