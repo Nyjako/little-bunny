@@ -21,6 +21,7 @@ import '../util/responsive.dart';
 import '../widgets/download_progress_indicator.dart';
 import '../widgets/gif_player.dart';
 import '../widgets/rating_badge.dart';
+import '../widgets/rich_markup_text.dart';
 import 'create_search_screen.dart';
 import 'full_screen_post_viewer_screen.dart';
 import 'tag_browse_screen.dart';
@@ -1168,7 +1169,15 @@ class _PostDetailPageState extends State<_PostDetailPage> {
               children: [
                 _poolsSection(l10n),
                 _relationshipsSection(l10n),
-                if (post.description != null && post.description!.isNotEmpty) ...[const Divider(), Text(post.description!)],
+                if (post.description != null && post.description!.isNotEmpty) ...[
+                  const Divider(),
+                  RichMarkupText(
+                    text: post.description!,
+                    onOpenAuthor: _openTagBrowse,
+                    onOpenWiki: _openTagWiki,
+                    onOpenThumbnail: (postId) => _openExternalPost(l10n, postId),
+                  ),
+                ],
                 const Divider(),
                 _tagsDetailsSourcesRegion(l10n),
                 _commentsSection(l10n),

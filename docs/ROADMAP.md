@@ -2528,11 +2528,27 @@ this file is the single source of truth for "what's done" across sessions.
   codebase's own tests). Replaces `CachedNetworkImage`/`Image` for `.gif` posts in both
   `PostDetailScreen` and `FullScreenPostViewerScreen`.
 
-- [ ] **M50 — Rich-text parsing for descriptions (auto-links, `{{author}}`, `[[tag]]`)**
+- [x] **M50 — Rich-text parsing for descriptions (auto-links, `{{author}}`, `[[tag]]`)**
   Post/pool/wiki descriptions should have plain URLs auto-linked and turned into
   clickable elements, plus recognize `{{author}}` and `[[tag]]` reference syntax
   (the same `[[...]]`/`{{...}}` convention e621.wiki's own wiki pages use for cross-
   references, see M53 below -- likely the same parser/renderer should serve both).
+  - New pure function `parseRichMarkup` (`app/lib/util/rich_markup.dart`) and widget
+    `RichMarkupText` (`app/lib/widgets/rich_markup_text.dart`) recognize `{{author}}`,
+    `[[wiki title]]`, `thumb #<id>` (M53's wiki-body-only convention, harmlessly
+    recognized everywhere since the markup itself doesn't depend on context), and
+    bare `https?://` URLs in one single left-to-right scan, trimming trailing
+    sentence punctuation (`.,;:!?)]}`) off an auto-linked URL. A segment whose
+    callback isn't supplied by the caller renders as inert plain text rather than a
+    dead link.
+  - Deliberately a *new*, separate parser from M44's existing `pool_description.dart`
+    (pool-# references only) rather than merging the two -- avoids any risk to that
+    already-shipped, well-tested parser. **Scope trim**: pool descriptions still only
+    get M44's pool-# handling; only post descriptions were wired up to the new
+    parser (`PostDetailScreen`). Revisit folding pool descriptions onto the shared
+    parser later if it's worth the risk.
+  - `WikiPageScreen` (M52/M53, see below) is the other consumer -- its page body is
+    rendered through the same `RichMarkupText`.
 
 - [ ] **M51 — Add a slideshow mode**
   User picks one or more saved searches, an interval (how often the post changes), and
@@ -2542,7 +2558,7 @@ this file is the single source of truth for "what's done" across sessions.
   until the user closes the slideshow. Videos/gifs are included and still switch on
   the same timer as everything else (not "play to completion first").
 
-- [ ] **M52 — Add a tag long-press context menu**
+- [x] **M52 — Add a tag long-press context menu**
   Long-pressing a tag while viewing a post should open a small menu: Search / Add to
   saved searches / Add to blacklist / Add to current search / Remove from current
   search / Show wiki / Copy to clipboard. "Add to current search"/"Remove from current
@@ -2551,8 +2567,25 @@ this file is the single source of truth for "what's done" across sessions.
   exact UX for those two needs revisiting when this is actually implemented; the other
   five (Search, Add to saved searches, Add to blacklist, Show wiki, Copy) are
   self-contained and can land first. "Show wiki" depends on M53.
+  - Landed the 5 self-contained actions; "Add to current search"/"Remove from current
+    search" are still deferred, per the note above.
+  - Each post tag chip (`PostDetailScreen._tagsSection`) is wrapped in a
+    `GestureDetector(onLongPress: ...)` -- `ActionChip` itself has no `onLongPress` in
+    this Flutter version -- opening a `showModalBottomSheet` with one `ListTile` per
+    action. Search reuses the existing tap-to-browse flow; "Add to saved searches"
+    opens `CreateSearchScreen` pre-filled with the tag; "Add to blacklist" calls
+    `BunnyRepository.addBlacklistTag`; "Show wiki" opens the new `WikiPageScreen`
+    (M53); "Copy to clipboard" mirrors the existing post-id-copy pattern.
+  - New screen `WikiPageScreen` (`app/lib/screens/wiki_page_screen.dart`) shows a
+    tag's wiki page body via `RichMarkupText` (M50), with author/wiki/thumb
+    references opening `TagBrowseScreen`, another `WikiPageScreen`, or the
+    referenced post, respectively.
+  - Extracted the existing parent/child blacklist-confirm-then-open-post flow out of
+    `PostDetailScreen` into a shared `openExternalPost()` helper
+    (`app/lib/util/post_navigation.dart`) so `WikiPageScreen`'s `thumb #<id>`
+    references reuse the same blacklist confirmation instead of bypassing it.
 
-- [ ] **M53 — Integrate e621.wiki for tag wiki info (tags/wiki pages/aliases/implications)**
+- [x] **M53 — Integrate e621.wiki for tag wiki info (tags/wiki pages/aliases/implications)**
   e621.wiki (<https://e621.wiki/>) hosts third-party docs/tooling for e621's real API,
   including an OpenAPI spec (fetched once as `docs/API - e621.yaml` -- gitignored,
   not ours to redistribute, kept locally for reference only) and an MCP server at
@@ -2580,6 +2613,21 @@ this file is the single source of truth for "what's done" across sessions.
     `approver_id`.
   Inkbunny has no wiki/tag-info endpoints of its own at all -- per the user, fall back
   to e621's wiki for Inkbunny tags too rather than omitting the feature there entirely.
+  - Went with direct REST calls, not the MCP server -- these are just regular e621
+    API endpoints, so they fit through this app's existing per-site-client stack
+    (`libe621` → `bunny_core` → server routes → FFI → Dart repository) without a new
+    runtime dependency. Added e621-only (`libe621`/`bunny_core`/server routes/Dart
+    repository all have no `site` parameter for these 4 calls) -- Inkbunny-sourced
+    tags fall back to the same e621 lookups, per the note above.
+  - `GET /wiki_pages.json` returns at most one page per title
+    (`?search[title]=<text>&limit=1`); a tag with no wiki page maps to
+    `BUNNY_CORE_ERR_NOT_FOUND` → a `null` `BunnyWikiPage?` at the Dart layer, not an
+    exception -- `WikiPageScreen` (M52) shows a plain "no wiki page" message for that
+    case.
+  - FFI-layer tests for the 4 new repository methods are deliberately not written,
+    matching the existing, established gap for every other FFI repository method that
+    needs a live network call to succeed (`fetchPool`/`getPostComments`/
+    `previewSearch`) -- the FFI test harness has no fake network transport to inject.
 
 - [ ] **M54 — Advanced/custom tag search syntax, with live autocomplete, in both search creation and the blacklist editor**
   Full e621 search grammar, not just a flat space-separated tag list -- the user

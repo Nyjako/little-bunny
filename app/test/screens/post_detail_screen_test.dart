@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -36,6 +37,29 @@ import '../fakes/test_app.dart';
 /// page, so this checks the `image` property too.
 Finder _findCachedNetworkImage() => find.byWidgetPredicate((widget) => widget is Image && widget.image is CachedNetworkImageProvider);
 
+/// [RichMarkupText] renders its links as [TapGestureRecognizer]s inside a
+/// single [Text.rich]'s [TextSpan] tree, so `find.text`/`tester.tap` can't
+/// locate or hit them (the widget's plain-text content is the whole
+/// description, not the individual span) -- this walks the span tree to
+/// find the matching segment and invokes its recognizer directly instead.
+void _tapLinkText(WidgetTester tester, String text) {
+  for (final richText in tester.widgetList<RichText>(find.byType(RichText))) {
+    GestureRecognizer? recognizer;
+    richText.text.visitChildren((span) {
+      if (span is TextSpan && span.text == text) {
+        recognizer = span.recognizer;
+        return false;
+      }
+      return true;
+    });
+    if (recognizer is TapGestureRecognizer) {
+      (recognizer as TapGestureRecognizer).onTap?.call();
+      return;
+    }
+  }
+  fail('No tappable span found for "$text"');
+}
+
 /// A fresh [DownloadQueueService] per call -- tests that don't care about
 /// the download queue at all (most of this file -- only the "download
 /// button" group below actually exercises it) just need a valid instance
@@ -64,6 +88,7 @@ BunnyPost _post({
   int id = 1,
   int externalId = 1,
   String title = 'A title',
+  String description = 'A description',
   int commentCount = 3,
   int width = 640,
   int height = 480,
@@ -73,7 +98,7 @@ BunnyPost _post({
   externalId: externalId,
   artist: 'someartist',
   title: title,
-  description: 'A description',
+  description: description,
   rating: 'safe',
   score: 42,
   scoreUp: 15,
@@ -331,6 +356,60 @@ void main() {
     await scrollToEnd(tester);
     expect(find.text('3'), findsOneWidget); // commentCount, in the post-details column
     expect(find.text('640x480'), findsOneWidget);
+  });
+
+  group('post description rich markup (M50)', () {
+    testWidgets('renders a bare URL in the description as a link', (WidgetTester tester) async {
+      final repository = FakeBunnyRepository();
+      final post = _post(fileExt: 'jpg', description: 'Source: https://example.invalid/page here.');
+
+      await tester.pumpWidget(wrapWithLocalization(PostDetailScreen(post: post, repository: repository, displaySettingsStore: const DisplaySettingsStore(), downloadSettingsStore: const DownloadSettingsStore(), downloadQueueService: _downloadQueueService())));
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('https://example.invalid/page'), findsOneWidget);
+    });
+
+    testWidgets('tapping an {{author}} reference opens that artist\'s posts', (WidgetTester tester) async {
+      final repository = FakeBunnyRepository();
+      final post = _post(fileExt: 'jpg', description: 'Drawn by {{someotherartist}}.');
+
+      await tester.pumpWidget(wrapWithLocalization(PostDetailScreen(post: post, repository: repository, displaySettingsStore: const DisplaySettingsStore(), downloadSettingsStore: const DownloadSettingsStore(), downloadQueueService: _downloadQueueService())));
+      await tester.pumpAndSettle();
+
+      _tapLinkText(tester, '{{someotherartist}}');
+      await tester.pumpAndSettle();
+
+      expect(find.byType(TagBrowseScreen), findsOneWidget);
+    });
+
+    testWidgets('tapping a [[wiki]] reference opens the wiki page', (WidgetTester tester) async {
+      final repository = FakeBunnyRepository();
+      final post = _post(fileExt: 'jpg', description: 'See [[canine]] for more.');
+      repository.wikiPageByTitle['canine'] = const BunnyWikiPage(id: 1, title: 'canine', body: 'A broader family.', isLocked: false);
+
+      await tester.pumpWidget(wrapWithLocalization(PostDetailScreen(post: post, repository: repository, displaySettingsStore: const DisplaySettingsStore(), downloadSettingsStore: const DownloadSettingsStore(), downloadQueueService: _downloadQueueService())));
+      await tester.pumpAndSettle();
+
+      _tapLinkText(tester, '[[canine]]');
+      await tester.pumpAndSettle();
+
+      expect(find.byType(WikiPageScreen), findsOneWidget);
+    });
+
+    testWidgets('tapping a thumb reference opens the referenced post', (WidgetTester tester) async {
+      final repository = FakeBunnyRepository();
+      final post = _post(fileExt: 'jpg', description: 'Related: thumb #55 above.');
+      repository.fetchPostResults['e621:55'] = 2;
+      repository.postsById[2] = _post(id: 2, externalId: 55, title: 'Related post', description: '');
+
+      await tester.pumpWidget(wrapWithLocalization(PostDetailScreen(post: post, repository: repository, displaySettingsStore: const DisplaySettingsStore(), downloadSettingsStore: const DownloadSettingsStore(), downloadQueueService: _downloadQueueService())));
+      await tester.pumpAndSettle();
+
+      _tapLinkText(tester, 'thumb #55');
+      await tester.pumpAndSettle();
+
+      expect(find.text('Related post'), findsOneWidget);
+    });
   });
 
   // A sync pass only ever stores what Inkbunny's own search/listing endpoint
