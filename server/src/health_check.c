@@ -2,6 +2,7 @@
 
 #include <bunny_core/core.h>
 #include <goblin/appdirs.h>
+#include <goblin/fileio.h>
 #include <openssl/pem.h>
 #include <openssl/x509.h>
 
@@ -11,17 +12,9 @@
 #include <string.h>
 #include <sys/stat.h>
 
-#ifdef _WIN32
-#include <io.h>
-#define access _access
-#define W_OK 2
-#else
-#include <unistd.h>
-#endif
-
 static bool check_data_dir_writable(const char *data_dir)
 {
-    bool ok = data_dir && access(data_dir, W_OK) == 0;
+    bool ok = data_dir && goblin_path_writable(data_dir);
     printf("%s  data_dir is writable (%s)\n", ok ? "PASS" : "FAIL", data_dir ? data_dir : "(none)");
     return ok;
 }

@@ -2,6 +2,7 @@
 #include <bunny_common/thread.h>
 #include <bunny_core/core.h>
 #include <goblin/appdirs.h>
+#include <goblin/env.h>
 
 #include <signal.h>
 #include <stdio.h>
@@ -43,7 +44,7 @@ static void handle_shutdown_signal(int signum)
 static void default_data_dir_if_unset(void)
 {
     if (!getenv("BUNNY_SERVER_DATA_DIR")) {
-        setenv("BUNNY_SERVER_DATA_DIR", "/var/lib/bunny-server", 1);
+        goblin_setenv("BUNNY_SERVER_DATA_DIR", "/var/lib/bunny-server", 1);
     }
 }
 
