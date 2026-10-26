@@ -177,6 +177,13 @@ void main() {
 
     service.enqueue(_post(id: 2), repository);
     expect(service.totalCount, 1);
+    // Without this, the background _processQueue() for post 2 is still
+    // in flight when this test returns -- it later calls _persist(), which
+    // re-reads PathProviderPlatform.instance at call-time. By then the next
+    // test's setUp() has already swapped in its own fake instance, so this
+    // dangling write lands in (and corrupts) the *next* test's persistence
+    // file instead of this test's own.
+    await waitUntilIdle(service);
   });
 
   test('restore re-enqueues whatever was still pending from a previous run', () async {
