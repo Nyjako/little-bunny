@@ -796,17 +796,11 @@ abstract class AppLocalizations {
   /// **'Download selected'**
   String get postGridMassDownloadTooltip;
 
-  /// No description provided for @postGridMassDownloadProgress.
+  /// No description provided for @postGridMassDownloadQueued.
   ///
   /// In en, this message translates to:
-  /// **'{done}/{total} downloaded'**
-  String postGridMassDownloadProgress(int done, int total);
-
-  /// No description provided for @postGridMassDownloadSummary.
-  ///
-  /// In en, this message translates to:
-  /// **'{succeeded} downloaded, {mismatched} checksum mismatch, {failed} failed'**
-  String postGridMassDownloadSummary(int succeeded, int mismatched, int failed);
+  /// **'{count} queued for download'**
+  String postGridMassDownloadQueued(int count);
 
   /// No description provided for @tagBrowseEmptyState.
   ///
@@ -1580,23 +1574,11 @@ abstract class AppLocalizations {
   /// **'Download'**
   String get postDetailDownloadTooltip;
 
-  /// No description provided for @postDetailDownloadVerified.
+  /// No description provided for @postDetailDownloadQueued.
   ///
   /// In en, this message translates to:
-  /// **'Downloaded and checksum verified'**
-  String get postDetailDownloadVerified;
-
-  /// No description provided for @postDetailDownloadMismatch.
-  ///
-  /// In en, this message translates to:
-  /// **'Downloaded, but the checksum didn\'t match'**
-  String get postDetailDownloadMismatch;
-
-  /// No description provided for @postDetailDownloadFailed.
-  ///
-  /// In en, this message translates to:
-  /// **'Download failed'**
-  String get postDetailDownloadFailed;
+  /// **'Queued for download'**
+  String get postDetailDownloadQueued;
 
   /// No description provided for @updateAvailableTitle.
   ///
