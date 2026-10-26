@@ -12,6 +12,8 @@ import '../settings/display_settings_store.dart';
 import '../util/image_headers.dart';
 import '../util/media_type.dart';
 import '../util/mouse_drag_scroll_behavior.dart';
+import '../widgets/download_progress_indicator.dart';
+import '../widgets/gif_player.dart';
 
 /// Full-screen pinch-zoom + swipe-between-posts viewer (M8.5.9), opened by
 /// tapping an image in [PostDetailScreen]. [posts] can mix images and videos
@@ -154,8 +156,25 @@ class _FullScreenPostViewerScreenState extends State<FullScreenPostViewerScreen>
                   // which makes PhotoView infer size from the decoded image) keeps
                   // the original aspect ratio even when the platform's image codec
                   // misreports an animated GIF's true dimensions.
+                  // Image's own loadingBuilder, not CachedNetworkImage's
+                  // progressIndicatorBuilder -- see PostDetailScreen's
+                  // _buildMedia for why (the latter never settles under
+                  // `flutter_test`'s pumpAndSettle).
+                  final content = isGifExt(post.fileExt)
+                      ? GifPlayer(imageUrl: post.fileUrl!, httpHeaders: imageHeadersFor(post.site))
+                      : Image(
+                          image: CachedNetworkImageProvider(post.fileUrl!, headers: imageHeadersFor(post.site)),
+                          fit: BoxFit.contain,
+                          loadingBuilder: (context, child, loadingProgress) {
+                            if (loadingProgress == null) {
+                              return child;
+                            }
+                            final total = loadingProgress.expectedTotalBytes;
+                            return DownloadProgressIndicator(progress: total != null ? loadingProgress.cumulativeBytesLoaded / total : null);
+                          },
+                        );
                   return PhotoViewGalleryPageOptions.customChild(
-                    child: CachedNetworkImage(imageUrl: post.fileUrl!, httpHeaders: imageHeadersFor(post.site), fit: BoxFit.contain),
+                    child: content,
                     childSize: post.width > 0 && post.height > 0 ? Size(post.width.toDouble(), post.height.toDouble()) : null,
                     minScale: PhotoViewComputedScale.contained,
                     maxScale: PhotoViewComputedScale.covered * 3,

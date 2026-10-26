@@ -193,7 +193,7 @@ packages:
     source: hosted
     version: "0.1.2"
   file:
-    dependency: transitive
+    dependency: "direct dev"
     description:
       name: file
       sha256: a3b4f84adafef897088c160faf7dfffb7696046cb13ae90b508c2cbc95d3b8d4
@@ -254,7 +254,7 @@ packages:
     source: sdk
     version: "0.0.0"
   flutter_cache_manager:
-    dependency: transitive
+    dependency: "direct main"
     description:
       name: flutter_cache_manager
       sha256: f94fc6f5480977e3eb7b622ed488f671ba96c971bd0e274e6bd0f0ba9b044816
@@ -1090,15 +1090,15 @@ packages:
     source: hosted
     version: "15.4.0"
   wakelock_plus:
-    dependency: transitive
+    dependency: "direct main"
     description:
       name: wakelock_plus
-      sha256: "9a91139ee876c24a9ebe1484e4b9b7923b07d368566a5e0b2301870b0f5029c8"
+      sha256: "39a1d99085cf3190d41305bca05f0c0d77522f355f7f99bb648ee231192d9d68"
       url: "https://pub.dev"
     source: hosted
-    version: "1.8.1"
+    version: "1.8.2"
   wakelock_plus_platform_interface:
-    dependency: transitive
+    dependency: "direct dev"
     description:
       name: wakelock_plus_platform_interface
       sha256: "764c25504562abc8ac3406f5d175f126b276e6ba916c7c2675690b73368ca384"
