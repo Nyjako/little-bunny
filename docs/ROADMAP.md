@@ -2652,3 +2652,50 @@ this file is the single source of truth for "what's done" across sessions.
   concept for arbitrary background HTTP work this way (background `URLSession` tasks
   are the iOS-native mechanism, a separate, not-yet-scoped design), so this milestone is
   Android-only; other platforms keep today's M43 behavior unchanged.
+
+- [x] **M58 — QR connection setup: scan/paste in the app, in-app share via the server, shrink the terminal code**
+  Follow-up the user raised during M43 planning, deliberately deferred to its own pass:
+  "we have no place to scan qr code on phone, or enter generated json in app when
+  connecting to server... generating qrcode/json directly in app so we can easily share
+  it when it is already connected... currently generated qrcode is pretty massive which
+  is not good for terminal." Four parts:
+  - **`bunny_server --qr` read the wrong data dir.** Reported separately: `--qr` printed
+    a different (wrong) `bearer_token`/`cert_sha256` every time, the same with or without
+    `sudo`. Root cause: the real server always runs under systemd with
+    `BUNNY_SERVER_DATA_DIR` explicitly set to `/var/lib/bunny-server`
+    (`DynamicUser`'s StateDirectory), but a manual `--qr` invocation has no such override
+    and fell through to the invoking user's own XDG data dir instead -- a different wrong
+    directory whether run plain or under `sudo` (`$HOME` becomes `/root`), silently
+    generating/reading throwaway credentials unrelated to the actually-running server.
+    `--qr` (`server/src/main.c`) now defaults `BUNNY_SERVER_DATA_DIR` to
+    `/var/lib/bunny-server` when unset, matching `deploy/dump_server_info.sh`'s own
+    hardcoded assumption -- still overridable via the env var. This also means `--qr` now
+    correctly requires `sudo` to read those files, rather than silently succeeding
+    against bogus data.
+  - **Shrunk the terminal QR.** `print_qr` (`server/src/qr.c`) switched from 2 ASCII
+    characters per module to Unicode half-block characters (`▀▄█` + space), printing 2
+    module-rows per terminal line and 1 character per module column -- quarters the
+    printed footprint. Pure rendering change, doesn't touch the JSON payload or the
+    `qrcodegen` encoding call.
+  - **Scan / paste on `SetupScreen`'s networked-mode fields.** New
+    `ConnectionQrPayload.tryParse` (`app/lib/util/connection_qr_payload.dart`) is the
+    shared parser for both entry points -- never throws, null on anything malformed, so a
+    bad scan/paste shows an inline error instead of crashing. "Paste connection info"
+    reads the clipboard directly, no new dependency. "Scan QR code" (new `mobile_scanner`
+    dependency, new `QrScanScreen`) is gated to Android/iOS/macOS, since that package
+    doesn't support Linux/Windows and this app ships both -- camera permission/usage
+    description added to the Android manifest, iOS and macOS `Info.plist`, and both
+    macOS entitlements files (camera access needs the entitlement under this app's
+    existing sandboxing, not just the `Info.plist` key).
+  - **Generate the connection QR in-app, rendered server-side.** The connected app
+    already has `serverUrl`/`bearerToken`/`certificateSha256Fingerprint` locally
+    (`NetworkedConfig`) -- no need for the server to re-resolve its own public IP/token.
+    New authenticated `POST /qr` route (`server/src/routes_qr.c`) takes those three
+    client-supplied values, builds the same JSON payload `--qr` already builds
+    (`server_qr_build_connection_json`, unchanged), and returns a PNG rendering of it via
+    a new `server_qr_render_png` (`qr.c`), rasterizing the `qrcodegen` module grid
+    through a newly-vendored `stb_image_write.h` (CPM, `DOWNLOAD_ONLY`, same pattern as
+    `qrcodegen` itself) -- so the app needs no QR-rendering library of its own.
+    `HttpBunnyRepository.fetchConnectionQrPng` calls the route; Settings' new "Share
+    connection QR" entry (networked mode only) opens a screen that fetches and displays
+    the PNG via `Image.memory`.
