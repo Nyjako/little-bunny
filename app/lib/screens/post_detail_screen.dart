@@ -16,18 +16,24 @@ import '../settings/download_settings_store.dart';
 import '../util/image_headers.dart';
 import '../util/media_type.dart';
 import '../util/mouse_drag_scroll_behavior.dart';
+import '../util/post_navigation.dart';
 import '../util/responsive.dart';
 import '../widgets/download_progress_indicator.dart';
 import '../widgets/gif_player.dart';
 import '../widgets/rating_badge.dart';
+import 'create_search_screen.dart';
 import 'full_screen_post_viewer_screen.dart';
 import 'tag_browse_screen.dart';
+import 'wiki_page_screen.dart';
 
 /// Tags are grouped by category (M8.5.3) and then sorted into this fixed
 /// order (M9.6.5) rather than whatever order they happened to arrive in --
 /// any category not in this list (including `null`, Inkbunny's single
 /// uncategorized bucket) is grouped last instead of being dropped.
 const _tagCategoryOrder = ['artist', 'character', 'copyright', 'species', 'general', 'meta'];
+
+/// The tag long-press context menu's options (M52).
+enum _TagMenuAction { search, addToSearches, addToBlacklist, showWiki, copy }
 
 const _imageExtensions = {'jpg', 'jpeg', 'png', 'gif', 'webp'};
 
@@ -773,6 +779,81 @@ class _PostDetailPageState extends State<_PostDetailPage> {
     );
   }
 
+  void _openAddToSearches(String tagName) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (context) => CreateSearchScreen(repository: widget.repository, initialSite: widget.post.site, initialQuery: tagName)),
+    );
+  }
+
+  Future<void> _addToBlacklist(AppLocalizations l10n, String tagName) async {
+    await widget.repository.addBlacklistTag(widget.post.site, tagName);
+    if (!mounted) {
+      return;
+    }
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(l10n.tagMenuAddedToBlacklist(tagName))));
+  }
+
+  void _openTagWiki(String tagName) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => WikiPageScreen(
+          title: tagName,
+          repository: widget.repository,
+          displaySettingsStore: widget.displaySettingsStore,
+          downloadSettingsStore: widget.downloadSettingsStore,
+          downloadQueueService: widget.downloadQueueService,
+        ),
+      ),
+    );
+  }
+
+  Future<void> _copyTagToClipboard(AppLocalizations l10n, String tagName) async {
+    await Clipboard.setData(ClipboardData(text: tagName));
+    if (!mounted) {
+      return;
+    }
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(l10n.tagMenuCopied(tagName))));
+  }
+
+  /// Long-pressing a tag chip (M52) opens this instead of immediately
+  /// searching -- the other four actions don't make sense as a tap on the
+  /// chip itself, so they live behind a long-press menu rather than a
+  /// second visible control per chip.
+  Future<void> _showTagMenu(AppLocalizations l10n, String tagName) async {
+    final action = await showModalBottomSheet<_TagMenuAction>(
+      context: context,
+      builder: (context) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(leading: const Icon(Icons.search), title: Text(l10n.tagMenuSearchLabel), onTap: () => Navigator.pop(context, _TagMenuAction.search)),
+            ListTile(leading: const Icon(Icons.bookmark_add_outlined), title: Text(l10n.tagMenuAddToSearchesLabel), onTap: () => Navigator.pop(context, _TagMenuAction.addToSearches)),
+            ListTile(leading: const Icon(Icons.block), title: Text(l10n.tagMenuAddToBlacklistLabel), onTap: () => Navigator.pop(context, _TagMenuAction.addToBlacklist)),
+            ListTile(leading: const Icon(Icons.menu_book_outlined), title: Text(l10n.tagMenuShowWikiLabel), onTap: () => Navigator.pop(context, _TagMenuAction.showWiki)),
+            ListTile(leading: const Icon(Icons.copy), title: Text(l10n.tagMenuCopyLabel), onTap: () => Navigator.pop(context, _TagMenuAction.copy)),
+          ],
+        ),
+      ),
+    );
+    if (!mounted || action == null) {
+      return;
+    }
+    switch (action) {
+      case _TagMenuAction.search:
+        _openTagBrowse(tagName);
+      case _TagMenuAction.addToSearches:
+        _openAddToSearches(tagName);
+      case _TagMenuAction.addToBlacklist:
+        await _addToBlacklist(l10n, tagName);
+      case _TagMenuAction.showWiki:
+        _openTagWiki(tagName);
+      case _TagMenuAction.copy:
+        await _copyTagToClipboard(l10n, tagName);
+    }
+  }
+
   Widget _tagsSection(AppLocalizations l10n) => FutureBuilder<List<BunnyPostTag>>(
     future: _tagsFuture,
     builder: (context, snapshot) {
@@ -798,7 +879,13 @@ class _PostDetailPageState extends State<_PostDetailPage> {
             Padding(padding: const EdgeInsets.only(bottom: 4), child: Text(entry.key == null ? l10n.postDetailTagsLabel : _titleCase(entry.key!), style: Theme.of(context).textTheme.titleSmall)),
             Padding(
               padding: const EdgeInsets.only(bottom: 8),
-              child: Wrap(spacing: 4, runSpacing: 4, children: entry.value.map((tag) => ActionChip(label: Text(tag.name), onPressed: () => _openTagBrowse(tag.name))).toList()),
+              child: Wrap(
+                spacing: 4,
+                runSpacing: 4,
+                children: entry.value
+                    .map((tag) => GestureDetector(onLongPress: () => _showTagMenu(l10n, tag.name), child: ActionChip(label: Text(tag.name), onPressed: () => _openTagBrowse(tag.name))))
+                    .toList(),
+              ),
             ),
           ],
         ],
@@ -836,64 +923,16 @@ class _PostDetailPageState extends State<_PostDetailPage> {
     },
   );
 
-  /// Parent/child chips are the one place this app navigates to a post that
-  /// wasn't reached through a (possibly blacklist-filtered) saved search --
-  /// so unlike the normal grid, a blacklisted post can actually surface here.
-  /// Named for the match found, not the whole blacklist, since that's what's
-  /// actually useful to show in the confirmation (M13.3).
-  Future<bool> _confirmIfBlacklisted(AppLocalizations l10n, BunnyPost post) async {
-    final tags = await widget.repository.getPostTagsByCategory(post.id);
-    final blacklist = await widget.repository.getBlacklist(post.site);
-    final matched = tags.map((tag) => tag.name).where(blacklist.contains).toList();
-    if (matched.isEmpty || !mounted) {
-      return true;
-    }
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text(l10n.postDetailBlacklistedDialogTitle),
-        content: Text(l10n.postDetailBlacklistedDialogContent(matched.join(', '))),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: Text(l10n.commonCancel)),
-          TextButton(onPressed: () => Navigator.pop(context, true), child: Text(l10n.postDetailBlacklistedViewAnyway)),
-        ],
-      ),
-    );
-    return confirmed == true;
-  }
-
-  Future<void> _openExternalPost(AppLocalizations l10n, int externalId) async {
-    try {
-      final postId = await widget.repository.fetchPost(widget.post.site, externalId);
-      final post = await widget.repository.getPost(postId);
-      if (!mounted) {
-        return;
-      }
-      if (!await _confirmIfBlacklisted(l10n, post)) {
-        return;
-      }
-      if (!mounted) {
-        return;
-      }
-      await Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (context) => PostDetailScreen(
-            post: post,
-            repository: widget.repository,
-            displaySettingsStore: widget.displaySettingsStore,
-            downloadSettingsStore: widget.downloadSettingsStore,
-            downloadQueueService: widget.downloadQueueService,
-          ),
-        ),
-      );
-    } catch (_) {
-      if (!mounted) {
-        return;
-      }
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(l10n.postDetailOpenPostFailed)));
-    }
-  }
+  Future<void> _openExternalPost(AppLocalizations l10n, int externalId) => openExternalPost(
+    context: context,
+    l10n: l10n,
+    repository: widget.repository,
+    site: widget.post.site,
+    externalId: externalId,
+    displaySettingsStore: widget.displaySettingsStore,
+    downloadSettingsStore: widget.downloadSettingsStore,
+    downloadQueueService: widget.downloadQueueService,
+  );
 
   Widget _relationshipsSection(AppLocalizations l10n) {
     final future = _relationshipsFuture;

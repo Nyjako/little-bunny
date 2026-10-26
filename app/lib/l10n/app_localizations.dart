@@ -1616,6 +1616,48 @@ abstract class AppLocalizations {
   /// **'Queued for download'**
   String get postDetailDownloadQueued;
 
+  /// No description provided for @tagMenuSearchLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Search'**
+  String get tagMenuSearchLabel;
+
+  /// No description provided for @tagMenuAddToSearchesLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Add to saved searches'**
+  String get tagMenuAddToSearchesLabel;
+
+  /// No description provided for @tagMenuAddToBlacklistLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Add to blacklist'**
+  String get tagMenuAddToBlacklistLabel;
+
+  /// No description provided for @tagMenuShowWikiLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Show wiki'**
+  String get tagMenuShowWikiLabel;
+
+  /// No description provided for @tagMenuCopyLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Copy to clipboard'**
+  String get tagMenuCopyLabel;
+
+  /// No description provided for @tagMenuAddedToBlacklist.
+  ///
+  /// In en, this message translates to:
+  /// **'Added \"{tag}\" to the blacklist'**
+  String tagMenuAddedToBlacklist(String tag);
+
+  /// No description provided for @tagMenuCopied.
+  ///
+  /// In en, this message translates to:
+  /// **'Copied \"{tag}\" to the clipboard'**
+  String tagMenuCopied(String tag);
+
   /// No description provided for @updateAvailableTitle.
   ///
   /// In en, this message translates to:
@@ -1645,6 +1687,24 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Update'**
   String get updateNowAction;
+
+  /// No description provided for @wikiPageNotFoundMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'No wiki page for this tag.'**
+  String get wikiPageNotFoundMessage;
+
+  /// No description provided for @wikiPageLoadFailedMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t load the wiki page.'**
+  String get wikiPageLoadFailedMessage;
+
+  /// No description provided for @wikiPageOtherNamesLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Also known as: {names}'**
+  String wikiPageOtherNamesLabel(String names);
 }
 
 class _AppLocalizationsDelegate

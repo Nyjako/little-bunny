@@ -378,6 +378,20 @@
   "postDetailDownloadTooltip": "Download",
   "postDetailDownloadQueued": "Queued for download",
 
+  "tagMenuSearchLabel": "Search",
+  "tagMenuAddToSearchesLabel": "Add to saved searches",
+  "tagMenuAddToBlacklistLabel": "Add to blacklist",
+  "tagMenuShowWikiLabel": "Show wiki",
+  "tagMenuCopyLabel": "Copy to clipboard",
+  "tagMenuAddedToBlacklist": "Added \"{tag}\" to the blacklist",
+  "@tagMenuAddedToBlacklist": {
+    "placeholders": {"tag": {"type": "String"}}
+  },
+  "tagMenuCopied": "Copied \"{tag}\" to the clipboard",
+  "@tagMenuCopied": {
+    "placeholders": {"tag": {"type": "String"}}
+  },
+
   "updateAvailableTitle": "Update available ({tagName})",
   "@updateAvailableTitle": {
     "placeholders": {"tagName": {"type": "String"}}
@@ -385,5 +399,12 @@
   "updateDownloadingMessage": "Downloading update...",
   "updateFailedMessage": "Update failed. Try again later, or update manually from the project's GitHub releases page.",
   "updateLaterAction": "Later",
-  "updateNowAction": "Update"
+  "updateNowAction": "Update",
+
+  "wikiPageNotFoundMessage": "No wiki page for this tag.",
+  "wikiPageLoadFailedMessage": "Couldn't load the wiki page.",
+  "wikiPageOtherNamesLabel": "Also known as: {names}",
+  "@wikiPageOtherNamesLabel": {
+    "placeholders": {"names": {"type": "String"}}
+  }
 }
