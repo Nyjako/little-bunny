@@ -2479,21 +2479,54 @@ this file is the single source of truth for "what's done" across sessions.
       (single-post lookups, the in-memory task queue/log ring buffer, one-page-at-a-
       time live previews) or already fixed by M37/M39/M40.
 
-- [ ] **M47 — Keep the device awake while browsing posts**
+- [x] **M47 — Keep the device awake while browsing posts**
   Reported by the user: wants a wake lock active while browsing so the screen doesn't
-  sleep mid-session. `wakelock_plus` is already present as a *transitive* dependency
-  (per `pubspec.lock`, not yet declared directly in `pubspec.yaml`) -- may not need a
-  new dependency, just wiring it up (enable on entering a post-browsing screen, disable
-  on leaving) and adding the direct `pubspec.yaml` entry.
+  sleep mid-session. `wakelock_plus` was already present as a *transitive* dependency
+  (via `cached_network_image`'s own chain) -- declared directly in `pubspec.yaml` now
+  that the app actually calls it. `PostDetailScreen` enables the wakelock in `initState`
+  and disables it in `dispose`, covering the whole browsing session including swiping
+  between `siblingPosts` and opening the fullscreen viewer on top of it (the wakelock
+  stays on the whole time `PostDetailScreen` itself is still on the navigator stack).
+  Tests needed `wakelockPlusPlatformInstance` (a `@visibleForTesting` top-level var in
+  the `wakelock_plus` package, not just `WakelockPlusPlatformInterface.instance` --
+  the package captures the latter into the former at import time, so only overriding
+  the former actually takes effect) swapped for a no-op fake; without it, the real
+  method-channel implementation throws under `flutter_test`, which widget tests using
+  `tester.runAsync` (the M43 download-button tests) surface as a real failure instead of
+  silently swallowing it the way simpler non-`runAsync` tests happened to.
 
-- [ ] **M48 — Show a loading-percentage indicator for images/gifs**
+- [x] **M48 — Show a loading-percentage indicator for images/gifs**
   While an image or gif is still loading, show progress (e.g. a percentage in the
-  middle of the loading spinner) instead of just an indeterminate spinner.
+  middle of the loading spinner) instead of just an indeterminate spinner. New
+  `DownloadProgressIndicator` widget (a `CircularProgressIndicator` with a `%` label
+  once the total size is known). Still images use `Image(image:
+  CachedNetworkImageProvider(...), loadingBuilder: ...)` -- *not*
+  `CachedNetworkImage`'s own `progressIndicatorBuilder`, which was tried first but
+  switches `CachedNetworkImage`'s internal rendering onto a different,
+  `flutter_cache_manager`-streaming-backed path that never settles under
+  `flutter_test`'s `pumpAndSettle` (confirmed: it broke nearly every test in
+  `PostDetailScreen`'s own suite, not just gif-related ones). `Image`'s own
+  `loadingBuilder` uses the standard `ImageStream`/`ImageChunkEvent` machinery the
+  already-working plain `CachedNetworkImage` already resolves through, so it's
+  test-compatible. Applied to both `PostDetailScreen`'s inline view and
+  `FullScreenPostViewerScreen`'s pinch-zoom gallery.
 
-- [ ] **M49 — Add a GIF frame counter overlay (N/X)**
+- [x] **M49 — Add a GIF frame counter overlay (N/X)**
   For a gif, display current-frame/total-frame count (e.g. "N/X") somewhere on
   screen -- the user's stated reason is it's otherwise hard to tell where the loop
-  repeats.
+  repeats. New `GifPlayer` widget (`app/lib/widgets/gif_player.dart`) decodes the GIF
+  frame-by-frame via `ui.Codec` directly, since `Image`/`CachedNetworkImage` drive GIF
+  animation internally with no hook for app code to observe which frame is currently
+  showing. Takes an injectable `BaseCacheManager` (same `client:`-injection reasoning
+  as `DownloadManager`/`HttpBunnyRepository`), defaulting to `DefaultCacheManager()`,
+  so tests can supply one that resolves synchronously from a real on-disk fixture file
+  instead of hitting the network -- `GifPlayer`'s own frame-advance loop is a plain
+  repeating `Timer`, which (like any perpetually-repeating animation) can't be waited
+  out with `pumpAndSettle`; its tests use bounded `pump()`s (or, where the actual
+  decoded frame content needs asserting on, `tester.runAsync` wrapping the triggering
+  `pumpWidget` call itself, same real-async-zone requirement as elsewhere in this
+  codebase's own tests). Replaces `CachedNetworkImage`/`Image` for `.gif` posts in both
+  `PostDetailScreen` and `FullScreenPostViewerScreen`.
 
 - [ ] **M50 — Rich-text parsing for descriptions (auto-links, `{{author}}`, `[[tag]]`)**
   Post/pool/wiki descriptions should have plain URLs auto-linked and turned into
@@ -2742,3 +2775,20 @@ this file is the single source of truth for "what's done" across sessions.
     `bunny_updater_scheduler_tick` -- zero duplicated check/download/verify/stage logic.
     Linux/systemd only, matching `updater.c`'s own existing scope (no self-update story
     for a Windows service, and no equivalent Windows service to stop/start anyway).
+
+- [ ] **M60 — Real PIN entry for app-lock, distinct from the password fallback**
+  Follow-up to M7.4's existing `AppLockService`/`LockScreen`/`LockSetupScreen`: today
+  "PIN" and "password" are the same free-text field under the hood (any characters,
+  compared by string equality, unlocked via an explicit submit action) -- M7.4's own
+  biometric-first flow (`local_auth`, Android only so far) already covers "fingerprint
+  on the phone", but the typed fallback doesn't behave like a real PIN pad anywhere.
+  The user wants an actual PIN entry mode: digits-only input, and -- unlike a
+  password field, which always needs an explicit submit/click -- auto-checks as soon
+  as the 4th digit is entered (standard mobile lock-screen PIN UX). Needs its own
+  design pass before implementation: whether PIN and password become two distinct,
+  user-selectable lock modes (`LockSetupScreen` choosing between them) or whether PIN
+  only applies on mobile with password staying as-is on desktop (matching M7.4's
+  own platform-specific precedent for biometric availability), whether the PIN length
+  is fixed at 4 digits or configurable, and how `LockSetupScreen`'s existing
+  "re-enter current PIN/password to disable" flow adapts to a digits-only keypad
+  instead of a text field.
