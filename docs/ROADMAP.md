@@ -2350,22 +2350,45 @@ this file is the single source of truth for "what's done" across sessions.
   `DownloadManager.isDownloaded` via a small subclass rather than seeding a real file on
   disk and waiting on the real check.
 
-- [ ] **M43 — Queue downloads (and mass download/favorite/upvote) server-side instead of blocking the app**
+- [x] **M43 — Queue downloads (single and mass) instead of blocking the app on them**
   Reported by the user: downloading currently means sitting on the post screen waiting
   for the file, checksum, and any auto-favorite/auto-upvote to all finish before moving
-  on. Wanted instead: tap download and forget about it -- the request (and its
-  favorite/upvote side effects) goes to the server's existing task queue (the same
-  `action_queue` table/`task_queue.c` worker `favorite_add`/`vote`/`comment` actions
-  already go through, M4.3) rather than blocking the client, with a push notification
-  once it actually completes. Same treatment for *mass* download/favorite/upvote (not
-  just a single post) -- and when a mass download has auto-favorite/auto-upvote
-  enabled, those should always apply to every post in the batch, not conditionally.
-  Needs: a new `download` action type in `action_queue` (today it only downloads
-  client-side via `DownloadManager`, with no server-side equivalent at all -- this is
-  a bigger shift than just reusing the existing queue, since the file itself has to
-  land on the *client's* filesystem, not the server's), a push-notification channel
-  the app can receive completion events through, and batch-enqueue endpoints for mass
-  actions.
+  on. Originally scoped (above) as routing downloads through the *server's* existing
+  `action_queue`, with push-notification completion events -- renegotiated with the user
+  during planning, since that doesn't fit this app's actual architecture: M42 just made
+  "downloaded" a deliberately client-side, per-device fact, and there's no push-
+  notification infrastructure anywhere in this codebase to build on. The server's
+  `action_queue` already handles favorite/vote queuing fine as-is and needed no changes.
+  What shipped instead is purely client-side: a new `DownloadQueueService`
+  (`app/lib/services/download_queue_service.dart`, a `ChangeNotifier` -- the one
+  deliberate exception to this codebase's plain-`setState` convention, since its
+  lifetime isn't tied to any single screen's `State`) that tapping download (single,
+  `PostDetailScreen`, or mass, `PostGridScreen`) enqueues into and returns from
+  immediately; the queue drains strictly sequentially in the background, reporting
+  progress/summary through a local (on-device, not server-push) notification via
+  `flutter_local_notifications`. Mass download's auto-favorite/auto-upvote drain
+  (`repository.processQueue()`) now runs once per successfully-downloaded item rather
+  than once per whole batch, a deliberate, accepted behavior change -- the queue is now
+  open-ended (more items can be enqueued mid-flight), so there's no well-defined "last
+  item in the batch" to key a single drain off of.
+  Two scope boundaries the user set explicitly during planning:
+  - **This only downloads while the app process is actually running** -- no attempt,
+    not even best-effort, to keep a download going once the phone screen locks.
+    Reliably surviving a locked screen needs a real Android foreground service, a
+    meaningfully bigger lift (see M57 below), deliberately not built in this pass.
+  - What *is* built: if the app process gets killed/restarted for any reason (including
+    a locked screen eventually getting it killed by the OS), pending downloads survive
+    via a small disk-backed resume list (`pending_downloads.json` in
+    `getApplicationSupportDirectory()`), restored and re-enqueued from scratch (not a
+    byte-level resume -- the HTTP fetch was always one in-memory read, no partial-write
+    risk) on the next launch.
+  Also added as part of this pass: an atomic temp-file-then-rename write in
+  `DownloadManager.downloadPost`'s plain (non-SAF) branch, so a crash/kill mid-write
+  never leaves a half-written file at the user-visible destination path.
+  Explicitly deferred, not built in this pass: live icon-flip on `PostDetailScreen`
+  while staying on that exact post's page (the "already downloaded" icon only updates
+  on next visit); true byte-level resume of an interrupted fetch; parallelizing
+  downloads (stays strictly sequential, matching this app's other mass actions).
 
 - [x] **M44 — Render pool cross-references as inline clickable text, not separate chips below**
   Follow-up to M26 (which added the pool description + a `Wrap` of `ActionChip`s below
@@ -2613,3 +2636,19 @@ this file is the single source of truth for "what's done" across sessions.
   (presumably reads the same `.env` this session used by hand), whether it's a
   shell script wrapping `curl` (matching this session's own ad hoc verification
   style) or something more structured.
+
+- [ ] **M57 — Keep the download queue running through a locked Android screen**
+  Follow-up the user explicitly asked to track during M43's planning, deliberately not
+  built as part of that pass: M43's `DownloadQueueService` only progresses while the app
+  process is actually alive -- a locked screen that the OS eventually suspends/kills the
+  process over just means the queue resumes next launch via M43's disk-backed resume
+  list, same as any other kill. Reliably surviving a locked screen instead needs real
+  native plumbing Android requires for exactly this (a background task outliving the
+  activity): a foreground `Service` subclass, `startForeground()` with a persistent
+  notification (likely the same one `FlutterLocalNotificationsQueueNotifier` already
+  shows), a manifest `<service>` entry declaring a `foregroundServiceType` (probably
+  `dataSync`, Android 14+'s API for exactly this), plus the runtime permission Android
+  13+ requires to start a foreground service of that type. iOS has no equivalent
+  concept for arbitrary background HTTP work this way (background `URLSession` tasks
+  are the iOS-native mechanism, a separate, not-yet-scoped design), so this milestone is
+  Android-only; other platforms keep today's M43 behavior unchanged.
