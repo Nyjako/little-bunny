@@ -10,6 +10,7 @@ add_library(bunny_core STATIC
     src/blacklist.c
     src/backup.c
     src/stats_report.c
+    src/diagnostics.c
 )
 
 target_include_directories(bunny_core
