@@ -279,6 +279,89 @@ bunny_db_result_t bunny_db_set_cached_stats_report(bunny_db_t *db, const char *j
     return rc == SQLITE_DONE ? BUNNY_DB_OK : bunny_db_sqlite_rc_to_result(rc);
 }
 
+bunny_db_result_t bunny_db_table_stats(bunny_db_t *db, bunny_db_tag_stat_list_t *out_list)
+{
+    if (!db || !out_list) {
+        return BUNNY_DB_ERR_INVALID_ARG;
+    }
+    memset(out_list, 0, sizeof(*out_list));
+
+    const char *list_sql = "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name;";
+    sqlite3_stmt *list_stmt = NULL;
+    if (sqlite3_prepare_v2(db->handle, list_sql, -1, &list_stmt, NULL) != SQLITE_OK) {
+        return BUNNY_DB_ERR_QUERY_FAILED;
+    }
+
+    bunny_db_tag_stat_array arr;
+    bunny_db_tag_stat_array_init(&arr);
+
+    int rc;
+    while ((rc = sqlite3_step(list_stmt)) == SQLITE_ROW) {
+        char *table_name = bunny_db_column_text_dup(list_stmt, 0);
+        if (!table_name) {
+            continue;
+        }
+
+        /* Table names come from sqlite_master itself, never user input --
+         * quoting is correctness (a table name could theoretically contain
+         * spaces/punctuation), not an injection concern. */
+        char count_sql[256];
+        snprintf(count_sql, sizeof(count_sql), "SELECT COUNT(*) FROM \"%s\";", table_name);
+        sqlite3_stmt *count_stmt = NULL;
+        int count = 0;
+        if (sqlite3_prepare_v2(db->handle, count_sql, -1, &count_stmt, NULL) == SQLITE_OK) {
+            if (sqlite3_step(count_stmt) == SQLITE_ROW) {
+                count = sqlite3_column_int(count_stmt, 0);
+            }
+            sqlite3_finalize(count_stmt);
+        }
+
+        bunny_db_tag_stat_t item = {.name = table_name, .count = count};
+        if (!bunny_db_tag_stat_array_push(&arr, item)) {
+            sqlite3_finalize(list_stmt);
+            bunny_db_tag_stat_free(&item);
+            for (size_t i = 0; i < arr.count; i++) {
+                bunny_db_tag_stat_free(&arr.items[i]);
+            }
+            bunny_db_tag_stat_array_free(&arr);
+            return BUNNY_DB_ERR_UNKNOWN;
+        }
+    }
+    sqlite3_finalize(list_stmt);
+
+    if (rc != SQLITE_DONE) {
+        for (size_t i = 0; i < arr.count; i++) {
+            bunny_db_tag_stat_free(&arr.items[i]);
+        }
+        bunny_db_tag_stat_array_free(&arr);
+        return bunny_db_sqlite_rc_to_result(rc);
+    }
+
+    out_list->items = arr.items;
+    out_list->count = arr.count;
+    return BUNNY_DB_OK;
+}
+
+bunny_db_result_t bunny_db_integrity_check(bunny_db_t *db, bool *out_ok)
+{
+    if (!db || !out_ok) {
+        return BUNNY_DB_ERR_INVALID_ARG;
+    }
+    *out_ok = false;
+
+    sqlite3_stmt *stmt = NULL;
+    if (sqlite3_prepare_v2(db->handle, "PRAGMA integrity_check;", -1, &stmt, NULL) != SQLITE_OK) {
+        return BUNNY_DB_ERR_QUERY_FAILED;
+    }
+    int rc = sqlite3_step(stmt);
+    if (rc == SQLITE_ROW) {
+        const unsigned char *text = sqlite3_column_text(stmt, 0);
+        *out_ok = text && strcmp((const char *)text, "ok") == 0;
+    }
+    sqlite3_finalize(stmt);
+    return (rc == SQLITE_ROW || rc == SQLITE_DONE) ? BUNNY_DB_OK : bunny_db_sqlite_rc_to_result(rc);
+}
+
 bunny_db_result_t bunny_db_tag_autocomplete(bunny_db_t *db, bunny_db_site_t site, const char *prefix, int limit, bunny_db_tag_stat_list_t *out_list)
 {
     if (!db || !prefix || !out_list) {

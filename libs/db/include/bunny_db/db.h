@@ -341,6 +341,19 @@ bunny_db_result_t bunny_db_get_cached_stats_report(bunny_db_t *db, char **out_js
 /* Replaces the cached report wholesale (there's only ever one). */
 bunny_db_result_t bunny_db_set_cached_stats_report(bunny_db_t *db, const char *json, const char *computed_at);
 
+/* Row count per user table (sqlite_master's internal "sqlite_%" tables
+ * excluded), alphabetical -- backs `bunny_server --db-stats`. Reuses
+ * bunny_db_tag_stat_t (name/count) rather than a new struct, since that's
+ * exactly this shape already. */
+bunny_db_result_t bunny_db_table_stats(bunny_db_t *db, bunny_db_tag_stat_list_t *out_list);
+
+/* `PRAGMA integrity_check;` -- *out_ok is true iff SQLite reports back
+ * exactly "ok" (any other single-row or multi-row result lists specific
+ * corruption, which this collapses to false; `bunny_server --health` only
+ * needs pass/fail). BUNNY_DB_OK is still returned on a clean "not ok"
+ * result -- only a genuine query failure returns an error code. */
+bunny_db_result_t bunny_db_integrity_check(bunny_db_t *db, bool *out_ok);
+
 /* --- Action queue -------------------------------------------------------------
  * Proxies favorite/vote/comment calls to the sites (M4.3): an action is
  * enqueued here, then bunny_core_process_queue() (libs/core) drains it
