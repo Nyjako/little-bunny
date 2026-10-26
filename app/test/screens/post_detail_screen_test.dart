@@ -17,10 +17,12 @@ import 'package:photo_view/photo_view_gallery.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:video_player/video_player.dart';
 import 'package:video_player_platform_interface/video_player_platform_interface.dart';
+import 'package:wakelock_plus/wakelock_plus.dart';
 
 import '../fakes/fake_bunny_repository.dart';
 import '../fakes/fake_path_provider.dart';
 import '../fakes/fake_video_player_platform.dart';
+import '../fakes/fake_wakelock_plus_platform.dart';
 import '../fakes/test_app.dart';
 
 /// A fresh [DownloadQueueService] per call -- tests that don't care about
@@ -79,8 +81,11 @@ BunnyPost _post({
 );
 
 void main() {
+  final wakelockPlatform = FakeWakelockPlusPlatform();
+
   setUpAll(() {
     VideoPlayerPlatform.instance = FakeVideoPlayerPlatform();
+    wakelockPlusPlatformInstance = wakelockPlatform;
   });
 
   // The headless `flutter_tester` engine has no real clipboard, so
@@ -242,6 +247,35 @@ void main() {
     await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
     await tester.pumpAndSettle();
     expect(find.byType(AppBar), findsOneWidget);
+  });
+
+  testWidgets('enables the wakelock while open and disables it on leaving (M47)', (WidgetTester tester) async {
+    final repository = FakeBunnyRepository();
+    final post = _post(fileExt: 'jpg');
+    repository.postsBySearchId[1] = [post];
+    wakelockPlatform.enabledValue = false;
+
+    await tester.pumpWidget(
+      wrapWithLocalization(
+        Builder(
+          builder: (context) => ElevatedButton(
+            onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (context) => PostDetailScreen(post: post, repository: repository, displaySettingsStore: const DisplaySettingsStore(), downloadSettingsStore: const DownloadSettingsStore(), downloadQueueService: _downloadQueueService())),
+            ),
+            child: const Text('open'),
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('open'));
+    await tester.pumpAndSettle();
+    expect(wakelockPlatform.enabledValue, isTrue);
+
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+    expect(wakelockPlatform.enabledValue, isFalse);
   });
 
   testWidgets('app bar shrinks on wide windows (M9.6.6)', (WidgetTester tester) async {

@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:video_player/video_player.dart';
+import 'package:wakelock_plus/wakelock_plus.dart';
 
 import '../l10n/app_localizations.dart';
 import '../repository/bunny_models.dart';
@@ -134,6 +135,11 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
     // PageView pre-built it as the next/previous page).
     _markSeenWithRetry(_posts[_initialIndex].id);
     _loadPreloadCountThenPreload();
+    // M47: keeps the screen from sleeping mid-session while looking at a
+    // post (and while swiping through siblingPosts) -- disabled again in
+    // dispose() once this screen is actually left, not just backgrounded by
+    // e.g. the fullscreen viewer being pushed on top of it.
+    WakelockPlus.enable();
   }
 
   /// [precacheImage] needs a [BuildContext] -- by the time this resolves
@@ -173,6 +179,7 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
   @override
   void dispose() {
     _pageController.dispose();
+    WakelockPlus.disable();
     super.dispose();
   }
 

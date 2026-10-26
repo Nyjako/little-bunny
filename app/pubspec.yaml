@@ -62,6 +62,7 @@ dependencies:
   saf_stream: ^4.0.2
   flutter_local_notifications: ^22.3.3
   mobile_scanner: ^7.4.2
+  wakelock_plus: ^1.8.2
 
 dev_dependencies:
   flutter_test:
@@ -77,6 +78,7 @@ dev_dependencies:
   plugin_platform_interface: ^2.1.8
   video_player_platform_interface: ^6.2.0
   flutter_launcher_icons: ^0.14.4
+  wakelock_plus_platform_interface: ^1.7.0
 
 # shared_preferences_android 2.5.0's only change is "Updates internal
 # implementation to use Pigeon JNI" -- a full rewrite of the native bridge,
