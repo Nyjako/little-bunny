@@ -9,6 +9,7 @@ import '../l10n/app_localizations.dart';
 import '../repository/bunny_models.dart';
 import '../repository/bunny_repository.dart';
 import '../services/download_manager.dart';
+import '../services/download_queue_service.dart';
 import '../settings/display_settings_store.dart';
 import '../settings/download_settings_store.dart';
 import '../util/image_headers.dart';
@@ -83,6 +84,8 @@ class PostDetailScreen extends StatefulWidget {
   /// fake HTTP client via [DownloadManager.client].
   final DownloadManager downloadManager;
 
+  final DownloadQueueService downloadQueueService;
+
   /// The post list this post was opened from (e.g. a grid's currently loaded
   /// posts) -- both the posts this screen itself pages through (M22) and,
   /// filtered down to image posts only, the sub-gallery [_PostDetailPage]
@@ -98,6 +101,7 @@ class PostDetailScreen extends StatefulWidget {
     required this.repository,
     required this.displaySettingsStore,
     required this.downloadSettingsStore,
+    required this.downloadQueueService,
     this.downloadManager = const DownloadManager(),
     this.siblingPosts,
   });
@@ -252,6 +256,7 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
             displaySettingsStore: widget.displaySettingsStore,
             downloadSettingsStore: widget.downloadSettingsStore,
             downloadManager: widget.downloadManager,
+            downloadQueueService: widget.downloadQueueService,
             siblingPosts: widget.siblingPosts,
             onFullScreenPostChanged: _jumpToPost,
           ),
@@ -270,6 +275,7 @@ class _PostDetailPage extends StatefulWidget {
   final DisplaySettingsStore displaySettingsStore;
   final DownloadSettingsStore downloadSettingsStore;
   final DownloadManager downloadManager;
+  final DownloadQueueService downloadQueueService;
   final List<BunnyPost>? siblingPosts;
 
   /// Called live as the user swipes inside [FullScreenPostViewerScreen]
@@ -286,6 +292,7 @@ class _PostDetailPage extends StatefulWidget {
     required this.displaySettingsStore,
     required this.downloadSettingsStore,
     required this.downloadManager,
+    required this.downloadQueueService,
     this.siblingPosts,
     this.onFullScreenPostChanged,
   });
@@ -320,7 +327,6 @@ class _PostDetailPageState extends State<_PostDetailPage> {
   /// state (M9.4) updates without a full screen reload -- same "not late
   /// final" reasoning as [_commentsFuture].
   late Future<bool> _isDownloadedFuture;
-  bool _downloading = false;
 
   /// Mutable local copy of [widget.post], so favorite/vote taps can update
   /// the displayed score/favCount/isFavorited immediately (M8.5.14) without
@@ -530,39 +536,17 @@ class _PostDetailPageState extends State<_PostDetailPage> {
     return widget.downloadManager.isDownloaded(_post, folder);
   }
 
-  Future<void> _downloadFile(AppLocalizations l10n) async {
-    setState(() => _downloading = true);
-    final folder = await widget.downloadSettingsStore.loadDestinationFolder();
-    if (folder == null) {
-      if (!mounted) {
-        return;
-      }
-      setState(() => _downloading = false);
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(l10n.postDetailDownloadFailed)));
-      return;
-    }
-    final autoFavorite = await widget.downloadSettingsStore.loadAutoFavoriteOnDownload();
-    final autoUpvote = await widget.downloadSettingsStore.loadAutoUpvoteOnDownload();
-    final result = await widget.downloadManager.downloadPost(_post, widget.repository, folder, autoFavorite: autoFavorite, autoUpvote: autoUpvote);
-    final downloaded = result.outcome == DownloadOutcome.verified || result.outcome == DownloadOutcome.checksumMismatch;
-    if ((autoFavorite || autoUpvote) && downloaded) {
-      await widget.repository.processQueue();
-    }
-    if (!mounted) {
-      return;
-    }
-    setState(() {
-      _downloading = false;
-      if (downloaded) {
-        _isDownloadedFuture = Future.value(true);
-      }
-    });
-    final message = switch (result.outcome) {
-      DownloadOutcome.verified => l10n.postDetailDownloadVerified,
-      DownloadOutcome.checksumMismatch => l10n.postDetailDownloadMismatch,
-      DownloadOutcome.noFileUrl || DownloadOutcome.failed => l10n.postDetailDownloadFailed,
-    };
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+  /// Enqueues and returns immediately (M43) -- the actual fetch/write/
+  /// checksum work now lives entirely inside [DownloadQueueService],
+  /// reported through its notifier rather than this screen's own state.
+  /// [_isDownloadedFuture] deliberately isn't refreshed here: there's no
+  /// "download finished" callback to hook anymore by design (the whole
+  /// point is this screen doesn't wait), so the download-done icon only
+  /// updates the next time this screen is (re)opened, not live while
+  /// staying on the same post's page -- an accepted, documented limitation.
+  void _queueDownload(AppLocalizations l10n) {
+    widget.downloadQueueService.enqueue(_post, widget.repository);
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(l10n.postDetailDownloadQueued)));
   }
 
   Widget _downloadButton(AppLocalizations l10n) {
@@ -572,11 +556,9 @@ class _PostDetailPageState extends State<_PostDetailPage> {
       builder: (context, snapshot) {
         final alreadyDownloaded = snapshot.data ?? false;
         return IconButton(
-          icon: _downloading
-              ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
-              : Icon(alreadyDownloaded ? Icons.download_done : Icons.download),
+          icon: Icon(alreadyDownloaded ? Icons.download_done : Icons.download),
           tooltip: l10n.postDetailDownloadTooltip,
-          onPressed: canDownload && !_downloading ? () => _downloadFile(l10n) : null,
+          onPressed: canDownload ? () => _queueDownload(l10n) : null,
         );
       },
     );
@@ -757,6 +739,7 @@ class _PostDetailPageState extends State<_PostDetailPage> {
           repository: widget.repository,
           displaySettingsStore: widget.displaySettingsStore,
           downloadSettingsStore: widget.downloadSettingsStore,
+          downloadQueueService: widget.downloadQueueService,
         ),
       ),
     );
@@ -872,6 +855,7 @@ class _PostDetailPageState extends State<_PostDetailPage> {
             repository: widget.repository,
             displaySettingsStore: widget.displaySettingsStore,
             downloadSettingsStore: widget.downloadSettingsStore,
+            downloadQueueService: widget.downloadQueueService,
           ),
         ),
       );
@@ -946,6 +930,7 @@ class _PostDetailPageState extends State<_PostDetailPage> {
           repository: widget.repository,
           displaySettingsStore: widget.displaySettingsStore,
           downloadSettingsStore: widget.downloadSettingsStore,
+          downloadQueueService: widget.downloadQueueService,
           initialLabel: label,
         ),
       ),

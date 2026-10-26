@@ -6,10 +6,12 @@ import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:little_bunny/repository/bunny_models.dart';
 import 'package:little_bunny/services/download_manager.dart';
+import 'package:path_provider_platform_interface/path_provider_platform_interface.dart';
 import 'package:saf_stream/saf_stream_platform_interface.dart';
 import 'package:saf_util/saf_util_platform_interface.dart';
 
 import '../fakes/fake_bunny_repository.dart';
+import '../fakes/fake_path_provider.dart';
 import '../fakes/fake_saf_platform.dart';
 
 BunnyPost _post({BunnySite site = BunnySite.e621, String? artist, String? fileUrl = 'https://static1.e621.net/data/1.png', String? fileExt = 'png', String? fileMd5}) => BunnyPost(
@@ -35,6 +37,11 @@ void main() {
 
   setUp(() async {
     tempDir = await Directory.systemTemp.createTemp('download_manager_test');
+    // downloadPost (M43) now stages the write through getTemporaryDirectory()
+    // before moving it into place -- path_provider's real plugin isn't
+    // registered under a bare `flutter test` VM run, so every test needs
+    // this fake even though none of them touch it directly.
+    PathProviderPlatform.instance = FakePathProviderPlatform();
   });
 
   tearDown(() async {

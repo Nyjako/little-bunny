@@ -6,6 +6,7 @@ import '../bunny_repository_scope.dart';
 import '../l10n/app_localizations.dart';
 import '../repository/bunny_models.dart';
 import '../repository/bunny_repository.dart';
+import '../services/download_queue_service.dart';
 import '../settings/app_lock_service.dart';
 import '../settings/display_settings_store.dart';
 import '../settings/download_settings_store.dart';
@@ -30,6 +31,7 @@ class SearchesScreen extends StatefulWidget {
   final ThemeSettingsStore themeSettingsStore;
   final DisplaySettingsStore displaySettingsStore;
   final DownloadSettingsStore downloadSettingsStore;
+  final DownloadQueueService downloadQueueService;
   final RepositorySettingsStore settingsStore;
   final ValueChanged<ThemeMode> onThemeModeChanged;
   final ValueChanged<ThemeColorOption> onThemeColorChanged;
@@ -43,6 +45,7 @@ class SearchesScreen extends StatefulWidget {
     required this.themeSettingsStore,
     required this.displaySettingsStore,
     required this.downloadSettingsStore,
+    required this.downloadQueueService,
     required this.settingsStore,
     required this.onThemeModeChanged,
     required this.onThemeColorChanged,
@@ -427,7 +430,13 @@ class _SearchesScreenState extends State<SearchesScreen> with SingleTickerProvid
       context,
       MaterialPageRoute(
         builder: (context) =>
-            PostGridScreen(search: search, repository: _repository!, displaySettingsStore: widget.displaySettingsStore, downloadSettingsStore: widget.downloadSettingsStore),
+            PostGridScreen(
+              search: search,
+              repository: _repository!,
+              displaySettingsStore: widget.displaySettingsStore,
+              downloadSettingsStore: widget.downloadSettingsStore,
+              downloadQueueService: widget.downloadQueueService,
+            ),
       ),
     );
     _refresh();
@@ -719,6 +728,7 @@ class _SearchesScreenState extends State<SearchesScreen> with SingleTickerProvid
                   repository: _repository!,
                   displaySettingsStore: widget.displaySettingsStore,
                   downloadSettingsStore: widget.downloadSettingsStore,
+                  downloadQueueService: widget.downloadQueueService,
                 ),
               ),
             ),
@@ -733,6 +743,7 @@ class _SearchesScreenState extends State<SearchesScreen> with SingleTickerProvid
                   repository: _repository!,
                   displaySettingsStore: widget.displaySettingsStore,
                   downloadSettingsStore: widget.downloadSettingsStore,
+                  downloadQueueService: widget.downloadQueueService,
                 ),
               ),
             ),

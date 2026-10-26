@@ -185,19 +185,10 @@
   "postGridMassUpvoteTooltip": "Upvote selected",
   "postGridMassDownvoteTooltip": "Downvote selected",
   "postGridMassDownloadTooltip": "Download selected",
-  "postGridMassDownloadProgress": "{done}/{total} downloaded",
-  "@postGridMassDownloadProgress": {
+  "postGridMassDownloadQueued": "{count} queued for download",
+  "@postGridMassDownloadQueued": {
     "placeholders": {
-      "done": {"type": "int"},
-      "total": {"type": "int"}
-    }
-  },
-  "postGridMassDownloadSummary": "{succeeded} downloaded, {mismatched} checksum mismatch, {failed} failed",
-  "@postGridMassDownloadSummary": {
-    "placeholders": {
-      "succeeded": {"type": "int"},
-      "mismatched": {"type": "int"},
-      "failed": {"type": "int"}
+      "count": {"type": "int"}
     }
   },
 
@@ -376,9 +367,7 @@
   "settingsBlacklistSyncE621Failed": "Couldn't sync from e621 -- check that an e621 account is configured",
 
   "postDetailDownloadTooltip": "Download",
-  "postDetailDownloadVerified": "Downloaded and checksum verified",
-  "postDetailDownloadMismatch": "Downloaded, but the checksum didn't match",
-  "postDetailDownloadFailed": "Download failed",
+  "postDetailDownloadQueued": "Queued for download",
 
   "updateAvailableTitle": "Update available ({tagName})",
   "@updateAvailableTitle": {

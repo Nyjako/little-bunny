@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:crypto/crypto.dart';
 import 'package:http/http.dart' as http;
+import 'package:path_provider/path_provider.dart';
 import 'package:saf_stream/saf_stream.dart';
 import 'package:saf_util/saf_util.dart';
 
@@ -126,7 +127,21 @@ class DownloadManager {
         final directory = Directory('$destinationFolder/$artistFolder');
         await directory.create(recursive: true);
         filePath = '${directory.path}/${post.externalId}.$ext';
-        await File(filePath).writeAsBytes(bytes);
+        // Written to a temp file first, then moved into place, so a crash
+        // or kill mid-write (M43) never leaves a corrupt, half-written file
+        // sitting at the user-visible destination path -- `rename` is atomic
+        // within the same filesystem; the copy+delete fallback only matters
+        // if the OS temp dir and destination folder happen to be on
+        // different filesystems/volumes.
+        final tempDir = await getTemporaryDirectory();
+        final tempFile = File('${tempDir.path}/${post.site.toWireString()}_${post.externalId}.$ext.tmp');
+        await tempFile.writeAsBytes(bytes);
+        try {
+          await tempFile.rename(filePath);
+        } catch (_) {
+          await tempFile.copy(filePath);
+          await tempFile.delete();
+        }
       }
 
       final checksum = md5.convert(bytes).toString();

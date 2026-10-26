@@ -395,17 +395,8 @@ class AppLocalizationsEn extends AppLocalizations {
   String get postGridMassDownloadTooltip => 'Download selected';
 
   @override
-  String postGridMassDownloadProgress(int done, int total) {
-    return '$done/$total downloaded';
-  }
-
-  @override
-  String postGridMassDownloadSummary(
-    int succeeded,
-    int mismatched,
-    int failed,
-  ) {
-    return '$succeeded downloaded, $mismatched checksum mismatch, $failed failed';
+  String postGridMassDownloadQueued(int count) {
+    return '$count queued for download';
   }
 
   @override
@@ -830,14 +821,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get postDetailDownloadTooltip => 'Download';
 
   @override
-  String get postDetailDownloadVerified => 'Downloaded and checksum verified';
-
-  @override
-  String get postDetailDownloadMismatch =>
-      'Downloaded, but the checksum didn\'t match';
-
-  @override
-  String get postDetailDownloadFailed => 'Download failed';
+  String get postDetailDownloadQueued => 'Queued for download';
 
   @override
   String updateAvailableTitle(String tagName) {

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../l10n/app_localizations.dart';
 import '../repository/bunny_models.dart';
 import '../repository/bunny_repository.dart';
+import '../services/download_queue_service.dart';
 import '../settings/display_settings_store.dart';
 import '../settings/download_settings_store.dart';
 import '../util/responsive.dart';
@@ -25,6 +26,7 @@ class TagBrowseScreen extends StatefulWidget {
   final BunnyRepository repository;
   final DisplaySettingsStore displaySettingsStore;
   final DownloadSettingsStore downloadSettingsStore;
+  final DownloadQueueService downloadQueueService;
 
   /// Pre-fills the label field when the user chooses to save this browse as
   /// a search (e.g. a pool's own title, M9.6.3) -- `null` leaves the label
@@ -50,6 +52,7 @@ class TagBrowseScreen extends StatefulWidget {
     required this.repository,
     required this.displaySettingsStore,
     required this.downloadSettingsStore,
+    required this.downloadQueueService,
     this.initialLabel,
     this.customFetch,
     this.title,
@@ -144,6 +147,7 @@ class _TagBrowseScreenState extends State<TagBrowseScreen> {
           repository: widget.repository,
           displaySettingsStore: widget.displaySettingsStore,
           downloadSettingsStore: widget.downloadSettingsStore,
+          downloadQueueService: widget.downloadQueueService,
         ),
       ),
     );
@@ -262,6 +266,7 @@ class _TagBrowseScreenState extends State<TagBrowseScreen> {
           repository: widget.repository,
           displaySettingsStore: widget.displaySettingsStore,
           downloadSettingsStore: widget.downloadSettingsStore,
+          downloadQueueService: widget.downloadQueueService,
           siblingPosts: posts,
         ),
       ),
