@@ -17,6 +17,8 @@ import '../util/image_headers.dart';
 import '../util/media_type.dart';
 import '../util/mouse_drag_scroll_behavior.dart';
 import '../util/responsive.dart';
+import '../widgets/download_progress_indicator.dart';
+import '../widgets/gif_player.dart';
 import '../widgets/rating_badge.dart';
 import 'full_screen_post_viewer_screen.dart';
 import 'tag_browse_screen.dart';
@@ -700,11 +702,30 @@ class _PostDetailPageState extends State<_PostDetailPage> {
     final maxHeight = MediaQuery.sizeOf(context).height * 0.6;
     Widget bounded(Widget child) => ConstrainedBox(constraints: BoxConstraints(maxHeight: maxHeight), child: AspectRatio(aspectRatio: aspectRatio, child: child));
     if (_imageExtensions.contains(ext)) {
-      return GestureDetector(
-        key: const Key('postDetailImageTapTarget'),
-        onTap: _openFullScreenViewer,
-        child: bounded(CachedNetworkImage(imageUrl: post.fileUrl!, httpHeaders: imageHeadersFor(post.site), fit: BoxFit.contain)),
-      );
+      // Image's own loadingBuilder (standard ImageStream/ImageChunkEvent
+      // machinery), not CachedNetworkImage's progressIndicatorBuilder --
+      // the latter switches CachedNetworkImage's internal rendering onto a
+      // different, flutter_cache_manager-streaming-backed path that never
+      // settles under `flutter_test` (confirmed: it hung even the simplest
+      // tests in this screen's own test suite, unrelated to gifs at all).
+      // This uses the exact same CachedNetworkImageProvider plain
+      // CachedNetworkImage already resolves through, which is already
+      // proven compatible with this test suite's existing pumpAndSettle
+      // calls.
+      final content = isGifExt(ext)
+          ? GifPlayer(imageUrl: post.fileUrl!, httpHeaders: imageHeadersFor(post.site))
+          : Image(
+              image: CachedNetworkImageProvider(post.fileUrl!, headers: imageHeadersFor(post.site)),
+              fit: BoxFit.contain,
+              loadingBuilder: (context, child, loadingProgress) {
+                if (loadingProgress == null) {
+                  return child;
+                }
+                final total = loadingProgress.expectedTotalBytes;
+                return DownloadProgressIndicator(progress: total != null ? loadingProgress.cumulativeBytesLoaded / total : null);
+              },
+            );
+      return GestureDetector(key: const Key('postDetailImageTapTarget'), onTap: _openFullScreenViewer, child: bounded(content));
     }
     if (isVideoExt(ext)) {
       return FutureBuilder<void>(

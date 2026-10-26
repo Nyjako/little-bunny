@@ -12,6 +12,7 @@ import 'package:little_bunny/services/download_manager.dart';
 import 'package:little_bunny/services/download_queue_service.dart';
 import 'package:little_bunny/settings/display_settings_store.dart';
 import 'package:little_bunny/settings/download_settings_store.dart';
+import 'package:little_bunny/widgets/gif_player.dart';
 import 'package:path_provider_platform_interface/path_provider_platform_interface.dart';
 import 'package:photo_view/photo_view_gallery.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -24,6 +25,13 @@ import '../fakes/fake_path_provider.dart';
 import '../fakes/fake_video_player_platform.dart';
 import '../fakes/fake_wakelock_plus_platform.dart';
 import '../fakes/test_app.dart';
+
+/// Finds the still-image path's [Image] widget (now built with an explicit
+/// [CachedNetworkImageProvider] + `loadingBuilder`, not `CachedNetworkImage`
+/// itself -- see `_buildMedia`'s own doc comment for why) -- a plain
+/// `find.byType(Image)` would also match any other `Image` elsewhere on the
+/// page, so this checks the `image` property too.
+Finder _findCachedNetworkImage() => find.byWidgetPredicate((widget) => widget is Image && widget.image is CachedNetworkImageProvider);
 
 /// A fresh [DownloadQueueService] per call -- tests that don't care about
 /// the download queue at all (most of this file -- only the "download
@@ -342,14 +350,14 @@ void main() {
     await tester.pumpWidget(wrapWithLocalization(PostDetailScreen(post: stalePost, repository: repository, displaySettingsStore: const DisplaySettingsStore(), downloadSettingsStore: const DownloadSettingsStore(), downloadQueueService: _downloadQueueService())));
     await tester.pumpAndSettle();
 
-    expect(find.byType(CachedNetworkImage), findsOneWidget);
+    expect(_findCachedNetworkImage(), findsOneWidget);
     await scrollToEnd(tester);
     expect(find.text('7'), findsOneWidget); // refreshed commentCount
     expect(find.text('1200x900'), findsOneWidget); // refreshed dimensions
     expect(find.text('freshly_loaded_tag'), findsOneWidget);
   });
 
-  for (final ext in ['jpg', 'png', 'gif', 'webp']) {
+  for (final ext in ['jpg', 'png', 'webp']) {
     testWidgets('renders a CachedNetworkImage for a $ext post', (WidgetTester tester) async {
       final repository = FakeBunnyRepository();
       final post = _post(fileExt: ext);
@@ -357,10 +365,28 @@ void main() {
       await tester.pumpWidget(wrapWithLocalization(PostDetailScreen(post: post, repository: repository, displaySettingsStore: const DisplaySettingsStore(), downloadSettingsStore: const DownloadSettingsStore(), downloadQueueService: _downloadQueueService())));
       await tester.pumpAndSettle();
 
-      expect(find.byType(CachedNetworkImage), findsOneWidget);
+      expect(_findCachedNetworkImage(), findsOneWidget);
       expect(find.byType(VideoPlayer), findsNothing);
     });
   }
+
+  // Only checks which widget is used, not that it finishes loading --
+  // GifPlayer drives a perpetual Timer-based animation loop once playing,
+  // which (like any repeating animation) pumpAndSettle can never settle
+  // past, so a single bounded pump() is used instead, same as this file's
+  // other image/video tests never wait for a real network fetch to resolve
+  // either.
+  testWidgets('renders a GifPlayer (not a plain CachedNetworkImage) for a gif post (M49)', (WidgetTester tester) async {
+    final repository = FakeBunnyRepository();
+    final post = _post(fileExt: 'gif');
+
+    await tester.pumpWidget(wrapWithLocalization(PostDetailScreen(post: post, repository: repository, displaySettingsStore: const DisplaySettingsStore(), downloadSettingsStore: const DownloadSettingsStore(), downloadQueueService: _downloadQueueService())));
+    await tester.pump();
+
+    expect(find.byType(GifPlayer), findsOneWidget);
+    expect(find.byType(CachedNetworkImage), findsNothing);
+    expect(find.byType(VideoPlayer), findsNothing);
+  });
 
   for (final ext in ['webm', 'mp4']) {
     testWidgets('renders a VideoPlayer for a $ext post', (WidgetTester tester) async {
