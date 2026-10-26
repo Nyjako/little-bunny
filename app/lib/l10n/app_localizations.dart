@@ -178,6 +178,24 @@ abstract class AppLocalizations {
   /// **'Certificate SHA-256 fingerprint'**
   String get setupCertFingerprintLabel;
 
+  /// No description provided for @setupPasteConnectionInfo.
+  ///
+  /// In en, this message translates to:
+  /// **'Paste connection info'**
+  String get setupPasteConnectionInfo;
+
+  /// No description provided for @setupScanQrCode.
+  ///
+  /// In en, this message translates to:
+  /// **'Scan QR code'**
+  String get setupScanQrCode;
+
+  /// No description provided for @setupConnectionQrInvalid.
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t read connection info from that'**
+  String get setupConnectionQrInvalid;
+
   /// No description provided for @setupReconfigureTitle.
   ///
   /// In en, this message translates to:

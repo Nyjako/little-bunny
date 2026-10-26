@@ -20,6 +20,11 @@
          request (FlutterLocalNotificationsQueueNotifier.initialize) is still
          needed too. -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
+    <!-- Lets SetupScreen's "Scan QR code" entry point (mobile_scanner) use
+         the camera to read a server's connection QR code. Declaring it
+         here is necessary but not sufficient -- mobile_scanner requests the
+         runtime permission itself when the camera preview starts. -->
+    <uses-permission android:name="android.permission.CAMERA"/>
     <application
         android:label="little_bunny"
         android:name="${applicationName}"
