@@ -354,6 +354,242 @@ e621_result_t e621_parse_pool(const cJSON *json, e621_pool_t *out)
     return E621_OK;
 }
 
+/* e621's tags.json "category" field -- numeric codes matching the same
+ * groupings e621_tags_t already buckets post tags into by name (general/
+ * artist/copyright/character/species/invalid/lore/meta). 2 is unused on
+ * e621's side; everything else unrecognized maps to UNKNOWN. */
+static e621_tag_category_t parse_tag_category(int category)
+{
+    switch (category) {
+        case 0:
+            return E621_TAG_CATEGORY_GENERAL;
+        case 1:
+            return E621_TAG_CATEGORY_ARTIST;
+        case 3:
+            return E621_TAG_CATEGORY_COPYRIGHT;
+        case 4:
+            return E621_TAG_CATEGORY_CHARACTER;
+        case 5:
+            return E621_TAG_CATEGORY_SPECIES;
+        case 6:
+            return E621_TAG_CATEGORY_INVALID;
+        case 7:
+            return E621_TAG_CATEGORY_META;
+        case 8:
+            return E621_TAG_CATEGORY_LORE;
+        default:
+            return E621_TAG_CATEGORY_UNKNOWN;
+    }
+}
+
+e621_result_t e621_parse_tag(const cJSON *json, e621_tag_t *out)
+{
+    if (!json || !out) {
+        return E621_ERR_INVALID_ARG;
+    }
+    memset(out, 0, sizeof(*out));
+
+    int64_t id = 0;
+    if (bunny_json_get_int64(json, "id", &id) != BUNNY_JSON_OK) {
+        return E621_ERR_PARSE;
+    }
+    out->id = id;
+
+    out->name = dup_or_null(bunny_json_get_string_or(json, "name", NULL));
+    out->post_count = bunny_json_get_int_or(json, "post_count", 0);
+    out->category = parse_tag_category(bunny_json_get_int_or(json, "category", -1));
+    out->related_tags = dup_or_null(bunny_json_get_string_or(json, "related_tags", NULL));
+    out->is_locked = bunny_json_get_bool_or(json, "is_locked", false);
+    out->created_at = dup_or_null(bunny_json_get_string_or(json, "created_at", NULL));
+    out->updated_at = dup_or_null(bunny_json_get_string_or(json, "updated_at", NULL));
+
+    return E621_OK;
+}
+
+e621_result_t e621_parse_tag_array(const cJSON *json_array, e621_tag_list_t *out)
+{
+    if (!json_array || !out) {
+        return E621_ERR_INVALID_ARG;
+    }
+    if (!cJSON_IsArray(json_array)) {
+        return E621_ERR_PARSE;
+    }
+    memset(out, 0, sizeof(*out));
+
+    size_t n = (size_t)cJSON_GetArraySize(json_array);
+    if (n == 0) {
+        return E621_OK;
+    }
+
+    e621_tag_t *items = calloc(n, sizeof(e621_tag_t));
+    if (!items) {
+        return E621_ERR_UNKNOWN;
+    }
+
+    size_t i = 0;
+    const cJSON *item;
+    cJSON_ArrayForEach(item, json_array)
+    {
+        e621_result_t result = e621_parse_tag(item, &items[i]);
+        if (result != E621_OK) {
+            for (size_t j = 0; j < i; j++) {
+                e621_tag_free(&items[j]);
+            }
+            free(items);
+            return result;
+        }
+        i++;
+    }
+
+    out->items = items;
+    out->count = n;
+    return E621_OK;
+}
+
+e621_result_t e621_parse_wiki_page(const cJSON *json, e621_wiki_page_t *out)
+{
+    if (!json || !out) {
+        return E621_ERR_INVALID_ARG;
+    }
+    memset(out, 0, sizeof(*out));
+
+    int64_t id = 0;
+    if (bunny_json_get_int64(json, "id", &id) != BUNNY_JSON_OK) {
+        return E621_ERR_PARSE;
+    }
+    out->id = id;
+
+    out->title = dup_or_null(bunny_json_get_string_or(json, "title", NULL));
+    out->body = dup_or_null(bunny_json_get_string_or(json, "body", NULL));
+    parse_string_array(cJSON_GetObjectItemCaseSensitive(json, "other_names"), &out->other_names);
+    out->is_locked = bunny_json_get_bool_or(json, "is_locked", false);
+    out->created_at = dup_or_null(bunny_json_get_string_or(json, "created_at", NULL));
+    out->updated_at = dup_or_null(bunny_json_get_string_or(json, "updated_at", NULL));
+
+    return E621_OK;
+}
+
+e621_result_t e621_parse_tag_alias(const cJSON *json, e621_tag_alias_t *out)
+{
+    if (!json || !out) {
+        return E621_ERR_INVALID_ARG;
+    }
+    memset(out, 0, sizeof(*out));
+
+    int64_t id = 0;
+    if (bunny_json_get_int64(json, "id", &id) != BUNNY_JSON_OK) {
+        return E621_ERR_PARSE;
+    }
+    out->id = id;
+
+    out->antecedent_name = dup_or_null(bunny_json_get_string_or(json, "antecedent_name", NULL));
+    out->consequent_name = dup_or_null(bunny_json_get_string_or(json, "consequent_name", NULL));
+    out->status = dup_or_null(bunny_json_get_string_or(json, "status", NULL));
+    out->post_count = bunny_json_get_int_or(json, "post_count", 0);
+
+    return E621_OK;
+}
+
+e621_result_t e621_parse_tag_alias_array(const cJSON *json_array, e621_tag_alias_list_t *out)
+{
+    if (!json_array || !out) {
+        return E621_ERR_INVALID_ARG;
+    }
+    if (!cJSON_IsArray(json_array)) {
+        return E621_ERR_PARSE;
+    }
+    memset(out, 0, sizeof(*out));
+
+    size_t n = (size_t)cJSON_GetArraySize(json_array);
+    if (n == 0) {
+        return E621_OK;
+    }
+
+    e621_tag_alias_t *items = calloc(n, sizeof(e621_tag_alias_t));
+    if (!items) {
+        return E621_ERR_UNKNOWN;
+    }
+
+    size_t i = 0;
+    const cJSON *item;
+    cJSON_ArrayForEach(item, json_array)
+    {
+        e621_result_t result = e621_parse_tag_alias(item, &items[i]);
+        if (result != E621_OK) {
+            for (size_t j = 0; j < i; j++) {
+                e621_tag_alias_free(&items[j]);
+            }
+            free(items);
+            return result;
+        }
+        i++;
+    }
+
+    out->items = items;
+    out->count = n;
+    return E621_OK;
+}
+
+e621_result_t e621_parse_tag_implication(const cJSON *json, e621_tag_implication_t *out)
+{
+    if (!json || !out) {
+        return E621_ERR_INVALID_ARG;
+    }
+    memset(out, 0, sizeof(*out));
+
+    int64_t id = 0;
+    if (bunny_json_get_int64(json, "id", &id) != BUNNY_JSON_OK) {
+        return E621_ERR_PARSE;
+    }
+    out->id = id;
+
+    out->antecedent_name = dup_or_null(bunny_json_get_string_or(json, "antecedent_name", NULL));
+    out->consequent_name = dup_or_null(bunny_json_get_string_or(json, "consequent_name", NULL));
+    out->status = dup_or_null(bunny_json_get_string_or(json, "status", NULL));
+
+    return E621_OK;
+}
+
+e621_result_t e621_parse_tag_implication_array(const cJSON *json_array, e621_tag_implication_list_t *out)
+{
+    if (!json_array || !out) {
+        return E621_ERR_INVALID_ARG;
+    }
+    if (!cJSON_IsArray(json_array)) {
+        return E621_ERR_PARSE;
+    }
+    memset(out, 0, sizeof(*out));
+
+    size_t n = (size_t)cJSON_GetArraySize(json_array);
+    if (n == 0) {
+        return E621_OK;
+    }
+
+    e621_tag_implication_t *items = calloc(n, sizeof(e621_tag_implication_t));
+    if (!items) {
+        return E621_ERR_UNKNOWN;
+    }
+
+    size_t i = 0;
+    const cJSON *item;
+    cJSON_ArrayForEach(item, json_array)
+    {
+        e621_result_t result = e621_parse_tag_implication(item, &items[i]);
+        if (result != E621_OK) {
+            for (size_t j = 0; j < i; j++) {
+                e621_tag_implication_free(&items[j]);
+            }
+            free(items);
+            return result;
+        }
+        i++;
+    }
+
+    out->items = items;
+    out->count = n;
+    return E621_OK;
+}
+
 void e621_string_list_free(e621_string_list_t *list)
 {
     if (!list) {
@@ -449,6 +685,92 @@ void e621_comment_list_free(e621_comment_list_t *list)
     }
     for (size_t i = 0; i < list->count; i++) {
         e621_comment_free(&list->items[i]);
+    }
+    free(list->items);
+    list->items = NULL;
+    list->count = 0;
+}
+
+void e621_tag_free(e621_tag_t *tag)
+{
+    if (!tag) {
+        return;
+    }
+    free(tag->name);
+    free(tag->related_tags);
+    free(tag->created_at);
+    free(tag->updated_at);
+    memset(tag, 0, sizeof(*tag));
+}
+
+void e621_tag_list_free(e621_tag_list_t *list)
+{
+    if (!list) {
+        return;
+    }
+    for (size_t i = 0; i < list->count; i++) {
+        e621_tag_free(&list->items[i]);
+    }
+    free(list->items);
+    list->items = NULL;
+    list->count = 0;
+}
+
+void e621_wiki_page_free(e621_wiki_page_t *page)
+{
+    if (!page) {
+        return;
+    }
+    free(page->title);
+    free(page->body);
+    e621_string_list_free(&page->other_names);
+    free(page->created_at);
+    free(page->updated_at);
+    memset(page, 0, sizeof(*page));
+}
+
+void e621_tag_alias_free(e621_tag_alias_t *alias)
+{
+    if (!alias) {
+        return;
+    }
+    free(alias->antecedent_name);
+    free(alias->consequent_name);
+    free(alias->status);
+    memset(alias, 0, sizeof(*alias));
+}
+
+void e621_tag_alias_list_free(e621_tag_alias_list_t *list)
+{
+    if (!list) {
+        return;
+    }
+    for (size_t i = 0; i < list->count; i++) {
+        e621_tag_alias_free(&list->items[i]);
+    }
+    free(list->items);
+    list->items = NULL;
+    list->count = 0;
+}
+
+void e621_tag_implication_free(e621_tag_implication_t *implication)
+{
+    if (!implication) {
+        return;
+    }
+    free(implication->antecedent_name);
+    free(implication->consequent_name);
+    free(implication->status);
+    memset(implication, 0, sizeof(*implication));
+}
+
+void e621_tag_implication_list_free(e621_tag_implication_list_t *list)
+{
+    if (!list) {
+        return;
+    }
+    for (size_t i = 0; i < list->count; i++) {
+        e621_tag_implication_free(&list->items[i]);
     }
     free(list->items);
     list->items = NULL;

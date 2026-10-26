@@ -42,6 +42,18 @@ static const char *E621_COMMENTS_LIST_FIXTURE = "[{\"id\":1,\"post_id\":42,\"cre
  * bunny_core_sync_e621_blacklist in a single fetch. */
 static const char *E621_USER_PROFILE_FIXTURE = "{\"id\":1,\"name\":\"tester\",\"blacklisted_tags\":\"young\\nbrand_new\\nrating:e young\"}";
 
+static const char *E621_TAGS_SEARCH_FIXTURE =
+    "[{\"id\":1,\"name\":\"fox\",\"post_count\":12345,\"category\":5,\"related_tags\":\"canine wolf\",\"is_locked\":false,"
+    "\"created_at\":\"2020-01-01T00:00:00.000-05:00\",\"updated_at\":\"2020-01-02T00:00:00.000-05:00\"}]";
+
+static const char *E621_WIKI_PAGE_FIXTURE =
+    "[{\"id\":7,\"title\":\"fox\",\"body\":\"A [[canine]] species.\",\"other_names\":[\"foxes\"],\"is_locked\":false,"
+    "\"created_at\":\"2020-01-01T00:00:00.000-05:00\",\"updated_at\":\"2020-01-02T00:00:00.000-05:00\"}]";
+
+static const char *E621_TAG_ALIASES_FIXTURE = "[{\"id\":1,\"antecedent_name\":\"foxes\",\"consequent_name\":\"fox\",\"status\":\"active\",\"post_count\":12345}]";
+
+static const char *E621_TAG_IMPLICATIONS_FIXTURE = "[{\"id\":1,\"antecedent_name\":\"red_fox\",\"consequent_name\":\"fox\",\"status\":\"active\"}]";
+
 static bunny_http_result_t fake_e621_send(void *user_data, const bunny_http_request_t *request, bunny_http_response_t *out_response)
 {
     (void)user_data;
@@ -54,6 +66,14 @@ static bunny_http_result_t fake_e621_send(void *user_data, const bunny_http_requ
         body = E621_USER_PROFILE_FIXTURE;
     } else if (strstr(request->url, "/comments.json") && request->method == BUNNY_HTTP_GET) {
         body = E621_COMMENTS_LIST_FIXTURE;
+    } else if (strstr(request->url, "/tags.json")) {
+        body = E621_TAGS_SEARCH_FIXTURE;
+    } else if (strstr(request->url, "/wiki_pages.json")) {
+        body = E621_WIKI_PAGE_FIXTURE;
+    } else if (strstr(request->url, "/tag_aliases.json")) {
+        body = E621_TAG_ALIASES_FIXTURE;
+    } else if (strstr(request->url, "/tag_implications.json")) {
+        body = E621_TAG_IMPLICATIONS_FIXTURE;
     }
     out_response->status = 200;
     out_response->body = strdup(body);
@@ -1183,6 +1203,52 @@ void test_user_triggered_due_sync_promotes_a_pending_background_one_instead_of_d
     free(response.data);
 }
 
+void test_tags_search(void)
+{
+    response_buffer_t response = {0};
+    long status = do_request("GET", "/tags/search?name_matches=fox&limit=10", NULL, &response, true, NULL);
+    TEST_ASSERT_EQUAL(200, status);
+    TEST_ASSERT_NOT_NULL(strstr(response.data, "\"name\":\"fox\""));
+    TEST_ASSERT_NOT_NULL(strstr(response.data, "\"post_count\":12345"));
+    free(response.data);
+}
+
+void test_tags_search_missing_name_matches_is_invalid_arg(void)
+{
+    response_buffer_t response = {0};
+    long status = do_request("GET", "/tags/search", NULL, &response, true, NULL);
+    TEST_ASSERT_EQUAL(400, status);
+    free(response.data);
+}
+
+void test_wiki_page_lookup(void)
+{
+    response_buffer_t response = {0};
+    long status = do_request("GET", "/wiki_pages?title=fox", NULL, &response, true, NULL);
+    TEST_ASSERT_EQUAL(200, status);
+    TEST_ASSERT_NOT_NULL(strstr(response.data, "\"title\":\"fox\""));
+    TEST_ASSERT_NOT_NULL(strstr(response.data, "[[canine]]"));
+    free(response.data);
+}
+
+void test_tag_aliases_search(void)
+{
+    response_buffer_t response = {0};
+    long status = do_request("GET", "/tag_aliases?name_matches=fox", NULL, &response, true, NULL);
+    TEST_ASSERT_EQUAL(200, status);
+    TEST_ASSERT_NOT_NULL(strstr(response.data, "\"antecedent_name\":\"foxes\""));
+    free(response.data);
+}
+
+void test_tag_implications_search(void)
+{
+    response_buffer_t response = {0};
+    long status = do_request("GET", "/tag_implications?name_matches=red_fox", NULL, &response, true, NULL);
+    TEST_ASSERT_EQUAL(200, status);
+    TEST_ASSERT_NOT_NULL(strstr(response.data, "\"antecedent_name\":\"red_fox\""));
+    free(response.data);
+}
+
 int main(void)
 {
     curl_global_init(CURL_GLOBAL_DEFAULT);
@@ -1210,6 +1276,11 @@ int main(void)
     RUN_TEST(test_sync_all_reports_progress_and_rejects_duplicate_while_running);
     RUN_TEST(test_tasks_endpoint_lists_pending_and_running_jobs_in_fifo_order);
     RUN_TEST(test_user_triggered_due_sync_promotes_a_pending_background_one_instead_of_duplicating);
+    RUN_TEST(test_tags_search);
+    RUN_TEST(test_tags_search_missing_name_matches_is_invalid_arg);
+    RUN_TEST(test_wiki_page_lookup);
+    RUN_TEST(test_tag_aliases_search);
+    RUN_TEST(test_tag_implications_search);
     int result = UNITY_END();
     curl_global_cleanup();
     return result;

@@ -75,6 +75,22 @@ e621_result_t e621_comment_list(e621_client_t *client, int64_t post_id, e621_com
 /* A post's e621_post_t.pool_ids / e621_post_t.relationships give you the ids to pass here. */
 e621_result_t e621_get_pool(e621_client_t *client, int64_t pool_id, e621_pool_t *out_pool);
 
+/* Tag/wiki reference data (M53) -- e621.wiki documents these as part of
+ * e621's own real API, so they're plain unauthenticated e621.net lookups
+ * like everything else in this file, not a separate service. */
+
+e621_result_t e621_search_tags(e621_client_t *client, const char *name_matches, int limit, e621_tag_list_t *out_tags);
+
+/* Not every tag has a wiki page -- returns E621_ERR_NOT_FOUND if `title`
+ * doesn't match one. Takes the first match of e621's own (potentially
+ * fuzzy) title search, since this is meant for "the wiki page for this
+ * exact tag name," not a general title search. */
+e621_result_t e621_get_wiki_page(e621_client_t *client, const char *title, e621_wiki_page_t *out_page);
+
+e621_result_t e621_search_tag_aliases(e621_client_t *client, const char *name_matches, int limit, e621_tag_alias_list_t *out_aliases);
+
+e621_result_t e621_search_tag_implications(e621_client_t *client, const char *name_matches, int limit, e621_tag_implication_list_t *out_implications);
+
 #ifdef __cplusplus
 }
 #endif

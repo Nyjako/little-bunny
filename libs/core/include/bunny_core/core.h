@@ -455,6 +455,104 @@ bunny_core_result_t bunny_core_process_queue(bunny_core_t *core, bunny_core_queu
 bunny_core_result_t bunny_core_table_stats(bunny_core_t *core, bunny_db_tag_stat_list_t *out_list);
 bunny_core_result_t bunny_core_integrity_check(bunny_core_t *core, bool *out_ok);
 
+/* --- Tag/wiki reference data (M53) -----------------------------------------
+ * e621.wiki (https://e621.wiki/) documents these as part of e621's own real
+ * API, so they're plain live e621 lookups like bunny_core_pool_info_t/
+ * bunny_core_comment_t above -- no persistence. e621-only: Inkbunny has no
+ * equivalent of any of this, so every function here always queries e621
+ * regardless of which site a tag came from (per the user: falling back to
+ * e621's wiki for Inkbunny tags too beats omitting the feature there
+ * entirely). */
+
+typedef enum
+{
+    BUNNY_CORE_TAG_CATEGORY_GENERAL,
+    BUNNY_CORE_TAG_CATEGORY_ARTIST,
+    BUNNY_CORE_TAG_CATEGORY_COPYRIGHT,
+    BUNNY_CORE_TAG_CATEGORY_CHARACTER,
+    BUNNY_CORE_TAG_CATEGORY_SPECIES,
+    BUNNY_CORE_TAG_CATEGORY_INVALID,
+    BUNNY_CORE_TAG_CATEGORY_LORE,
+    BUNNY_CORE_TAG_CATEGORY_META,
+    BUNNY_CORE_TAG_CATEGORY_UNKNOWN,
+} bunny_core_tag_category_t;
+
+typedef struct
+{
+    int64_t id;
+    char *name;
+    int post_count;
+    bunny_core_tag_category_t category;
+    char *related_tags; /* raw, space-separated; e621 doesn't structure this further */
+    bool is_locked;
+    char *created_at;
+    char *updated_at;
+} bunny_core_tag_t;
+
+typedef struct
+{
+    bunny_core_tag_t *items;
+    size_t count;
+} bunny_core_tag_list_t;
+
+void bunny_core_tag_list_free(bunny_core_tag_list_t *list);
+
+bunny_core_result_t bunny_core_search_tags(bunny_core_t *core, const char *name_matches, int limit, bunny_core_tag_list_t *out_list);
+
+typedef struct
+{
+    int64_t id;
+    char *title;
+    char *body; /* [[wiki link]]/{{author}}/`thumb #id` markup, unparsed -- see the app's shared rich-text parser (M50) */
+    bunny_db_string_list_t other_names;
+    bool is_locked;
+    char *created_at;
+    char *updated_at;
+} bunny_core_wiki_page_t;
+
+void bunny_core_wiki_page_free(bunny_core_wiki_page_t *page);
+
+/* Not every tag has a wiki page -- returns BUNNY_CORE_ERR_NOT_FOUND if
+ * `title` doesn't match one. */
+bunny_core_result_t bunny_core_get_wiki_page(bunny_core_t *core, const char *title, bunny_core_wiki_page_t *out_page);
+
+typedef struct
+{
+    int64_t id;
+    char *antecedent_name;
+    char *consequent_name;
+    char *status;
+    int post_count;
+} bunny_core_tag_alias_t;
+
+typedef struct
+{
+    bunny_core_tag_alias_t *items;
+    size_t count;
+} bunny_core_tag_alias_list_t;
+
+void bunny_core_tag_alias_list_free(bunny_core_tag_alias_list_t *list);
+
+bunny_core_result_t bunny_core_search_tag_aliases(bunny_core_t *core, const char *name_matches, int limit, bunny_core_tag_alias_list_t *out_list);
+
+typedef struct
+{
+    int64_t id;
+    char *antecedent_name;
+    char *consequent_name;
+    char *status;
+} bunny_core_tag_implication_t;
+
+typedef struct
+{
+    bunny_core_tag_implication_t *items;
+    size_t count;
+} bunny_core_tag_implication_list_t;
+
+void bunny_core_tag_implication_list_free(bunny_core_tag_implication_list_t *list);
+
+bunny_core_result_t bunny_core_search_tag_implications(bunny_core_t *core, const char *name_matches, int limit, bunny_core_tag_implication_list_t *out_list);
+
 #ifdef __cplusplus
 }
 #endif
