@@ -23,6 +23,14 @@ Future<void> openExternalPost({
   required DisplaySettingsStore displaySettingsStore,
   required DownloadSettingsStore downloadSettingsStore,
   required DownloadQueueService downloadQueueService,
+  // Forwarded into the PostDetailScreen this opens -- see that widget's own
+  // currentSearchSite/currentSearchQuery doc comment (M54 partial). Null
+  // (the default) for every prose/description cross-reference caller;
+  // only PostDetailScreen's own parent/child chip handler forwards real
+  // values, to keep the "current search" context alive across structural
+  // navigation within the same browsing session.
+  BunnySite? currentSearchSite,
+  String? currentSearchQuery,
 }) async {
   try {
     final postId = await repository.fetchPost(site, externalId);
@@ -64,6 +72,8 @@ Future<void> openExternalPost({
           displaySettingsStore: displaySettingsStore,
           downloadSettingsStore: downloadSettingsStore,
           downloadQueueService: downloadQueueService,
+          currentSearchSite: currentSearchSite,
+          currentSearchQuery: currentSearchQuery,
         ),
       ),
     );

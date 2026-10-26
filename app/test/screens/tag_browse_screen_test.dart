@@ -94,6 +94,28 @@ void main() {
     expect(find.byType(PostDetailScreen), findsOneWidget);
   });
 
+  testWidgets('a post opened from a tag browse carries the current query into its tag menu (M54 partial)', (WidgetTester tester) async {
+    final repository = FakeBunnyRepository();
+    repository.previewSearchResults['e621:someartist:1'] = [_post(1)];
+    repository.tagsByPostId[1] = const [BunnyPostTag(name: 'someartist', category: 'artist')];
+
+    await tester.pumpWidget(wrap(repository));
+    await tester.pumpAndSettle();
+
+    tester.widget<PostGridTile>(find.byKey(const ValueKey(1))).onTap();
+    await tester.pumpAndSettle();
+    await tester.drag(find.byType(Scrollable).first, const Offset(0, -2000));
+    await tester.pumpAndSettle();
+
+    await tester.longPress(find.widgetWithText(ActionChip, 'someartist'));
+    await tester.pumpAndSettle();
+
+    // "someartist" is the browse's own query -- already present, so
+    // "Remove from current search" should show up (proving the context
+    // propagated from TagBrowseScreen into PostDetailScreen's tag menu).
+    expect(find.text('Remove from current search'), findsOneWidget);
+  });
+
   testWidgets('a pool query (M22) requests ascending order from e621, not the default newest-first', (WidgetTester tester) async {
     final repository = FakeBunnyRepository();
     repository.previewSearchResults['e621:pool:123 order:id:1'] = [_post(1)];

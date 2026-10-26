@@ -18,6 +18,7 @@ import '../util/media_type.dart';
 import '../util/mouse_drag_scroll_behavior.dart';
 import '../util/post_navigation.dart';
 import '../util/responsive.dart';
+import '../util/tag_query.dart';
 import '../widgets/download_progress_indicator.dart';
 import '../widgets/gif_player.dart';
 import '../widgets/rating_badge.dart';
@@ -33,8 +34,9 @@ import 'wiki_page_screen.dart';
 /// uncategorized bucket) is grouped last instead of being dropped.
 const _tagCategoryOrder = ['artist', 'character', 'copyright', 'species', 'general', 'meta'];
 
-/// The tag long-press context menu's options (M52).
-enum _TagMenuAction { search, addToSearches, addToBlacklist, showWiki, copy }
+/// The tag long-press context menu's options (M52; the 3 "current search"
+/// actions are M54 partial).
+enum _TagMenuAction { search, addToSearches, addToBlacklist, showWiki, copy, addToCurrentSearch, excludeFromCurrentSearch, removeFromCurrentSearch }
 
 const _imageExtensions = {'jpg', 'jpeg', 'png', 'gif', 'webp'};
 
@@ -105,6 +107,19 @@ class PostDetailScreen extends StatefulWidget {
   /// [post] in both places.
   final List<BunnyPost>? siblingPosts;
 
+  /// The site/query [post] was reached through as a live, editable browse
+  /// (M54 partial) -- the grid this screen was opened from, whether a
+  /// saved search (its own stored query) or an unsaved `TagBrowseScreen`
+  /// (whatever it's currently showing). `null` when there's no such
+  /// context (e.g. opened via a parent/child/pool/wiki cross-reference).
+  /// The tag long-press menu's "Add/Exclude/Remove from current search"
+  /// actions read these to compute a new query, then push a brand-new,
+  /// unsaved `TagBrowseScreen` with it -- even when [currentSearchQuery]
+  /// came from a saved search, that search's own stored query is never
+  /// written to.
+  final BunnySite? currentSearchSite;
+  final String? currentSearchQuery;
+
   const PostDetailScreen({
     super.key,
     required this.post,
@@ -114,6 +129,8 @@ class PostDetailScreen extends StatefulWidget {
     required this.downloadQueueService,
     this.downloadManager = const DownloadManager(),
     this.siblingPosts,
+    this.currentSearchSite,
+    this.currentSearchQuery,
   });
 
   @override
@@ -274,6 +291,8 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
             downloadManager: widget.downloadManager,
             downloadQueueService: widget.downloadQueueService,
             siblingPosts: widget.siblingPosts,
+            currentSearchSite: widget.currentSearchSite,
+            currentSearchQuery: widget.currentSearchQuery,
             onFullScreenPostChanged: _jumpToPost,
           ),
         ),
@@ -294,6 +313,11 @@ class _PostDetailPage extends StatefulWidget {
   final DownloadQueueService downloadQueueService;
   final List<BunnyPost>? siblingPosts;
 
+  /// See [PostDetailScreen.currentSearchSite]/[PostDetailScreen.currentSearchQuery]
+  /// -- threaded straight through from the outer shell (M54 partial).
+  final BunnySite? currentSearchSite;
+  final String? currentSearchQuery;
+
   /// Called live as the user swipes inside [FullScreenPostViewerScreen]
   /// (not just once on exit) so the outer [PostDetailScreen]'s own
   /// [PageView] already shows the right page the moment fullscreen is
@@ -310,6 +334,8 @@ class _PostDetailPage extends StatefulWidget {
     required this.downloadManager,
     required this.downloadQueueService,
     this.siblingPosts,
+    this.currentSearchSite,
+    this.currentSearchQuery,
     this.onFullScreenPostChanged,
   });
 
@@ -818,23 +844,103 @@ class _PostDetailPageState extends State<_PostDetailPage> {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(l10n.tagMenuCopied(tagName))));
   }
 
+  /// Pushes a brand-new, unsaved [TagBrowseScreen] for [query] (M54
+  /// partial) -- the mechanism behind all 3 "current search" tag-menu
+  /// actions below. Never mutates [widget.currentSearchQuery]'s source
+  /// (whether that was a saved search or an already-live browse); the
+  /// result is always a fresh, independent live preview.
+  void _pushCurrentSearch(BunnySite site, String query) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => TagBrowseScreen(
+          site: site,
+          query: query,
+          repository: widget.repository,
+          displaySettingsStore: widget.displaySettingsStore,
+          downloadSettingsStore: widget.downloadSettingsStore,
+          downloadQueueService: widget.downloadQueueService,
+        ),
+      ),
+    );
+  }
+
+  /// Falls back to this post's own site + a fresh one-tag query when
+  /// there's no current-search context at all (e.g. opened via a parent/
+  /// child/pool/wiki cross-reference) -- "Add"/"Exclude" always have
+  /// something sensible to do; only "Remove" needs real context (see
+  /// [_showTagMenu]'s visibility check for that one).
+  void _addToCurrentSearch(String tagName) => _pushCurrentSearch(widget.currentSearchSite ?? widget.post.site, addTagToQuery(widget.currentSearchQuery ?? '', tagName));
+
+  void _excludeFromCurrentSearch(String tagName) =>
+      _pushCurrentSearch(widget.currentSearchSite ?? widget.post.site, excludeTagInQuery(widget.currentSearchQuery ?? '', tagName));
+
+  void _removeFromCurrentSearch(String tagName) {
+    final currentQuery = widget.currentSearchQuery;
+    if (currentQuery == null) {
+      return;
+    }
+    _pushCurrentSearch(widget.currentSearchSite ?? widget.post.site, removeTagFromQuery(currentQuery, tagName));
+  }
+
   /// Long-pressing a tag chip (M52) opens this instead of immediately
-  /// searching -- the other four actions don't make sense as a tap on the
-  /// chip itself, so they live behind a long-press menu rather than a
-  /// second visible control per chip.
+  /// searching -- the other actions don't make sense as a tap on the chip
+  /// itself, so they live behind a long-press menu rather than a second
+  /// visible control per chip. The 3 "current search" actions (M54
+  /// partial) are suppressed entirely for a pool browse (adding/excluding/
+  /// removing a bare tag token against a `pool:<id>` sentinel produces a
+  /// query this app's pool-detection logic can't parse back out -- see
+  /// `queryIsPoolSentinel`'s own doc comment); "Remove" specifically is
+  /// also hidden whenever the tag isn't actually present in the current
+  /// query, so it's never offered as a no-op.
   Future<void> _showTagMenu(AppLocalizations l10n, String tagName) async {
+    final currentQuery = widget.currentSearchQuery;
+    final isPoolBrowse = currentQuery != null && queryIsPoolSentinel(currentQuery);
+    final canRemove = !isPoolBrowse && currentQuery != null && queryHasBareTag(currentQuery, tagName);
     final action = await showModalBottomSheet<_TagMenuAction>(
       context: context,
       builder: (context) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ListTile(leading: const Icon(Icons.search), title: Text(l10n.tagMenuSearchLabel), onTap: () => Navigator.pop(context, _TagMenuAction.search)),
-            ListTile(leading: const Icon(Icons.bookmark_add_outlined), title: Text(l10n.tagMenuAddToSearchesLabel), onTap: () => Navigator.pop(context, _TagMenuAction.addToSearches)),
-            ListTile(leading: const Icon(Icons.block), title: Text(l10n.tagMenuAddToBlacklistLabel), onTap: () => Navigator.pop(context, _TagMenuAction.addToBlacklist)),
-            ListTile(leading: const Icon(Icons.menu_book_outlined), title: Text(l10n.tagMenuShowWikiLabel), onTap: () => Navigator.pop(context, _TagMenuAction.showWiki)),
-            ListTile(leading: const Icon(Icons.copy), title: Text(l10n.tagMenuCopyLabel), onTap: () => Navigator.pop(context, _TagMenuAction.copy)),
-          ],
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(leading: const Icon(Icons.search), title: Text(l10n.tagMenuSearchLabel), onTap: () => Navigator.pop(context, _TagMenuAction.search)),
+              ListTile(
+                leading: const Icon(Icons.bookmark_add_outlined),
+                title: Text(l10n.tagMenuAddToSearchesLabel),
+                onTap: () => Navigator.pop(context, _TagMenuAction.addToSearches),
+              ),
+              ListTile(
+                leading: const Icon(Icons.block),
+                title: Text(l10n.tagMenuAddToBlacklistLabel),
+                onTap: () => Navigator.pop(context, _TagMenuAction.addToBlacklist),
+              ),
+              ListTile(
+                leading: const Icon(Icons.menu_book_outlined),
+                title: Text(l10n.tagMenuShowWikiLabel),
+                onTap: () => Navigator.pop(context, _TagMenuAction.showWiki),
+              ),
+              ListTile(leading: const Icon(Icons.copy), title: Text(l10n.tagMenuCopyLabel), onTap: () => Navigator.pop(context, _TagMenuAction.copy)),
+              if (!isPoolBrowse) ...[
+                ListTile(
+                  leading: const Icon(Icons.playlist_add),
+                  title: Text(l10n.tagMenuAddToCurrentSearchLabel),
+                  onTap: () => Navigator.pop(context, _TagMenuAction.addToCurrentSearch),
+                ),
+                ListTile(
+                  leading: const Icon(Icons.playlist_remove),
+                  title: Text(l10n.tagMenuExcludeFromCurrentSearchLabel),
+                  onTap: () => Navigator.pop(context, _TagMenuAction.excludeFromCurrentSearch),
+                ),
+                if (canRemove)
+                  ListTile(
+                    leading: const Icon(Icons.remove_circle_outline),
+                    title: Text(l10n.tagMenuRemoveFromCurrentSearchLabel),
+                    onTap: () => Navigator.pop(context, _TagMenuAction.removeFromCurrentSearch),
+                  ),
+              ],
+            ],
+          ),
         ),
       ),
     );
@@ -852,6 +958,12 @@ class _PostDetailPageState extends State<_PostDetailPage> {
         _openTagWiki(tagName);
       case _TagMenuAction.copy:
         await _copyTagToClipboard(l10n, tagName);
+      case _TagMenuAction.addToCurrentSearch:
+        _addToCurrentSearch(tagName);
+      case _TagMenuAction.excludeFromCurrentSearch:
+        _excludeFromCurrentSearch(tagName);
+      case _TagMenuAction.removeFromCurrentSearch:
+        _removeFromCurrentSearch(tagName);
     }
   }
 
@@ -925,24 +1037,34 @@ class _PostDetailPageState extends State<_PostDetailPage> {
   );
 
   /// Parent/child relationship chips are always same-site as the post
-  /// they're shown on (M13.3).
-  Future<void> _openExternalPost(AppLocalizations l10n, int externalId) => _openPostLink(l10n, widget.post.site, externalId);
+  /// they're shown on (M13.3) -- structural navigation within this same
+  /// browsing session, so unlike the raw [_openPostLink] call below, this
+  /// forwards [widget.currentSearchSite]/[widget.currentSearchQuery]
+  /// forward (M54 partial) rather than starting a fresh context.
+  Future<void> _openExternalPost(AppLocalizations l10n, int externalId) =>
+      _openPostLink(l10n, widget.post.site, externalId, currentSearchSite: widget.currentSearchSite, currentSearchQuery: widget.currentSearchQuery);
 
   /// A `thumb #<id>`/pool-permalink-URL post reference in a description
   /// (M50) carries its own site -- always e621 for `thumb #<id>` (M53's own
   /// wiki-body convention), but whichever domain actually matched for a
   /// captured post URL -- so unlike [_openExternalPost] above, this never
-  /// assumes [widget.post.site].
-  Future<void> _openPostLink(AppLocalizations l10n, BunnySite site, int externalId) => openExternalPost(
-    context: context,
-    l10n: l10n,
-    repository: widget.repository,
-    site: site,
-    externalId: externalId,
-    displaySettingsStore: widget.displaySettingsStore,
-    downloadSettingsStore: widget.downloadSettingsStore,
-    downloadQueueService: widget.downloadQueueService,
-  );
+  /// assumes [widget.post.site]. Description cross-references are prose,
+  /// not a continuation of the current browsing session, so
+  /// [RichMarkupText]'s own `onOpenPost` callback calls this without the
+  /// optional current-search params (both default null below).
+  Future<void> _openPostLink(AppLocalizations l10n, BunnySite site, int externalId, {BunnySite? currentSearchSite, String? currentSearchQuery}) =>
+      openExternalPost(
+        context: context,
+        l10n: l10n,
+        repository: widget.repository,
+        site: site,
+        externalId: externalId,
+        displaySettingsStore: widget.displaySettingsStore,
+        downloadSettingsStore: widget.downloadSettingsStore,
+        downloadQueueService: widget.downloadQueueService,
+        currentSearchSite: currentSearchSite,
+        currentSearchQuery: currentSearchQuery,
+      );
 
   Widget _relationshipsSection(AppLocalizations l10n) {
     final future = _relationshipsFuture;

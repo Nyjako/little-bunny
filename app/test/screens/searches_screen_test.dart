@@ -202,6 +202,16 @@ void main() {
     expect(find.text('Tag stats'), findsOneWidget);
   });
 
+  testWidgets('tapping the custom search icon opens CustomSearchScreen (M54 partial)', (WidgetTester tester) async {
+    await tester.pumpWidget(_wrap(FakeBunnyRepository()));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byIcon(Icons.travel_explore));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Custom search'), findsOneWidget);
+  });
+
   testWidgets('tapping the settings icon opens SettingsScreen', (WidgetTester tester) async {
     await tester.pumpWidget(_wrap(FakeBunnyRepository()));
     await tester.pumpAndSettle();
