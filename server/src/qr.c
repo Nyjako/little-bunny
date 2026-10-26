@@ -41,8 +41,10 @@ char *server_qr_build_connection_json(const char *server_url, const char *bearer
 
 /* Same lookup deploy/dump_server_info.sh already does manually
  * (`curl https://ipinfo.io/ip`) -- `hostname -I`-style local-interface
- * addresses are useless here, clients connect from outside this machine. */
-static char *fetch_public_ip(const bunny_http_transport_t *transport, const char *user_agent)
+ * addresses are useless here, clients connect from outside this machine.
+ * Not static -- status.c (`bunny_server --status`, M58 follow-up) reuses it
+ * too, needing exactly the same fact. */
+char *fetch_public_ip(const bunny_http_transport_t *transport, const char *user_agent)
 {
     bunny_http_header_t headers[] = {{"User-Agent", user_agent}};
     bunny_http_request_t request = {
@@ -71,7 +73,9 @@ static char *fetch_public_ip(const bunny_http_transport_t *transport, const char
     return ip;
 }
 
-static char *compute_cert_sha256(const char *data_dir)
+/* Not static -- status.c reuses this too (see fetch_public_ip's own note
+ * above). */
+char *compute_cert_sha256(const char *data_dir)
 {
     char *pem_path = goblin_appdir_join(data_dir, "server.pem");
     if (!pem_path) {

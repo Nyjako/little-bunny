@@ -448,6 +448,13 @@ typedef struct
  * scheduling -- a failed action stays failed. */
 bunny_core_result_t bunny_core_process_queue(bunny_core_t *core, bunny_core_queue_stats_t *out_stats);
 
+/* --- Diagnostics ----------------------------------------------------------
+ * Backs `bunny_server --db-stats`/`--health` (server/src/main.c) -- thin
+ * read-locked pass-throughs to bunny_db_table_stats/bunny_db_integrity_check,
+ * same pattern as bunny_core_search_list -> bunny_db_search_list. */
+bunny_core_result_t bunny_core_table_stats(bunny_core_t *core, bunny_db_tag_stat_list_t *out_list);
+bunny_core_result_t bunny_core_integrity_check(bunny_core_t *core, bool *out_ok);
+
 #ifdef __cplusplus
 }
 #endif

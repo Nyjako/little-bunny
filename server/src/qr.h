@@ -1,6 +1,8 @@
 #ifndef BUNNY_SERVER_QR_H
 #define BUNNY_SERVER_QR_H
 
+#include <bunny_common/http.h>
+
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -35,5 +37,17 @@ bool server_print_connection_qr(const server_config_t *config);
  * and `*out_len` is its length; returns false (leaving both untouched) on
  * a PNG-encoding failure. */
 bool server_qr_render_png(const uint8_t *qrcode, uint8_t **out_data, size_t *out_len);
+
+/* Looks up this machine's own public IP the same way deploy/dump_server_info.sh
+ * does (`curl https://ipinfo.io/ip`) -- local-interface addresses are useless
+ * here, clients connect from outside this machine. Malloc'd, caller frees.
+ * NULL on any failure (e.g. no internet access). Shared by `--qr` and
+ * `--status` (status.c). */
+char *fetch_public_ip(const bunny_http_transport_t *transport, const char *user_agent);
+
+/* Reads data_dir/server.pem and returns its SHA-256 fingerprint as
+ * malloc'd uppercase hex (caller frees). NULL if the file is missing or
+ * unparseable. Shared by `--qr` and `--status` (status.c). */
+char *compute_cert_sha256(const char *data_dir);
 
 #endif /* BUNNY_SERVER_QR_H */

@@ -376,6 +376,44 @@ void test_extract_tar_gz_produces_the_archived_file(void)
 }
 #endif
 
+/* --- bunny_updater_force_check_and_stage --------------------------------- */
+
+#ifndef _WIN32
+/* Doesn't exercise the full check-download-stage sequence (that needs a
+ * real/fixture-driven scheduler_tick harness this suite doesn't have) --
+ * just this wrapper's own job: bypassing the 24h throttle so the check
+ * actually runs. A freshly-touched marker (mtime = now, i.e. "already
+ * checked within the last second") would make a plain
+ * bunny_updater_scheduler_tick call skip the check entirely -- confirming
+ * fake_send still gets invoked (via last_url getting populated) proves the
+ * marker's mtime was cleared first. (bunny_updater_scheduler_tick itself
+ * re-touches the marker right as a check starts, independent of this
+ * wrapper -- so the marker existing again afterward is expected, not a
+ * sign the throttle wasn't bypassed.) */
+void test_force_check_and_stage_bypasses_an_existing_throttle_marker(void)
+{
+    char data_dir[] = "/tmp/bunny_updater_test_force_check_XXXXXX";
+    TEST_ASSERT_NOT_NULL(mkdtemp(data_dir));
+
+    char marker_path[600];
+    snprintf(marker_path, sizeof(marker_path), "%s/.last_update_check", data_dir);
+    FILE *f = fopen(marker_path, "w");
+    TEST_ASSERT_NOT_NULL(f);
+    fclose(f);
+
+    g_state.forced_result = BUNNY_HTTP_ERR_NETWORK;
+
+    bool restart_requested = false;
+    bunny_updater_force_check_and_stage(&g_transport, data_dir, "bunny-tests/1.0", &restart_requested);
+
+    TEST_ASSERT_FALSE(restart_requested);
+    TEST_ASSERT_TRUE_MESSAGE(strlen(g_state.last_url) > 0, "expected the check's HTTP request to actually fire, not be skipped by the throttle");
+
+    remove(marker_path);
+    rmdir(data_dir);
+}
+#endif
+
 int main(void)
 {
     UNITY_BEGIN();
@@ -401,6 +439,7 @@ int main(void)
     RUN_TEST(test_extract_tar_gz_produces_the_archived_file);
     RUN_TEST(test_sha256_hex_matches_a_known_test_vector);
     RUN_TEST(test_sha256_hex_returns_false_for_a_missing_file);
+    RUN_TEST(test_force_check_and_stage_bypasses_an_existing_throttle_marker);
 #endif
     return UNITY_END();
 }

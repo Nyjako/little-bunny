@@ -24,6 +24,11 @@ target_include_directories(bunny_server_test_qr PRIVATE ${CMAKE_CURRENT_SOURCE_D
 target_link_libraries(bunny_server_test_qr PRIVATE bunny_common cjson qrcodegen stb civetweb-c-library OpenSSL::Crypto unity::framework)
 add_test(NAME bunny_server_test_qr COMMAND bunny_server_test_qr)
 
+add_executable(bunny_server_test_health_check test_health_check.c ../src/health_check.c ../src/auth.c ../src/tls.c ../src/log.c)
+target_include_directories(bunny_server_test_health_check PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../src)
+target_link_libraries(bunny_server_test_health_check PRIVATE bunny_core bunny_common civetweb-c-library OpenSSL::Crypto unity::framework)
+add_test(NAME bunny_server_test_health_check COMMAND bunny_server_test_health_check)
+
 # Starts a real bunny_server (via server_app_start(), the same code path
 # main.c uses) on :memory: with a fake e621 transport, and exercises it with
 # real HTTPS requests over libcurl -- no fixture can substitute for actually

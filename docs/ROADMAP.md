@@ -2699,3 +2699,46 @@ this file is the single source of truth for "what's done" across sessions.
     `HttpBunnyRepository.fetchConnectionQrPng` calls the route; Settings' new "Share
     connection QR" entry (networked mode only) opens a screen that fetches and displays
     the PNG via `Image.memory`.
+
+- [x] **M59 — Real operator CLI tooling for `bunny_server` (`--help`/`--status`/`--health`/`--db-stats`/`--update`)**
+  The user wanted `bunny_server` to grow proper ops tooling beyond `--qr`/`--version`:
+  "--update, --status maybe --health that would do some checks on database and app
+  itself we have `dump_server_info.sh` we could add this to server itself... something
+  to check db stats that would print basically how many entries in each table." All five
+  new flags follow `--qr`'s existing one-shot pattern (`server/src/main.c`): default
+  `BUNNY_SERVER_DATA_DIR` to `/var/lib/bunny-server` if unset, load config, do the work,
+  never call `server_app_start`.
+  - **`--help`/`-h`** prints usage, the build number, the GitHub link, and a one-line
+    description of every flag.
+  - **`--status`** (new `server/src/status.c`) is a plain informational dump -- data dir,
+    port, poll interval, bearer token, cert fingerprint, public IP/derived server URL,
+    `bunny.db` file size, and whether an update is currently staged -- effectively
+    `deploy/dump_server_info.sh` folded into the binary. Reuses `qr.c`'s own
+    `fetch_public_ip`/`compute_cert_sha256` (un-`static`'d for this) rather than
+    duplicating that OpenSSL/curl logic.
+  - **`--health`** (new `server/src/health_check.c`) runs independent, read-only sanity
+    checks -- data dir writable, database opens and passes `PRAGMA integrity_check`
+    (new `bunny_db_integrity_check`/`bunny_core_integrity_check`), auth token and TLS
+    cert exist/parse/aren't expired -- printing PASS/FAIL per check and exiting 0/1,
+    suitable for monitoring/cron. Deliberately doesn't reuse `server_auth_load`/
+    `server_tls_ensure_cert` (which auto-generate on a missing file) -- a health check
+    must never have write side effects.
+  - **`--db-stats`** prints row counts per database table (new
+    `bunny_db_table_stats`/`bunny_core_table_stats`, reusing the existing
+    `bunny_db_tag_stat_t` name/count struct rather than inventing a new one).
+  - Confirmed with the user: `--status`/`--health`/`--db-stats` are read-only and safe to
+    run alongside the real live systemd service (SQLite's own WAL mode already permits
+    concurrent readers) -- no special handling needed, verified manually against a
+    running instance. **`--update`** is different, since it writes to the same
+    `data_dir/update-staging/`/`.last_update_check`/`update-ready` files the live
+    service's own scheduler tick can be concurrently touching: confirmed with the user
+    it should stop the systemd service itself first (`systemctl stop bunny-server`, via
+    direct fork/exec -- same no-shell pattern `updater.c`'s own `tar` invocation already
+    uses) and always restart it afterward (`systemctl start`) regardless of outcome,
+    gated on an explicit root check (`geteuid() == 0`) since both stopping/restarting the
+    service and reading `/var/lib/bunny-server`'s root-owned files need it. New
+    `bunny_updater_force_check_and_stage` (`updater.c`) bypasses the scheduler's own 24h
+    throttle by clearing the marker file before delegating to the existing
+    `bunny_updater_scheduler_tick` -- zero duplicated check/download/verify/stage logic.
+    Linux/systemd only, matching `updater.c`'s own existing scope (no self-update story
+    for a Windows service, and no equivalent Windows service to stop/start anyway).

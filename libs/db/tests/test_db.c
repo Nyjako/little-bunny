@@ -2106,6 +2106,44 @@ void test_wal_mode_lets_a_separate_connection_read_without_blocking(void)
     rmdir(dir);
 }
 
+void test_table_stats_counts_rows_per_table(void)
+{
+    int64_t search_id = 0;
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, bunny_db_search_create(g_db, BUNNY_DB_SITE_E621, "wolves", "wolf", 24, NULL, &search_id));
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, bunny_db_account_set(g_db, BUNNY_DB_SITE_E621, "someuser", "somesecret"));
+
+    bunny_db_tag_stat_list_t stats;
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, bunny_db_table_stats(g_db, &stats));
+
+    bool found_searches = false;
+    bool found_accounts = false;
+    bool found_posts = false;
+    for (size_t i = 0; i < stats.count; i++) {
+        if (strcmp(stats.items[i].name, "searches") == 0) {
+            TEST_ASSERT_EQUAL(1, stats.items[i].count);
+            found_searches = true;
+        } else if (strcmp(stats.items[i].name, "accounts") == 0) {
+            TEST_ASSERT_EQUAL(1, stats.items[i].count);
+            found_accounts = true;
+        } else if (strcmp(stats.items[i].name, "posts") == 0) {
+            TEST_ASSERT_EQUAL(0, stats.items[i].count);
+            found_posts = true;
+        }
+    }
+    TEST_ASSERT_TRUE_MESSAGE(found_searches, "expected a 'searches' row in the table stats");
+    TEST_ASSERT_TRUE_MESSAGE(found_accounts, "expected an 'accounts' row in the table stats");
+    TEST_ASSERT_TRUE_MESSAGE(found_posts, "expected a 'posts' row (0 count) in the table stats");
+
+    bunny_db_tag_stat_list_free(&stats);
+}
+
+void test_integrity_check_passes_on_a_fresh_database(void)
+{
+    bool ok = false;
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, bunny_db_integrity_check(g_db, &ok));
+    TEST_ASSERT_TRUE(ok);
+}
+
 int main(void)
 {
     UNITY_BEGIN();
@@ -2195,5 +2233,7 @@ int main(void)
     RUN_TEST(test_post_sample_url_round_trips_and_is_nullable);
     RUN_TEST(test_post_upsert_replaces_sample_url_wholesale_on_resync);
     RUN_TEST(test_wal_mode_lets_a_separate_connection_read_without_blocking);
+    RUN_TEST(test_table_stats_counts_rows_per_table);
+    RUN_TEST(test_integrity_check_passes_on_a_fresh_database);
     return UNITY_END();
 }

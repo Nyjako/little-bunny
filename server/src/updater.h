@@ -90,6 +90,13 @@ bool bunny_updater_extract_tar_gz(const char *tar_gz_path, const char *dest_dir)
  * Restart=always is the actual restart mechanism, not this function. */
 void bunny_updater_scheduler_tick(const bunny_http_transport_t *transport, const char *data_dir, const char *user_agent, bool *out_restart_requested);
 
+/* Same end-to-end sequence as bunny_updater_scheduler_tick, but bypasses
+ * the 24h throttle by clearing data_dir/.last_update_check first -- backs
+ * `bunny_server --update` (server/src/main.c), a manual, operator-initiated
+ * check that should never silently no-op just because the scheduler
+ * already checked recently. */
+void bunny_updater_force_check_and_stage(const bunny_http_transport_t *transport, const char *data_dir, const char *user_agent, bool *out_restart_requested);
+
 #ifdef __cplusplus
 }
 #endif
