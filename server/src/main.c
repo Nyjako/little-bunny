@@ -39,6 +39,23 @@ int main(int argc, char **argv)
      * own doc comment for why that's fine even on a never-before-run data
      * dir). */
     if (argc > 1 && strcmp(argv[1], "--qr") == 0) {
+        /* Unlike the real server-start path below (always launched by
+         * systemd with BUNNY_SERVER_DATA_DIR already set, see
+         * deploy/bunny-server.service's Environment= line), a manual `--qr`
+         * invocation runs in a plain shell with no such override --
+         * falling through to server_config_load()'s per-invoking-user XDG
+         * default would silently read/generate a throwaway auth_token and
+         * server.pem that have nothing to do with the actually-running
+         * production server, in a different (and still wrong) directory
+         * whether run as a plain user or under sudo (since sudo resets
+         * $HOME too). Default to the real deployment's StateDirectory
+         * instead, matching deploy/dump_server_info.sh's own hardcoded
+         * assumption -- still overridable via the env var for any other
+         * deployment layout. Reading files there now correctly requires
+         * sudo, same as dump_server_info.sh already needs. */
+        if (!getenv("BUNNY_SERVER_DATA_DIR")) {
+            setenv("BUNNY_SERVER_DATA_DIR", "/var/lib/bunny-server", 1);
+        }
         server_config_t *qr_config = server_config_load();
         if (!qr_config) {
             fprintf(stderr, "failed to load server config\n");
