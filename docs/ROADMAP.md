@@ -2670,21 +2670,35 @@ this file is the single source of truth for "what's done" across sessions.
   shell script wrapping `curl` (matching this session's own ad hoc verification
   style) or something more structured.
 
-- [ ] **M57 — Keep the download queue running through a locked Android screen**
+- [x] **M57 — Keep the download queue running through a locked Android screen**
   Follow-up the user explicitly asked to track during M43's planning, deliberately not
   built as part of that pass: M43's `DownloadQueueService` only progresses while the app
   process is actually alive -- a locked screen that the OS eventually suspends/kills the
   process over just means the queue resumes next launch via M43's disk-backed resume
-  list, same as any other kill. Reliably surviving a locked screen instead needs real
-  native plumbing Android requires for exactly this (a background task outliving the
-  activity): a foreground `Service` subclass, `startForeground()` with a persistent
-  notification (likely the same one `FlutterLocalNotificationsQueueNotifier` already
-  shows), a manifest `<service>` entry declaring a `foregroundServiceType` (probably
-  `dataSync`, Android 14+'s API for exactly this), plus the runtime permission Android
-  13+ requires to start a foreground service of that type. iOS has no equivalent
-  concept for arbitrary background HTTP work this way (background `URLSession` tasks
-  are the iOS-native mechanism, a separate, not-yet-scoped design), so this milestone is
-  Android-only; other platforms keep today's M43 behavior unchanged.
+  list, same as any other kill. New `DownloadForegroundService` (Kotlin,
+  `app/android/.../DownloadForegroundService.kt`) is a plain `Service` that calls
+  `ServiceCompat.startForeground()` with a `dataSync`-typed notification (Android 14+'s
+  `ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC`, falls back to type `0` pre-34) --
+  this is the only thing that reliably stops Android from killing the process once the
+  Activity backgrounds, which locking the screen does immediately. Reuses the exact
+  same notification channel/id `FlutterLocalNotificationsQueueNotifier` (M43) already
+  uses, so it's the same notification the user already sees, not a second one. New
+  `AndroidForegroundServiceQueueNotifier` (`app/lib/services/
+  android_foreground_service_queue_notifier.dart`) implements the existing
+  `DownloadQueueNotifier` interface by calling into the service over a hand-rolled
+  `MethodChannel` (`little_bunny/download_foreground_service`, handled in
+  `MainActivity.kt`) -- this is the first Dart<->native platform channel this codebase
+  has needed; every previous platform-specific need came from a Flutter package
+  wrapping it internally. `main.dart` picks this notifier over the cross-platform
+  `FlutterLocalNotificationsQueueNotifier` only on Android (still initializing the
+  latter everywhere, since that's what requests the POST_NOTIFICATIONS runtime
+  permission and creates the shared notification channel in the first place).
+  `DownloadQueueService` itself (the actual HTTP fetch + file write loop) is completely
+  unchanged -- the foreground service's only job is keeping the process alive long
+  enough for that existing loop to keep running; iOS has no equivalent concept for
+  arbitrary background HTTP work this way (background `URLSession` tasks are the
+  iOS-native mechanism, a separate, not-yet-scoped design), so this milestone is
+  Android-only; other platforms keep the unchanged M43 behavior.
 
 - [x] **M58 — QR connection setup: scan/paste in the app, in-app share via the server, shrink the terminal code**
   Follow-up the user raised during M43 planning, deliberately deferred to its own pass:
