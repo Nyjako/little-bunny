@@ -245,6 +245,23 @@ if(BUNNY_BUILD_SERVER)
     add_library(qrcodegen STATIC ${qrcodegen_SOURCE_DIR}/c/qrcodegen.c)
     target_include_directories(qrcodegen PUBLIC ${qrcodegen_SOURCE_DIR}/c)
   endif()
+
+  # Rasterizing the connection QR to a PNG for the app's "Share connection
+  # QR" screen (server/src/qr.c's server_qr_render_png, M43 follow-up) --
+  # header-only (just stb_image_write.h out of the whole stb collection), so
+  # DOWNLOAD_ONLY + an INTERFACE target, same pattern as GOBLIN above. The
+  # implementation itself (STB_IMAGE_WRITE_IMPLEMENTATION) is defined in
+  # qr.c, the single translation unit that uses it.
+  CPMAddPackage(
+    NAME stb
+    GITHUB_REPOSITORY nothings/stb
+    GIT_TAG 003501f6d7a8668ce8b6d875e34dd97ad0d5d5b5
+    DOWNLOAD_ONLY YES
+  )
+  if(stb_ADDED)
+    add_library(stb INTERFACE)
+    target_include_directories(stb INTERFACE ${stb_SOURCE_DIR})
+  endif()
 endif()
 
 if(BUNNY_BUILD_TESTS)

@@ -1,10 +1,15 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../l10n/app_localizations.dart';
 import '../repository/bunny_repository.dart';
 import '../repository/bunny_repository_factory.dart';
 import '../settings/repository_settings_store.dart';
 import '../settings/server_connection_check.dart';
+import '../util/connection_qr_payload.dart';
+import 'qr_scan_screen.dart';
 
 /// Shown on first launch (no persisted [BunnyRepositoryConfig] yet): lets the
 /// user pick standalone (FFI) or networked (HTTP) mode and, once it's
@@ -70,6 +75,37 @@ class _SetupScreenState extends State<SetupScreen> {
     _bearerTokenController.dispose();
     _certFingerprintController.dispose();
     super.dispose();
+  }
+
+  void _applyConnectionQrPayload(ConnectionQrPayload? payload) {
+    final l10n = AppLocalizations.of(context)!;
+    if (payload == null) {
+      setState(() => _error = l10n.setupConnectionQrInvalid);
+      return;
+    }
+    setState(() {
+      _serverUrlController.text = payload.serverUrl.toString();
+      _bearerTokenController.text = payload.bearerToken;
+      _certFingerprintController.text = payload.certSha256;
+      _error = null;
+    });
+  }
+
+  Future<void> _pasteConnectionInfo() async {
+    final clipboard = await Clipboard.getData(Clipboard.kTextPlain);
+    final text = clipboard?.text;
+    if (!mounted) {
+      return;
+    }
+    _applyConnectionQrPayload(text == null ? null : ConnectionQrPayload.tryParse(text));
+  }
+
+  Future<void> _scanConnectionQrCode() async {
+    final scanned = await Navigator.push<String>(context, MaterialPageRoute(builder: (context) => const QrScanScreen()));
+    if (!mounted || scanned == null) {
+      return;
+    }
+    _applyConnectionQrPayload(ConnectionQrPayload.tryParse(scanned));
   }
 
   Future<bool> _confirmSwitch(AppLocalizations l10n) async {
@@ -199,6 +235,22 @@ class _SetupScreenState extends State<SetupScreen> {
               if (_mode == _Mode.standalone) ...[
                 Text(l10n.setupStandaloneDescription),
               ] else ...[
+                Wrap(
+                  spacing: 8,
+                  children: [
+                    TextButton.icon(
+                      onPressed: _submitting ? null : _pasteConnectionInfo,
+                      icon: const Icon(Icons.content_paste),
+                      label: Text(l10n.setupPasteConnectionInfo),
+                    ),
+                    if (Platform.isAndroid || Platform.isIOS || Platform.isMacOS)
+                      TextButton.icon(
+                        onPressed: _submitting ? null : _scanConnectionQrCode,
+                        icon: const Icon(Icons.qr_code_scanner),
+                        label: Text(l10n.setupScanQrCode),
+                      ),
+                  ],
+                ),
                 TextFormField(
                   controller: _serverUrlController,
                   enabled: !_submitting,

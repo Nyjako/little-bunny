@@ -52,6 +52,16 @@ class AppLocalizationsEn extends AppLocalizations {
   String get setupCertFingerprintLabel => 'Certificate SHA-256 fingerprint';
 
   @override
+  String get setupPasteConnectionInfo => 'Paste connection info';
+
+  @override
+  String get setupScanQrCode => 'Scan QR code';
+
+  @override
+  String get setupConnectionQrInvalid =>
+      'Couldn\'t read connection info from that';
+
+  @override
   String get setupReconfigureTitle => 'Switch connection';
 
   @override
@@ -611,6 +621,17 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get settingsTaskQueueEntry => 'Task queue';
+
+  @override
+  String get settingsShareConnectionQr => 'Share connection QR';
+
+  @override
+  String get connectionQrScreenTitle => 'Connection QR';
+
+  @override
+  String connectionQrLoadError(String error) {
+    return 'Couldn\'t load the connection QR: $error';
+  }
 
   @override
   String get taskQueueScreenTitle => 'Task queue';

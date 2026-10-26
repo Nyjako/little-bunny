@@ -16,6 +16,15 @@
 #include "auth.h"
 #include "tls.h"
 
+/* qr.c is the only translation unit that includes stb_image_write.h, and
+ * it only ever compiles into the single bunny_server_lib static library
+ * target -- safe to define the implementation here with no risk of the
+ * duplicate-symbol problem a header-only lib's IMPLEMENTATION macro can
+ * cause if multiple static libraries in the same link graph each define
+ * it independently. */
+#define STB_IMAGE_WRITE_IMPLEMENTATION
+#include <stb_image_write.h>
+
 char *server_qr_build_connection_json(const char *server_url, const char *bearer_token, const char *cert_sha256)
 {
     cJSON *json = cJSON_CreateObject();
@@ -97,21 +106,94 @@ static char *compute_cert_sha256(const char *data_dir)
     return hex;
 }
 
-/* Two characters per module (not the more compact half-block-per-row
- * Unicode trick some terminal QR printers use) -- simpler, and a typical
- * monospace cell's ~2:1 height:width ratio already makes a 2-wide/1-tall
- * block roughly square, matching the approach qrcodegen's own upstream
- * demo (qrcodegen-demo.c) uses for the exact same purpose. */
+/* Two module-rows per printed line via Unicode half-block characters
+ * (one character per module column, not two) -- quarters the terminal
+ * footprint of the old 2-chars-per-module/1-row-per-line rendering, which
+ * was "pretty massive" for a typical connection payload's QR version. A
+ * typical monospace cell's ~2:1 height:width ratio makes one such cell
+ * (covering a 1-wide/2-tall module pair) roughly square. */
 static void print_qr(const uint8_t *qrcode)
 {
     int size = qrcodegen_getSize(qrcode);
     int border = 2;
-    for (int y = -border; y < size + border; y++) {
+    for (int y = -border; y < size + border; y += 2) {
         for (int x = -border; x < size + border; x++) {
-            fputs(qrcodegen_getModule(qrcode, x, y) ? "##" : "  ", stdout);
+            bool top = qrcodegen_getModule(qrcode, x, y);
+            bool bottom = qrcodegen_getModule(qrcode, x, y + 1);
+            fputs(top ? (bottom ? "█" : "▀") : (bottom ? "▄" : " "), stdout);
         }
         fputs("\n", stdout);
     }
+}
+
+/* Growable buffer for stbi_write_png_to_func's callback to accumulate
+ * into -- the callback fires once per internal zlib flush (typically a few
+ * KB at a time for a QR-sized image), not once per byte, so one memcpy per
+ * invocation is enough; no need for goblin/dyn_array.h's single-element
+ * _push here. */
+typedef struct
+{
+    uint8_t *data;
+    size_t len;
+    size_t cap;
+} png_buf_t;
+
+static void png_write_callback(void *context, void *data, int size)
+{
+    png_buf_t *buf = (png_buf_t *)context;
+    if (size <= 0) {
+        return;
+    }
+    size_t needed = buf->len + (size_t)size;
+    if (needed > buf->cap) {
+        size_t new_cap = buf->cap ? buf->cap * 2 : 4096;
+        while (new_cap < needed) {
+            new_cap *= 2;
+        }
+        uint8_t *new_data = realloc(buf->data, new_cap);
+        if (!new_data) {
+            return; /* buf->len stays short of what was written -- caller's length check below catches this */
+        }
+        buf->data = new_data;
+        buf->cap = new_cap;
+    }
+    memcpy(buf->data + buf->len, data, (size_t)size);
+    buf->len += (size_t)size;
+}
+
+bool server_qr_render_png(const uint8_t *qrcode, uint8_t **out_data, size_t *out_len)
+{
+    int size = qrcodegen_getSize(qrcode);
+    int border = 2;
+    int scale = 8;
+    int dim = (size + 2 * border) * scale;
+
+    uint8_t *pixels = malloc((size_t)dim * (size_t)dim);
+    if (!pixels) {
+        return false;
+    }
+    for (int my = -border; my < size + border; my++) {
+        for (int mx = -border; mx < size + border; mx++) {
+            uint8_t shade = qrcodegen_getModule(qrcode, mx, my) ? 0x00 : 0xFF;
+            int px0 = (mx + border) * scale;
+            int py0 = (my + border) * scale;
+            for (int dy = 0; dy < scale; dy++) {
+                memset(pixels + (size_t)(py0 + dy) * (size_t)dim + (size_t)px0, shade, (size_t)scale);
+            }
+        }
+    }
+
+    png_buf_t buf = {0};
+    int ok = stbi_write_png_to_func(png_write_callback, &buf, dim, dim, 1, pixels, dim);
+    free(pixels);
+    if (!ok || buf.len == 0) {
+        free(buf.data);
+        return false;
+    }
+
+    *out_data = buf.data;
+    *out_len = buf.len;
+    return true;
 }
 
 bool server_print_connection_qr(const server_config_t *config)

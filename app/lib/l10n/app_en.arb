@@ -18,6 +18,9 @@
   "setupServerUrlInvalid": "Enter a valid URL",
   "setupBearerTokenLabel": "Bearer token",
   "setupCertFingerprintLabel": "Certificate SHA-256 fingerprint",
+  "setupPasteConnectionInfo": "Paste connection info",
+  "setupScanQrCode": "Scan QR code",
+  "setupConnectionQrInvalid": "Couldn't read connection info from that",
   "setupReconfigureTitle": "Switch connection",
   "setupSwitchWarningTitle": "Switch data source?",
   "setupSwitchWarningMessage": "Standalone and networked mode use separate data stores -- your current searches/accounts won't automatically carry over. Use Settings → Backup to export/import searches if you want to bring them along.",
@@ -281,6 +284,12 @@
   "serverLogsEmptyState": "No log lines yet.",
   "serverLogsRefreshTooltip": "Refresh",
   "settingsTaskQueueEntry": "Task queue",
+  "settingsShareConnectionQr": "Share connection QR",
+  "connectionQrScreenTitle": "Connection QR",
+  "connectionQrLoadError": "Couldn't load the connection QR: {error}",
+  "@connectionQrLoadError": {
+    "placeholders": {"error": {"type": "String"}}
+  },
   "taskQueueScreenTitle": "Task queue",
   "taskQueueEmptyState": "Nothing queued right now.",
   "taskQueuePriorityHigh": "High",
