@@ -819,6 +819,17 @@ void main() {
       expect(lines, ['line one', 'line two']);
     });
 
+    test('fetchConnectionQrPng sends the right request body and returns the raw PNG bytes', () async {
+      respond = (_) => http.Response.bytes([1, 2, 3, 4], 200);
+
+      final bytes = await buildRepository().fetchConnectionQrPng(serverUrl: Uri.parse('https://1.2.3.4:8443'), bearerToken: 'sometok', certSha256: 'DEADBEEF');
+
+      expect(capturedMethod, 'POST');
+      expect(capturedUri.path, '/qr');
+      expect(jsonDecode(capturedBody), {'server_url': 'https://1.2.3.4:8443', 'bearer_token': 'sometok', 'cert_sha256': 'DEADBEEF'});
+      expect(bytes, [1, 2, 3, 4]);
+    });
+
     test('a JSON error body surfaces its message in BunnyRepositoryException', () async {
       respond = (_) => http.Response(jsonEncode({'error': 'missing or invalid bearer token'}), 401);
 

@@ -18,6 +18,7 @@ import '../settings/download_settings_store.dart';
 import '../settings/repository_settings_store.dart';
 import '../settings/theme_settings_store.dart';
 import 'about_screen.dart';
+import 'connection_qr_screen.dart';
 import 'lock_setup_screen.dart';
 import 'server_logs_screen.dart';
 import 'setup_screen.dart';
@@ -418,6 +419,23 @@ class _SettingsScreenState extends State<SettingsScreen> {
               title: Text(l10n.settingsTaskQueueEntry),
               trailing: const Icon(Icons.chevron_right),
               onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => TaskQueueScreen(repository: httpRepository))),
+            ),
+          if (showServerOnlyEntries)
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              title: Text(l10n.settingsShareConnectionQr),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => ConnectionQrScreen(
+                    repository: httpRepository,
+                    serverUrl: repositoryConfig.serverBaseUrl,
+                    bearerToken: repositoryConfig.bearerToken,
+                    certSha256: repositoryConfig.certificateSha256Fingerprint,
+                  ),
+                ),
+              ),
             ),
           const SizedBox(height: 24),
           Text(l10n.settingsAppearanceSection, style: Theme.of(context).textTheme.titleMedium),

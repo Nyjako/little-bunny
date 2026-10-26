@@ -1216,6 +1216,24 @@ abstract class AppLocalizations {
   /// **'Task queue'**
   String get settingsTaskQueueEntry;
 
+  /// No description provided for @settingsShareConnectionQr.
+  ///
+  /// In en, this message translates to:
+  /// **'Share connection QR'**
+  String get settingsShareConnectionQr;
+
+  /// No description provided for @connectionQrScreenTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Connection QR'**
+  String get connectionQrScreenTitle;
+
+  /// No description provided for @connectionQrLoadError.
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t load the connection QR: {error}'**
+  String connectionQrLoadError(String error);
+
   /// No description provided for @taskQueueScreenTitle.
   ///
   /// In en, this message translates to:

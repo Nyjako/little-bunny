@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:crypto/crypto.dart';
 import 'package:http/http.dart' as http;
@@ -672,5 +673,24 @@ class HttpBunnyRepository implements BunnyRepository {
       _throwError(response);
     }
     return (jsonDecode(response.body) as List).cast<String>();
+  }
+
+  /// Renders this device's own already-configured connection info
+  /// (server_url/bearer_token/cert_sha256, whatever the caller already has
+  /// from [NetworkedConfig]) as a PNG QR code, via the server's `/qr`
+  /// route (server/src/routes_qr.c) -- so a second device can scan it to
+  /// connect, without this app needing its own QR-rendering library. Not a
+  /// [BunnyRepository] interface method, same reasoning as
+  /// [getServerLogs]'s doc comment above.
+  Future<Uint8List> fetchConnectionQrPng({required Uri serverUrl, required String bearerToken, required String certSha256}) async {
+    final response = await _client.post(
+      _uri('/qr'),
+      headers: _headers,
+      body: jsonEncode({'server_url': serverUrl.toString(), 'bearer_token': bearerToken, 'cert_sha256': certSha256}),
+    );
+    if (response.statusCode != 200) {
+      _throwError(response);
+    }
+    return response.bodyBytes;
   }
 }

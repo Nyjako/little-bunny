@@ -623,6 +623,17 @@ class AppLocalizationsEn extends AppLocalizations {
   String get settingsTaskQueueEntry => 'Task queue';
 
   @override
+  String get settingsShareConnectionQr => 'Share connection QR';
+
+  @override
+  String get connectionQrScreenTitle => 'Connection QR';
+
+  @override
+  String connectionQrLoadError(String error) {
+    return 'Couldn\'t load the connection QR: $error';
+  }
+
+  @override
   String get taskQueueScreenTitle => 'Task queue';
 
   @override

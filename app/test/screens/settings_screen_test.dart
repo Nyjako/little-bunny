@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
 import 'package:little_bunny/repository/bunny_models.dart';
+import 'package:little_bunny/repository/http_bunny_repository.dart';
 import 'package:little_bunny/screens/settings_screen.dart';
 import 'package:little_bunny/settings/app_lock_service.dart';
 import 'package:little_bunny/settings/display_settings_store.dart';
@@ -582,5 +585,71 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Switch connection'), findsOneWidget);
+  });
+
+  testWidgets('tapping "Share connection QR" in networked mode fetches and shows the PNG from /qr (M43 follow-up)', (WidgetTester tester) async {
+    final store = settingsStore();
+    await store.saveNetworked(serverBaseUrl: Uri.parse('https://example.test:8443'), bearerToken: 'tok', certificateSha256Fingerprint: 'fp');
+    Uri? qrRequestUri;
+    final httpRepository = HttpBunnyRepository.withClient(
+      baseUrl: Uri.parse('https://example.test:8443'),
+      bearerToken: 'tok',
+      // SettingsScreen loads its own sync-interval/blacklist state on open
+      // (unrelated to this test), so the mock has to answer those too, not
+      // just /qr.
+      client: MockClient((request) async {
+        if (request.url.path == '/qr') {
+          qrRequestUri = request.url;
+          // A real, minimal (1x1) valid PNG -- Image.memory actually
+          // decodes the bytes when the widget paints, so arbitrary bytes
+          // would fail decoding instead of rendering.
+          return http.Response.bytes(const [
+            0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, //
+            0x00, 0x00, 0x00, 0x0D, 0x49, 0x48, 0x44, 0x52, //
+            0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, //
+            0x08, 0x06, 0x00, 0x00, 0x00, 0x1F, 0x15, 0xC4, //
+            0x89, 0x00, 0x00, 0x00, 0x0A, 0x49, 0x44, 0x41, //
+            0x54, 0x78, 0x9C, 0x63, 0x00, 0x01, 0x00, 0x00, //
+            0x05, 0x00, 0x01, 0x0D, 0x0A, 0x2D, 0xB4, 0x00, //
+            0x00, 0x00, 0x00, 0x49, 0x45, 0x4E, 0x44, 0xAE, //
+            0x42, 0x60, 0x82,
+          ], 200);
+        }
+        if (request.url.path == '/settings') {
+          return http.Response('{"default_sync_interval_hours":24}', 200);
+        }
+        if (request.url.path == '/blacklist') {
+          return http.Response('[]', 200);
+        }
+        return http.Response('not found', 404);
+      }),
+    );
+
+    await tester.pumpWidget(
+      wrapWithLocalization(
+        SettingsScreen(
+          repository: httpRepository,
+          themeSettingsStore: const ThemeSettingsStore(),
+          lockService: AppLockService(FakeSecretStore()),
+          downloadSettingsStore: const DownloadSettingsStore(),
+          displaySettingsStore: const DisplaySettingsStore(),
+          settingsStore: store,
+          onThemeModeChanged: (_) {},
+          onThemeColorChanged: (_) {},
+          onAmoledChanged: (_) {},
+          onLanguageCodeChanged: (_) {},
+          onRepositoryConfigured: (_) {},
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Share connection QR'), findsOneWidget);
+    await tester.tap(find.text('Share connection QR'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Connection QR'), findsOneWidget);
+    expect(qrRequestUri?.path, '/qr');
+    expect(find.byType(Image), findsOneWidget);
   });
 }

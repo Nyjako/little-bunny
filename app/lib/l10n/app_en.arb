@@ -284,6 +284,12 @@
   "serverLogsEmptyState": "No log lines yet.",
   "serverLogsRefreshTooltip": "Refresh",
   "settingsTaskQueueEntry": "Task queue",
+  "settingsShareConnectionQr": "Share connection QR",
+  "connectionQrScreenTitle": "Connection QR",
+  "connectionQrLoadError": "Couldn't load the connection QR: {error}",
+  "@connectionQrLoadError": {
+    "placeholders": {"error": {"type": "String"}}
+  },
   "taskQueueScreenTitle": "Task queue",
   "taskQueueEmptyState": "Nothing queued right now.",
   "taskQueuePriorityHigh": "High",

@@ -21,7 +21,7 @@ add_test(NAME bunny_server_test_updater COMMAND bunny_server_test_updater)
 
 add_executable(bunny_server_test_qr test_qr.c ../src/qr.c ../src/auth.c ../src/tls.c ../src/log.c)
 target_include_directories(bunny_server_test_qr PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../src)
-target_link_libraries(bunny_server_test_qr PRIVATE bunny_common cjson qrcodegen civetweb-c-library OpenSSL::Crypto unity::framework)
+target_link_libraries(bunny_server_test_qr PRIVATE bunny_common cjson qrcodegen stb civetweb-c-library OpenSSL::Crypto unity::framework)
 add_test(NAME bunny_server_test_qr COMMAND bunny_server_test_qr)
 
 # Starts a real bunny_server (via server_app_start(), the same code path
