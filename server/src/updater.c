@@ -384,6 +384,7 @@ void bunny_updater_scheduler_tick(const bunny_http_transport_t *transport, const
         return;
     }
     if (!check.update_available) {
+        server_log("INFO", "updater: already running the latest build (%d)", BUNNY_BUILD_NUMBER);
         bunny_updater_check_result_free(&check);
         return;
     }
@@ -486,4 +487,23 @@ void bunny_updater_scheduler_tick(const bunny_http_transport_t *transport, const
     server_log("INFO", "updater: %s staged and verified -- will install on next restart", check.tag_name);
     bunny_updater_check_result_free(&check);
     *out_restart_requested = true;
+}
+
+void bunny_updater_force_check_and_stage(const bunny_http_transport_t *transport, const char *data_dir, const char *user_agent, bool *out_restart_requested)
+{
+    /* Clearing (not just touching) the throttle marker makes check_due()
+     * unconditionally return true for the call below -- a manual
+     * `bunny_server --update` invocation (server/src/main.c) wants a real
+     * check right now, not whatever the scheduler's own 24h cadence last
+     * happened to do. Zero duplicated logic: this is a thin wrapper around
+     * bunny_updater_scheduler_tick's existing check-download-verify-extract-
+     * stage sequence. */
+    if (data_dir) {
+        char *marker_path = goblin_appdir_join(data_dir, ".last_update_check");
+        if (marker_path) {
+            remove(marker_path);
+            free(marker_path);
+        }
+    }
+    bunny_updater_scheduler_tick(transport, data_dir, user_agent, out_restart_requested);
 }
