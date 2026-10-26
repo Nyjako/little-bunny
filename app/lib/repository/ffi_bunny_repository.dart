@@ -90,6 +90,33 @@ BunnyPoolInfo _poolInfoFromMap(Map<String, Object?> m) => BunnyPoolInfo(
 
 BunnyComment _commentFromMap(Map<String, Object?> m) => BunnyComment(id: m['id'] as int, creatorName: m['creatorName'] as String?, body: m['body'] as String?, createdAt: m['createdAt'] as String?);
 
+BunnyTag _tagFromMap(Map<String, Object?> m) => BunnyTag(
+  id: m['id'] as int,
+  name: m['name'] as String?,
+  postCount: m['postCount'] as int,
+  category: BunnyTagCategory.values[m['category'] as int],
+  relatedTags: m['relatedTags'] as String?,
+  isLocked: m['isLocked'] as bool,
+  createdAt: m['createdAt'] as String?,
+  updatedAt: m['updatedAt'] as String?,
+);
+
+BunnyWikiPage _wikiPageFromMap(Map<String, Object?> m) => BunnyWikiPage(
+  id: m['id'] as int,
+  title: m['title'] as String?,
+  body: m['body'] as String?,
+  otherNames: (m['otherNames'] as List? ?? const []).cast<String>(),
+  isLocked: m['isLocked'] as bool,
+  createdAt: m['createdAt'] as String?,
+  updatedAt: m['updatedAt'] as String?,
+);
+
+BunnyTagAlias _tagAliasFromMap(Map<String, Object?> m) =>
+    BunnyTagAlias(id: m['id'] as int, antecedentName: m['antecedentName'] as String?, consequentName: m['consequentName'] as String?, status: m['status'] as String?, postCount: m['postCount'] as int);
+
+BunnyTagImplication _tagImplicationFromMap(Map<String, Object?> m) =>
+    BunnyTagImplication(id: m['id'] as int, antecedentName: m['antecedentName'] as String?, consequentName: m['consequentName'] as String?, status: m['status'] as String?);
+
 BunnyQueueStats _queueStatsFromMap(Map<String, Object?> m) => BunnyQueueStats(
   actionsProcessed: m['actionsProcessed'] as int,
   actionsSucceeded: m['actionsSucceeded'] as int,
@@ -333,6 +360,30 @@ class FfiBunnyRepository implements BunnyRepository {
   Future<List<BunnyComment>> getPostComments(int postId) async {
     final items = await _wrapped(() => _native.listComments(postId));
     return items.map(_commentFromMap).toList();
+  }
+
+  @override
+  Future<List<BunnyTag>> searchTags(String nameMatches, {int limit = 0}) async {
+    final items = await _wrapped(() => _native.searchTags(nameMatches, limit: limit));
+    return items.map(_tagFromMap).toList();
+  }
+
+  @override
+  Future<BunnyWikiPage?> getWikiPage(String title) async {
+    final map = await _wrapped(() => _native.getWikiPage(title));
+    return map == null ? null : _wikiPageFromMap(map);
+  }
+
+  @override
+  Future<List<BunnyTagAlias>> searchTagAliases(String nameMatches, {int limit = 0}) async {
+    final items = await _wrapped(() => _native.searchTagAliases(nameMatches, limit: limit));
+    return items.map(_tagAliasFromMap).toList();
+  }
+
+  @override
+  Future<List<BunnyTagImplication>> searchTagImplications(String nameMatches, {int limit = 0}) async {
+    final items = await _wrapped(() => _native.searchTagImplications(nameMatches, limit: limit));
+    return items.map(_tagImplicationFromMap).toList();
   }
 
   @override

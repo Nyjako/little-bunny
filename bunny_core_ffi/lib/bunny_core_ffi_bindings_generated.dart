@@ -1911,6 +1911,249 @@ class BunnyCoreFfiBindings {
           ffi.Pointer<bunny_core_queue_stats_t>,
         )
       >();
+
+  /// --- Diagnostics ----------------------------------------------------------
+  /// Backs `bunny_server --db-stats`/`--health` (server/src/main.c) -- thin
+  /// read-locked pass-throughs to bunny_db_table_stats/bunny_db_integrity_check,
+  /// same pattern as bunny_core_search_list -> bunny_db_search_list.
+  bunny_core_result_t bunny_core_table_stats(
+    ffi.Pointer<bunny_core_t> core,
+    ffi.Pointer<bunny_db_tag_stat_list_t> out_list,
+  ) {
+    return bunny_core_result_t.fromValue(
+      _bunny_core_table_stats(core, out_list),
+    );
+  }
+
+  late final _bunny_core_table_statsPtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.UnsignedInt Function(
+            ffi.Pointer<bunny_core_t>,
+            ffi.Pointer<bunny_db_tag_stat_list_t>,
+          )
+        >
+      >('bunny_core_table_stats');
+  late final _bunny_core_table_stats = _bunny_core_table_statsPtr
+      .asFunction<
+        int Function(
+          ffi.Pointer<bunny_core_t>,
+          ffi.Pointer<bunny_db_tag_stat_list_t>,
+        )
+      >();
+
+  bunny_core_result_t bunny_core_integrity_check(
+    ffi.Pointer<bunny_core_t> core,
+    ffi.Pointer<ffi.Bool> out_ok,
+  ) {
+    return bunny_core_result_t.fromValue(
+      _bunny_core_integrity_check(core, out_ok),
+    );
+  }
+
+  late final _bunny_core_integrity_checkPtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.UnsignedInt Function(
+            ffi.Pointer<bunny_core_t>,
+            ffi.Pointer<ffi.Bool>,
+          )
+        >
+      >('bunny_core_integrity_check');
+  late final _bunny_core_integrity_check = _bunny_core_integrity_checkPtr
+      .asFunction<
+        int Function(ffi.Pointer<bunny_core_t>, ffi.Pointer<ffi.Bool>)
+      >();
+
+  void bunny_core_tag_list_free(ffi.Pointer<bunny_core_tag_list_t> list) {
+    return _bunny_core_tag_list_free(list);
+  }
+
+  late final _bunny_core_tag_list_freePtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.Void Function(ffi.Pointer<bunny_core_tag_list_t>)
+        >
+      >('bunny_core_tag_list_free');
+  late final _bunny_core_tag_list_free = _bunny_core_tag_list_freePtr
+      .asFunction<void Function(ffi.Pointer<bunny_core_tag_list_t>)>();
+
+  bunny_core_result_t bunny_core_search_tags(
+    ffi.Pointer<bunny_core_t> core,
+    ffi.Pointer<ffi.Char> name_matches,
+    int limit,
+    ffi.Pointer<bunny_core_tag_list_t> out_list,
+  ) {
+    return bunny_core_result_t.fromValue(
+      _bunny_core_search_tags(core, name_matches, limit, out_list),
+    );
+  }
+
+  late final _bunny_core_search_tagsPtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.UnsignedInt Function(
+            ffi.Pointer<bunny_core_t>,
+            ffi.Pointer<ffi.Char>,
+            ffi.Int,
+            ffi.Pointer<bunny_core_tag_list_t>,
+          )
+        >
+      >('bunny_core_search_tags');
+  late final _bunny_core_search_tags = _bunny_core_search_tagsPtr
+      .asFunction<
+        int Function(
+          ffi.Pointer<bunny_core_t>,
+          ffi.Pointer<ffi.Char>,
+          int,
+          ffi.Pointer<bunny_core_tag_list_t>,
+        )
+      >();
+
+  void bunny_core_wiki_page_free(ffi.Pointer<bunny_core_wiki_page_t> page) {
+    return _bunny_core_wiki_page_free(page);
+  }
+
+  late final _bunny_core_wiki_page_freePtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.Void Function(ffi.Pointer<bunny_core_wiki_page_t>)
+        >
+      >('bunny_core_wiki_page_free');
+  late final _bunny_core_wiki_page_free = _bunny_core_wiki_page_freePtr
+      .asFunction<void Function(ffi.Pointer<bunny_core_wiki_page_t>)>();
+
+  /// Not every tag has a wiki page -- returns BUNNY_CORE_ERR_NOT_FOUND if
+  /// `title` doesn't match one.
+  bunny_core_result_t bunny_core_get_wiki_page(
+    ffi.Pointer<bunny_core_t> core,
+    ffi.Pointer<ffi.Char> title,
+    ffi.Pointer<bunny_core_wiki_page_t> out_page,
+  ) {
+    return bunny_core_result_t.fromValue(
+      _bunny_core_get_wiki_page(core, title, out_page),
+    );
+  }
+
+  late final _bunny_core_get_wiki_pagePtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.UnsignedInt Function(
+            ffi.Pointer<bunny_core_t>,
+            ffi.Pointer<ffi.Char>,
+            ffi.Pointer<bunny_core_wiki_page_t>,
+          )
+        >
+      >('bunny_core_get_wiki_page');
+  late final _bunny_core_get_wiki_page = _bunny_core_get_wiki_pagePtr
+      .asFunction<
+        int Function(
+          ffi.Pointer<bunny_core_t>,
+          ffi.Pointer<ffi.Char>,
+          ffi.Pointer<bunny_core_wiki_page_t>,
+        )
+      >();
+
+  void bunny_core_tag_alias_list_free(
+    ffi.Pointer<bunny_core_tag_alias_list_t> list,
+  ) {
+    return _bunny_core_tag_alias_list_free(list);
+  }
+
+  late final _bunny_core_tag_alias_list_freePtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.Void Function(ffi.Pointer<bunny_core_tag_alias_list_t>)
+        >
+      >('bunny_core_tag_alias_list_free');
+  late final _bunny_core_tag_alias_list_free =
+      _bunny_core_tag_alias_list_freePtr
+          .asFunction<
+            void Function(ffi.Pointer<bunny_core_tag_alias_list_t>)
+          >();
+
+  bunny_core_result_t bunny_core_search_tag_aliases(
+    ffi.Pointer<bunny_core_t> core,
+    ffi.Pointer<ffi.Char> name_matches,
+    int limit,
+    ffi.Pointer<bunny_core_tag_alias_list_t> out_list,
+  ) {
+    return bunny_core_result_t.fromValue(
+      _bunny_core_search_tag_aliases(core, name_matches, limit, out_list),
+    );
+  }
+
+  late final _bunny_core_search_tag_aliasesPtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.UnsignedInt Function(
+            ffi.Pointer<bunny_core_t>,
+            ffi.Pointer<ffi.Char>,
+            ffi.Int,
+            ffi.Pointer<bunny_core_tag_alias_list_t>,
+          )
+        >
+      >('bunny_core_search_tag_aliases');
+  late final _bunny_core_search_tag_aliases = _bunny_core_search_tag_aliasesPtr
+      .asFunction<
+        int Function(
+          ffi.Pointer<bunny_core_t>,
+          ffi.Pointer<ffi.Char>,
+          int,
+          ffi.Pointer<bunny_core_tag_alias_list_t>,
+        )
+      >();
+
+  void bunny_core_tag_implication_list_free(
+    ffi.Pointer<bunny_core_tag_implication_list_t> list,
+  ) {
+    return _bunny_core_tag_implication_list_free(list);
+  }
+
+  late final _bunny_core_tag_implication_list_freePtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.Void Function(ffi.Pointer<bunny_core_tag_implication_list_t>)
+        >
+      >('bunny_core_tag_implication_list_free');
+  late final _bunny_core_tag_implication_list_free =
+      _bunny_core_tag_implication_list_freePtr
+          .asFunction<
+            void Function(ffi.Pointer<bunny_core_tag_implication_list_t>)
+          >();
+
+  bunny_core_result_t bunny_core_search_tag_implications(
+    ffi.Pointer<bunny_core_t> core,
+    ffi.Pointer<ffi.Char> name_matches,
+    int limit,
+    ffi.Pointer<bunny_core_tag_implication_list_t> out_list,
+  ) {
+    return bunny_core_result_t.fromValue(
+      _bunny_core_search_tag_implications(core, name_matches, limit, out_list),
+    );
+  }
+
+  late final _bunny_core_search_tag_implicationsPtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.UnsignedInt Function(
+            ffi.Pointer<bunny_core_t>,
+            ffi.Pointer<ffi.Char>,
+            ffi.Int,
+            ffi.Pointer<bunny_core_tag_implication_list_t>,
+          )
+        >
+      >('bunny_core_search_tag_implications');
+  late final _bunny_core_search_tag_implications =
+      _bunny_core_search_tag_implicationsPtr
+          .asFunction<
+            int Function(
+              ffi.Pointer<bunny_core_t>,
+              ffi.Pointer<ffi.Char>,
+              int,
+              ffi.Pointer<bunny_core_tag_implication_list_t>,
+            )
+          >();
 }
 
 enum bunny_core_result_t {
@@ -2591,4 +2834,133 @@ final class bunny_core_queue_stats_t extends ffi.Struct {
 
   @ffi.Int()
   external int actions_failed;
+}
+
+/// --- Tag/wiki reference data (M53) -----------------------------------------
+/// e621.wiki (https://e621.wiki/) documents these as part of e621's own real
+/// API, so they're plain live e621 lookups like bunny_core_pool_info_t/
+/// bunny_core_comment_t above -- no persistence. e621-only: Inkbunny has no
+/// equivalent of any of this, so every function here always queries e621
+/// regardless of which site a tag came from (per the user: falling back to
+/// e621's wiki for Inkbunny tags too beats omitting the feature there
+/// entirely).
+enum bunny_core_tag_category_t {
+  BUNNY_CORE_TAG_CATEGORY_GENERAL(0),
+  BUNNY_CORE_TAG_CATEGORY_ARTIST(1),
+  BUNNY_CORE_TAG_CATEGORY_COPYRIGHT(2),
+  BUNNY_CORE_TAG_CATEGORY_CHARACTER(3),
+  BUNNY_CORE_TAG_CATEGORY_SPECIES(4),
+  BUNNY_CORE_TAG_CATEGORY_INVALID(5),
+  BUNNY_CORE_TAG_CATEGORY_LORE(6),
+  BUNNY_CORE_TAG_CATEGORY_META(7),
+  BUNNY_CORE_TAG_CATEGORY_UNKNOWN(8);
+
+  final int value;
+  const bunny_core_tag_category_t(this.value);
+
+  static bunny_core_tag_category_t fromValue(int value) => switch (value) {
+    0 => BUNNY_CORE_TAG_CATEGORY_GENERAL,
+    1 => BUNNY_CORE_TAG_CATEGORY_ARTIST,
+    2 => BUNNY_CORE_TAG_CATEGORY_COPYRIGHT,
+    3 => BUNNY_CORE_TAG_CATEGORY_CHARACTER,
+    4 => BUNNY_CORE_TAG_CATEGORY_SPECIES,
+    5 => BUNNY_CORE_TAG_CATEGORY_INVALID,
+    6 => BUNNY_CORE_TAG_CATEGORY_LORE,
+    7 => BUNNY_CORE_TAG_CATEGORY_META,
+    8 => BUNNY_CORE_TAG_CATEGORY_UNKNOWN,
+    _ => throw ArgumentError(
+      'Unknown value for bunny_core_tag_category_t: $value',
+    ),
+  };
+}
+
+final class bunny_core_tag_t extends ffi.Struct {
+  @ffi.Int64()
+  external int id;
+
+  external ffi.Pointer<ffi.Char> name;
+
+  @ffi.Int()
+  external int post_count;
+
+  @ffi.UnsignedInt()
+  external int categoryAsInt;
+
+  bunny_core_tag_category_t get category =>
+      bunny_core_tag_category_t.fromValue(categoryAsInt);
+
+  /// raw, space-separated; e621 doesn't structure this further
+  external ffi.Pointer<ffi.Char> related_tags;
+
+  @ffi.Bool()
+  external bool is_locked;
+
+  external ffi.Pointer<ffi.Char> created_at;
+
+  external ffi.Pointer<ffi.Char> updated_at;
+}
+
+final class bunny_core_tag_list_t extends ffi.Struct {
+  external ffi.Pointer<bunny_core_tag_t> items;
+
+  @ffi.Size()
+  external int count;
+}
+
+final class bunny_core_wiki_page_t extends ffi.Struct {
+  @ffi.Int64()
+  external int id;
+
+  external ffi.Pointer<ffi.Char> title;
+
+  /// [[wiki link]]/{{author}}/`thumb #id` markup, unparsed -- see the app's shared rich-text parser (M50)
+  external ffi.Pointer<ffi.Char> body;
+
+  external bunny_db_string_list_t other_names;
+
+  @ffi.Bool()
+  external bool is_locked;
+
+  external ffi.Pointer<ffi.Char> created_at;
+
+  external ffi.Pointer<ffi.Char> updated_at;
+}
+
+final class bunny_core_tag_alias_t extends ffi.Struct {
+  @ffi.Int64()
+  external int id;
+
+  external ffi.Pointer<ffi.Char> antecedent_name;
+
+  external ffi.Pointer<ffi.Char> consequent_name;
+
+  external ffi.Pointer<ffi.Char> status;
+
+  @ffi.Int()
+  external int post_count;
+}
+
+final class bunny_core_tag_alias_list_t extends ffi.Struct {
+  external ffi.Pointer<bunny_core_tag_alias_t> items;
+
+  @ffi.Size()
+  external int count;
+}
+
+final class bunny_core_tag_implication_t extends ffi.Struct {
+  @ffi.Int64()
+  external int id;
+
+  external ffi.Pointer<ffi.Char> antecedent_name;
+
+  external ffi.Pointer<ffi.Char> consequent_name;
+
+  external ffi.Pointer<ffi.Char> status;
+}
+
+final class bunny_core_tag_implication_list_t extends ffi.Struct {
+  external ffi.Pointer<bunny_core_tag_implication_t> items;
+
+  @ffi.Size()
+  external int count;
 }

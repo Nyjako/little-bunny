@@ -422,6 +422,23 @@ class FakeBunnyRepository implements BunnyRepository {
   @override
   Future<List<BunnyComment>> getPostComments(int postId) async => List.of(commentsByPostId[postId] ?? const []);
 
+  final Map<String, List<BunnyTag>> tagsByNameMatches = {};
+  final Map<String, BunnyWikiPage?> wikiPageByTitle = {};
+  final Map<String, List<BunnyTagAlias>> tagAliasesByNameMatches = {};
+  final Map<String, List<BunnyTagImplication>> tagImplicationsByNameMatches = {};
+
+  @override
+  Future<List<BunnyTag>> searchTags(String nameMatches, {int limit = 0}) async => List.of(tagsByNameMatches[nameMatches] ?? const []);
+
+  @override
+  Future<BunnyWikiPage?> getWikiPage(String title) async => wikiPageByTitle[title];
+
+  @override
+  Future<List<BunnyTagAlias>> searchTagAliases(String nameMatches, {int limit = 0}) async => List.of(tagAliasesByNameMatches[nameMatches] ?? const []);
+
+  @override
+  Future<List<BunnyTagImplication>> searchTagImplications(String nameMatches, {int limit = 0}) async => List.of(tagImplicationsByNameMatches[nameMatches] ?? const []);
+
   @override
   Future<void> syncDueSearches() async {
     syncCallCount++;
