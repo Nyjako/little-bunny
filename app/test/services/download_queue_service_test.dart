@@ -191,7 +191,17 @@ void main() {
     repository.postsById[1] = post;
 
     service.enqueue(post, repository);
-    await Future<void>.delayed(const Duration(milliseconds: 1));
+    // enqueue's own _persist() write to pending_downloads.json is real,
+    // fire-and-forget file I/O -- a single fixed 1ms wait before reading it
+    // back below was flaky under CI load (observed directly: passed in the
+    // PR's own check run, then failed on push to `dev` moments later with
+    // restored.totalCount reading 0 instead of 1, meaning the write hadn't
+    // landed yet). Poll for the real file's content instead of guessing a
+    // delay is long enough.
+    final persistedFile = File('${(PathProviderPlatform.instance as _RealPathProviderPlatform).supportPath}/pending_downloads.json');
+    while (!await persistedFile.exists() || !(await persistedFile.readAsString()).contains('${post.id}')) {
+      await Future<void>.delayed(const Duration(milliseconds: 1));
+    }
 
     // Simulate a fresh process: a brand new service instance, pointed at
     // the same (real) persistence directory via the same PathProviderPlatform
