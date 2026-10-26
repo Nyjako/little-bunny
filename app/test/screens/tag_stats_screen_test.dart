@@ -3,6 +3,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:little_bunny/repository/bunny_models.dart';
 import 'package:little_bunny/screens/tag_browse_screen.dart';
 import 'package:little_bunny/screens/tag_stats_screen.dart';
+import 'package:little_bunny/services/download_manager.dart';
+import 'package:little_bunny/services/download_queue_service.dart';
 import 'package:little_bunny/settings/display_settings_store.dart';
 import 'package:little_bunny/settings/download_settings_store.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -16,7 +18,12 @@ void main() {
   });
 
   Widget wrap(FakeBunnyRepository repository) => wrapWithLocalization(
-    TagStatsScreen(repository: repository, displaySettingsStore: const DisplaySettingsStore(), downloadSettingsStore: const DownloadSettingsStore()),
+    TagStatsScreen(
+      repository: repository,
+      displaySettingsStore: const DisplaySettingsStore(),
+      downloadSettingsStore: const DownloadSettingsStore(),
+      downloadQueueService: DownloadQueueService(downloadManager: const DownloadManager(), downloadSettingsStore: const DownloadSettingsStore()),
+    ),
   );
 
   testWidgets('shows the empty state for every section when the report is empty (M40)', (WidgetTester tester) async {

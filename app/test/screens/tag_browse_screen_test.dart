@@ -3,6 +3,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:little_bunny/repository/bunny_models.dart';
 import 'package:little_bunny/screens/post_detail_screen.dart';
 import 'package:little_bunny/screens/tag_browse_screen.dart';
+import 'package:little_bunny/services/download_manager.dart';
+import 'package:little_bunny/services/download_queue_service.dart';
 import 'package:little_bunny/settings/display_settings_store.dart';
 import 'package:little_bunny/settings/download_settings_store.dart';
 import 'package:little_bunny/widgets/pool_description_text.dart';
@@ -11,6 +13,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../fakes/fake_bunny_repository.dart';
 import '../fakes/test_app.dart';
+
+DownloadQueueService _downloadQueueService() => DownloadQueueService(downloadManager: const DownloadManager(), downloadSettingsStore: const DownloadSettingsStore());
 
 BunnyPost _post(int id) => BunnyPost(
   id: id,
@@ -38,7 +42,7 @@ void main() {
       site: BunnySite.e621,
       query: 'someartist',
       repository: repository,
-      displaySettingsStore: const DisplaySettingsStore(), downloadSettingsStore: const DownloadSettingsStore(),
+      displaySettingsStore: const DisplaySettingsStore(), downloadSettingsStore: const DownloadSettingsStore(), downloadQueueService: _downloadQueueService(),
     ),
   );
 
@@ -96,7 +100,7 @@ void main() {
 
     await tester.pumpWidget(
       wrapWithLocalization(
-        TagBrowseScreen(site: BunnySite.e621, query: 'pool:123', repository: repository, displaySettingsStore: const DisplaySettingsStore(), downloadSettingsStore: const DownloadSettingsStore()),
+        TagBrowseScreen(site: BunnySite.e621, query: 'pool:123', repository: repository, displaySettingsStore: const DisplaySettingsStore(), downloadSettingsStore: const DownloadSettingsStore(), downloadQueueService: _downloadQueueService()),
       ),
     );
     await tester.pumpAndSettle();
@@ -107,7 +111,7 @@ void main() {
 
   group('pool description + references (M26)', () {
     Widget wrapPool(FakeBunnyRepository repository, {int poolId = 123}) => wrapWithLocalization(
-      TagBrowseScreen(site: BunnySite.e621, query: 'pool:$poolId', repository: repository, displaySettingsStore: const DisplaySettingsStore(), downloadSettingsStore: const DownloadSettingsStore()),
+      TagBrowseScreen(site: BunnySite.e621, query: 'pool:$poolId', repository: repository, displaySettingsStore: const DisplaySettingsStore(), downloadSettingsStore: const DownloadSettingsStore(), downloadQueueService: _downloadQueueService()),
     );
 
     testWidgets('shows the pool description', (WidgetTester tester) async {
@@ -171,7 +175,7 @@ void main() {
 
       await tester.pumpWidget(
         wrapWithLocalization(
-          TagBrowseScreen(site: BunnySite.inkbunny, query: 'pool:123', repository: repository, displaySettingsStore: const DisplaySettingsStore(), downloadSettingsStore: const DownloadSettingsStore()),
+          TagBrowseScreen(site: BunnySite.inkbunny, query: 'pool:123', repository: repository, displaySettingsStore: const DisplaySettingsStore(), downloadSettingsStore: const DownloadSettingsStore(), downloadQueueService: _downloadQueueService()),
         ),
       );
       await tester.pumpAndSettle();
@@ -316,7 +320,7 @@ void main() {
         query: '',
         repository: repository,
         displaySettingsStore: const DisplaySettingsStore(),
-        downloadSettingsStore: const DownloadSettingsStore(),
+        downloadSettingsStore: const DownloadSettingsStore(), downloadQueueService: _downloadQueueService(),
         customFetch: customFetch,
         title: title,
       ),

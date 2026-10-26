@@ -1,5 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:little_bunny/main.dart';
+import 'package:little_bunny/services/download_manager.dart';
+import 'package:little_bunny/services/download_queue_service.dart';
 import 'package:little_bunny/settings/app_lock_service.dart';
 import 'package:little_bunny/settings/display_settings_store.dart';
 import 'package:little_bunny/settings/repository_settings_store.dart';
@@ -9,13 +11,15 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'fakes/fake_secret_store.dart';
 
+DownloadQueueService _downloadQueueService() => DownloadQueueService(downloadManager: const DownloadManager(), downloadSettingsStore: const DownloadSettingsStore());
+
 void main() {
   testWidgets('app boots straight to the searches screen when already configured', (WidgetTester tester) async {
     SharedPreferences.setMockInitialValues({'repository_mode': 'networked', 'repository_server_url': 'https://localhost:9443'});
     final settingsStore = RepositorySettingsStore(FakeSecretStore({'repository_bearer_token': 'test-token', 'repository_cert_fingerprint': '00' * 32}));
     final lockService = AppLockService(FakeSecretStore());
 
-    await tester.pumpWidget(LittleBunnyApp(settingsStore: settingsStore, lockService: lockService, themeSettingsStore: const ThemeSettingsStore(), downloadSettingsStore: const DownloadSettingsStore(), displaySettingsStore: const DisplaySettingsStore()));
+    await tester.pumpWidget(LittleBunnyApp(settingsStore: settingsStore, lockService: lockService, themeSettingsStore: const ThemeSettingsStore(), downloadSettingsStore: const DownloadSettingsStore(), displaySettingsStore: const DisplaySettingsStore(), downloadQueueService: _downloadQueueService()));
     // Not pumpAndSettle(): SearchesScreen's own listSearches call goes through
     // a real HttpBunnyRepository against an unreachable localhost:9443 here,
     // which never cleanly "settles" under TestWidgetsFlutterBinding. Two
@@ -37,7 +41,7 @@ void main() {
     final settingsStore = RepositorySettingsStore(FakeSecretStore());
     final lockService = AppLockService(FakeSecretStore());
 
-    await tester.pumpWidget(LittleBunnyApp(settingsStore: settingsStore, lockService: lockService, themeSettingsStore: const ThemeSettingsStore(), downloadSettingsStore: const DownloadSettingsStore(), displaySettingsStore: const DisplaySettingsStore()));
+    await tester.pumpWidget(LittleBunnyApp(settingsStore: settingsStore, lockService: lockService, themeSettingsStore: const ThemeSettingsStore(), downloadSettingsStore: const DownloadSettingsStore(), displaySettingsStore: const DisplaySettingsStore(), downloadQueueService: _downloadQueueService()));
     await tester.pumpAndSettle();
 
     expect(find.text('Set up LittleBunny'), findsOneWidget);
@@ -51,7 +55,7 @@ void main() {
     final settingsStore = RepositorySettingsStore(FakeSecretStore({'repository_bearer_token': 'test-token', 'repository_cert_fingerprint': '00' * 32}));
     final lockService = AppLockService(lockSecrets);
 
-    await tester.pumpWidget(LittleBunnyApp(settingsStore: settingsStore, lockService: lockService, themeSettingsStore: const ThemeSettingsStore(), downloadSettingsStore: const DownloadSettingsStore(), displaySettingsStore: const DisplaySettingsStore()));
+    await tester.pumpWidget(LittleBunnyApp(settingsStore: settingsStore, lockService: lockService, themeSettingsStore: const ThemeSettingsStore(), downloadSettingsStore: const DownloadSettingsStore(), displaySettingsStore: const DisplaySettingsStore(), downloadQueueService: _downloadQueueService()));
     await tester.pump();
     await tester.pump();
 

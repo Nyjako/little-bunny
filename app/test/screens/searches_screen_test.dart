@@ -5,6 +5,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:little_bunny/bunny_repository_scope.dart';
 import 'package:little_bunny/repository/bunny_models.dart';
 import 'package:little_bunny/screens/searches_screen.dart';
+import 'package:little_bunny/services/download_manager.dart';
+import 'package:little_bunny/services/download_queue_service.dart';
 import 'package:little_bunny/settings/app_lock_service.dart';
 import 'package:little_bunny/settings/display_settings_store.dart';
 import 'package:little_bunny/settings/download_settings_store.dart';
@@ -26,6 +28,7 @@ Widget _wrap(FakeBunnyRepository repository) => wrapWithLocalization(
       themeSettingsStore: const ThemeSettingsStore(),
       displaySettingsStore: const DisplaySettingsStore(),
       downloadSettingsStore: const DownloadSettingsStore(),
+      downloadQueueService: DownloadQueueService(downloadManager: const DownloadManager(), downloadSettingsStore: const DownloadSettingsStore()),
       settingsStore: RepositorySettingsStore(FakeSecretStore()),
       onThemeModeChanged: (_) {},
       onThemeColorChanged: (_) {},
