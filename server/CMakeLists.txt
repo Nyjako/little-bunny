@@ -27,6 +27,8 @@ add_library(bunny_server_lib STATIC
     src/routes_qr.c
     src/updater.c
     src/qr.c
+    src/status.c
+    src/health_check.c
 )
 
 target_compile_definitions(bunny_server_lib PUBLIC BUNNY_BUILD_NUMBER=${BUNNY_BUILD_NUMBER})
