@@ -489,6 +489,115 @@ e621_result_t e621_get_pool(e621_client_t *client, int64_t pool_id, e621_pool_t 
     return result;
 }
 
+e621_result_t e621_search_tags(e621_client_t *client, const char *name_matches, int limit, e621_tag_list_t *out_tags)
+{
+    if (!client || !out_tags) {
+        return E621_ERR_INVALID_ARG;
+    }
+
+    char *encoded = url_encode(name_matches ? name_matches : "");
+    if (!encoded) {
+        return E621_ERR_UNKNOWN;
+    }
+
+    char query[1600];
+    snprintf(query, sizeof(query), "search[name_matches]=%s&limit=%d", encoded, limit > 0 ? limit : 75);
+    free(encoded);
+
+    cJSON *json = NULL;
+    e621_result_t result = perform_request(client, BUNNY_HTTP_GET, "/tags.json", query, NULL, &json);
+    if (result != E621_OK) {
+        return result;
+    }
+
+    result = e621_parse_tag_array(json, out_tags);
+    cJSON_Delete(json);
+    return result;
+}
+
+e621_result_t e621_get_wiki_page(e621_client_t *client, const char *title, e621_wiki_page_t *out_page)
+{
+    if (!client || !title || !out_page) {
+        return E621_ERR_INVALID_ARG;
+    }
+
+    char *encoded = url_encode(title);
+    if (!encoded) {
+        return E621_ERR_UNKNOWN;
+    }
+
+    char query[1600];
+    snprintf(query, sizeof(query), "search[title]=%s&limit=1", encoded);
+    free(encoded);
+
+    cJSON *json = NULL;
+    e621_result_t result = perform_request(client, BUNNY_HTTP_GET, "/wiki_pages.json", query, NULL, &json);
+    if (result != E621_OK) {
+        return result;
+    }
+
+    if (!cJSON_IsArray(json) || cJSON_GetArraySize(json) == 0) {
+        cJSON_Delete(json);
+        return E621_ERR_NOT_FOUND;
+    }
+
+    result = e621_parse_wiki_page(cJSON_GetArrayItem(json, 0), out_page);
+    cJSON_Delete(json);
+    return result;
+}
+
+e621_result_t e621_search_tag_aliases(e621_client_t *client, const char *name_matches, int limit, e621_tag_alias_list_t *out_aliases)
+{
+    if (!client || !out_aliases) {
+        return E621_ERR_INVALID_ARG;
+    }
+
+    char *encoded = url_encode(name_matches ? name_matches : "");
+    if (!encoded) {
+        return E621_ERR_UNKNOWN;
+    }
+
+    char query[1600];
+    snprintf(query, sizeof(query), "search[name_matches]=%s&limit=%d", encoded, limit > 0 ? limit : 320);
+    free(encoded);
+
+    cJSON *json = NULL;
+    e621_result_t result = perform_request(client, BUNNY_HTTP_GET, "/tag_aliases.json", query, NULL, &json);
+    if (result != E621_OK) {
+        return result;
+    }
+
+    result = e621_parse_tag_alias_array(json, out_aliases);
+    cJSON_Delete(json);
+    return result;
+}
+
+e621_result_t e621_search_tag_implications(e621_client_t *client, const char *name_matches, int limit, e621_tag_implication_list_t *out_implications)
+{
+    if (!client || !out_implications) {
+        return E621_ERR_INVALID_ARG;
+    }
+
+    char *encoded = url_encode(name_matches ? name_matches : "");
+    if (!encoded) {
+        return E621_ERR_UNKNOWN;
+    }
+
+    char query[1600];
+    snprintf(query, sizeof(query), "search[name_matches]=%s&limit=%d", encoded, limit > 0 ? limit : 320);
+    free(encoded);
+
+    cJSON *json = NULL;
+    e621_result_t result = perform_request(client, BUNNY_HTTP_GET, "/tag_implications.json", query, NULL, &json);
+    if (result != E621_OK) {
+        return result;
+    }
+
+    result = e621_parse_tag_implication_array(json, out_implications);
+    cJSON_Delete(json);
+    return result;
+}
+
 e621_result_t e621_get_blacklisted_tags(e621_client_t *client, char **out_blacklisted_tags)
 {
     if (!client || !out_blacklisted_tags) {

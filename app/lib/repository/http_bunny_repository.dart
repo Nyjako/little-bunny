@@ -105,6 +105,38 @@ BunnyPoolInfo _poolInfoFromJson(Map<String, Object?> j) => BunnyPoolInfo(
 BunnyComment _commentFromJson(Map<String, Object?> j) =>
     BunnyComment(id: (j['id'] as num).toInt(), creatorName: j['creator_name'] as String?, body: j['body'] as String?, createdAt: j['created_at'] as String?);
 
+BunnyTag _tagFromJson(Map<String, Object?> j) => BunnyTag(
+  id: (j['id'] as num).toInt(),
+  name: j['name'] as String?,
+  postCount: (j['post_count'] as num).toInt(),
+  category: BunnyTagCategory.values[(j['category'] as num).toInt()],
+  relatedTags: j['related_tags'] as String?,
+  isLocked: j['is_locked'] as bool,
+  createdAt: j['created_at'] as String?,
+  updatedAt: j['updated_at'] as String?,
+);
+
+BunnyWikiPage _wikiPageFromJson(Map<String, Object?> j) => BunnyWikiPage(
+  id: (j['id'] as num).toInt(),
+  title: j['title'] as String?,
+  body: j['body'] as String?,
+  otherNames: (j['other_names'] as List? ?? const []).cast<String>(),
+  isLocked: j['is_locked'] as bool,
+  createdAt: j['created_at'] as String?,
+  updatedAt: j['updated_at'] as String?,
+);
+
+BunnyTagAlias _tagAliasFromJson(Map<String, Object?> j) => BunnyTagAlias(
+  id: (j['id'] as num).toInt(),
+  antecedentName: j['antecedent_name'] as String?,
+  consequentName: j['consequent_name'] as String?,
+  status: j['status'] as String?,
+  postCount: (j['post_count'] as num).toInt(),
+);
+
+BunnyTagImplication _tagImplicationFromJson(Map<String, Object?> j) =>
+    BunnyTagImplication(id: (j['id'] as num).toInt(), antecedentName: j['antecedent_name'] as String?, consequentName: j['consequent_name'] as String?, status: j['status'] as String?);
+
 BunnyQueueStats _queueStatsFromJson(Map<String, Object?> j) => BunnyQueueStats(
   actionsProcessed: (j['actions_processed'] as num).toInt(),
   actionsSucceeded: (j['actions_succeeded'] as num).toInt(),
@@ -559,6 +591,45 @@ class HttpBunnyRepository implements BunnyRepository {
       _throwError(response);
     }
     return _decodeList(response).map(_commentFromJson).toList();
+  }
+
+  @override
+  Future<List<BunnyTag>> searchTags(String nameMatches, {int limit = 0}) async {
+    final response = await _client.get(_uri('/tags/search', {'name_matches': nameMatches, if (limit > 0) 'limit': '$limit'}), headers: _headers);
+    if (response.statusCode != 200) {
+      _throwError(response);
+    }
+    return _decodeList(response).map(_tagFromJson).toList();
+  }
+
+  @override
+  Future<BunnyWikiPage?> getWikiPage(String title) async {
+    final response = await _client.get(_uri('/wiki_pages', {'title': title}), headers: _headers);
+    if (response.statusCode == 404) {
+      return null;
+    }
+    if (response.statusCode != 200) {
+      _throwError(response);
+    }
+    return _wikiPageFromJson(_decodeObject(response));
+  }
+
+  @override
+  Future<List<BunnyTagAlias>> searchTagAliases(String nameMatches, {int limit = 0}) async {
+    final response = await _client.get(_uri('/tag_aliases', {'name_matches': nameMatches, if (limit > 0) 'limit': '$limit'}), headers: _headers);
+    if (response.statusCode != 200) {
+      _throwError(response);
+    }
+    return _decodeList(response).map(_tagAliasFromJson).toList();
+  }
+
+  @override
+  Future<List<BunnyTagImplication>> searchTagImplications(String nameMatches, {int limit = 0}) async {
+    final response = await _client.get(_uri('/tag_implications', {'name_matches': nameMatches, if (limit > 0) 'limit': '$limit'}), headers: _headers);
+    if (response.statusCode != 200) {
+      _throwError(response);
+    }
+    return _decodeList(response).map(_tagImplicationFromJson).toList();
   }
 
   @override

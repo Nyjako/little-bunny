@@ -848,6 +848,51 @@ class AppLocalizationsEn extends AppLocalizations {
   String get postDetailDownloadQueued => 'Queued for download';
 
   @override
+  String get tagMenuSearchLabel => 'Search';
+
+  @override
+  String get tagMenuAddToSearchesLabel => 'Add to saved searches';
+
+  @override
+  String get tagMenuAddToBlacklistLabel => 'Add to blacklist';
+
+  @override
+  String get tagMenuShowWikiLabel => 'Show wiki';
+
+  @override
+  String get tagMenuCopyLabel => 'Copy to clipboard';
+
+  @override
+  String tagMenuAddedToBlacklist(String tag) {
+    return 'Added \"$tag\" to the blacklist';
+  }
+
+  @override
+  String tagMenuCopied(String tag) {
+    return 'Copied \"$tag\" to the clipboard';
+  }
+
+  @override
+  String get tagMenuAddToCurrentSearchLabel => 'Add to current search';
+
+  @override
+  String get tagMenuExcludeFromCurrentSearchLabel =>
+      'Exclude from current search';
+
+  @override
+  String get tagMenuRemoveFromCurrentSearchLabel =>
+      'Remove from current search';
+
+  @override
+  String get customSearchScreenTitle => 'Custom search';
+
+  @override
+  String get customSearchSubmit => 'Search';
+
+  @override
+  String get searchesCustomSearchTooltip => 'Custom search';
+
+  @override
   String get downloadQueueScreenTitle => 'Downloads';
 
   @override
@@ -892,4 +937,15 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get updateNowAction => 'Update';
+
+  @override
+  String get wikiPageNotFoundMessage => 'No wiki page for this tag.';
+
+  @override
+  String get wikiPageLoadFailedMessage => 'Couldn\'t load the wiki page.';
+
+  @override
+  String wikiPageOtherNamesLabel(String names) {
+    return 'Also known as: $names';
+  }
 }

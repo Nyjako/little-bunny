@@ -114,6 +114,154 @@ static int handle_stats_report(struct mg_connection *conn, server_context_t *ctx
     return status;
 }
 
+/* Shared by handle_search_tags/handle_search_tag_aliases/
+ * handle_search_tag_implications below -- all three take the same
+ * name_matches/limit query params and only differ in which bunny_core_*
+ * function they call and how each result item serializes. */
+static bool parse_name_matches_and_limit(const char *query_string, char *name_matches, size_t name_matches_size, int *out_limit)
+{
+    if (!query_string || mg_get_var(query_string, strlen(query_string), "name_matches", name_matches, name_matches_size) <= 0) {
+        return false;
+    }
+    *out_limit = 0;
+    char limit_value[16];
+    if (mg_get_var(query_string, strlen(query_string), "limit", limit_value, sizeof(limit_value)) > 0) {
+        *out_limit = atoi(limit_value);
+    }
+    return true;
+}
+
+static int handle_search_tags(struct mg_connection *conn, server_context_t *ctx, const char *query_string)
+{
+    char name_matches[256];
+    int limit;
+    if (!parse_name_matches_and_limit(query_string, name_matches, sizeof(name_matches), &limit)) {
+        return server_json_respond_error(conn, BUNNY_CORE_ERR_INVALID_ARG);
+    }
+
+    bunny_core_tag_list_t list;
+    bunny_core_result_t result = bunny_core_search_tags(ctx->core, name_matches, limit, &list);
+    if (result != BUNNY_CORE_OK) {
+        return server_json_respond_error(conn, result);
+    }
+
+    cJSON *response = cJSON_CreateArray();
+    for (size_t i = 0; i < list.count; i++) {
+        cJSON *item = cJSON_CreateObject();
+        cJSON_AddNumberToObject(item, "id", (double)list.items[i].id);
+        cJSON_AddStringToObject(item, "name", list.items[i].name ? list.items[i].name : "");
+        cJSON_AddNumberToObject(item, "post_count", list.items[i].post_count);
+        cJSON_AddNumberToObject(item, "category", (double)list.items[i].category);
+        if (list.items[i].related_tags) {
+            cJSON_AddStringToObject(item, "related_tags", list.items[i].related_tags);
+        } else {
+            cJSON_AddNullToObject(item, "related_tags");
+        }
+        cJSON_AddBoolToObject(item, "is_locked", list.items[i].is_locked);
+        cJSON_AddStringToObject(item, "created_at", list.items[i].created_at ? list.items[i].created_at : "");
+        cJSON_AddStringToObject(item, "updated_at", list.items[i].updated_at ? list.items[i].updated_at : "");
+        cJSON_AddItemToArray(response, item);
+    }
+    bunny_core_tag_list_free(&list);
+
+    int status = server_json_respond(conn, 200, response);
+    cJSON_Delete(response);
+    return status;
+}
+
+static int handle_get_wiki_page(struct mg_connection *conn, server_context_t *ctx, const char *query_string)
+{
+    char title[256];
+    if (!query_string || mg_get_var(query_string, strlen(query_string), "title", title, sizeof(title)) <= 0) {
+        return server_json_respond_error(conn, BUNNY_CORE_ERR_INVALID_ARG);
+    }
+
+    bunny_core_wiki_page_t page;
+    bunny_core_result_t result = bunny_core_get_wiki_page(ctx->core, title, &page);
+    if (result != BUNNY_CORE_OK) {
+        return server_json_respond_error(conn, result);
+    }
+
+    cJSON *response = cJSON_CreateObject();
+    cJSON_AddNumberToObject(response, "id", (double)page.id);
+    cJSON_AddStringToObject(response, "title", page.title ? page.title : "");
+    cJSON_AddStringToObject(response, "body", page.body ? page.body : "");
+    cJSON *other_names = cJSON_CreateArray();
+    for (size_t i = 0; i < page.other_names.count; i++) {
+        cJSON_AddItemToArray(other_names, cJSON_CreateString(page.other_names.items[i]));
+    }
+    cJSON_AddItemToObject(response, "other_names", other_names);
+    cJSON_AddBoolToObject(response, "is_locked", page.is_locked);
+    cJSON_AddStringToObject(response, "created_at", page.created_at ? page.created_at : "");
+    cJSON_AddStringToObject(response, "updated_at", page.updated_at ? page.updated_at : "");
+    bunny_core_wiki_page_free(&page);
+
+    int status = server_json_respond(conn, 200, response);
+    cJSON_Delete(response);
+    return status;
+}
+
+static int handle_search_tag_aliases(struct mg_connection *conn, server_context_t *ctx, const char *query_string)
+{
+    char name_matches[256];
+    int limit;
+    if (!parse_name_matches_and_limit(query_string, name_matches, sizeof(name_matches), &limit)) {
+        return server_json_respond_error(conn, BUNNY_CORE_ERR_INVALID_ARG);
+    }
+
+    bunny_core_tag_alias_list_t list;
+    bunny_core_result_t result = bunny_core_search_tag_aliases(ctx->core, name_matches, limit, &list);
+    if (result != BUNNY_CORE_OK) {
+        return server_json_respond_error(conn, result);
+    }
+
+    cJSON *response = cJSON_CreateArray();
+    for (size_t i = 0; i < list.count; i++) {
+        cJSON *item = cJSON_CreateObject();
+        cJSON_AddNumberToObject(item, "id", (double)list.items[i].id);
+        cJSON_AddStringToObject(item, "antecedent_name", list.items[i].antecedent_name ? list.items[i].antecedent_name : "");
+        cJSON_AddStringToObject(item, "consequent_name", list.items[i].consequent_name ? list.items[i].consequent_name : "");
+        cJSON_AddStringToObject(item, "status", list.items[i].status ? list.items[i].status : "");
+        cJSON_AddNumberToObject(item, "post_count", list.items[i].post_count);
+        cJSON_AddItemToArray(response, item);
+    }
+    bunny_core_tag_alias_list_free(&list);
+
+    int status = server_json_respond(conn, 200, response);
+    cJSON_Delete(response);
+    return status;
+}
+
+static int handle_search_tag_implications(struct mg_connection *conn, server_context_t *ctx, const char *query_string)
+{
+    char name_matches[256];
+    int limit;
+    if (!parse_name_matches_and_limit(query_string, name_matches, sizeof(name_matches), &limit)) {
+        return server_json_respond_error(conn, BUNNY_CORE_ERR_INVALID_ARG);
+    }
+
+    bunny_core_tag_implication_list_t list;
+    bunny_core_result_t result = bunny_core_search_tag_implications(ctx->core, name_matches, limit, &list);
+    if (result != BUNNY_CORE_OK) {
+        return server_json_respond_error(conn, result);
+    }
+
+    cJSON *response = cJSON_CreateArray();
+    for (size_t i = 0; i < list.count; i++) {
+        cJSON *item = cJSON_CreateObject();
+        cJSON_AddNumberToObject(item, "id", (double)list.items[i].id);
+        cJSON_AddStringToObject(item, "antecedent_name", list.items[i].antecedent_name ? list.items[i].antecedent_name : "");
+        cJSON_AddStringToObject(item, "consequent_name", list.items[i].consequent_name ? list.items[i].consequent_name : "");
+        cJSON_AddStringToObject(item, "status", list.items[i].status ? list.items[i].status : "");
+        cJSON_AddItemToArray(response, item);
+    }
+    bunny_core_tag_implication_list_free(&list);
+
+    int status = server_json_respond(conn, 200, response);
+    cJSON_Delete(response);
+    return status;
+}
+
 static int tags_handler(struct mg_connection *conn, void *cbdata)
 {
     server_context_t *ctx = (server_context_t *)cbdata;
@@ -128,6 +276,18 @@ static int tags_handler(struct mg_connection *conn, void *cbdata)
     if ((strcmp(info->request_method, "GET") == 0 || strcmp(info->request_method, "POST") == 0) && strcmp(info->local_uri, "/stats_report") == 0) {
         return handle_stats_report(conn, ctx, info->request_method);
     }
+    if (strcmp(info->request_method, "GET") == 0 && strcmp(info->local_uri, "/tags/search") == 0) {
+        return handle_search_tags(conn, ctx, info->query_string);
+    }
+    if (strcmp(info->request_method, "GET") == 0 && strcmp(info->local_uri, "/wiki_pages") == 0) {
+        return handle_get_wiki_page(conn, ctx, info->query_string);
+    }
+    if (strcmp(info->request_method, "GET") == 0 && strcmp(info->local_uri, "/tag_aliases") == 0) {
+        return handle_search_tag_aliases(conn, ctx, info->query_string);
+    }
+    if (strcmp(info->request_method, "GET") == 0 && strcmp(info->local_uri, "/tag_implications") == 0) {
+        return handle_search_tag_implications(conn, ctx, info->query_string);
+    }
 
     return server_json_respond_error(conn, BUNNY_CORE_ERR_NOT_FOUND);
 }
@@ -136,4 +296,8 @@ void server_routes_register_tags(struct mg_context *mg_ctx, server_context_t *ct
 {
     mg_set_request_handler(mg_ctx, "/tags/autocomplete", tags_handler, ctx);
     mg_set_request_handler(mg_ctx, "/stats_report", tags_handler, ctx);
+    mg_set_request_handler(mg_ctx, "/tags/search", tags_handler, ctx);
+    mg_set_request_handler(mg_ctx, "/wiki_pages", tags_handler, ctx);
+    mg_set_request_handler(mg_ctx, "/tag_aliases", tags_handler, ctx);
+    mg_set_request_handler(mg_ctx, "/tag_implications", tags_handler, ctx);
 }

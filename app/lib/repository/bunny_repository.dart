@@ -242,6 +242,19 @@ abstract interface class BunnyRepository {
   /// re-calling this is how the new comment appears.
   Future<List<BunnyComment>> getPostComments(int postId);
 
+  /// Tag reference data (M53), fetched live from e621 -- e621-only
+  /// regardless of [BunnyPost.site], same reasoning as [getPostComments]
+  /// but without the throw: Inkbunny tags fall back to e621's own wiki data
+  /// too rather than having no tag info at all (per the user).
+  Future<List<BunnyTag>> searchTags(String nameMatches, {int limit = 0});
+
+  /// `null` if [title] doesn't match a wiki page -- not every tag has one.
+  Future<BunnyWikiPage?> getWikiPage(String title);
+
+  Future<List<BunnyTagAlias>> searchTagAliases(String nameMatches, {int limit = 0});
+
+  Future<List<BunnyTagImplication>> searchTagImplications(String nameMatches, {int limit = 0});
+
   /// Manually triggers a sync pass (runs every due search). The server also
   /// does this on its own schedule (M5.3); this is for an explicit
   /// "refresh now" action. Runs in the background (server mode: enqueued

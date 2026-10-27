@@ -125,6 +125,77 @@ typedef struct
     size_t post_count;
 } e621_pool_t;
 
+typedef enum
+{
+    E621_TAG_CATEGORY_GENERAL,
+    E621_TAG_CATEGORY_ARTIST,
+    E621_TAG_CATEGORY_COPYRIGHT,
+    E621_TAG_CATEGORY_CHARACTER,
+    E621_TAG_CATEGORY_SPECIES,
+    E621_TAG_CATEGORY_INVALID,
+    E621_TAG_CATEGORY_LORE,
+    E621_TAG_CATEGORY_META,
+    E621_TAG_CATEGORY_UNKNOWN,
+} e621_tag_category_t;
+
+typedef struct
+{
+    int64_t id;
+    char *name;
+    int post_count;
+    e621_tag_category_t category;
+    char *related_tags; /* raw, space-separated; e621 doesn't structure this further */
+    bool is_locked;
+    char *created_at;
+    char *updated_at;
+} e621_tag_t;
+
+typedef struct
+{
+    e621_tag_t *items;
+    size_t count;
+} e621_tag_list_t;
+
+typedef struct
+{
+    int64_t id;
+    char *title;
+    char *body; /* [[wiki link]]/{{author}}/`thumb #id` markup, unparsed -- see M50's shared parser */
+    e621_string_list_t other_names;
+    bool is_locked;
+    char *created_at;
+    char *updated_at;
+} e621_wiki_page_t;
+
+typedef struct
+{
+    int64_t id;
+    char *antecedent_name;
+    char *consequent_name;
+    char *status;
+    int post_count;
+} e621_tag_alias_t;
+
+typedef struct
+{
+    e621_tag_alias_t *items;
+    size_t count;
+} e621_tag_alias_list_t;
+
+typedef struct
+{
+    int64_t id;
+    char *antecedent_name;
+    char *consequent_name;
+    char *status;
+} e621_tag_implication_t;
+
+typedef struct
+{
+    e621_tag_implication_t *items;
+    size_t count;
+} e621_tag_implication_list_t;
+
 void e621_string_list_free(e621_string_list_t *list);
 void e621_file_free(e621_file_t *file);
 void e621_post_free(e621_post_t *post);
@@ -132,6 +203,13 @@ void e621_post_list_free(e621_post_list_t *list);
 void e621_comment_free(e621_comment_t *comment);
 void e621_comment_list_free(e621_comment_list_t *list);
 void e621_pool_free(e621_pool_t *pool);
+void e621_tag_free(e621_tag_t *tag);
+void e621_tag_list_free(e621_tag_list_t *list);
+void e621_wiki_page_free(e621_wiki_page_t *page);
+void e621_tag_alias_free(e621_tag_alias_t *alias);
+void e621_tag_alias_list_free(e621_tag_alias_list_t *list);
+void e621_tag_implication_free(e621_tag_implication_t *implication);
+void e621_tag_implication_list_free(e621_tag_implication_list_t *list);
 
 #ifdef __cplusplus
 }

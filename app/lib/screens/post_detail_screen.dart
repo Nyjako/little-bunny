@@ -16,18 +16,27 @@ import '../util/app_wakelock.dart';
 import '../util/image_headers.dart';
 import '../util/media_type.dart';
 import '../util/mouse_drag_scroll_behavior.dart';
+import '../util/post_navigation.dart';
 import '../util/responsive.dart';
+import '../util/tag_query.dart';
 import '../widgets/download_progress_indicator.dart';
 import '../widgets/gif_player.dart';
 import '../widgets/rating_badge.dart';
+import '../widgets/rich_markup_text.dart';
+import 'create_search_screen.dart';
 import 'full_screen_post_viewer_screen.dart';
 import 'tag_browse_screen.dart';
+import 'wiki_page_screen.dart';
 
 /// Tags are grouped by category (M8.5.3) and then sorted into this fixed
 /// order (M9.6.5) rather than whatever order they happened to arrive in --
 /// any category not in this list (including `null`, Inkbunny's single
 /// uncategorized bucket) is grouped last instead of being dropped.
 const _tagCategoryOrder = ['artist', 'character', 'copyright', 'species', 'general', 'meta'];
+
+/// The tag long-press context menu's options (M52; the 3 "current search"
+/// actions are M54 partial).
+enum _TagMenuAction { search, addToSearches, addToBlacklist, showWiki, copy, addToCurrentSearch, excludeFromCurrentSearch, removeFromCurrentSearch }
 
 const _imageExtensions = {'jpg', 'jpeg', 'png', 'gif', 'webp'};
 
@@ -98,6 +107,19 @@ class PostDetailScreen extends StatefulWidget {
   /// [post] in both places.
   final List<BunnyPost>? siblingPosts;
 
+  /// The site/query [post] was reached through as a live, editable browse
+  /// (M54 partial) -- the grid this screen was opened from, whether a
+  /// saved search (its own stored query) or an unsaved `TagBrowseScreen`
+  /// (whatever it's currently showing). `null` when there's no such
+  /// context (e.g. opened via a parent/child/pool/wiki cross-reference).
+  /// The tag long-press menu's "Add/Exclude/Remove from current search"
+  /// actions read these to compute a new query, then push a brand-new,
+  /// unsaved `TagBrowseScreen` with it -- even when [currentSearchQuery]
+  /// came from a saved search, that search's own stored query is never
+  /// written to.
+  final BunnySite? currentSearchSite;
+  final String? currentSearchQuery;
+
   const PostDetailScreen({
     super.key,
     required this.post,
@@ -107,6 +129,8 @@ class PostDetailScreen extends StatefulWidget {
     required this.downloadQueueService,
     this.downloadManager = const DownloadManager(),
     this.siblingPosts,
+    this.currentSearchSite,
+    this.currentSearchQuery,
   });
 
   @override
@@ -267,6 +291,8 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
             downloadManager: widget.downloadManager,
             downloadQueueService: widget.downloadQueueService,
             siblingPosts: widget.siblingPosts,
+            currentSearchSite: widget.currentSearchSite,
+            currentSearchQuery: widget.currentSearchQuery,
             onFullScreenPostChanged: _jumpToPost,
           ),
         ),
@@ -287,6 +313,11 @@ class _PostDetailPage extends StatefulWidget {
   final DownloadQueueService downloadQueueService;
   final List<BunnyPost>? siblingPosts;
 
+  /// See [PostDetailScreen.currentSearchSite]/[PostDetailScreen.currentSearchQuery]
+  /// -- threaded straight through from the outer shell (M54 partial).
+  final BunnySite? currentSearchSite;
+  final String? currentSearchQuery;
+
   /// Called live as the user swipes inside [FullScreenPostViewerScreen]
   /// (not just once on exit) so the outer [PostDetailScreen]'s own
   /// [PageView] already shows the right page the moment fullscreen is
@@ -303,6 +334,8 @@ class _PostDetailPage extends StatefulWidget {
     required this.downloadManager,
     required this.downloadQueueService,
     this.siblingPosts,
+    this.currentSearchSite,
+    this.currentSearchQuery,
     this.onFullScreenPostChanged,
   });
 
@@ -773,6 +806,167 @@ class _PostDetailPageState extends State<_PostDetailPage> {
     );
   }
 
+  void _openAddToSearches(String tagName) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (context) => CreateSearchScreen(repository: widget.repository, initialSite: widget.post.site, initialQuery: tagName)),
+    );
+  }
+
+  Future<void> _addToBlacklist(AppLocalizations l10n, String tagName) async {
+    await widget.repository.addBlacklistTag(widget.post.site, tagName);
+    if (!mounted) {
+      return;
+    }
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(l10n.tagMenuAddedToBlacklist(tagName))));
+  }
+
+  void _openTagWiki(String tagName) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => WikiPageScreen(
+          title: tagName,
+          repository: widget.repository,
+          displaySettingsStore: widget.displaySettingsStore,
+          downloadSettingsStore: widget.downloadSettingsStore,
+          downloadQueueService: widget.downloadQueueService,
+        ),
+      ),
+    );
+  }
+
+  Future<void> _copyTagToClipboard(AppLocalizations l10n, String tagName) async {
+    await Clipboard.setData(ClipboardData(text: tagName));
+    if (!mounted) {
+      return;
+    }
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(l10n.tagMenuCopied(tagName))));
+  }
+
+  /// Pushes a brand-new, unsaved [TagBrowseScreen] for [query] (M54
+  /// partial) -- the mechanism behind all 3 "current search" tag-menu
+  /// actions below. Never mutates [widget.currentSearchQuery]'s source
+  /// (whether that was a saved search or an already-live browse); the
+  /// result is always a fresh, independent live preview.
+  void _pushCurrentSearch(BunnySite site, String query) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => TagBrowseScreen(
+          site: site,
+          query: query,
+          repository: widget.repository,
+          displaySettingsStore: widget.displaySettingsStore,
+          downloadSettingsStore: widget.downloadSettingsStore,
+          downloadQueueService: widget.downloadQueueService,
+        ),
+      ),
+    );
+  }
+
+  /// Falls back to this post's own site + a fresh one-tag query when
+  /// there's no current-search context at all (e.g. opened via a parent/
+  /// child/pool/wiki cross-reference) -- "Add"/"Exclude" always have
+  /// something sensible to do; only "Remove" needs real context (see
+  /// [_showTagMenu]'s visibility check for that one).
+  void _addToCurrentSearch(String tagName) => _pushCurrentSearch(widget.currentSearchSite ?? widget.post.site, addTagToQuery(widget.currentSearchQuery ?? '', tagName));
+
+  void _excludeFromCurrentSearch(String tagName) =>
+      _pushCurrentSearch(widget.currentSearchSite ?? widget.post.site, excludeTagInQuery(widget.currentSearchQuery ?? '', tagName));
+
+  void _removeFromCurrentSearch(String tagName) {
+    final currentQuery = widget.currentSearchQuery;
+    if (currentQuery == null) {
+      return;
+    }
+    _pushCurrentSearch(widget.currentSearchSite ?? widget.post.site, removeTagFromQuery(currentQuery, tagName));
+  }
+
+  /// Long-pressing a tag chip (M52) opens this instead of immediately
+  /// searching -- the other actions don't make sense as a tap on the chip
+  /// itself, so they live behind a long-press menu rather than a second
+  /// visible control per chip. The 3 "current search" actions (M54
+  /// partial) are suppressed entirely for a pool browse (adding/excluding/
+  /// removing a bare tag token against a `pool:<id>` sentinel produces a
+  /// query this app's pool-detection logic can't parse back out -- see
+  /// `queryIsPoolSentinel`'s own doc comment); "Remove" specifically is
+  /// also hidden whenever the tag isn't actually present in the current
+  /// query, so it's never offered as a no-op.
+  Future<void> _showTagMenu(AppLocalizations l10n, String tagName) async {
+    final currentQuery = widget.currentSearchQuery;
+    final isPoolBrowse = currentQuery != null && queryIsPoolSentinel(currentQuery);
+    final canRemove = !isPoolBrowse && currentQuery != null && queryHasBareTag(currentQuery, tagName);
+    final action = await showModalBottomSheet<_TagMenuAction>(
+      context: context,
+      builder: (context) => SafeArea(
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(leading: const Icon(Icons.search), title: Text(l10n.tagMenuSearchLabel), onTap: () => Navigator.pop(context, _TagMenuAction.search)),
+              ListTile(
+                leading: const Icon(Icons.bookmark_add_outlined),
+                title: Text(l10n.tagMenuAddToSearchesLabel),
+                onTap: () => Navigator.pop(context, _TagMenuAction.addToSearches),
+              ),
+              ListTile(
+                leading: const Icon(Icons.block),
+                title: Text(l10n.tagMenuAddToBlacklistLabel),
+                onTap: () => Navigator.pop(context, _TagMenuAction.addToBlacklist),
+              ),
+              ListTile(
+                leading: const Icon(Icons.menu_book_outlined),
+                title: Text(l10n.tagMenuShowWikiLabel),
+                onTap: () => Navigator.pop(context, _TagMenuAction.showWiki),
+              ),
+              ListTile(leading: const Icon(Icons.copy), title: Text(l10n.tagMenuCopyLabel), onTap: () => Navigator.pop(context, _TagMenuAction.copy)),
+              if (!isPoolBrowse) ...[
+                ListTile(
+                  leading: const Icon(Icons.playlist_add),
+                  title: Text(l10n.tagMenuAddToCurrentSearchLabel),
+                  onTap: () => Navigator.pop(context, _TagMenuAction.addToCurrentSearch),
+                ),
+                ListTile(
+                  leading: const Icon(Icons.playlist_remove),
+                  title: Text(l10n.tagMenuExcludeFromCurrentSearchLabel),
+                  onTap: () => Navigator.pop(context, _TagMenuAction.excludeFromCurrentSearch),
+                ),
+                if (canRemove)
+                  ListTile(
+                    leading: const Icon(Icons.remove_circle_outline),
+                    title: Text(l10n.tagMenuRemoveFromCurrentSearchLabel),
+                    onTap: () => Navigator.pop(context, _TagMenuAction.removeFromCurrentSearch),
+                  ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+    if (!mounted || action == null) {
+      return;
+    }
+    switch (action) {
+      case _TagMenuAction.search:
+        _openTagBrowse(tagName);
+      case _TagMenuAction.addToSearches:
+        _openAddToSearches(tagName);
+      case _TagMenuAction.addToBlacklist:
+        await _addToBlacklist(l10n, tagName);
+      case _TagMenuAction.showWiki:
+        _openTagWiki(tagName);
+      case _TagMenuAction.copy:
+        await _copyTagToClipboard(l10n, tagName);
+      case _TagMenuAction.addToCurrentSearch:
+        _addToCurrentSearch(tagName);
+      case _TagMenuAction.excludeFromCurrentSearch:
+        _excludeFromCurrentSearch(tagName);
+      case _TagMenuAction.removeFromCurrentSearch:
+        _removeFromCurrentSearch(tagName);
+    }
+  }
+
   Widget _tagsSection(AppLocalizations l10n) => FutureBuilder<List<BunnyPostTag>>(
     future: _tagsFuture,
     builder: (context, snapshot) {
@@ -798,7 +992,13 @@ class _PostDetailPageState extends State<_PostDetailPage> {
             Padding(padding: const EdgeInsets.only(bottom: 4), child: Text(entry.key == null ? l10n.postDetailTagsLabel : _titleCase(entry.key!), style: Theme.of(context).textTheme.titleSmall)),
             Padding(
               padding: const EdgeInsets.only(bottom: 8),
-              child: Wrap(spacing: 4, runSpacing: 4, children: entry.value.map((tag) => ActionChip(label: Text(tag.name), onPressed: () => _openTagBrowse(tag.name))).toList()),
+              child: Wrap(
+                spacing: 4,
+                runSpacing: 4,
+                children: entry.value
+                    .map((tag) => GestureDetector(onLongPress: () => _showTagMenu(l10n, tag.name), child: ActionChip(label: Text(tag.name), onPressed: () => _openTagBrowse(tag.name))))
+                    .toList(),
+              ),
             ),
           ],
         ],
@@ -836,64 +1036,35 @@ class _PostDetailPageState extends State<_PostDetailPage> {
     },
   );
 
-  /// Parent/child chips are the one place this app navigates to a post that
-  /// wasn't reached through a (possibly blacklist-filtered) saved search --
-  /// so unlike the normal grid, a blacklisted post can actually surface here.
-  /// Named for the match found, not the whole blacklist, since that's what's
-  /// actually useful to show in the confirmation (M13.3).
-  Future<bool> _confirmIfBlacklisted(AppLocalizations l10n, BunnyPost post) async {
-    final tags = await widget.repository.getPostTagsByCategory(post.id);
-    final blacklist = await widget.repository.getBlacklist(post.site);
-    final matched = tags.map((tag) => tag.name).where(blacklist.contains).toList();
-    if (matched.isEmpty || !mounted) {
-      return true;
-    }
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text(l10n.postDetailBlacklistedDialogTitle),
-        content: Text(l10n.postDetailBlacklistedDialogContent(matched.join(', '))),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: Text(l10n.commonCancel)),
-          TextButton(onPressed: () => Navigator.pop(context, true), child: Text(l10n.postDetailBlacklistedViewAnyway)),
-        ],
-      ),
-    );
-    return confirmed == true;
-  }
+  /// Parent/child relationship chips are always same-site as the post
+  /// they're shown on (M13.3) -- structural navigation within this same
+  /// browsing session, so unlike the raw [_openPostLink] call below, this
+  /// forwards [widget.currentSearchSite]/[widget.currentSearchQuery]
+  /// forward (M54 partial) rather than starting a fresh context.
+  Future<void> _openExternalPost(AppLocalizations l10n, int externalId) =>
+      _openPostLink(l10n, widget.post.site, externalId, currentSearchSite: widget.currentSearchSite, currentSearchQuery: widget.currentSearchQuery);
 
-  Future<void> _openExternalPost(AppLocalizations l10n, int externalId) async {
-    try {
-      final postId = await widget.repository.fetchPost(widget.post.site, externalId);
-      final post = await widget.repository.getPost(postId);
-      if (!mounted) {
-        return;
-      }
-      if (!await _confirmIfBlacklisted(l10n, post)) {
-        return;
-      }
-      if (!mounted) {
-        return;
-      }
-      await Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (context) => PostDetailScreen(
-            post: post,
-            repository: widget.repository,
-            displaySettingsStore: widget.displaySettingsStore,
-            downloadSettingsStore: widget.downloadSettingsStore,
-            downloadQueueService: widget.downloadQueueService,
-          ),
-        ),
+  /// A `thumb #<id>`/pool-permalink-URL post reference in a description
+  /// (M50) carries its own site -- always e621 for `thumb #<id>` (M53's own
+  /// wiki-body convention), but whichever domain actually matched for a
+  /// captured post URL -- so unlike [_openExternalPost] above, this never
+  /// assumes [widget.post.site]. Description cross-references are prose,
+  /// not a continuation of the current browsing session, so
+  /// [RichMarkupText]'s own `onOpenPost` callback calls this without the
+  /// optional current-search params (both default null below).
+  Future<void> _openPostLink(AppLocalizations l10n, BunnySite site, int externalId, {BunnySite? currentSearchSite, String? currentSearchQuery}) =>
+      openExternalPost(
+        context: context,
+        l10n: l10n,
+        repository: widget.repository,
+        site: site,
+        externalId: externalId,
+        displaySettingsStore: widget.displaySettingsStore,
+        downloadSettingsStore: widget.downloadSettingsStore,
+        downloadQueueService: widget.downloadQueueService,
+        currentSearchSite: currentSearchSite,
+        currentSearchQuery: currentSearchQuery,
       );
-    } catch (_) {
-      if (!mounted) {
-        return;
-      }
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(l10n.postDetailOpenPostFailed)));
-    }
-  }
 
   Widget _relationshipsSection(AppLocalizations l10n) {
     final future = _relationshipsFuture;
@@ -1129,7 +1300,16 @@ class _PostDetailPageState extends State<_PostDetailPage> {
               children: [
                 _poolsSection(l10n),
                 _relationshipsSection(l10n),
-                if (post.description != null && post.description!.isNotEmpty) ...[const Divider(), Text(post.description!)],
+                if (post.description != null && post.description!.isNotEmpty) ...[
+                  const Divider(),
+                  RichMarkupText(
+                    text: post.description!,
+                    onOpenAuthor: _openTagBrowse,
+                    onOpenWiki: _openTagWiki,
+                    onOpenPost: (site, postId) => _openPostLink(l10n, site, postId),
+                    onOpenPool: (poolId) => _openPool(l10n, poolId),
+                  ),
+                ],
                 const Divider(),
                 _tagsDetailsSourcesRegion(l10n),
                 _commentsSection(l10n),

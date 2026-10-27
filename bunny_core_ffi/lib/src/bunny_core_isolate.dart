@@ -405,6 +405,33 @@ class _ListCommentsRequest extends _Request {
   const _ListCommentsRequest(this.postId);
 }
 
+class _SearchTagsRequest extends _Request {
+  final String nameMatches;
+  final int limit;
+
+  const _SearchTagsRequest(this.nameMatches, this.limit);
+}
+
+class _GetWikiPageRequest extends _Request {
+  final String title;
+
+  const _GetWikiPageRequest(this.title);
+}
+
+class _SearchTagAliasesRequest extends _Request {
+  final String nameMatches;
+  final int limit;
+
+  const _SearchTagAliasesRequest(this.nameMatches, this.limit);
+}
+
+class _SearchTagImplicationsRequest extends _Request {
+  final String nameMatches;
+  final int limit;
+
+  const _SearchTagImplicationsRequest(this.nameMatches, this.limit);
+}
+
 
 class _QueueFavoriteAddRequest extends _Request {
   final int postId;
@@ -720,6 +747,95 @@ List<Map<String, Object?>> _handleListComments(Pointer<bunny_core_t> core, _List
   });
 }
 
+Map<String, Object?> _tagToMap(bunny_core_tag_t tag) => {
+  'id': tag.id,
+  'name': _readNullableString(tag.name),
+  'postCount': tag.post_count,
+  'category': tag.category.value,
+  'relatedTags': _readNullableString(tag.related_tags),
+  'isLocked': tag.is_locked,
+  'createdAt': _readNullableString(tag.created_at),
+  'updatedAt': _readNullableString(tag.updated_at),
+};
+
+List<Map<String, Object?>> _handleSearchTags(Pointer<bunny_core_t> core, _SearchTagsRequest r) {
+  return using((arena) {
+    final out = arena<bunny_core_tag_list_t>();
+    _check(_bindings.bunny_core_search_tags(core, r.nameMatches.toNativeUtf8(allocator: arena).cast(), r.limit, out));
+    final items = <Map<String, Object?>>[];
+    for (var i = 0; i < out.ref.count; i++) {
+      items.add(_tagToMap(out.ref.items[i]));
+    }
+    _bindings.bunny_core_tag_list_free(out);
+    return items;
+  });
+}
+
+Map<String, Object?>? _handleGetWikiPage(Pointer<bunny_core_t> core, _GetWikiPageRequest r) {
+  return using((arena) {
+    final out = arena<bunny_core_wiki_page_t>();
+    final result = _bindings.bunny_core_get_wiki_page(core, r.title.toNativeUtf8(allocator: arena).cast(), out);
+    if (result == bunny_core_result_t.BUNNY_CORE_ERR_NOT_FOUND) {
+      return null;
+    }
+    _check(result);
+    final otherNames = <String>[];
+    for (var i = 0; i < out.ref.other_names.count; i++) {
+      otherNames.add(out.ref.other_names.items[i].cast<Utf8>().toDartString());
+    }
+    final map = {
+      'id': out.ref.id,
+      'title': _readNullableString(out.ref.title),
+      'body': _readNullableString(out.ref.body),
+      'otherNames': otherNames,
+      'isLocked': out.ref.is_locked,
+      'createdAt': _readNullableString(out.ref.created_at),
+      'updatedAt': _readNullableString(out.ref.updated_at),
+    };
+    _bindings.bunny_core_wiki_page_free(out);
+    return map;
+  });
+}
+
+List<Map<String, Object?>> _handleSearchTagAliases(Pointer<bunny_core_t> core, _SearchTagAliasesRequest r) {
+  return using((arena) {
+    final out = arena<bunny_core_tag_alias_list_t>();
+    _check(_bindings.bunny_core_search_tag_aliases(core, r.nameMatches.toNativeUtf8(allocator: arena).cast(), r.limit, out));
+    final items = <Map<String, Object?>>[];
+    for (var i = 0; i < out.ref.count; i++) {
+      final alias = out.ref.items[i];
+      items.add({
+        'id': alias.id,
+        'antecedentName': _readNullableString(alias.antecedent_name),
+        'consequentName': _readNullableString(alias.consequent_name),
+        'status': _readNullableString(alias.status),
+        'postCount': alias.post_count,
+      });
+    }
+    _bindings.bunny_core_tag_alias_list_free(out);
+    return items;
+  });
+}
+
+List<Map<String, Object?>> _handleSearchTagImplications(Pointer<bunny_core_t> core, _SearchTagImplicationsRequest r) {
+  return using((arena) {
+    final out = arena<bunny_core_tag_implication_list_t>();
+    _check(_bindings.bunny_core_search_tag_implications(core, r.nameMatches.toNativeUtf8(allocator: arena).cast(), r.limit, out));
+    final items = <Map<String, Object?>>[];
+    for (var i = 0; i < out.ref.count; i++) {
+      final implication = out.ref.items[i];
+      items.add({
+        'id': implication.id,
+        'antecedentName': _readNullableString(implication.antecedent_name),
+        'consequentName': _readNullableString(implication.consequent_name),
+        'status': _readNullableString(implication.status),
+      });
+    }
+    _bindings.bunny_core_tag_implication_list_free(out);
+    return items;
+  });
+}
+
 Map<String, Object?> _handleGetPostById(Pointer<bunny_core_t> core, _GetPostByIdRequest r) {
   return using((arena) {
     final out = arena<bunny_db_post_t>();
@@ -879,6 +995,14 @@ Object? _dispatch(Pointer<bunny_core_t>? core, _Request request, void Function(P
         return _handleListMyInkbunnyFavorites(c, r);
       case _ListCommentsRequest r:
         return _handleListComments(c, r);
+      case _SearchTagsRequest r:
+        return _handleSearchTags(c, r);
+      case _GetWikiPageRequest r:
+        return _handleGetWikiPage(c, r);
+      case _SearchTagAliasesRequest r:
+        return _handleSearchTagAliases(c, r);
+      case _SearchTagImplicationsRequest r:
+        return _handleSearchTagImplications(c, r);
       case _QueueFavoriteAddRequest r:
         _check(_bindings.bunny_core_queue_favorite_add(c, r.postId, r.stars));
         return null;
@@ -1067,6 +1191,15 @@ class BunnyCoreNative {
   Future<List<Map<String, Object?>>> listMyInkbunnyFavorites({int page = 1}) => _send<List<Map<String, Object?>>>(_ListMyInkbunnyFavoritesRequest(page));
 
   Future<List<Map<String, Object?>>> listComments(int postId) => _send<List<Map<String, Object?>>>(_ListCommentsRequest(postId));
+
+  Future<List<Map<String, Object?>>> searchTags(String nameMatches, {int limit = 0}) => _send<List<Map<String, Object?>>>(_SearchTagsRequest(nameMatches, limit));
+
+  /// `null` if `title` doesn't match a wiki page -- not every tag has one.
+  Future<Map<String, Object?>?> getWikiPage(String title) => _send<Map<String, Object?>?>(_GetWikiPageRequest(title));
+
+  Future<List<Map<String, Object?>>> searchTagAliases(String nameMatches, {int limit = 0}) => _send<List<Map<String, Object?>>>(_SearchTagAliasesRequest(nameMatches, limit));
+
+  Future<List<Map<String, Object?>>> searchTagImplications(String nameMatches, {int limit = 0}) => _send<List<Map<String, Object?>>>(_SearchTagImplicationsRequest(nameMatches, limit));
 
   Future<void> queueFavoriteAdd(int postId, int stars) => _send<void>(_QueueFavoriteAddRequest(postId, stars));
 
