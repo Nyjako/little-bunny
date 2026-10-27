@@ -87,6 +87,7 @@
   "searchesSortRecentlyCreated": "Recently created",
   "searchesSortLastViewed": "Last viewed",
   "searchesCheckForUpdatesTooltip": "Check for updates",
+  "searchesDownloadQueueTooltip": "Downloads",
   "searchesSyncAllProgress": "{done}/{total} checked",
   "@searchesSyncAllProgress": {
     "placeholders": {
@@ -377,6 +378,16 @@
 
   "postDetailDownloadTooltip": "Download",
   "postDetailDownloadQueued": "Queued for download",
+
+  "downloadQueueScreenTitle": "Downloads",
+  "downloadQueueDownloadingLabel": "Downloading",
+  "downloadQueueQueuedLabel": "Queued",
+  "downloadQueueFailedLabel": "Failed",
+  "downloadQueueEmptyState": "Nothing here right now.",
+  "downloadQueueRetryTooltip": "Retry",
+  "downloadQueueRetryAllTooltip": "Retry all",
+  "downloadQueueClearFinishedTooltip": "Clear finished",
+  "downloadQueueChecksumMismatchReason": "Downloaded, but the checksum didn't match",
 
   "updateAvailableTitle": "Update available ({tagName})",
   "@updateAvailableTitle": {

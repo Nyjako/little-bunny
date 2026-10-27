@@ -42,7 +42,13 @@ class DownloadResult {
   final DownloadOutcome outcome;
   final String? filePath;
 
-  const DownloadResult(this.outcome, {this.filePath});
+  /// Populated for [DownloadOutcome.failed] (an HTTP status string or the
+  /// caught exception's own message) so the queue screen can show *why* an
+  /// item failed, not just that it did. Always `null` for every other
+  /// outcome.
+  final String? errorMessage;
+
+  const DownloadResult(this.outcome, {this.filePath, this.errorMessage});
 }
 
 /// Pure logic, no widget -- the first class in this `services/` directory
@@ -104,7 +110,7 @@ class DownloadManager {
       final httpClient = client ?? http.Client();
       final response = await httpClient.get(Uri.parse(url), headers: imageHeadersFor(post.site) ?? const {});
       if (response.statusCode != 200) {
-        return const DownloadResult(DownloadOutcome.failed);
+        return DownloadResult(DownloadOutcome.failed, errorMessage: 'HTTP ${response.statusCode}');
       }
       final bytes = response.bodyBytes;
 
@@ -156,8 +162,8 @@ class DownloadManager {
       }
 
       return DownloadResult(verified ? DownloadOutcome.verified : DownloadOutcome.checksumMismatch, filePath: filePath);
-    } catch (_) {
-      return const DownloadResult(DownloadOutcome.failed);
+    } catch (e) {
+      return DownloadResult(DownloadOutcome.failed, errorMessage: e.toString());
     }
   }
 }
