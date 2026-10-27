@@ -99,13 +99,24 @@ void main() {
     expect(result.outcome, DownloadOutcome.verified);
   });
 
-  test('reports failed on a non-200 response', () async {
+  test('reports failed on a non-200 response, with the status code as the error message', () async {
     final manager = DownloadManager(client: MockClient((_) async => http.Response('', 404)));
     final repository = FakeBunnyRepository();
 
     final result = await manager.downloadPost(_post(), repository, tempDir.path);
 
     expect(result.outcome, DownloadOutcome.failed);
+    expect(result.errorMessage, 'HTTP 404');
+  });
+
+  test('reports failed with a non-null error message when the request itself throws', () async {
+    final manager = DownloadManager(client: MockClient((_) async => throw const SocketException('connection refused')));
+    final repository = FakeBunnyRepository();
+
+    final result = await manager.downloadPost(_post(), repository, tempDir.path);
+
+    expect(result.outcome, DownloadOutcome.failed);
+    expect(result.errorMessage, isNotNull);
   });
 
   test('creates the destination directory recursively when it does not already exist', () async {

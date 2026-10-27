@@ -2389,6 +2389,25 @@ this file is the single source of truth for "what's done" across sessions.
   while staying on that exact post's page (the "already downloaded" icon only updates
   on next visit); true byte-level resume of an interrupted fetch; parallelizing
   downloads (stays strictly sequential, matching this app's other mass actions).
+  - **Follow-up: make the queue a real, viewable thing instead of just a passing
+    notification.** `DownloadQueueService` now keeps every item (not just still-pending
+    ones) in one list with a per-item `DownloadQueueItemStatus` (`queued`/
+    `downloading`/`succeeded`/`checksumMismatch`/`failed`) and an optional
+    `failureReason` -- `DownloadManager.downloadPost`'s own catch-all and non-200 branch
+    now populate a real `DownloadResult.errorMessage` instead of swallowing it silently.
+    Terminal items persist until a new `clearFinished()` call, not auto-reset the moment
+    the queue drains; `retryFailed`/`retryAllFailed` re-queue one or all failed/
+    mismatched items. New screen `DownloadQueueScreen`
+    (`app/lib/screens/download_queue_screen.dart`, reached via a new app-bar icon on
+    `SearchesScreen`) shows Downloading/Queued/Failed sections live off the already-
+    `ChangeNotifier` service -- no polling needed, unlike `TaskQueueScreen`'s
+    server-side equivalent. `pending_downloads.json`'s persisted format grew from a flat
+    array of bare post ids to `{id, status, failureReason}` objects; `restore()` still
+    handles the old flat-array shape as a temporary migration fallback so an in-flight
+    queue isn't silently lost on the one upgrade that crosses this change. A restored
+    `failed`/`checksumMismatch` item is **not** auto-retried on launch -- "restart failed
+    downloads" is an explicit, manual action via the new screen, not automatic hammering
+    of a site that just rejected the request.
 
 - [x] **M44 — Render pool cross-references as inline clickable text, not separate chips below**
   Follow-up to M26 (which added the pool description + a `Wrap` of `ActionChip`s below
@@ -2699,6 +2718,19 @@ this file is the single source of truth for "what's done" across sessions.
   arbitrary background HTTP work this way (background `URLSession` tasks are the
   iOS-native mechanism, a separate, not-yet-scoped design), so this milestone is
   Android-only; other platforms keep the unchanged M43 behavior.
+  - **Bug found after this shipped: downloads still failed if the screen locked
+    immediately after enqueueing.** `DownloadQueueNotifier.showProgress` (the only thing
+    that triggers the foreground service's `startForeground()` call) was only called
+    *after* each item's HTTP fetch already finished, never before the queue's first
+    fetch -- so locking the screen right after tapping download could let Android kill
+    the process before anything ever told the service to start. Fixed by a new
+    `showStarting({required int total})` notifier method, called once before
+    `_processQueue()`'s loop begins (wired through a new `ACTION_START` on
+    `DownloadForegroundService`), plus a reference-counted `AppWakelock`
+    (`app/lib/util/app_wakelock.dart`) wrapping `wakelock_plus` so the queue holds a CPU
+    wake lock during active processing without stomping on `PostDetailScreen`'s own M47
+    wakelock if both are held at once (`WakelockPlus.enable()`/`disable()` are a flat
+    on/off toggle, not a counter).
 
 - [x] **M58 — QR connection setup: scan/paste in the app, in-app share via the server, shrink the terminal code**
   Follow-up the user raised during M43 planning, deliberately deferred to its own pass:
