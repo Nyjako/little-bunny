@@ -2389,6 +2389,25 @@ this file is the single source of truth for "what's done" across sessions.
   while staying on that exact post's page (the "already downloaded" icon only updates
   on next visit); true byte-level resume of an interrupted fetch; parallelizing
   downloads (stays strictly sequential, matching this app's other mass actions).
+  - **Follow-up: make the queue a real, viewable thing instead of just a passing
+    notification.** `DownloadQueueService` now keeps every item (not just still-pending
+    ones) in one list with a per-item `DownloadQueueItemStatus` (`queued`/
+    `downloading`/`succeeded`/`checksumMismatch`/`failed`) and an optional
+    `failureReason` -- `DownloadManager.downloadPost`'s own catch-all and non-200 branch
+    now populate a real `DownloadResult.errorMessage` instead of swallowing it silently.
+    Terminal items persist until a new `clearFinished()` call, not auto-reset the moment
+    the queue drains; `retryFailed`/`retryAllFailed` re-queue one or all failed/
+    mismatched items. New screen `DownloadQueueScreen`
+    (`app/lib/screens/download_queue_screen.dart`, reached via a new app-bar icon on
+    `SearchesScreen`) shows Downloading/Queued/Failed sections live off the already-
+    `ChangeNotifier` service -- no polling needed, unlike `TaskQueueScreen`'s
+    server-side equivalent. `pending_downloads.json`'s persisted format grew from a flat
+    array of bare post ids to `{id, status, failureReason}` objects; `restore()` still
+    handles the old flat-array shape as a temporary migration fallback so an in-flight
+    queue isn't silently lost on the one upgrade that crosses this change. A restored
+    `failed`/`checksumMismatch` item is **not** auto-retried on launch -- "restart failed
+    downloads" is an explicit, manual action via the new screen, not automatic hammering
+    of a site that just rejected the request.
 
 - [x] **M44 — Render pool cross-references as inline clickable text, not separate chips below**
   Follow-up to M26 (which added the pool description + a `Wrap` of `ActionChip`s below
@@ -2528,11 +2547,50 @@ this file is the single source of truth for "what's done" across sessions.
   codebase's own tests). Replaces `CachedNetworkImage`/`Image` for `.gif` posts in both
   `PostDetailScreen` and `FullScreenPostViewerScreen`.
 
-- [ ] **M50 — Rich-text parsing for descriptions (auto-links, `{{author}}`, `[[tag]]`)**
+- [x] **M50 — Rich-text parsing for descriptions (auto-links, `{{author}}`, `[[tag]]`)**
   Post/pool/wiki descriptions should have plain URLs auto-linked and turned into
   clickable elements, plus recognize `{{author}}` and `[[tag]]` reference syntax
   (the same `[[...]]`/`{{...}}` convention e621.wiki's own wiki pages use for cross-
   references, see M53 below -- likely the same parser/renderer should serve both).
+  - New pure function `parseRichMarkup` (`app/lib/util/rich_markup.dart`) and widget
+    `RichMarkupText` (`app/lib/widgets/rich_markup_text.dart`) recognize `{{author}}`,
+    `[[wiki title]]`, `thumb #<id>` (M53's wiki-body-only convention, harmlessly
+    recognized everywhere since the markup itself doesn't depend on context), and
+    bare `https?://` URLs in one single left-to-right scan, trimming trailing
+    sentence punctuation (`.,;:!?)]}`) off an auto-linked URL. A segment whose
+    callback isn't supplied by the caller renders as inert plain text rather than a
+    dead link.
+  - Initially landed as a *new*, separate parser from M44's existing
+    `pool_description.dart` (pool-# references only), to avoid risking that
+    already-shipped parser -- only post descriptions were wired up to the new one at
+    first. Revisited immediately after: the user asked for pool descriptions to get
+    the same clickable-link treatment too (they previously had zero URL auto-linking
+    at all, only the pool-# convention), so `parseRichMarkup` absorbed M44's
+    `pool #<id>` pattern as a 5th alternative (`RichMarkupPoolSegment`) and
+    `pool_description.dart`/`pool_description_text.dart`/their tests were deleted
+    outright once nothing referenced them anymore. `TagBrowseScreen`'s pool header and
+    `PostGridScreen`'s pool-info dialog both now render via `RichMarkupText` with full
+    author/wiki/post/pool callbacks, not just pool references.
+  - **Follow-up: capture post/pool links, not just auto-link them.** A bare URL that
+    matches a known e621/Inkbunny post or pool permalink
+    (`e621.net/posts/<id>`, the older `/post/show/<id>` form, `e926.net`'s mirror,
+    `e621.net/pools/<id>`, `inkbunny.net/s/<id>`) now parses straight into a
+    `RichMarkupPostSegment`/`RichMarkupPoolSegment` instead of a generic
+    `RichMarkupUrlSegment`, so tapping it opens the post/pool in-app (reusing the
+    same blacklist-confirming `openExternalPost()` for posts) instead of launching an
+    external browser. `RichMarkupThumbSegment` was folded into
+    `RichMarkupPostSegment` (now carrying a `BunnySite`, always e621 for `thumb #<id>`
+    but whichever domain matched for a captured URL) since both represent the same
+    "open this post" action; `RichMarkupText`'s `onOpenThumbnail` callback was renamed
+    `onOpenPost(BunnySite, int)` accordingly. An Inkbunny pool permalink is
+    deliberately *not* recognized -- pool metadata/descriptions in this app only ever
+    come from e621's own pool endpoint (see [BunnyPoolInfo]), so there's no
+    `BunnyPoolInfo`-backed pool concept on the Inkbunny side to open one into, and the
+    author wasn't confident enough of Inkbunny's real pool-viewing URL shape to guess
+    at a pattern for it.
+  - `WikiPageScreen` (M52/M53, see below) is the other consumer -- its page body is
+    rendered through the same `RichMarkupText`, so wiki bodies get the same in-app
+    post/pool link capture too.
 
 - [ ] **M51 — Add a slideshow mode**
   User picks one or more saved searches, an interval (how often the post changes), and
@@ -2542,7 +2600,7 @@ this file is the single source of truth for "what's done" across sessions.
   until the user closes the slideshow. Videos/gifs are included and still switch on
   the same timer as everything else (not "play to completion first").
 
-- [ ] **M52 — Add a tag long-press context menu**
+- [x] **M52 — Add a tag long-press context menu**
   Long-pressing a tag while viewing a post should open a small menu: Search / Add to
   saved searches / Add to blacklist / Add to current search / Remove from current
   search / Show wiki / Copy to clipboard. "Add to current search"/"Remove from current
@@ -2551,8 +2609,25 @@ this file is the single source of truth for "what's done" across sessions.
   exact UX for those two needs revisiting when this is actually implemented; the other
   five (Search, Add to saved searches, Add to blacklist, Show wiki, Copy) are
   self-contained and can land first. "Show wiki" depends on M53.
+  - Landed the 5 self-contained actions; "Add to current search"/"Remove from current
+    search" are still deferred, per the note above.
+  - Each post tag chip (`PostDetailScreen._tagsSection`) is wrapped in a
+    `GestureDetector(onLongPress: ...)` -- `ActionChip` itself has no `onLongPress` in
+    this Flutter version -- opening a `showModalBottomSheet` with one `ListTile` per
+    action. Search reuses the existing tap-to-browse flow; "Add to saved searches"
+    opens `CreateSearchScreen` pre-filled with the tag; "Add to blacklist" calls
+    `BunnyRepository.addBlacklistTag`; "Show wiki" opens the new `WikiPageScreen`
+    (M53); "Copy to clipboard" mirrors the existing post-id-copy pattern.
+  - New screen `WikiPageScreen` (`app/lib/screens/wiki_page_screen.dart`) shows a
+    tag's wiki page body via `RichMarkupText` (M50), with author/wiki/thumb
+    references opening `TagBrowseScreen`, another `WikiPageScreen`, or the
+    referenced post, respectively.
+  - Extracted the existing parent/child blacklist-confirm-then-open-post flow out of
+    `PostDetailScreen` into a shared `openExternalPost()` helper
+    (`app/lib/util/post_navigation.dart`) so `WikiPageScreen`'s `thumb #<id>`
+    references reuse the same blacklist confirmation instead of bypassing it.
 
-- [ ] **M53 — Integrate e621.wiki for tag wiki info (tags/wiki pages/aliases/implications)**
+- [x] **M53 — Integrate e621.wiki for tag wiki info (tags/wiki pages/aliases/implications)**
   e621.wiki (<https://e621.wiki/>) hosts third-party docs/tooling for e621's real API,
   including an OpenAPI spec (fetched once as `docs/API - e621.yaml` -- gitignored,
   not ours to redistribute, kept locally for reference only) and an MCP server at
@@ -2580,6 +2655,21 @@ this file is the single source of truth for "what's done" across sessions.
     `approver_id`.
   Inkbunny has no wiki/tag-info endpoints of its own at all -- per the user, fall back
   to e621's wiki for Inkbunny tags too rather than omitting the feature there entirely.
+  - Went with direct REST calls, not the MCP server -- these are just regular e621
+    API endpoints, so they fit through this app's existing per-site-client stack
+    (`libe621` → `bunny_core` → server routes → FFI → Dart repository) without a new
+    runtime dependency. Added e621-only (`libe621`/`bunny_core`/server routes/Dart
+    repository all have no `site` parameter for these 4 calls) -- Inkbunny-sourced
+    tags fall back to the same e621 lookups, per the note above.
+  - `GET /wiki_pages.json` returns at most one page per title
+    (`?search[title]=<text>&limit=1`); a tag with no wiki page maps to
+    `BUNNY_CORE_ERR_NOT_FOUND` → a `null` `BunnyWikiPage?` at the Dart layer, not an
+    exception -- `WikiPageScreen` (M52) shows a plain "no wiki page" message for that
+    case.
+  - FFI-layer tests for the 4 new repository methods are deliberately not written,
+    matching the existing, established gap for every other FFI repository method that
+    needs a live network call to succeed (`fetchPool`/`getPostComments`/
+    `previewSearch`) -- the FFI test harness has no fake network transport to inject.
 
 - [ ] **M54 — Advanced/custom tag search syntax, with live autocomplete, in both search creation and the blacklist editor**
   Full e621 search grammar, not just a flat space-separated tag list -- the user
@@ -2610,6 +2700,26 @@ this file is the single source of truth for "what's done" across sessions.
   string, so this may mostly be a client-side authoring/autocomplete problem rather
   than a storage one), and the *same* syntax + autocomplete support added to the
   blacklist editor, which today only accepts single bare tags.
+  - **Partial progress landed**: a free-text search entry point
+    (`CustomSearchScreen`, reachable via a new app-bar icon on `SearchesScreen`) lets
+    the user type any space-separated query -- reusing `tag_query.dart`'s existing
+    `-`/`~`/`(`-prefix-aware autocomplete as-is, not re-implemented -- and push it as a
+    live, unsaved `TagBrowseScreen` preview. The M52 tag long-press menu's two
+    previously-deferred actions ("Add to current search"/"Remove from current
+    search") are now implemented, plus a third ("Exclude from current search",
+    prepending `-`): all three read `PostDetailScreen.currentSearchSite`/
+    `currentSearchQuery` (threaded in from whichever grid the post was opened from --
+    a saved search's own stored query, or an already-live `TagBrowseScreen`'s query)
+    and push a **brand-new** `TagBrowseScreen` with the edited query -- never writing
+    back to a saved search, even when the context came from one. New pure functions in
+    `tag_query.dart`: `addTagToQuery`/`excludeTagInQuery`/`removeTagFromQuery`/
+    `queryHasBareTag`/`queryIsPoolSentinel`. All 3 actions are suppressed for a pool
+    browse (`queryIsPoolSentinel`'s own doc comment explains why: a bare tag token
+    appended to `pool:<id>` breaks this app's exact-match pool-id parsing); "Remove"
+    specifically is also hidden whenever the tag isn't actually present in the query.
+  - **Still pending**: the full e621 grammar above (OR/wildcards/groups/aliases/
+    implications), position-aware autocomplete beyond the existing simple prefix
+    stripping, and the same syntax/autocomplete support in the blacklist editor.
 
 - [x] **M55 — Build the tag-stats report in the background instead of on the request thread**
   Discovered right after deploying M46: on the user's real database (1.39GB,
@@ -2670,21 +2780,48 @@ this file is the single source of truth for "what's done" across sessions.
   shell script wrapping `curl` (matching this session's own ad hoc verification
   style) or something more structured.
 
-- [ ] **M57 — Keep the download queue running through a locked Android screen**
+- [x] **M57 — Keep the download queue running through a locked Android screen**
   Follow-up the user explicitly asked to track during M43's planning, deliberately not
   built as part of that pass: M43's `DownloadQueueService` only progresses while the app
   process is actually alive -- a locked screen that the OS eventually suspends/kills the
   process over just means the queue resumes next launch via M43's disk-backed resume
-  list, same as any other kill. Reliably surviving a locked screen instead needs real
-  native plumbing Android requires for exactly this (a background task outliving the
-  activity): a foreground `Service` subclass, `startForeground()` with a persistent
-  notification (likely the same one `FlutterLocalNotificationsQueueNotifier` already
-  shows), a manifest `<service>` entry declaring a `foregroundServiceType` (probably
-  `dataSync`, Android 14+'s API for exactly this), plus the runtime permission Android
-  13+ requires to start a foreground service of that type. iOS has no equivalent
-  concept for arbitrary background HTTP work this way (background `URLSession` tasks
-  are the iOS-native mechanism, a separate, not-yet-scoped design), so this milestone is
-  Android-only; other platforms keep today's M43 behavior unchanged.
+  list, same as any other kill. New `DownloadForegroundService` (Kotlin,
+  `app/android/.../DownloadForegroundService.kt`) is a plain `Service` that calls
+  `ServiceCompat.startForeground()` with a `dataSync`-typed notification (Android 14+'s
+  `ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC`, falls back to type `0` pre-34) --
+  this is the only thing that reliably stops Android from killing the process once the
+  Activity backgrounds, which locking the screen does immediately. Reuses the exact
+  same notification channel/id `FlutterLocalNotificationsQueueNotifier` (M43) already
+  uses, so it's the same notification the user already sees, not a second one. New
+  `AndroidForegroundServiceQueueNotifier` (`app/lib/services/
+  android_foreground_service_queue_notifier.dart`) implements the existing
+  `DownloadQueueNotifier` interface by calling into the service over a hand-rolled
+  `MethodChannel` (`little_bunny/download_foreground_service`, handled in
+  `MainActivity.kt`) -- this is the first Dart<->native platform channel this codebase
+  has needed; every previous platform-specific need came from a Flutter package
+  wrapping it internally. `main.dart` picks this notifier over the cross-platform
+  `FlutterLocalNotificationsQueueNotifier` only on Android (still initializing the
+  latter everywhere, since that's what requests the POST_NOTIFICATIONS runtime
+  permission and creates the shared notification channel in the first place).
+  `DownloadQueueService` itself (the actual HTTP fetch + file write loop) is completely
+  unchanged -- the foreground service's only job is keeping the process alive long
+  enough for that existing loop to keep running; iOS has no equivalent concept for
+  arbitrary background HTTP work this way (background `URLSession` tasks are the
+  iOS-native mechanism, a separate, not-yet-scoped design), so this milestone is
+  Android-only; other platforms keep the unchanged M43 behavior.
+  - **Bug found after this shipped: downloads still failed if the screen locked
+    immediately after enqueueing.** `DownloadQueueNotifier.showProgress` (the only thing
+    that triggers the foreground service's `startForeground()` call) was only called
+    *after* each item's HTTP fetch already finished, never before the queue's first
+    fetch -- so locking the screen right after tapping download could let Android kill
+    the process before anything ever told the service to start. Fixed by a new
+    `showStarting({required int total})` notifier method, called once before
+    `_processQueue()`'s loop begins (wired through a new `ACTION_START` on
+    `DownloadForegroundService`), plus a reference-counted `AppWakelock`
+    (`app/lib/util/app_wakelock.dart`) wrapping `wakelock_plus` so the queue holds a CPU
+    wake lock during active processing without stomping on `PostDetailScreen`'s own M47
+    wakelock if both are held at once (`WakelockPlus.enable()`/`disable()` are a flat
+    on/off toggle, not a counter).
 
 - [x] **M58 — QR connection setup: scan/paste in the app, in-app share via the server, shrink the terminal code**
   Follow-up the user raised during M43 planning, deliberately deferred to its own pass:

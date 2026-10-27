@@ -298,6 +298,64 @@ class BunnyPoolInfo {
   const BunnyPoolInfo({required this.id, this.name, this.description, required this.postCount, this.referencedPoolIds = const []});
 }
 
+/// Mirrors `bunny_core_tag_category_t`'s numeric order (do not reorder --
+/// index must match the native enum, since the FFI layer passes it through
+/// as a bare int).
+enum BunnyTagCategory { general, artist, copyright, character, species, invalid, lore, meta, unknown }
+
+/// e621 tag reference data (M53), fetched live -- e621.wiki documents these
+/// as part of e621's own real API. e621-only, same reasoning as
+/// [BunnyPoolInfo]/[BunnyComment] -- Inkbunny has no equivalent, so even
+/// Inkbunny-sourced tags fall back to this. Mirrors `bunny_core_tag_t`.
+class BunnyTag {
+  final int id;
+  final String? name;
+  final int postCount;
+  final BunnyTagCategory category;
+  final String? relatedTags;
+  final bool isLocked;
+  final String? createdAt;
+  final String? updatedAt;
+
+  const BunnyTag({required this.id, this.name, required this.postCount, required this.category, this.relatedTags, required this.isLocked, this.createdAt, this.updatedAt});
+}
+
+/// A tag's wiki page body ([[wiki link]]/{{author}}/`thumb #id` markup,
+/// unparsed -- see the app's shared rich-text parser, M50). Not every tag
+/// has one. Mirrors `bunny_core_wiki_page_t`.
+class BunnyWikiPage {
+  final int id;
+  final String? title;
+  final String? body;
+  final List<String> otherNames;
+  final bool isLocked;
+  final String? createdAt;
+  final String? updatedAt;
+
+  const BunnyWikiPage({required this.id, this.title, this.body, this.otherNames = const [], required this.isLocked, this.createdAt, this.updatedAt});
+}
+
+/// Mirrors `bunny_core_tag_alias_t`.
+class BunnyTagAlias {
+  final int id;
+  final String? antecedentName;
+  final String? consequentName;
+  final String? status;
+  final int postCount;
+
+  const BunnyTagAlias({required this.id, this.antecedentName, this.consequentName, this.status, required this.postCount});
+}
+
+/// Mirrors `bunny_core_tag_implication_t`.
+class BunnyTagImplication {
+  final int id;
+  final String? antecedentName;
+  final String? consequentName;
+  final String? status;
+
+  const BunnyTagImplication({required this.id, this.antecedentName, this.consequentName, this.status});
+}
+
 /// Mirrors `bunny_core_sync_stats_t`.
 class BunnySyncStats {
   final int searchesChecked;

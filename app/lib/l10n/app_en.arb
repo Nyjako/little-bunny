@@ -87,6 +87,7 @@
   "searchesSortRecentlyCreated": "Recently created",
   "searchesSortLastViewed": "Last viewed",
   "searchesCheckForUpdatesTooltip": "Check for updates",
+  "searchesDownloadQueueTooltip": "Downloads",
   "searchesSyncAllProgress": "{done}/{total} checked",
   "@searchesSyncAllProgress": {
     "placeholders": {
@@ -378,6 +379,37 @@
   "postDetailDownloadTooltip": "Download",
   "postDetailDownloadQueued": "Queued for download",
 
+  "tagMenuSearchLabel": "Search",
+  "tagMenuAddToSearchesLabel": "Add to saved searches",
+  "tagMenuAddToBlacklistLabel": "Add to blacklist",
+  "tagMenuShowWikiLabel": "Show wiki",
+  "tagMenuCopyLabel": "Copy to clipboard",
+  "tagMenuAddedToBlacklist": "Added \"{tag}\" to the blacklist",
+  "@tagMenuAddedToBlacklist": {
+    "placeholders": {"tag": {"type": "String"}}
+  },
+  "tagMenuCopied": "Copied \"{tag}\" to the clipboard",
+  "@tagMenuCopied": {
+    "placeholders": {"tag": {"type": "String"}}
+  },
+  "tagMenuAddToCurrentSearchLabel": "Add to current search",
+  "tagMenuExcludeFromCurrentSearchLabel": "Exclude from current search",
+  "tagMenuRemoveFromCurrentSearchLabel": "Remove from current search",
+
+  "customSearchScreenTitle": "Custom search",
+  "customSearchSubmit": "Search",
+  "searchesCustomSearchTooltip": "Custom search",
+
+  "downloadQueueScreenTitle": "Downloads",
+  "downloadQueueDownloadingLabel": "Downloading",
+  "downloadQueueQueuedLabel": "Queued",
+  "downloadQueueFailedLabel": "Failed",
+  "downloadQueueEmptyState": "Nothing here right now.",
+  "downloadQueueRetryTooltip": "Retry",
+  "downloadQueueRetryAllTooltip": "Retry all",
+  "downloadQueueClearFinishedTooltip": "Clear finished",
+  "downloadQueueChecksumMismatchReason": "Downloaded, but the checksum didn't match",
+
   "updateAvailableTitle": "Update available ({tagName})",
   "@updateAvailableTitle": {
     "placeholders": {"tagName": {"type": "String"}}
@@ -385,5 +417,12 @@
   "updateDownloadingMessage": "Downloading update...",
   "updateFailedMessage": "Update failed. Try again later, or update manually from the project's GitHub releases page.",
   "updateLaterAction": "Later",
-  "updateNowAction": "Update"
+  "updateNowAction": "Update",
+
+  "wikiPageNotFoundMessage": "No wiki page for this tag.",
+  "wikiPageLoadFailedMessage": "Couldn't load the wiki page.",
+  "wikiPageOtherNamesLabel": "Also known as: {names}",
+  "@wikiPageOtherNamesLabel": {
+    "placeholders": {"names": {"type": "String"}}
+  }
 }

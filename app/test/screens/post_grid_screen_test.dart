@@ -7,6 +7,7 @@ import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:little_bunny/repository/bunny_models.dart';
 import 'package:little_bunny/screens/post_grid_screen.dart';
+import 'package:little_bunny/screens/tag_browse_screen.dart';
 import 'package:little_bunny/services/download_manager.dart';
 import 'package:little_bunny/services/download_queue_service.dart';
 import 'package:little_bunny/settings/display_settings_store.dart';
@@ -233,6 +234,35 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Foxes'), findsOneWidget);
+  });
+
+  testWidgets('a post opened from a saved search carries its stored query into the tag menu (M54 partial)', (WidgetTester tester) async {
+    final repository = FakeBunnyRepository();
+    repository.postsBySearchId[1] = [_post(id: 1, isSeen: false)];
+    repository.tagsByPostId[1] = const [BunnyPostTag(name: 'fox', category: 'species')];
+
+    await tester.pumpWidget(wrapWithLocalization(PostGridScreen(search: search, repository: repository, displaySettingsStore: const DisplaySettingsStore(), downloadSettingsStore: const DownloadSettingsStore(), downloadQueueService: _downloadQueueService())));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byKey(const ValueKey(1)));
+    await tester.pumpAndSettle();
+    await tester.drag(find.byType(Scrollable).first, const Offset(0, -2000));
+    await tester.pumpAndSettle();
+
+    await tester.longPress(find.widgetWithText(ActionChip, 'fox'));
+    await tester.pumpAndSettle();
+
+    // The saved search's own query is "fox" -- already present, so
+    // "Remove from current search" should show up (proving the context
+    // propagated from the saved search into the tag menu) -- and tapping
+    // it must push a live, unsaved preview rather than touching the saved
+    // search's own stored query.
+    await tester.ensureVisible(find.text('Remove from current search'));
+    await tester.tap(find.text('Remove from current search'));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(TagBrowseScreen), findsOneWidget);
+    expect(search.query, 'fox'); // the saved search's own record is never mutated
   });
 
   testWidgets('tapping refresh calls syncDueSearches then reloads', (WidgetTester tester) async {

@@ -25,6 +25,15 @@
          here is necessary but not sufficient, mobile_scanner requests the
          runtime permission itself when the camera preview starts. -->
     <uses-permission android:name="android.permission.CAMERA"/>
+    <!-- Lets DownloadForegroundService (M57) keep the download queue running
+         through a locked screen. Without a foreground service, Android
+         kills the whole process soon after the Activity backgrounds, which
+         is exactly what locking the screen does. FOREGROUND_SERVICE_DATA_SYNC
+         is the Android 14+ (API 34+) scoped permission for this service's
+         declared foregroundServiceType; FOREGROUND_SERVICE itself has been
+         required for any foreground service since API 28. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC"/>
     <application
         android:label="little_bunny"
         android:name="${applicationName}"
@@ -56,6 +65,13 @@
         <meta-data
             android:name="flutterEmbedding"
             android:value="2" />
+        <!-- M57: keeps the download queue (DownloadQueueService) running
+             through a locked screen. exported="false": only this app ever
+             starts it, via MainActivity's own MethodChannel handler. -->
+        <service
+            android:name=".DownloadForegroundService"
+            android:exported="false"
+            android:foregroundServiceType="dataSync" />
     </application>
     <!-- Required to query activities that can process text, see:
          https://developer.android.com/training/package-visibility and

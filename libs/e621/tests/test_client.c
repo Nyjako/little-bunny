@@ -414,6 +414,125 @@ void test_get_blacklisted_tags_returns_empty_string_when_unset(void)
     e621_client_destroy(client);
 }
 
+void test_search_tags_success(void)
+{
+    e621_client_t *client = make_test_client(false);
+    g_state.response_status = 200;
+    g_state.response_body =
+        "[{\"id\":1,\"name\":\"fox\",\"post_count\":12345,\"category\":5,\"related_tags\":\"canine wolf\",\"is_locked\":false,"
+        "\"created_at\":\"2020-01-01T00:00:00.000-05:00\",\"updated_at\":\"2020-01-02T00:00:00.000-05:00\"}]";
+    g_state.response_body_len = strlen(g_state.response_body);
+
+    e621_tag_list_t tags;
+    e621_result_t result = e621_search_tags(client, "fox", 0, &tags);
+
+    TEST_ASSERT_EQUAL(E621_OK, result);
+    TEST_ASSERT_EQUAL(1, (int)tags.count);
+    TEST_ASSERT_EQUAL_STRING("fox", tags.items[0].name);
+    TEST_ASSERT_EQUAL(12345, tags.items[0].post_count);
+    TEST_ASSERT_EQUAL(E621_TAG_CATEGORY_SPECIES, tags.items[0].category);
+    TEST_ASSERT_NOT_NULL(strstr(g_state.last_url, "search[name_matches]=fox"));
+
+    e621_tag_list_free(&tags);
+    e621_client_destroy(client);
+}
+
+void test_search_tags_empty_result(void)
+{
+    e621_client_t *client = make_test_client(false);
+    g_state.response_status = 200;
+    g_state.response_body = "[]";
+    g_state.response_body_len = strlen(g_state.response_body);
+
+    e621_tag_list_t tags;
+    e621_result_t result = e621_search_tags(client, "zzz_no_such_tag", 0, &tags);
+
+    TEST_ASSERT_EQUAL(E621_OK, result);
+    TEST_ASSERT_EQUAL(0, (int)tags.count);
+
+    e621_tag_list_free(&tags);
+    e621_client_destroy(client);
+}
+
+void test_get_wiki_page_success(void)
+{
+    e621_client_t *client = make_test_client(false);
+    g_state.response_status = 200;
+    g_state.response_body =
+        "[{\"id\":7,\"title\":\"fox\",\"body\":\"A [[canine]] species. See {{author}} for art.\","
+        "\"other_names\":[\"foxes\"],\"is_locked\":false,\"created_at\":\"2020-01-01T00:00:00.000-05:00\","
+        "\"updated_at\":\"2020-01-02T00:00:00.000-05:00\"}]";
+    g_state.response_body_len = strlen(g_state.response_body);
+
+    e621_wiki_page_t page;
+    e621_result_t result = e621_get_wiki_page(client, "fox", &page);
+
+    TEST_ASSERT_EQUAL(E621_OK, result);
+    TEST_ASSERT_EQUAL_STRING("fox", page.title);
+    TEST_ASSERT_EQUAL_STRING("A [[canine]] species. See {{author}} for art.", page.body);
+    TEST_ASSERT_EQUAL(1, (int)page.other_names.count);
+    TEST_ASSERT_EQUAL_STRING("foxes", page.other_names.items[0]);
+    TEST_ASSERT_NOT_NULL(strstr(g_state.last_url, "search[title]=fox"));
+
+    e621_wiki_page_free(&page);
+    e621_client_destroy(client);
+}
+
+void test_get_wiki_page_not_found(void)
+{
+    e621_client_t *client = make_test_client(false);
+    g_state.response_status = 200;
+    g_state.response_body = "[]";
+    g_state.response_body_len = strlen(g_state.response_body);
+
+    e621_wiki_page_t page;
+    e621_result_t result = e621_get_wiki_page(client, "no_such_tag_at_all", &page);
+
+    TEST_ASSERT_EQUAL(E621_ERR_NOT_FOUND, result);
+
+    e621_client_destroy(client);
+}
+
+void test_search_tag_aliases_success(void)
+{
+    e621_client_t *client = make_test_client(false);
+    g_state.response_status = 200;
+    g_state.response_body = "[{\"id\":1,\"antecedent_name\":\"foxes\",\"consequent_name\":\"fox\",\"status\":\"active\",\"post_count\":12345}]";
+    g_state.response_body_len = strlen(g_state.response_body);
+
+    e621_tag_alias_list_t aliases;
+    e621_result_t result = e621_search_tag_aliases(client, "fox", 0, &aliases);
+
+    TEST_ASSERT_EQUAL(E621_OK, result);
+    TEST_ASSERT_EQUAL(1, (int)aliases.count);
+    TEST_ASSERT_EQUAL_STRING("foxes", aliases.items[0].antecedent_name);
+    TEST_ASSERT_EQUAL_STRING("fox", aliases.items[0].consequent_name);
+    TEST_ASSERT_NOT_NULL(strstr(g_state.last_url, "/tag_aliases.json"));
+
+    e621_tag_alias_list_free(&aliases);
+    e621_client_destroy(client);
+}
+
+void test_search_tag_implications_success(void)
+{
+    e621_client_t *client = make_test_client(false);
+    g_state.response_status = 200;
+    g_state.response_body = "[{\"id\":1,\"antecedent_name\":\"red_fox\",\"consequent_name\":\"fox\",\"status\":\"active\"}]";
+    g_state.response_body_len = strlen(g_state.response_body);
+
+    e621_tag_implication_list_t implications;
+    e621_result_t result = e621_search_tag_implications(client, "red_fox", 0, &implications);
+
+    TEST_ASSERT_EQUAL(E621_OK, result);
+    TEST_ASSERT_EQUAL(1, (int)implications.count);
+    TEST_ASSERT_EQUAL_STRING("red_fox", implications.items[0].antecedent_name);
+    TEST_ASSERT_EQUAL_STRING("fox", implications.items[0].consequent_name);
+    TEST_ASSERT_NOT_NULL(strstr(g_state.last_url, "/tag_implications.json"));
+
+    e621_tag_implication_list_free(&implications);
+    e621_client_destroy(client);
+}
+
 int main(void)
 {
     UNITY_BEGIN();
@@ -435,5 +554,11 @@ int main(void)
     RUN_TEST(test_get_blacklisted_tags_requires_credentials);
     RUN_TEST(test_get_blacklisted_tags_requests_the_authenticated_username);
     RUN_TEST(test_get_blacklisted_tags_returns_empty_string_when_unset);
+    RUN_TEST(test_search_tags_success);
+    RUN_TEST(test_search_tags_empty_result);
+    RUN_TEST(test_get_wiki_page_success);
+    RUN_TEST(test_get_wiki_page_not_found);
+    RUN_TEST(test_search_tag_aliases_success);
+    RUN_TEST(test_search_tag_implications_success);
     return UNITY_END();
 }

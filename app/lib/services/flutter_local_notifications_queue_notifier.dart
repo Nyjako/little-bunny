@@ -70,6 +70,9 @@ class FlutterLocalNotificationsQueueNotifier implements DownloadQueueNotifier {
   );
 
   @override
+  Future<void> showStarting({required int total}) => showProgress(done: 0, total: total);
+
+  @override
   Future<void> showProgress({required int done, required int total}) async {
     try {
       await _plugin.show(

@@ -1,13 +1,17 @@
 import 'dart:io';
 
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:little_bunny/repository/bunny_models.dart';
+import 'package:little_bunny/screens/create_search_screen.dart';
 import 'package:little_bunny/screens/post_detail_screen.dart';
+import 'package:little_bunny/screens/tag_browse_screen.dart';
+import 'package:little_bunny/screens/wiki_page_screen.dart';
 import 'package:little_bunny/services/download_manager.dart';
 import 'package:little_bunny/services/download_queue_service.dart';
 import 'package:little_bunny/settings/display_settings_store.dart';
@@ -32,6 +36,29 @@ import '../fakes/test_app.dart';
 /// `find.byType(Image)` would also match any other `Image` elsewhere on the
 /// page, so this checks the `image` property too.
 Finder _findCachedNetworkImage() => find.byWidgetPredicate((widget) => widget is Image && widget.image is CachedNetworkImageProvider);
+
+/// [RichMarkupText] renders its links as [TapGestureRecognizer]s inside a
+/// single [Text.rich]'s [TextSpan] tree, so `find.text`/`tester.tap` can't
+/// locate or hit them (the widget's plain-text content is the whole
+/// description, not the individual span) -- this walks the span tree to
+/// find the matching segment and invokes its recognizer directly instead.
+void _tapLinkText(WidgetTester tester, String text) {
+  for (final richText in tester.widgetList<RichText>(find.byType(RichText))) {
+    GestureRecognizer? recognizer;
+    richText.text.visitChildren((span) {
+      if (span is TextSpan && span.text == text) {
+        recognizer = span.recognizer;
+        return false;
+      }
+      return true;
+    });
+    if (recognizer is TapGestureRecognizer) {
+      (recognizer as TapGestureRecognizer).onTap?.call();
+      return;
+    }
+  }
+  fail('No tappable span found for "$text"');
+}
 
 /// A fresh [DownloadQueueService] per call -- tests that don't care about
 /// the download queue at all (most of this file -- only the "download
@@ -61,6 +88,7 @@ BunnyPost _post({
   int id = 1,
   int externalId = 1,
   String title = 'A title',
+  String description = 'A description',
   int commentCount = 3,
   int width = 640,
   int height = 480,
@@ -70,7 +98,7 @@ BunnyPost _post({
   externalId: externalId,
   artist: 'someartist',
   title: title,
-  description: 'A description',
+  description: description,
   rating: 'safe',
   score: 42,
   scoreUp: 15,
@@ -330,6 +358,118 @@ void main() {
     expect(find.text('640x480'), findsOneWidget);
   });
 
+  group('post description rich markup (M50)', () {
+    testWidgets('renders a bare URL in the description as a link', (WidgetTester tester) async {
+      final repository = FakeBunnyRepository();
+      final post = _post(fileExt: 'jpg', description: 'Source: https://example.invalid/page here.');
+
+      await tester.pumpWidget(wrapWithLocalization(PostDetailScreen(post: post, repository: repository, displaySettingsStore: const DisplaySettingsStore(), downloadSettingsStore: const DownloadSettingsStore(), downloadQueueService: _downloadQueueService())));
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('https://example.invalid/page'), findsOneWidget);
+    });
+
+    testWidgets('tapping an {{author}} reference opens that artist\'s posts', (WidgetTester tester) async {
+      final repository = FakeBunnyRepository();
+      final post = _post(fileExt: 'jpg', description: 'Drawn by {{someotherartist}}.');
+
+      await tester.pumpWidget(wrapWithLocalization(PostDetailScreen(post: post, repository: repository, displaySettingsStore: const DisplaySettingsStore(), downloadSettingsStore: const DownloadSettingsStore(), downloadQueueService: _downloadQueueService())));
+      await tester.pumpAndSettle();
+
+      _tapLinkText(tester, '{{someotherartist}}');
+      await tester.pumpAndSettle();
+
+      expect(find.byType(TagBrowseScreen), findsOneWidget);
+    });
+
+    testWidgets('tapping a [[wiki]] reference opens the wiki page', (WidgetTester tester) async {
+      final repository = FakeBunnyRepository();
+      final post = _post(fileExt: 'jpg', description: 'See [[canine]] for more.');
+      repository.wikiPageByTitle['canine'] = const BunnyWikiPage(id: 1, title: 'canine', body: 'A broader family.', isLocked: false);
+
+      await tester.pumpWidget(wrapWithLocalization(PostDetailScreen(post: post, repository: repository, displaySettingsStore: const DisplaySettingsStore(), downloadSettingsStore: const DownloadSettingsStore(), downloadQueueService: _downloadQueueService())));
+      await tester.pumpAndSettle();
+
+      _tapLinkText(tester, '[[canine]]');
+      await tester.pumpAndSettle();
+
+      expect(find.byType(WikiPageScreen), findsOneWidget);
+    });
+
+    testWidgets('tapping a thumb reference opens the referenced post', (WidgetTester tester) async {
+      final repository = FakeBunnyRepository();
+      final post = _post(fileExt: 'jpg', description: 'Related: thumb #55 above.');
+      repository.fetchPostResults['e621:55'] = 2;
+      repository.postsById[2] = _post(id: 2, externalId: 55, title: 'Related post', description: '');
+
+      await tester.pumpWidget(wrapWithLocalization(PostDetailScreen(post: post, repository: repository, displaySettingsStore: const DisplaySettingsStore(), downloadSettingsStore: const DownloadSettingsStore(), downloadQueueService: _downloadQueueService())));
+      await tester.pumpAndSettle();
+
+      _tapLinkText(tester, 'thumb #55');
+      await tester.pumpAndSettle();
+
+      expect(find.text('Related post'), findsOneWidget);
+    });
+
+    testWidgets('tapping a pool #<id> reference opens that pool', (WidgetTester tester) async {
+      final repository = FakeBunnyRepository();
+      final post = _post(fileExt: 'jpg', description: 'Part of pool #77.');
+      repository.previewSearchResults['e621:pool:77 order:id:1'] = [];
+
+      await tester.pumpWidget(wrapWithLocalization(PostDetailScreen(post: post, repository: repository, displaySettingsStore: const DisplaySettingsStore(), downloadSettingsStore: const DownloadSettingsStore(), downloadQueueService: _downloadQueueService())));
+      await tester.pumpAndSettle();
+
+      _tapLinkText(tester, 'pool #77');
+      await tester.pumpAndSettle();
+
+      expect(find.byType(TagBrowseScreen), findsOneWidget);
+    });
+
+    testWidgets('tapping a pasted e621 post URL opens that post in-app, not a browser', (WidgetTester tester) async {
+      final repository = FakeBunnyRepository();
+      final post = _post(fileExt: 'jpg', description: 'Original here: https://e621.net/posts/999');
+      repository.fetchPostResults['e621:999'] = 2;
+      repository.postsById[2] = _post(id: 2, externalId: 999, title: 'Original post', description: '');
+
+      await tester.pumpWidget(wrapWithLocalization(PostDetailScreen(post: post, repository: repository, displaySettingsStore: const DisplaySettingsStore(), downloadSettingsStore: const DownloadSettingsStore(), downloadQueueService: _downloadQueueService())));
+      await tester.pumpAndSettle();
+
+      _tapLinkText(tester, 'https://e621.net/posts/999');
+      await tester.pumpAndSettle();
+
+      expect(find.text('Original post'), findsOneWidget);
+    });
+
+    testWidgets('tapping a pasted Inkbunny submission URL opens that post in-app', (WidgetTester tester) async {
+      final repository = FakeBunnyRepository();
+      final post = _post(fileExt: 'jpg', description: 'Crossposted from https://inkbunny.net/s/4242');
+      repository.fetchPostResults['inkbunny:4242'] = 2;
+      repository.postsById[2] = _post(id: 2, site: BunnySite.inkbunny, externalId: 4242, title: 'Inkbunny original', description: '');
+
+      await tester.pumpWidget(wrapWithLocalization(PostDetailScreen(post: post, repository: repository, displaySettingsStore: const DisplaySettingsStore(), downloadSettingsStore: const DownloadSettingsStore(), downloadQueueService: _downloadQueueService())));
+      await tester.pumpAndSettle();
+
+      _tapLinkText(tester, 'https://inkbunny.net/s/4242');
+      await tester.pumpAndSettle();
+
+      expect(find.text('Inkbunny original'), findsOneWidget);
+    });
+
+    testWidgets('tapping a pasted e621 pool URL opens that pool in-app', (WidgetTester tester) async {
+      final repository = FakeBunnyRepository();
+      final post = _post(fileExt: 'jpg', description: 'See https://e621.net/pools/88 for the series.');
+      repository.previewSearchResults['e621:pool:88 order:id:1'] = [];
+
+      await tester.pumpWidget(wrapWithLocalization(PostDetailScreen(post: post, repository: repository, displaySettingsStore: const DisplaySettingsStore(), downloadSettingsStore: const DownloadSettingsStore(), downloadQueueService: _downloadQueueService())));
+      await tester.pumpAndSettle();
+
+      _tapLinkText(tester, 'https://e621.net/pools/88');
+      await tester.pumpAndSettle();
+
+      expect(find.byType(TagBrowseScreen), findsOneWidget);
+    });
+  });
+
   // A sync pass only ever stores what Inkbunny's own search/listing endpoint
   // returns, which omits tags, full file dimensions, and comment count
   // entirely (only present on a full per-submission fetch) -- opening a post
@@ -432,6 +572,268 @@ void main() {
     expect(find.text('some_character'), findsOneWidget);
     expect(find.text('some_species'), findsOneWidget);
     expect(find.text('uncategorized_tag'), findsOneWidget);
+  });
+
+  group('tag long-press context menu (M52)', () {
+    testWidgets('long-pressing a tag chip opens a menu with all 5 actions', (WidgetTester tester) async {
+      final repository = FakeBunnyRepository();
+      final post = _post(fileExt: 'jpg');
+      repository.tagsByPostId[1] = const [BunnyPostTag(name: 'some_tag', category: 'general')];
+
+      await tester.pumpWidget(wrapWithLocalization(PostDetailScreen(post: post, repository: repository, displaySettingsStore: const DisplaySettingsStore(), downloadSettingsStore: const DownloadSettingsStore(), downloadQueueService: _downloadQueueService())));
+      await tester.pumpAndSettle();
+      await scrollToEnd(tester);
+
+      await tester.longPress(find.widgetWithText(ActionChip, 'some_tag'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Search'), findsOneWidget);
+      expect(find.text('Add to saved searches'), findsOneWidget);
+      expect(find.text('Add to blacklist'), findsOneWidget);
+      expect(find.text('Show wiki'), findsOneWidget);
+      expect(find.text('Copy to clipboard'), findsOneWidget);
+    });
+
+    testWidgets('"Search" opens TagBrowseScreen for the tag', (WidgetTester tester) async {
+      final repository = FakeBunnyRepository();
+      final post = _post(fileExt: 'jpg');
+      repository.tagsByPostId[1] = const [BunnyPostTag(name: 'some_tag', category: 'general')];
+
+      await tester.pumpWidget(wrapWithLocalization(PostDetailScreen(post: post, repository: repository, displaySettingsStore: const DisplaySettingsStore(), downloadSettingsStore: const DownloadSettingsStore(), downloadQueueService: _downloadQueueService())));
+      await tester.pumpAndSettle();
+      await scrollToEnd(tester);
+
+      await tester.longPress(find.widgetWithText(ActionChip, 'some_tag'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Search'));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(TagBrowseScreen), findsOneWidget);
+    });
+
+    testWidgets('"Add to saved searches" opens CreateSearchScreen pre-filled with the tag', (WidgetTester tester) async {
+      final repository = FakeBunnyRepository();
+      final post = _post(fileExt: 'jpg');
+      repository.tagsByPostId[1] = const [BunnyPostTag(name: 'some_tag', category: 'general')];
+
+      await tester.pumpWidget(wrapWithLocalization(PostDetailScreen(post: post, repository: repository, displaySettingsStore: const DisplaySettingsStore(), downloadSettingsStore: const DownloadSettingsStore(), downloadQueueService: _downloadQueueService())));
+      await tester.pumpAndSettle();
+      await scrollToEnd(tester);
+
+      await tester.longPress(find.widgetWithText(ActionChip, 'some_tag'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Add to saved searches'));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(CreateSearchScreen), findsOneWidget);
+      expect(find.widgetWithText(TextFormField, 'some_tag'), findsWidgets);
+    });
+
+    testWidgets('"Add to blacklist" blacklists the tag and shows a confirmation', (WidgetTester tester) async {
+      final repository = FakeBunnyRepository();
+      final post = _post(fileExt: 'jpg');
+      repository.tagsByPostId[1] = const [BunnyPostTag(name: 'some_tag', category: 'general')];
+
+      await tester.pumpWidget(wrapWithLocalization(PostDetailScreen(post: post, repository: repository, displaySettingsStore: const DisplaySettingsStore(), downloadSettingsStore: const DownloadSettingsStore(), downloadQueueService: _downloadQueueService())));
+      await tester.pumpAndSettle();
+      await scrollToEnd(tester);
+
+      await tester.longPress(find.widgetWithText(ActionChip, 'some_tag'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Add to blacklist'));
+      await tester.pumpAndSettle();
+
+      expect(repository.blacklistBySite[BunnySite.e621], contains('some_tag'));
+      expect(find.text('Added "some_tag" to the blacklist'), findsOneWidget);
+    });
+
+    testWidgets('"Show wiki" opens the wiki page for the tag', (WidgetTester tester) async {
+      final repository = FakeBunnyRepository();
+      final post = _post(fileExt: 'jpg');
+      repository.tagsByPostId[1] = const [BunnyPostTag(name: 'some_tag', category: 'general')];
+      repository.wikiPageByTitle['some_tag'] = const BunnyWikiPage(id: 1, title: 'some_tag', body: 'A description.', isLocked: false);
+
+      await tester.pumpWidget(wrapWithLocalization(PostDetailScreen(post: post, repository: repository, displaySettingsStore: const DisplaySettingsStore(), downloadSettingsStore: const DownloadSettingsStore(), downloadQueueService: _downloadQueueService())));
+      await tester.pumpAndSettle();
+      await scrollToEnd(tester);
+
+      await tester.longPress(find.widgetWithText(ActionChip, 'some_tag'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Show wiki'));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(WikiPageScreen), findsOneWidget);
+      expect(find.textContaining('A description.'), findsOneWidget);
+    });
+
+    testWidgets('"Copy to clipboard" copies the tag name and shows a confirmation', (WidgetTester tester) async {
+      final repository = FakeBunnyRepository();
+      final post = _post(fileExt: 'jpg');
+      repository.tagsByPostId[1] = const [BunnyPostTag(name: 'some_tag', category: 'general')];
+
+      await tester.pumpWidget(wrapWithLocalization(PostDetailScreen(post: post, repository: repository, displaySettingsStore: const DisplaySettingsStore(), downloadSettingsStore: const DownloadSettingsStore(), downloadQueueService: _downloadQueueService())));
+      await tester.pumpAndSettle();
+      await scrollToEnd(tester);
+
+      await tester.longPress(find.widgetWithText(ActionChip, 'some_tag'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Copy to clipboard'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Copied "some_tag" to the clipboard'), findsOneWidget);
+    });
+
+    group('current search actions (M54 partial)', () {
+      testWidgets('with no current-search context, Add/Exclude fall back to a fresh one-tag query on the post\'s own site', (WidgetTester tester) async {
+        final repository = FakeBunnyRepository();
+        final post = _post(fileExt: 'jpg');
+        repository.tagsByPostId[1] = const [BunnyPostTag(name: 'some_tag', category: 'general')];
+        repository.previewSearchResults['e621:some_tag:1'] = [];
+
+        await tester.pumpWidget(wrapWithLocalization(PostDetailScreen(post: post, repository: repository, displaySettingsStore: const DisplaySettingsStore(), downloadSettingsStore: const DownloadSettingsStore(), downloadQueueService: _downloadQueueService())));
+        await tester.pumpAndSettle();
+        await scrollToEnd(tester);
+
+        await tester.longPress(find.widgetWithText(ActionChip, 'some_tag'));
+        await tester.pumpAndSettle();
+
+        expect(find.text('Add to current search'), findsOneWidget);
+        expect(find.text('Exclude from current search'), findsOneWidget);
+        expect(find.text('Remove from current search'), findsNothing);
+
+        await tester.tap(find.text('Add to current search'));
+        await tester.pumpAndSettle();
+
+        expect(repository.previewSearchCalls, contains((BunnySite.e621, 'some_tag', 1)));
+      });
+
+      testWidgets('"Add to current search" merges the tag into the existing query and pushes a live preview', (WidgetTester tester) async {
+        final repository = FakeBunnyRepository();
+        final post = _post(fileExt: 'jpg');
+        repository.tagsByPostId[1] = const [BunnyPostTag(name: 'some_tag', category: 'general')];
+        repository.previewSearchResults['e621:other_tag some_tag:1'] = [];
+
+        await tester.pumpWidget(
+          wrapWithLocalization(
+            PostDetailScreen(
+              post: post,
+              repository: repository,
+              displaySettingsStore: const DisplaySettingsStore(),
+              downloadSettingsStore: const DownloadSettingsStore(),
+              downloadQueueService: _downloadQueueService(),
+              currentSearchSite: BunnySite.e621,
+              currentSearchQuery: 'other_tag',
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+        await scrollToEnd(tester);
+
+        await tester.longPress(find.widgetWithText(ActionChip, 'some_tag'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Add to current search'));
+        await tester.pumpAndSettle();
+
+        expect(find.byType(TagBrowseScreen), findsOneWidget);
+        expect(repository.previewSearchCalls, contains((BunnySite.e621, 'other_tag some_tag', 1)));
+      });
+
+      testWidgets('"Exclude from current search" prepends a - and pushes a live preview', (WidgetTester tester) async {
+        final repository = FakeBunnyRepository();
+        final post = _post(fileExt: 'jpg');
+        repository.tagsByPostId[1] = const [BunnyPostTag(name: 'some_tag', category: 'general')];
+        repository.previewSearchResults['e621:other_tag -some_tag:1'] = [];
+
+        await tester.pumpWidget(
+          wrapWithLocalization(
+            PostDetailScreen(
+              post: post,
+              repository: repository,
+              displaySettingsStore: const DisplaySettingsStore(),
+              downloadSettingsStore: const DownloadSettingsStore(),
+              downloadQueueService: _downloadQueueService(),
+              currentSearchSite: BunnySite.e621,
+              currentSearchQuery: 'other_tag',
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+        await scrollToEnd(tester);
+
+        await tester.longPress(find.widgetWithText(ActionChip, 'some_tag'));
+        await tester.pumpAndSettle();
+        await tester.ensureVisible(find.text('Exclude from current search'));
+        await tester.tap(find.text('Exclude from current search'));
+        await tester.pumpAndSettle();
+
+        expect(find.byType(TagBrowseScreen), findsOneWidget);
+        expect(repository.previewSearchCalls, contains((BunnySite.e621, 'other_tag -some_tag', 1)));
+      });
+
+      testWidgets('"Remove from current search" only appears when the tag is actually present, and removes it', (WidgetTester tester) async {
+        final repository = FakeBunnyRepository();
+        final post = _post(fileExt: 'jpg');
+        repository.tagsByPostId[1] = const [BunnyPostTag(name: 'some_tag', category: 'general')];
+        repository.previewSearchResults['e621:other_tag:1'] = [];
+
+        await tester.pumpWidget(
+          wrapWithLocalization(
+            PostDetailScreen(
+              post: post,
+              repository: repository,
+              displaySettingsStore: const DisplaySettingsStore(),
+              downloadSettingsStore: const DownloadSettingsStore(),
+              downloadQueueService: _downloadQueueService(),
+              currentSearchSite: BunnySite.e621,
+              currentSearchQuery: 'other_tag some_tag',
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+        await scrollToEnd(tester);
+
+        await tester.longPress(find.widgetWithText(ActionChip, 'some_tag'));
+        await tester.pumpAndSettle();
+
+        expect(find.text('Remove from current search'), findsOneWidget);
+
+        await tester.ensureVisible(find.text('Remove from current search'));
+        await tester.tap(find.text('Remove from current search'));
+        await tester.pumpAndSettle();
+
+        expect(find.byType(TagBrowseScreen), findsOneWidget);
+        expect(repository.previewSearchCalls, contains((BunnySite.e621, 'other_tag', 1)));
+      });
+
+      testWidgets('all 3 current-search actions are hidden for a pool browse', (WidgetTester tester) async {
+        final repository = FakeBunnyRepository();
+        final post = _post(fileExt: 'jpg');
+        repository.tagsByPostId[1] = const [BunnyPostTag(name: 'some_tag', category: 'general')];
+
+        await tester.pumpWidget(
+          wrapWithLocalization(
+            PostDetailScreen(
+              post: post,
+              repository: repository,
+              displaySettingsStore: const DisplaySettingsStore(),
+              downloadSettingsStore: const DownloadSettingsStore(),
+              downloadQueueService: _downloadQueueService(),
+              currentSearchSite: BunnySite.e621,
+              currentSearchQuery: 'pool:123',
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+        await scrollToEnd(tester);
+
+        await tester.longPress(find.widgetWithText(ActionChip, 'some_tag'));
+        await tester.pumpAndSettle();
+
+        expect(find.text('Add to current search'), findsNothing);
+        expect(find.text('Exclude from current search'), findsNothing);
+        expect(find.text('Remove from current search'), findsNothing);
+      });
+    });
   });
 
   testWidgets('sorts tag category headers into the fixed order, unrecognized last (M9.6.5)', (WidgetTester tester) async {

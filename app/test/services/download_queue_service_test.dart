@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -11,10 +12,12 @@ import 'package:little_bunny/services/download_queue_service.dart';
 import 'package:little_bunny/settings/download_settings_store.dart';
 import 'package:path_provider_platform_interface/path_provider_platform_interface.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:wakelock_plus/wakelock_plus.dart' show wakelockPlusPlatformInstance;
 
 import '../fakes/fake_bunny_repository.dart';
 import '../fakes/fake_download_queue_notifier.dart';
 import '../fakes/fake_path_provider.dart';
+import '../fakes/fake_wakelock_plus_platform.dart';
 
 /// Same shape as `fake_path_provider.dart`'s own `FakePathProviderPlatform`,
 /// but with a *real* (not a bare placeholder string) directory for
@@ -58,6 +61,7 @@ void main() {
   late Directory destinationDir;
   late FakeBunnyRepository repository;
   late FakeDownloadQueueNotifier notifier;
+  late FakeWakelockPlusPlatform wakelockPlatform;
 
   setUp(() async {
     PathProviderPlatform.instance = _RealPathProviderPlatform();
@@ -65,6 +69,8 @@ void main() {
     SharedPreferences.setMockInitialValues({'download_destination_folder': destinationDir.path});
     repository = FakeBunnyRepository();
     notifier = FakeDownloadQueueNotifier();
+    wakelockPlatform = FakeWakelockPlusPlatform();
+    wakelockPlusPlatformInstance = wakelockPlatform;
   });
 
   tearDown(() async {
@@ -90,6 +96,7 @@ void main() {
     service.enqueue(post, repository);
     await waitUntilIdle(service);
 
+    expect(notifier.startingCalls, [1]);
     expect(notifier.progressCalls, [(1, 1)]);
     expect(notifier.summaryCalls, [(1, 0, 0)]);
     expect(await File('${destinationDir.path}/someartist/1.png').exists(), isTrue);
@@ -102,6 +109,7 @@ void main() {
     service.enqueueAll(posts, repository);
     await waitUntilIdle(service);
 
+    expect(notifier.startingCalls, [3]);
     expect(notifier.progressCalls, [(1, 3), (2, 3), (3, 3)]);
     expect(notifier.summaryCalls, [(3, 0, 0)]);
   });
@@ -141,6 +149,10 @@ void main() {
     firstItemGate.complete();
     await waitUntilIdle(service);
 
+    // Only one startingCalls entry -- the second enqueue() lands while the
+    // queue is already processing, so it extends the existing run rather
+    // than starting a second one.
+    expect(notifier.startingCalls, [1]);
     expect(notifier.summaryCalls, [(2, 0, 0)]);
   });
 
@@ -151,6 +163,7 @@ void main() {
     service.enqueue(_post(id: 1), repository);
     await waitUntilIdle(service);
 
+    expect(notifier.startingCalls, [1]);
     expect(notifier.summaryCalls, [(0, 0, 1)]);
   });
 
@@ -220,9 +233,199 @@ void main() {
     firstItemGate.complete();
     await waitUntilIdle(service);
   });
+
+  test('showStarting fires before the first HTTP request completes (M57 screen-lock fix)', () async {
+    final firstItemGate = Completer<void>();
+    final service = buildService(
+      client: MockClient((_) async {
+        await firstItemGate.future;
+        return http.Response.bytes([1, 2, 3], 200);
+      }),
+    );
+
+    service.enqueue(_post(id: 1), repository);
+    // Let the queue's own microtasks run, but the HTTP client is still
+    // gated -- showStarting must already have fired by now, well before the
+    // fetch itself resolves.
+    await Future<void>.delayed(const Duration(milliseconds: 1));
+    expect(notifier.startingCalls, [1]);
+    expect(notifier.progressCalls, isEmpty);
+
+    firstItemGate.complete();
+    await waitUntilIdle(service);
+  });
+
+  test('holds a wake lock while the queue is active and releases it once drained', () async {
+    final firstItemGate = Completer<void>();
+    final service = buildService(
+      client: MockClient((_) async {
+        await firstItemGate.future;
+        return http.Response.bytes([1, 2, 3], 200);
+      }),
+    );
+
+    expect(wakelockPlatform.enabledValue, isFalse);
+    service.enqueue(_post(id: 1), repository);
+    await Future<void>.delayed(const Duration(milliseconds: 1));
+    expect(wakelockPlatform.enabledValue, isTrue);
+
+    firstItemGate.complete();
+    await waitUntilIdle(service);
+    expect(wakelockPlatform.enabledValue, isFalse);
+  });
+
+  group('queue visibility (M43 follow-up)', () {
+    test('a failed download shows up in failedItems with its reason', () async {
+      final service = buildService(client: MockClient((_) async => http.Response('', 500)));
+
+      service.enqueue(_post(id: 1), repository);
+      await waitUntilIdle(service);
+
+      expect(service.failedItems, hasLength(1));
+      expect(service.failedItems.single.post.id, 1);
+      expect(service.failedItems.single.failureReason, 'HTTP 500');
+    });
+
+    test('retryFailed moves one failed item back to queued and it gets reprocessed', () async {
+      final attempts = <String, int>{};
+      final service = buildService(
+        client: MockClient((request) async {
+          final url = request.url.toString();
+          attempts[url] = (attempts[url] ?? 0) + 1;
+          return attempts[url] == 1 ? http.Response('', 500) : http.Response.bytes([1, 2, 3], 200);
+        }),
+      );
+
+      service.enqueue(_post(id: 1), repository);
+      await waitUntilIdle(service);
+      final failedItem = service.failedItems.single;
+
+      service.retryFailed(failedItem);
+      await waitUntilIdle(service);
+
+      expect(service.failedItems, isEmpty);
+      expect(failedItem.status, DownloadQueueItemStatus.succeeded);
+      expect(await File('${destinationDir.path}/someartist/1.png').exists(), isTrue);
+    });
+
+    test('retryFailed is a no-op for an item that is not actually failed', () async {
+      final service = buildService(client: MockClient((_) async => http.Response.bytes([1, 2, 3], 200)));
+      service.enqueue(_post(id: 1), repository);
+      await waitUntilIdle(service);
+      final succeededItem = service.items.single;
+      expect(succeededItem.status, DownloadQueueItemStatus.succeeded);
+
+      service.retryFailed(succeededItem);
+
+      expect(service.isActive, isFalse);
+      expect(succeededItem.status, DownloadQueueItemStatus.succeeded);
+    });
+
+    test('retryAllFailed retries every failed item in one batch', () async {
+      final attempts = <String, int>{};
+      final service = buildService(
+        client: MockClient((request) async {
+          final url = request.url.toString();
+          attempts[url] = (attempts[url] ?? 0) + 1;
+          return attempts[url] == 1 ? http.Response('', 500) : http.Response.bytes([1, 2, 3], 200);
+        }),
+      );
+
+      service.enqueueAll([_post(id: 1, fileUrl: 'https://static1.e621.net/data/1.png'), _post(id: 2, fileUrl: 'https://static1.e621.net/data/2.png')], repository);
+      await waitUntilIdle(service);
+      expect(service.failedItems, hasLength(2));
+
+      service.retryAllFailed();
+      await waitUntilIdle(service);
+
+      expect(service.failedItems, isEmpty);
+    });
+
+    test('clearFinished drops terminal items but leaves a still-downloading one untouched', () async {
+      final thirdItemGate = Completer<void>();
+      final service = buildService(
+        client: MockClient((request) async {
+          final url = request.url.toString();
+          if (url.endsWith('/1.png')) {
+            return http.Response('', 500);
+          }
+          if (url.endsWith('/2.png')) {
+            return http.Response.bytes([1, 2, 3], 200);
+          }
+          await thirdItemGate.future;
+          return http.Response.bytes([1, 2, 3], 200);
+        }),
+      );
+
+      service.enqueueAll([
+        _post(id: 1, fileUrl: 'https://static1.e621.net/data/1.png'),
+        _post(id: 2, fileUrl: 'https://static1.e621.net/data/2.png'),
+        _post(id: 3, fileUrl: 'https://static1.e621.net/data/3.png'),
+      ], repository);
+
+      // Items 1 (fails) and 2 (succeeds) resolve immediately; item 3 is
+      // gated, so it sits as "downloading" while we clear.
+      while (service.currentItem?.post.id != 3) {
+        await Future<void>.delayed(const Duration(milliseconds: 1));
+      }
+      expect(service.items, hasLength(3));
+
+      service.clearFinished();
+
+      expect(service.items, hasLength(1));
+      expect(service.currentItem?.post.id, 3);
+
+      thirdItemGate.complete();
+      await waitUntilIdle(service);
+    });
+
+    test('restore brings back a failed item\'s status/reason without auto-retrying it', () async {
+      final service = buildService(client: MockClient((_) async => http.Response('', 500)));
+      final post = _post(id: 1);
+      repository.postsById[1] = post;
+
+      service.enqueue(post, repository);
+      await waitUntilIdle(service);
+      expect(service.failedItems, hasLength(1));
+
+      final persistedFile = File('${(PathProviderPlatform.instance as _RealPathProviderPlatform).supportPath}/pending_downloads.json');
+      while (!(await persistedFile.readAsString()).contains('failed')) {
+        await Future<void>.delayed(const Duration(milliseconds: 1));
+      }
+
+      var requestCount = 0;
+      final restored = buildService(
+        client: MockClient((_) async {
+          requestCount++;
+          return http.Response.bytes([1, 2, 3], 200);
+        }),
+      );
+      await restored.restore(repository);
+
+      expect(restored.failedItems, hasLength(1));
+      expect(restored.failedItems.single.failureReason, 'HTTP 500');
+      expect(requestCount, 0);
+    });
+
+    test('restore falls back to the pre-queue-visibility flat-id-array format', () async {
+      final file = File('${(PathProviderPlatform.instance as _RealPathProviderPlatform).supportPath}/pending_downloads.json');
+      await file.writeAsString(jsonEncode([1]));
+      repository.postsById[1] = _post(id: 1);
+
+      final service = buildService(client: MockClient((_) async => http.Response.bytes([1, 2, 3], 200)));
+      await service.restore(repository);
+
+      expect(service.totalCount, 1);
+      await waitUntilIdle(service);
+      expect(await File('${destinationDir.path}/someartist/1.png').exists(), isTrue);
+    });
+  });
 }
 
 class _ThrowingDownloadQueueNotifier implements DownloadQueueNotifier {
+  @override
+  Future<void> showStarting({required int total}) async => throw StateError('boom');
+
   @override
   Future<void> showProgress({required int done, required int total}) async => throw StateError('boom');
 

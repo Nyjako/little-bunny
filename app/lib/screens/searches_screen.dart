@@ -17,6 +17,8 @@ import '../util/responsive.dart';
 import '../widgets/update_dialog.dart';
 import 'accounts_screen.dart';
 import 'create_search_screen.dart';
+import 'custom_search_screen.dart';
+import 'download_queue_screen.dart';
 import 'edit_search_screen.dart';
 import 'post_grid_screen.dart';
 import 'settings_screen.dart';
@@ -717,6 +719,26 @@ class _SearchesScreenState extends State<SearchesScreen> with SingleTickerProvid
             icon: _syncStatus.active ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.sync),
             tooltip: l10n.searchesCheckForUpdatesTooltip,
             onPressed: _syncStatus.active ? null : _checkForUpdates,
+          ),
+          IconButton(
+            icon: const Icon(Icons.travel_explore),
+            tooltip: l10n.searchesCustomSearchTooltip,
+            onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => CustomSearchScreen(
+                  repository: _repository!,
+                  displaySettingsStore: widget.displaySettingsStore,
+                  downloadSettingsStore: widget.downloadSettingsStore,
+                  downloadQueueService: widget.downloadQueueService,
+                ),
+              ),
+            ),
+          ),
+          IconButton(
+            icon: const Icon(Icons.download_outlined),
+            tooltip: l10n.searchesDownloadQueueTooltip,
+            onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (context) => DownloadQueueScreen(downloadQueueService: widget.downloadQueueService))),
           ),
           IconButton(
             icon: const Icon(Icons.person_outline),

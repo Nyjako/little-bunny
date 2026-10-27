@@ -695,6 +695,91 @@ void main() {
       expect(comments.single.body, 'Nice pic!');
     });
 
+    test('searchTags sends GET with name_matches/limit and maps the response', () async {
+      respond = (_) => http.Response(
+        jsonEncode([
+          {'id': 1, 'name': 'fox', 'post_count': 12345, 'category': 4, 'related_tags': 'canine wolf', 'is_locked': false, 'created_at': '2020-01-01T00:00:00Z', 'updated_at': '2020-01-02T00:00:00Z'},
+        ]),
+        200,
+      );
+
+      final tags = await buildRepository().searchTags('fox', limit: 10);
+
+      expect(capturedMethod, 'GET');
+      expect(capturedUri.path, '/tags/search');
+      expect(capturedUri.queryParameters, {'name_matches': 'fox', 'limit': '10'});
+      expect(tags, hasLength(1));
+      expect(tags.single.name, 'fox');
+      expect(tags.single.postCount, 12345);
+      expect(tags.single.category, BunnyTagCategory.species);
+    });
+
+    test('getWikiPage sends GET with title and maps the response', () async {
+      respond = (_) => http.Response(
+        jsonEncode({
+          'id': 7,
+          'title': 'fox',
+          'body': 'A [[canine]] species.',
+          'other_names': ['foxes'],
+          'is_locked': false,
+          'created_at': '2020-01-01T00:00:00Z',
+          'updated_at': '2020-01-02T00:00:00Z',
+        }),
+        200,
+      );
+
+      final page = await buildRepository().getWikiPage('fox');
+
+      expect(capturedMethod, 'GET');
+      expect(capturedUri.path, '/wiki_pages');
+      expect(capturedUri.queryParameters, {'title': 'fox'});
+      expect(page, isNotNull);
+      expect(page!.title, 'fox');
+      expect(page.otherNames, ['foxes']);
+    });
+
+    test('getWikiPage returns null on 404', () async {
+      respond = (_) => http.Response(jsonEncode({'error': 'not found'}), 404);
+
+      final page = await buildRepository().getWikiPage('no_such_tag_at_all');
+
+      expect(page, isNull);
+    });
+
+    test('searchTagAliases sends GET with name_matches and maps the response', () async {
+      respond = (_) => http.Response(
+        jsonEncode([
+          {'id': 1, 'antecedent_name': 'foxes', 'consequent_name': 'fox', 'status': 'active', 'post_count': 12345},
+        ]),
+        200,
+      );
+
+      final aliases = await buildRepository().searchTagAliases('fox');
+
+      expect(capturedMethod, 'GET');
+      expect(capturedUri.path, '/tag_aliases');
+      expect(aliases, hasLength(1));
+      expect(aliases.single.antecedentName, 'foxes');
+      expect(aliases.single.consequentName, 'fox');
+    });
+
+    test('searchTagImplications sends GET with name_matches and maps the response', () async {
+      respond = (_) => http.Response(
+        jsonEncode([
+          {'id': 1, 'antecedent_name': 'red_fox', 'consequent_name': 'fox', 'status': 'active'},
+        ]),
+        200,
+      );
+
+      final implications = await buildRepository().searchTagImplications('red_fox');
+
+      expect(capturedMethod, 'GET');
+      expect(capturedUri.path, '/tag_implications');
+      expect(implications, hasLength(1));
+      expect(implications.single.antecedentName, 'red_fox');
+      expect(implications.single.consequentName, 'fox');
+    });
+
     test('markPostSeen sends POST to the right path', () async {
       respond = (_) => http.Response(jsonEncode({'ok': true}), 200);
 

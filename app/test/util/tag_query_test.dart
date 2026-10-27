@@ -95,4 +95,91 @@ void main() {
       expect(cursor, 'cat -dog '.length);
     });
   });
+
+  group('queryHasBareTag', () {
+    test('finds a plain tag', () {
+      expect(queryHasBareTag('cat dog', 'dog'), isTrue);
+    });
+
+    test('finds a tag regardless of its prefix', () {
+      expect(queryHasBareTag('cat -dog', 'dog'), isTrue);
+      expect(queryHasBareTag('cat ~dog', 'dog'), isTrue);
+    });
+
+    test('a tag not present returns false', () {
+      expect(queryHasBareTag('cat dog', 'fox'), isFalse);
+    });
+  });
+
+  group('addTagToQuery', () {
+    test('appends to an empty query', () {
+      expect(addTagToQuery('', 'cat'), 'cat');
+    });
+
+    test('appends to a non-empty query', () {
+      expect(addTagToQuery('cat', 'dog'), 'cat dog');
+    });
+
+    test('replaces an existing excluded occurrence rather than duplicating it', () {
+      expect(addTagToQuery('cat -dog', 'dog'), 'cat dog');
+    });
+
+    test('adding an already-present plain tag is a no-op', () {
+      expect(addTagToQuery('cat dog', 'dog'), 'cat dog');
+    });
+  });
+
+  group('excludeTagInQuery', () {
+    test('appends as an excluded token', () {
+      expect(excludeTagInQuery('cat', 'dog'), 'cat -dog');
+    });
+
+    test('replaces an existing plain occurrence rather than duplicating it', () {
+      expect(excludeTagInQuery('cat dog', 'dog'), 'cat -dog');
+    });
+
+    test('excluding an already-excluded tag is idempotent', () {
+      expect(excludeTagInQuery('cat -dog', 'dog'), 'cat -dog');
+    });
+
+    test('works from an empty query', () {
+      expect(excludeTagInQuery('', 'dog'), '-dog');
+    });
+  });
+
+  group('removeTagFromQuery', () {
+    test('removes a plain tag', () {
+      expect(removeTagFromQuery('cat dog', 'dog'), 'cat');
+    });
+
+    test('removes an excluded tag', () {
+      expect(removeTagFromQuery('cat -dog', 'dog'), 'cat');
+    });
+
+    test('removing the only tag leaves an empty string', () {
+      expect(removeTagFromQuery('dog', 'dog'), '');
+    });
+
+    test('removing a tag not present is a no-op', () {
+      expect(removeTagFromQuery('cat dog', 'fox'), 'cat dog');
+    });
+  });
+
+  group('queryIsPoolSentinel', () {
+    test('an exact pool:<id> query is a pool sentinel', () {
+      expect(queryIsPoolSentinel('pool:123'), isTrue);
+    });
+
+    test('a tag-polluted pool query is not', () {
+      expect(queryIsPoolSentinel('pool:123 sometag'), isFalse);
+    });
+
+    test('a plain tag query is not', () {
+      expect(queryIsPoolSentinel('cat'), isFalse);
+    });
+
+    test('a non-numeric pool id is not', () {
+      expect(queryIsPoolSentinel('pool:abc'), isFalse);
+    });
+  });
 }
