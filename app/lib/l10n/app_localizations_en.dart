@@ -198,6 +198,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get searchesCheckForUpdatesTooltip => 'Check for updates';
 
   @override
+  String get searchesDownloadQueueTooltip => 'Downloads';
+
+  @override
   String searchesSyncAllProgress(int done, int total) {
     return '$done/$total checked';
   }
@@ -843,6 +846,34 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get postDetailDownloadQueued => 'Queued for download';
+
+  @override
+  String get downloadQueueScreenTitle => 'Downloads';
+
+  @override
+  String get downloadQueueDownloadingLabel => 'Downloading';
+
+  @override
+  String get downloadQueueQueuedLabel => 'Queued';
+
+  @override
+  String get downloadQueueFailedLabel => 'Failed';
+
+  @override
+  String get downloadQueueEmptyState => 'Nothing here right now.';
+
+  @override
+  String get downloadQueueRetryTooltip => 'Retry';
+
+  @override
+  String get downloadQueueRetryAllTooltip => 'Retry all';
+
+  @override
+  String get downloadQueueClearFinishedTooltip => 'Clear finished';
+
+  @override
+  String get downloadQueueChecksumMismatchReason =>
+      'Downloaded, but the checksum didn\'t match';
 
   @override
   String updateAvailableTitle(String tagName) {
