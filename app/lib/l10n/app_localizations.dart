@@ -442,6 +442,12 @@ abstract class AppLocalizations {
   /// **'Check for updates'**
   String get searchesCheckForUpdatesTooltip;
 
+  /// No description provided for @searchesDownloadQueueTooltip.
+  ///
+  /// In en, this message translates to:
+  /// **'Downloads'**
+  String get searchesDownloadQueueTooltip;
+
   /// No description provided for @searchesSyncAllProgress.
   ///
   /// In en, this message translates to:
@@ -1693,6 +1699,60 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Custom search'**
   String get searchesCustomSearchTooltip;
+
+  /// No description provided for @downloadQueueScreenTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Downloads'**
+  String get downloadQueueScreenTitle;
+
+  /// No description provided for @downloadQueueDownloadingLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Downloading'**
+  String get downloadQueueDownloadingLabel;
+
+  /// No description provided for @downloadQueueQueuedLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Queued'**
+  String get downloadQueueQueuedLabel;
+
+  /// No description provided for @downloadQueueFailedLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Failed'**
+  String get downloadQueueFailedLabel;
+
+  /// No description provided for @downloadQueueEmptyState.
+  ///
+  /// In en, this message translates to:
+  /// **'Nothing here right now.'**
+  String get downloadQueueEmptyState;
+
+  /// No description provided for @downloadQueueRetryTooltip.
+  ///
+  /// In en, this message translates to:
+  /// **'Retry'**
+  String get downloadQueueRetryTooltip;
+
+  /// No description provided for @downloadQueueRetryAllTooltip.
+  ///
+  /// In en, this message translates to:
+  /// **'Retry all'**
+  String get downloadQueueRetryAllTooltip;
+
+  /// No description provided for @downloadQueueClearFinishedTooltip.
+  ///
+  /// In en, this message translates to:
+  /// **'Clear finished'**
+  String get downloadQueueClearFinishedTooltip;
+
+  /// No description provided for @downloadQueueChecksumMismatchReason.
+  ///
+  /// In en, this message translates to:
+  /// **'Downloaded, but the checksum didn\'t match'**
+  String get downloadQueueChecksumMismatchReason;
 
   /// No description provided for @updateAvailableTitle.
   ///

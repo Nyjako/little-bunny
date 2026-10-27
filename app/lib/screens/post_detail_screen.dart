@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:video_player/video_player.dart';
-import 'package:wakelock_plus/wakelock_plus.dart';
 
 import '../l10n/app_localizations.dart';
 import '../repository/bunny_models.dart';
@@ -13,6 +12,7 @@ import '../services/download_manager.dart';
 import '../services/download_queue_service.dart';
 import '../settings/display_settings_store.dart';
 import '../settings/download_settings_store.dart';
+import '../util/app_wakelock.dart';
 import '../util/image_headers.dart';
 import '../util/media_type.dart';
 import '../util/mouse_drag_scroll_behavior.dart';
@@ -165,7 +165,7 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
     // post (and while swiping through siblingPosts) -- disabled again in
     // dispose() once this screen is actually left, not just backgrounded by
     // e.g. the fullscreen viewer being pushed on top of it.
-    WakelockPlus.enable();
+    AppWakelock.acquire();
   }
 
   /// [precacheImage] needs a [BuildContext] -- by the time this resolves
@@ -205,7 +205,7 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
   @override
   void dispose() {
     _pageController.dispose();
-    WakelockPlus.disable();
+    AppWakelock.release();
     super.dispose();
   }
 
