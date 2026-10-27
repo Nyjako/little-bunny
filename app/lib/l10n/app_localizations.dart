@@ -1658,6 +1658,42 @@ abstract class AppLocalizations {
   /// **'Copied \"{tag}\" to the clipboard'**
   String tagMenuCopied(String tag);
 
+  /// No description provided for @tagMenuAddToCurrentSearchLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Add to current search'**
+  String get tagMenuAddToCurrentSearchLabel;
+
+  /// No description provided for @tagMenuExcludeFromCurrentSearchLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Exclude from current search'**
+  String get tagMenuExcludeFromCurrentSearchLabel;
+
+  /// No description provided for @tagMenuRemoveFromCurrentSearchLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Remove from current search'**
+  String get tagMenuRemoveFromCurrentSearchLabel;
+
+  /// No description provided for @customSearchScreenTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Custom search'**
+  String get customSearchScreenTitle;
+
+  /// No description provided for @customSearchSubmit.
+  ///
+  /// In en, this message translates to:
+  /// **'Search'**
+  String get customSearchSubmit;
+
+  /// No description provided for @searchesCustomSearchTooltip.
+  ///
+  /// In en, this message translates to:
+  /// **'Custom search'**
+  String get searchesCustomSearchTooltip;
+
   /// No description provided for @updateAvailableTitle.
   ///
   /// In en, this message translates to:

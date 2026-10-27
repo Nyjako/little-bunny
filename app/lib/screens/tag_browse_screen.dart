@@ -315,6 +315,14 @@ class _TagBrowseScreenState extends State<TagBrowseScreen> {
           downloadSettingsStore: widget.downloadSettingsStore,
           downloadQueueService: widget.downloadQueueService,
           siblingPosts: posts,
+          // "Add/Exclude/Remove from current search" (M54 partial) forks
+          // into a brand-new TagBrowseScreen rather than mutating this one
+          // in place, so there's no live state here to thread through
+          // beyond the query this screen was opened with. customFetch
+          // (M10.3, Inkbunny "my favorites") has no real query string at
+          // all -- no context to fork from.
+          currentSearchSite: widget.customFetch == null ? widget.site : null,
+          currentSearchQuery: widget.customFetch == null ? widget.query : null,
         ),
       ),
     );

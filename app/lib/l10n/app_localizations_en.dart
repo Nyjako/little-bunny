@@ -870,6 +870,26 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String get tagMenuAddToCurrentSearchLabel => 'Add to current search';
+
+  @override
+  String get tagMenuExcludeFromCurrentSearchLabel =>
+      'Exclude from current search';
+
+  @override
+  String get tagMenuRemoveFromCurrentSearchLabel =>
+      'Remove from current search';
+
+  @override
+  String get customSearchScreenTitle => 'Custom search';
+
+  @override
+  String get customSearchSubmit => 'Search';
+
+  @override
+  String get searchesCustomSearchTooltip => 'Custom search';
+
+  @override
   String updateAvailableTitle(String tagName) {
     return 'Update available ($tagName)';
   }

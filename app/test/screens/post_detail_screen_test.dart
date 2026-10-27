@@ -682,6 +682,158 @@ void main() {
 
       expect(find.text('Copied "some_tag" to the clipboard'), findsOneWidget);
     });
+
+    group('current search actions (M54 partial)', () {
+      testWidgets('with no current-search context, Add/Exclude fall back to a fresh one-tag query on the post\'s own site', (WidgetTester tester) async {
+        final repository = FakeBunnyRepository();
+        final post = _post(fileExt: 'jpg');
+        repository.tagsByPostId[1] = const [BunnyPostTag(name: 'some_tag', category: 'general')];
+        repository.previewSearchResults['e621:some_tag:1'] = [];
+
+        await tester.pumpWidget(wrapWithLocalization(PostDetailScreen(post: post, repository: repository, displaySettingsStore: const DisplaySettingsStore(), downloadSettingsStore: const DownloadSettingsStore(), downloadQueueService: _downloadQueueService())));
+        await tester.pumpAndSettle();
+        await scrollToEnd(tester);
+
+        await tester.longPress(find.widgetWithText(ActionChip, 'some_tag'));
+        await tester.pumpAndSettle();
+
+        expect(find.text('Add to current search'), findsOneWidget);
+        expect(find.text('Exclude from current search'), findsOneWidget);
+        expect(find.text('Remove from current search'), findsNothing);
+
+        await tester.tap(find.text('Add to current search'));
+        await tester.pumpAndSettle();
+
+        expect(repository.previewSearchCalls, contains((BunnySite.e621, 'some_tag', 1)));
+      });
+
+      testWidgets('"Add to current search" merges the tag into the existing query and pushes a live preview', (WidgetTester tester) async {
+        final repository = FakeBunnyRepository();
+        final post = _post(fileExt: 'jpg');
+        repository.tagsByPostId[1] = const [BunnyPostTag(name: 'some_tag', category: 'general')];
+        repository.previewSearchResults['e621:other_tag some_tag:1'] = [];
+
+        await tester.pumpWidget(
+          wrapWithLocalization(
+            PostDetailScreen(
+              post: post,
+              repository: repository,
+              displaySettingsStore: const DisplaySettingsStore(),
+              downloadSettingsStore: const DownloadSettingsStore(),
+              downloadQueueService: _downloadQueueService(),
+              currentSearchSite: BunnySite.e621,
+              currentSearchQuery: 'other_tag',
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+        await scrollToEnd(tester);
+
+        await tester.longPress(find.widgetWithText(ActionChip, 'some_tag'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Add to current search'));
+        await tester.pumpAndSettle();
+
+        expect(find.byType(TagBrowseScreen), findsOneWidget);
+        expect(repository.previewSearchCalls, contains((BunnySite.e621, 'other_tag some_tag', 1)));
+      });
+
+      testWidgets('"Exclude from current search" prepends a - and pushes a live preview', (WidgetTester tester) async {
+        final repository = FakeBunnyRepository();
+        final post = _post(fileExt: 'jpg');
+        repository.tagsByPostId[1] = const [BunnyPostTag(name: 'some_tag', category: 'general')];
+        repository.previewSearchResults['e621:other_tag -some_tag:1'] = [];
+
+        await tester.pumpWidget(
+          wrapWithLocalization(
+            PostDetailScreen(
+              post: post,
+              repository: repository,
+              displaySettingsStore: const DisplaySettingsStore(),
+              downloadSettingsStore: const DownloadSettingsStore(),
+              downloadQueueService: _downloadQueueService(),
+              currentSearchSite: BunnySite.e621,
+              currentSearchQuery: 'other_tag',
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+        await scrollToEnd(tester);
+
+        await tester.longPress(find.widgetWithText(ActionChip, 'some_tag'));
+        await tester.pumpAndSettle();
+        await tester.ensureVisible(find.text('Exclude from current search'));
+        await tester.tap(find.text('Exclude from current search'));
+        await tester.pumpAndSettle();
+
+        expect(find.byType(TagBrowseScreen), findsOneWidget);
+        expect(repository.previewSearchCalls, contains((BunnySite.e621, 'other_tag -some_tag', 1)));
+      });
+
+      testWidgets('"Remove from current search" only appears when the tag is actually present, and removes it', (WidgetTester tester) async {
+        final repository = FakeBunnyRepository();
+        final post = _post(fileExt: 'jpg');
+        repository.tagsByPostId[1] = const [BunnyPostTag(name: 'some_tag', category: 'general')];
+        repository.previewSearchResults['e621:other_tag:1'] = [];
+
+        await tester.pumpWidget(
+          wrapWithLocalization(
+            PostDetailScreen(
+              post: post,
+              repository: repository,
+              displaySettingsStore: const DisplaySettingsStore(),
+              downloadSettingsStore: const DownloadSettingsStore(),
+              downloadQueueService: _downloadQueueService(),
+              currentSearchSite: BunnySite.e621,
+              currentSearchQuery: 'other_tag some_tag',
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+        await scrollToEnd(tester);
+
+        await tester.longPress(find.widgetWithText(ActionChip, 'some_tag'));
+        await tester.pumpAndSettle();
+
+        expect(find.text('Remove from current search'), findsOneWidget);
+
+        await tester.ensureVisible(find.text('Remove from current search'));
+        await tester.tap(find.text('Remove from current search'));
+        await tester.pumpAndSettle();
+
+        expect(find.byType(TagBrowseScreen), findsOneWidget);
+        expect(repository.previewSearchCalls, contains((BunnySite.e621, 'other_tag', 1)));
+      });
+
+      testWidgets('all 3 current-search actions are hidden for a pool browse', (WidgetTester tester) async {
+        final repository = FakeBunnyRepository();
+        final post = _post(fileExt: 'jpg');
+        repository.tagsByPostId[1] = const [BunnyPostTag(name: 'some_tag', category: 'general')];
+
+        await tester.pumpWidget(
+          wrapWithLocalization(
+            PostDetailScreen(
+              post: post,
+              repository: repository,
+              displaySettingsStore: const DisplaySettingsStore(),
+              downloadSettingsStore: const DownloadSettingsStore(),
+              downloadQueueService: _downloadQueueService(),
+              currentSearchSite: BunnySite.e621,
+              currentSearchQuery: 'pool:123',
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+        await scrollToEnd(tester);
+
+        await tester.longPress(find.widgetWithText(ActionChip, 'some_tag'));
+        await tester.pumpAndSettle();
+
+        expect(find.text('Add to current search'), findsNothing);
+        expect(find.text('Exclude from current search'), findsNothing);
+        expect(find.text('Remove from current search'), findsNothing);
+      });
+    });
   });
 
   testWidgets('sorts tag category headers into the fixed order, unrecognized last (M9.6.5)', (WidgetTester tester) async {

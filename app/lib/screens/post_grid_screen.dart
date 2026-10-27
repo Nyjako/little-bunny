@@ -370,6 +370,11 @@ class _PostGridScreenState extends State<PostGridScreen> {
           downloadSettingsStore: widget.downloadSettingsStore,
           downloadQueueService: widget.downloadQueueService,
           siblingPosts: posts,
+          // "Add/Exclude/Remove from current search" (M54 partial) forks
+          // the saved search's own query into a brand-new, unsaved
+          // TagBrowseScreen -- this saved search itself is never altered.
+          currentSearchSite: widget.search.site,
+          currentSearchQuery: widget.search.query,
         ),
       ),
     );

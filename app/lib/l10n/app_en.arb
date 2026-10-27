@@ -391,6 +391,13 @@
   "@tagMenuCopied": {
     "placeholders": {"tag": {"type": "String"}}
   },
+  "tagMenuAddToCurrentSearchLabel": "Add to current search",
+  "tagMenuExcludeFromCurrentSearchLabel": "Exclude from current search",
+  "tagMenuRemoveFromCurrentSearchLabel": "Remove from current search",
+
+  "customSearchScreenTitle": "Custom search",
+  "customSearchSubmit": "Search",
+  "searchesCustomSearchTooltip": "Custom search",
 
   "updateAvailableTitle": "Update available ({tagName})",
   "@updateAvailableTitle": {

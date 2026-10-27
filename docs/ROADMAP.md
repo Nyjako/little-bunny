@@ -2681,6 +2681,26 @@ this file is the single source of truth for "what's done" across sessions.
   string, so this may mostly be a client-side authoring/autocomplete problem rather
   than a storage one), and the *same* syntax + autocomplete support added to the
   blacklist editor, which today only accepts single bare tags.
+  - **Partial progress landed**: a free-text search entry point
+    (`CustomSearchScreen`, reachable via a new app-bar icon on `SearchesScreen`) lets
+    the user type any space-separated query -- reusing `tag_query.dart`'s existing
+    `-`/`~`/`(`-prefix-aware autocomplete as-is, not re-implemented -- and push it as a
+    live, unsaved `TagBrowseScreen` preview. The M52 tag long-press menu's two
+    previously-deferred actions ("Add to current search"/"Remove from current
+    search") are now implemented, plus a third ("Exclude from current search",
+    prepending `-`): all three read `PostDetailScreen.currentSearchSite`/
+    `currentSearchQuery` (threaded in from whichever grid the post was opened from --
+    a saved search's own stored query, or an already-live `TagBrowseScreen`'s query)
+    and push a **brand-new** `TagBrowseScreen` with the edited query -- never writing
+    back to a saved search, even when the context came from one. New pure functions in
+    `tag_query.dart`: `addTagToQuery`/`excludeTagInQuery`/`removeTagFromQuery`/
+    `queryHasBareTag`/`queryIsPoolSentinel`. All 3 actions are suppressed for a pool
+    browse (`queryIsPoolSentinel`'s own doc comment explains why: a bare tag token
+    appended to `pool:<id>` breaks this app's exact-match pool-id parsing); "Remove"
+    specifically is also hidden whenever the tag isn't actually present in the query.
+  - **Still pending**: the full e621 grammar above (OR/wildcards/groups/aliases/
+    implications), position-aware autocomplete beyond the existing simple prefix
+    stripping, and the same syntax/autocomplete support in the blacklist editor.
 
 - [x] **M55 — Build the tag-stats report in the background instead of on the request thread**
   Discovered right after deploying M46: on the user's real database (1.39GB,
