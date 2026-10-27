@@ -8,6 +8,7 @@ import 'package:path_provider/path_provider.dart';
 import '../repository/bunny_models.dart';
 import '../repository/bunny_repository.dart';
 import '../settings/download_settings_store.dart';
+import '../util/app_wakelock.dart';
 import 'download_manager.dart';
 import 'download_queue_notifier.dart';
 
@@ -78,34 +79,56 @@ class DownloadQueueService extends ChangeNotifier {
 
   Future<void> _processQueue() async {
     _processing = true;
-    while (_pending.isNotEmpty) {
-      final item = _pending.removeAt(0);
-      _current = item.post;
-      notifyListeners();
-      try {
-        await _processItem(item.post, item.repository);
-      } catch (_) {
-        // One item throwing (e.g. a settings read failing) must not stop
-        // every subsequent queued item from being attempted.
-        _failed++;
+    // Both best-effort, same reasoning as every other notifier/wakelock call
+    // in this method -- but called *before* the loop below, not just after
+    // each item, so the Android foreground service (M57) gets a chance to
+    // call startForeground() before the first HTTP fetch starts, not after
+    // it finishes. Without this ordering, locking the screen right after
+    // enqueueing could let Android kill the process before anything ever
+    // told the service to start. (A much smaller residual race -- the gap
+    // between enqueueAll() returning to its caller and this method's first
+    // await actually running -- is a single event-loop tick and not worth
+    // chasing further.) AppWakelock is reference-counted (see its own doc
+    // comment) so this can't turn off a wakelock PostDetailScreen (M47) is
+    // still holding for an unrelated reason.
+    await AppWakelock.acquire();
+    try {
+      await notifier.showStarting(total: _sessionTotal);
+    } catch (_) {
+      // Best-effort.
+    }
+    try {
+      while (_pending.isNotEmpty) {
+        final item = _pending.removeAt(0);
+        _current = item.post;
+        notifyListeners();
+        try {
+          await _processItem(item.post, item.repository);
+        } catch (_) {
+          // One item throwing (e.g. a settings read failing) must not stop
+          // every subsequent queued item from being attempted.
+          _failed++;
+        }
+        _current = null;
+        _sessionDone++;
+        await _persist();
+        // A broken notifier (any implementation, not just the real one, which
+        // already swallows its own exceptions -- this is the queue's own
+        // backstop) must never stop subsequent items from being processed.
+        try {
+          await notifier.showProgress(done: _sessionDone, total: _sessionTotal);
+        } catch (_) {
+          // Best-effort.
+        }
+        notifyListeners();
       }
-      _current = null;
-      _sessionDone++;
-      await _persist();
-      // A broken notifier (any implementation, not just the real one, which
-      // already swallows its own exceptions -- this is the queue's own
-      // backstop) must never stop subsequent items from being processed.
       try {
-        await notifier.showProgress(done: _sessionDone, total: _sessionTotal);
+        await notifier.showSummary(succeeded: _succeeded, mismatched: _mismatched, failed: _failed);
       } catch (_) {
         // Best-effort.
       }
-      notifyListeners();
-    }
-    try {
-      await notifier.showSummary(succeeded: _succeeded, mismatched: _mismatched, failed: _failed);
-    } catch (_) {
-      // Best-effort.
+    } finally {
+      await AppWakelock.release();
     }
     _sessionDone = 0;
     _sessionTotal = 0;

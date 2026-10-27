@@ -26,6 +26,7 @@ import androidx.core.app.ServiceCompat
 // not a second, duplicate one.
 class DownloadForegroundService : Service() {
     companion object {
+        const val ACTION_START = "com.github.nyjako.little_bunny.action.START"
         const val ACTION_UPDATE_PROGRESS = "com.github.nyjako.little_bunny.action.UPDATE_PROGRESS"
         const val ACTION_SHOW_SUMMARY = "com.github.nyjako.little_bunny.action.SHOW_SUMMARY"
         const val ACTION_CLEAR = "com.github.nyjako.little_bunny.action.CLEAR"
@@ -52,6 +53,10 @@ class DownloadForegroundService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
+            ACTION_START -> {
+                val total = intent.getIntExtra(EXTRA_TOTAL, 0)
+                startForegroundCompat(progressNotification(0, total))
+            }
             ACTION_UPDATE_PROGRESS -> {
                 val done = intent.getIntExtra(EXTRA_DONE, 0)
                 val total = intent.getIntExtra(EXTRA_TOTAL, 0)

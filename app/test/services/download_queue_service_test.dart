@@ -11,10 +11,12 @@ import 'package:little_bunny/services/download_queue_service.dart';
 import 'package:little_bunny/settings/download_settings_store.dart';
 import 'package:path_provider_platform_interface/path_provider_platform_interface.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:wakelock_plus/wakelock_plus.dart' show wakelockPlusPlatformInstance;
 
 import '../fakes/fake_bunny_repository.dart';
 import '../fakes/fake_download_queue_notifier.dart';
 import '../fakes/fake_path_provider.dart';
+import '../fakes/fake_wakelock_plus_platform.dart';
 
 /// Same shape as `fake_path_provider.dart`'s own `FakePathProviderPlatform`,
 /// but with a *real* (not a bare placeholder string) directory for
@@ -58,6 +60,7 @@ void main() {
   late Directory destinationDir;
   late FakeBunnyRepository repository;
   late FakeDownloadQueueNotifier notifier;
+  late FakeWakelockPlusPlatform wakelockPlatform;
 
   setUp(() async {
     PathProviderPlatform.instance = _RealPathProviderPlatform();
@@ -65,6 +68,8 @@ void main() {
     SharedPreferences.setMockInitialValues({'download_destination_folder': destinationDir.path});
     repository = FakeBunnyRepository();
     notifier = FakeDownloadQueueNotifier();
+    wakelockPlatform = FakeWakelockPlusPlatform();
+    wakelockPlusPlatformInstance = wakelockPlatform;
   });
 
   tearDown(() async {
@@ -90,6 +95,7 @@ void main() {
     service.enqueue(post, repository);
     await waitUntilIdle(service);
 
+    expect(notifier.startingCalls, [1]);
     expect(notifier.progressCalls, [(1, 1)]);
     expect(notifier.summaryCalls, [(1, 0, 0)]);
     expect(await File('${destinationDir.path}/someartist/1.png').exists(), isTrue);
@@ -102,6 +108,7 @@ void main() {
     service.enqueueAll(posts, repository);
     await waitUntilIdle(service);
 
+    expect(notifier.startingCalls, [3]);
     expect(notifier.progressCalls, [(1, 3), (2, 3), (3, 3)]);
     expect(notifier.summaryCalls, [(3, 0, 0)]);
   });
@@ -141,6 +148,10 @@ void main() {
     firstItemGate.complete();
     await waitUntilIdle(service);
 
+    // Only one startingCalls entry -- the second enqueue() lands while the
+    // queue is already processing, so it extends the existing run rather
+    // than starting a second one.
+    expect(notifier.startingCalls, [1]);
     expect(notifier.summaryCalls, [(2, 0, 0)]);
   });
 
@@ -151,6 +162,7 @@ void main() {
     service.enqueue(_post(id: 1), repository);
     await waitUntilIdle(service);
 
+    expect(notifier.startingCalls, [1]);
     expect(notifier.summaryCalls, [(0, 0, 1)]);
   });
 
@@ -220,9 +232,52 @@ void main() {
     firstItemGate.complete();
     await waitUntilIdle(service);
   });
+
+  test('showStarting fires before the first HTTP request completes (M57 screen-lock fix)', () async {
+    final firstItemGate = Completer<void>();
+    final service = buildService(
+      client: MockClient((_) async {
+        await firstItemGate.future;
+        return http.Response.bytes([1, 2, 3], 200);
+      }),
+    );
+
+    service.enqueue(_post(id: 1), repository);
+    // Let the queue's own microtasks run, but the HTTP client is still
+    // gated -- showStarting must already have fired by now, well before the
+    // fetch itself resolves.
+    await Future<void>.delayed(const Duration(milliseconds: 1));
+    expect(notifier.startingCalls, [1]);
+    expect(notifier.progressCalls, isEmpty);
+
+    firstItemGate.complete();
+    await waitUntilIdle(service);
+  });
+
+  test('holds a wake lock while the queue is active and releases it once drained', () async {
+    final firstItemGate = Completer<void>();
+    final service = buildService(
+      client: MockClient((_) async {
+        await firstItemGate.future;
+        return http.Response.bytes([1, 2, 3], 200);
+      }),
+    );
+
+    expect(wakelockPlatform.enabledValue, isFalse);
+    service.enqueue(_post(id: 1), repository);
+    await Future<void>.delayed(const Duration(milliseconds: 1));
+    expect(wakelockPlatform.enabledValue, isTrue);
+
+    firstItemGate.complete();
+    await waitUntilIdle(service);
+    expect(wakelockPlatform.enabledValue, isFalse);
+  });
 }
 
 class _ThrowingDownloadQueueNotifier implements DownloadQueueNotifier {
+  @override
+  Future<void> showStarting({required int total}) async => throw StateError('boom');
+
   @override
   Future<void> showProgress({required int done, required int total}) async => throw StateError('boom');
 

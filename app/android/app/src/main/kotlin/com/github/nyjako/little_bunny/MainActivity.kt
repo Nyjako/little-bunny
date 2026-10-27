@@ -19,6 +19,12 @@ class MainActivity : FlutterFragmentActivity() {
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, downloadForegroundServiceChannel).setMethodCallHandler { call, result ->
             val intent = Intent(this, DownloadForegroundService::class.java)
             when (call.method) {
+                "startQueue" -> {
+                    intent.action = DownloadForegroundService.ACTION_START
+                    intent.putExtra(DownloadForegroundService.EXTRA_TOTAL, call.argument<Int>("total") ?: 0)
+                    ContextCompat.startForegroundService(this, intent)
+                    result.success(null)
+                }
                 "updateProgress" -> {
                     intent.action = DownloadForegroundService.ACTION_UPDATE_PROGRESS
                     intent.putExtra(DownloadForegroundService.EXTRA_DONE, call.argument<Int>("done") ?: 0)

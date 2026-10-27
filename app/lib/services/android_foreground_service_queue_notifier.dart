@@ -22,6 +22,15 @@ class AndroidForegroundServiceQueueNotifier implements DownloadQueueNotifier {
   AndroidForegroundServiceQueueNotifier({MethodChannel? channel}) : _channel = channel ?? const MethodChannel(_channelName);
 
   @override
+  Future<void> showStarting({required int total}) async {
+    try {
+      await _channel.invokeMethod('startQueue', {'total': total});
+    } catch (e) {
+      debugPrint('AndroidForegroundServiceQueueNotifier.showStarting failed: $e');
+    }
+  }
+
+  @override
   Future<void> showProgress({required int done, required int total}) async {
     try {
       await _channel.invokeMethod('updateProgress', {'done': done, 'total': total});

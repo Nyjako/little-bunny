@@ -7,6 +7,14 @@
 /// tested against a fake without touching a real platform channel -- same
 /// reasoning as [DownloadManager]'s injectable `client`.
 abstract class DownloadQueueNotifier {
+  /// Called once, before the queue's first item is actually fetched --
+  /// distinct from [showProgress] (which only ever fires *after* an item
+  /// finishes) so the Android foreground service (M57) gets a chance to
+  /// call `startForeground()` before the first HTTP request, not after it.
+  /// Without this, locking the screen right after enqueueing could kill the
+  /// process before anything ever told the service to start.
+  Future<void> showStarting({required int total});
+
   Future<void> showProgress({required int done, required int total});
 
   Future<void> showSummary({required int succeeded, required int mismatched, required int failed});
@@ -18,6 +26,9 @@ abstract class DownloadQueueNotifier {
 /// (e.g. in tests that don't care about notifications at all).
 class NoopDownloadQueueNotifier implements DownloadQueueNotifier {
   const NoopDownloadQueueNotifier();
+
+  @override
+  Future<void> showStarting({required int total}) async {}
 
   @override
   Future<void> showProgress({required int done, required int total}) async {}
