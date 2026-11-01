@@ -440,6 +440,24 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String postGridSelectEntireSearch(int count) {
+    return 'Select entire search ($count)';
+  }
+
+  @override
+  String get postGridSelectEntireSearchDialogTitle =>
+      'Selecting entire search…';
+
+  @override
+  String postGridSelectEntireSearchProgress(int count, int total) {
+    return '$count of $total';
+  }
+
+  @override
+  String get postGridSelectEntireSearchError =>
+      'Couldn\'t load the full search. Try again.';
+
+  @override
   String get tagBrowseEmptyState => 'No posts found for this search.';
 
   @override

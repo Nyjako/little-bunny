@@ -204,6 +204,20 @@
       "count": {"type": "int"}
     }
   },
+  "postGridSelectEntireSearch": "Select entire search ({count})",
+  "@postGridSelectEntireSearch": {
+    "placeholders": {"count": {"type": "int"}}
+  },
+  "postGridSelectEntireSearchDialogTitle": "Selecting entire search…",
+  "postGridSelectEntireSearchProgress": "{count} of {total}",
+  "@postGridSelectEntireSearchProgress": {
+    "placeholders": {
+      "count": {"type": "int"},
+      "total": {"type": "int"}
+    }
+  },
+  "postGridSelectEntireSearchError": "Couldn't load the full search. Try again.",
+
   "tagBrowseEmptyState": "No posts found for this search.",
   "tagBrowseAddToSearchesTooltip": "Save as a search",
   "tagBrowseAlreadySavedTooltip": "Already saved -- tap to remove",
