@@ -551,11 +551,16 @@ class BunnyCoreFfiBindings {
 
   /// page is 1-indexed -- see bunny_db_search_list_posts' own doc comment for
   /// why this is paginated at all (an unbounded response for a search with
-  /// thousands of posts routinely timed out client-side).
+  /// thousands of posts routinely timed out client-side). rating_mask/media_mask
+  /// are the BUNNY_DB_RATING_MASK_ and BUNNY_DB_MEDIA_MASK_ bitmask constants
+  /// (M28) -- forwarded only to the non-pool bunny_db_search_list_posts branch;
+  /// a pool search ignores both, same as it already ignores apply_blacklist.
   bunny_core_result_t bunny_core_search_list_posts(
     ffi.Pointer<bunny_core_t> core,
     int search_id,
     bool unseen_only,
+    int rating_mask,
+    int media_mask,
     int page,
     ffi.Pointer<bunny_db_post_list_t> out_list,
   ) {
@@ -564,6 +569,8 @@ class BunnyCoreFfiBindings {
         core,
         search_id,
         unseen_only,
+        rating_mask,
+        media_mask,
         page,
         out_list,
       ),
@@ -578,6 +585,8 @@ class BunnyCoreFfiBindings {
             ffi.Int64,
             ffi.Bool,
             ffi.Int,
+            ffi.Int,
+            ffi.Int,
             ffi.Pointer<bunny_db_post_list_t>,
           )
         >
@@ -588,6 +597,8 @@ class BunnyCoreFfiBindings {
           ffi.Pointer<bunny_core_t>,
           int,
           bool,
+          int,
+          int,
           int,
           ffi.Pointer<bunny_db_post_list_t>,
         )
@@ -2964,3 +2975,21 @@ final class bunny_core_tag_implication_list_t extends ffi.Struct {
   @ffi.Size()
   external int count;
 }
+
+const int BUNNY_DB_RATING_MASK_SAFE = 1;
+
+const int BUNNY_DB_RATING_MASK_QUESTIONABLE = 2;
+
+const int BUNNY_DB_RATING_MASK_EXPLICIT = 4;
+
+const int BUNNY_DB_RATING_MASK_UNKNOWN = 8;
+
+const int BUNNY_DB_RATING_MASK_ALL = 15;
+
+const int BUNNY_DB_MEDIA_MASK_IMAGE = 1;
+
+const int BUNNY_DB_MEDIA_MASK_VIDEO = 2;
+
+const int BUNNY_DB_MEDIA_MASK_GIF = 4;
+
+const int BUNNY_DB_MEDIA_MASK_ALL = 7;

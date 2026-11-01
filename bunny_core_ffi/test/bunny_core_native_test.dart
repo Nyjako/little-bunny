@@ -96,7 +96,8 @@ void main() {
   test('listSearchPosts is empty for a freshly created search', () async {
     final id = await native.createSearch('e621', 'my search', 'rating:safe', 24);
 
-    expect(await native.listSearchPosts(id, false, 1), isEmpty);
+    // 15/7 == BUNNY_DB_RATING_MASK_ALL/BUNNY_DB_MEDIA_MASK_ALL (unfiltered).
+    expect(await native.listSearchPosts(id, false, 15, 7, 1), isEmpty);
   });
 
   test('syncDueSearches with no searches is a no-op', () async {

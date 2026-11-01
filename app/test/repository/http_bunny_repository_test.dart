@@ -278,6 +278,24 @@ void main() {
       expect(capturedUri.queryParameters['unseen_only'], 'true');
     });
 
+    test('listSearchPosts sends rating_mask/media_mask as decimal-string query parameters, defaulting to "all"', () async {
+      respond = (_) => http.Response(jsonEncode([]), 200);
+
+      await buildRepository().listSearchPosts(7);
+
+      expect(capturedUri.queryParameters['rating_mask'], '15');
+      expect(capturedUri.queryParameters['media_mask'], '7');
+    });
+
+    test('listSearchPosts sends an explicit rating_mask/media_mask', () async {
+      respond = (_) => http.Response(jsonEncode([]), 200);
+
+      await buildRepository().listSearchPosts(7, ratingMask: kRatingMaskSafe, mediaMask: kMediaMaskImage);
+
+      expect(capturedUri.queryParameters['rating_mask'], '1');
+      expect(capturedUri.queryParameters['media_mask'], '1');
+    });
+
     test('listSearchPosts maps a JSON array into BunnyPost objects', () async {
       respond = (_) => http.Response(
         jsonEncode([

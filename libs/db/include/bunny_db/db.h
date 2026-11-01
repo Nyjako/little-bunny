@@ -194,8 +194,13 @@ bunny_db_result_t bunny_db_search_has_result(bunny_db_t *db, int64_t search_id, 
  * apply_blacklist (M37) should be false for a favorites search (see
  * bunny_core_is_favorites_query) -- a user's own favorites are meant to
  * show everything they favorited, not a filtered subset. Every other
- * search (including a plain tag search) passes true. */
-bunny_db_result_t bunny_db_search_list_posts(bunny_db_t *db, int64_t search_id, bool unseen_only, bool apply_blacklist, int page, bunny_db_post_list_t *out_list);
+ * search (including a plain tag search) passes true.
+ *
+ * rating_mask/media_mask (M28) are bitmasks of the BUNNY_DB_RATING_MASK_ and
+ * BUNNY_DB_MEDIA_MASK_ constants (types.h) -- pass BUNNY_DB_RATING_MASK_ALL
+ * and BUNNY_DB_MEDIA_MASK_ALL for "no filtering", matching this function's
+ * pre-M28 behavior exactly. */
+bunny_db_result_t bunny_db_search_list_posts(bunny_db_t *db, int64_t search_id, bool unseen_only, bool apply_blacklist, int rating_mask, int media_mask, int page, bunny_db_post_list_t *out_list);
 
 /* A post's tags with their categories, for a post detail view's sectioned
  * tag display (Artists/Characters/Copyrights/Species/General/Meta for e621;

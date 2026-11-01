@@ -40,6 +40,17 @@ class PostGridScreen extends StatefulWidget {
 
 class _PostGridScreenState extends State<PostGridScreen> {
   bool _unseenOnly = false;
+  // Screen-local only, not persisted via DisplaySettingsStore -- same
+  // precedent as _unseenOnly above (that store is scoped to display
+  // presentation settings, not query filter criteria). Starts at "all"
+  // (every bit set, including the UNKNOWN bit -- see kRatingMaskUnknown's
+  // own doc comment) so a fresh screen shows every post, unfiltered. The
+  // UNKNOWN bit is never toggled by any chip in _showFilterSheet below, so
+  // it stays permanently set for the lifetime of this screen -- an
+  // unrecognized rating is never silently hidden by a filter the UI doesn't
+  // actually expose a control for.
+  int _ratingMask = kRatingMaskAll;
+  int _mediaMask = kMediaMaskAll;
   bool _syncing = false;
   // Sensible defaults (match DisplaySettingsStore's own) so the first frame
   // doesn't flash a different column count before the real value loads.
@@ -253,7 +264,8 @@ class _PostGridScreenState extends State<PostGridScreen> {
   /// order" (M22, this comment's old approach) was wrong whenever a pool's
   /// pages were uploaded out of sequence, a common occurrence for ongoing
   /// comics.
-  Future<List<BunnyPost>> _fetchPage(int page) => widget.repository.listSearchPosts(widget.search.id, unseenOnly: _unseenOnly, page: page);
+  Future<List<BunnyPost>> _fetchPage(int page) =>
+      widget.repository.listSearchPosts(widget.search.id, unseenOnly: _unseenOnly, ratingMask: _ratingMask, mediaMask: _mediaMask, page: page);
 
   Future<void> _loadInitial() async {
     final page = await _fetchPage(1);
@@ -330,6 +342,103 @@ class _PostGridScreenState extends State<PostGridScreen> {
   void _toggleUnseenOnly() {
     setState(() => _unseenOnly = !_unseenOnly);
     _resetAndReload();
+  }
+
+  void _toggleRatingBit(int bit) {
+    setState(() => _ratingMask ^= bit);
+    _resetAndReload();
+  }
+
+  void _toggleMediaBit(int bit) {
+    setState(() => _mediaMask ^= bit);
+    _resetAndReload();
+  }
+
+  /// Rating/media-type toggle chips (M28) -- the matching post *set* changes
+  /// on every toggle, so each one triggers [_resetAndReload] (not
+  /// [_refreshLoadedPages]), same as [_toggleUnseenOnly] above. Colors mirror
+  /// [ratingBadgeFor]'s own scheme. The sheet's own [StatefulBuilder] setState
+  /// only re-renders the chips with this screen's already-updated masks --
+  /// the actual state lives on [_PostGridScreenState], not the sheet.
+  void _showFilterSheet(AppLocalizations l10n) {
+    showModalBottomSheet<void>(
+      context: context,
+      builder: (sheetContext) {
+        return StatefulBuilder(
+          builder: (sheetContext, setSheetState) {
+            void toggleRating(int bit) {
+              _toggleRatingBit(bit);
+              setSheetState(() {});
+            }
+
+            void toggleMedia(int bit) {
+              _toggleMediaBit(bit);
+              setSheetState(() {});
+            }
+
+            return SafeArea(
+              child: Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(l10n.postGridFilterRatingLabel, style: Theme.of(sheetContext).textTheme.titleSmall),
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 8,
+                      children: [
+                        FilterChip(
+                          label: Text(l10n.postGridFilterRatingSafe),
+                          selected: _ratingMask & kRatingMaskSafe != 0,
+                          selectedColor: Colors.green.withValues(alpha: 0.3),
+                          onSelected: (_) => toggleRating(kRatingMaskSafe),
+                        ),
+                        FilterChip(
+                          label: Text(l10n.postGridFilterRatingQuestionable),
+                          selected: _ratingMask & kRatingMaskQuestionable != 0,
+                          selectedColor: Colors.amber.withValues(alpha: 0.3),
+                          onSelected: (_) => toggleRating(kRatingMaskQuestionable),
+                        ),
+                        FilterChip(
+                          label: Text(l10n.postGridFilterRatingExplicit),
+                          selected: _ratingMask & kRatingMaskExplicit != 0,
+                          selectedColor: Colors.red.withValues(alpha: 0.3),
+                          onSelected: (_) => toggleRating(kRatingMaskExplicit),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    Text(l10n.postGridFilterMediaLabel, style: Theme.of(sheetContext).textTheme.titleSmall),
+                    const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 8,
+                      children: [
+                        FilterChip(
+                          label: Text(l10n.postGridFilterMediaImage),
+                          selected: _mediaMask & kMediaMaskImage != 0,
+                          onSelected: (_) => toggleMedia(kMediaMaskImage),
+                        ),
+                        FilterChip(
+                          label: Text(l10n.postGridFilterMediaVideo),
+                          selected: _mediaMask & kMediaMaskVideo != 0,
+                          onSelected: (_) => toggleMedia(kMediaMaskVideo),
+                        ),
+                        FilterChip(
+                          label: Text(l10n.postGridFilterMediaGif),
+                          selected: _mediaMask & kMediaMaskGif != 0,
+                          onSelected: (_) => toggleMedia(kMediaMaskGif),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
   }
 
   Future<void> _refresh() async {
@@ -470,6 +579,7 @@ class _PostGridScreenState extends State<PostGridScreen> {
       actions: [
         if (_poolInfo != null) IconButton(icon: const Icon(Icons.info_outline), tooltip: l10n.postGridPoolInfoTooltip, onPressed: () => _showPoolInfo(l10n)),
         IconButton(icon: Icon(_unseenOnly ? Icons.visibility_off : Icons.visibility), tooltip: l10n.postGridUnseenOnlyTooltip, onPressed: _toggleUnseenOnly),
+        IconButton(icon: const Icon(Icons.filter_list), tooltip: l10n.postGridFilterTooltip, onPressed: () => _showFilterSheet(l10n)),
         IconButton(
           icon: _syncing ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.refresh),
           tooltip: l10n.postGridRefreshTooltip,

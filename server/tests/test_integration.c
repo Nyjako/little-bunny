@@ -359,6 +359,31 @@ void test_full_account_search_sync_favorite_flow(void)
     free(response.data);
     memset(&response, 0, sizeof(response));
 
+    /* M28: rating_mask/media_mask query params -- the synced post is a
+     * safe-rated ("s" -> mask 1) png (image -> mask 1). */
+    status = do_request("GET", "/searches/1/posts?rating_mask=4", NULL, &response, true, NULL);
+    TEST_ASSERT_EQUAL(200, status);
+    TEST_ASSERT_EQUAL_STRING("[]", response.data);
+    free(response.data);
+    memset(&response, 0, sizeof(response));
+
+    status = do_request("GET", "/searches/1/posts?rating_mask=1&media_mask=1", NULL, &response, true, NULL);
+    TEST_ASSERT_EQUAL(200, status);
+    TEST_ASSERT_NOT_NULL(strstr(response.data, "\"external_id\":1"));
+    free(response.data);
+    memset(&response, 0, sizeof(response));
+
+    status = do_request("GET", "/searches/1/posts?media_mask=2", NULL, &response, true, NULL);
+    TEST_ASSERT_EQUAL(200, status);
+    TEST_ASSERT_EQUAL_STRING("[]", response.data);
+    free(response.data);
+    memset(&response, 0, sizeof(response));
+
+    status = do_request("GET", "/searches/1/posts?rating_mask=notanumber", NULL, &response, true, NULL);
+    TEST_ASSERT_EQUAL(400, status);
+    free(response.data);
+    memset(&response, 0, sizeof(response));
+
     /* "somea", not the shorter "one" -- M39 throttles autocomplete to
      * prefixes of 5+ characters. */
     status = do_request("GET", "/tags/autocomplete?site=e621&prefix=somea", NULL, &response, true, NULL);
