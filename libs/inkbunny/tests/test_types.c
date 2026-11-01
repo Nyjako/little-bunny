@@ -126,6 +126,58 @@ void test_parse_submission_array_success(void)
     free(content);
 }
 
+void test_parse_submission_synthesizes_a_file_from_top_level_fields_when_files_array_is_absent(void)
+{
+    /* api_search.php's actual shape (confirmed against the live API,
+     * 2026-11-05) -- file fields directly on the submission object, no
+     * nested "files" array at all. Before this fallback existed,
+     * files.count stayed 0 for every search-synced submission, so
+     * file_url/file_ext/sample_url ended up NULL in the DB until a later
+     * live per-submission refetch patched them up -- the detail view
+     * showed nothing until that extra round trip finished. */
+    cJSON *obj = cJSON_Parse(
+        "{\"submission_id\": \"42\", \"file_name\": \"42_artist_pic.jpg\", "
+        "\"file_url_full\": \"https://example.com/full/42.jpg\", "
+        "\"file_url_screen\": \"https://example.com/screen/42.jpg\", "
+        "\"file_url_preview\": \"https://example.com/preview/42.jpg\", "
+        "\"mimetype\": \"image/jpeg\"}"
+    );
+    TEST_ASSERT_NOT_NULL(obj);
+
+    inkbunny_submission_t submission;
+    inkbunny_result_t result = inkbunny_parse_submission(obj, &submission);
+    TEST_ASSERT_EQUAL(INKBUNNY_OK, result);
+    TEST_ASSERT_EQUAL(1, (int)submission.files.count);
+    TEST_ASSERT_EQUAL_STRING("42_artist_pic.jpg", submission.files.items[0].file_name);
+    TEST_ASSERT_EQUAL_STRING("https://example.com/full/42.jpg", submission.files.items[0].url_full);
+    TEST_ASSERT_EQUAL_STRING("https://example.com/screen/42.jpg", submission.files.items[0].url_screen);
+    TEST_ASSERT_EQUAL_STRING("image/jpeg", submission.files.items[0].mimetype);
+    /* Genuinely absent at this level, same as a real api_search.php
+     * response -- the fallback must not invent these. */
+    TEST_ASSERT_NULL(submission.files.items[0].md5);
+    TEST_ASSERT_EQUAL(0, submission.files.items[0].full_width);
+    TEST_ASSERT_EQUAL(0, submission.files.items[0].full_height);
+
+    inkbunny_submission_free(&submission);
+    cJSON_Delete(obj);
+}
+
+void test_parse_submission_leaves_files_empty_when_neither_shape_is_present(void)
+{
+    /* A submission with genuinely no file at all (e.g. a deleted/removed
+     * one) must not synthesize a bogus entry. */
+    cJSON *obj = cJSON_Parse("{\"submission_id\": \"42\", \"title\": \"no file here\"}");
+    TEST_ASSERT_NOT_NULL(obj);
+
+    inkbunny_submission_t submission;
+    inkbunny_result_t result = inkbunny_parse_submission(obj, &submission);
+    TEST_ASSERT_EQUAL(INKBUNNY_OK, result);
+    TEST_ASSERT_EQUAL(0, (int)submission.files.count);
+
+    inkbunny_submission_free(&submission);
+    cJSON_Delete(obj);
+}
+
 void test_parse_submission_array_propagates_item_error(void)
 {
     cJSON *array = cJSON_Parse("[{\"submission_id\": \"1\"}, {\"title\": \"no id\"}]");
@@ -162,5 +214,7 @@ int main(void)
     RUN_TEST(test_parse_submission_array_success);
     RUN_TEST(test_parse_submission_array_propagates_item_error);
     RUN_TEST(test_parse_submission_lenient_on_malformed_keywords);
+    RUN_TEST(test_parse_submission_synthesizes_a_file_from_top_level_fields_when_files_array_is_absent);
+    RUN_TEST(test_parse_submission_leaves_files_empty_when_neither_shape_is_present);
     return UNITY_END();
 }

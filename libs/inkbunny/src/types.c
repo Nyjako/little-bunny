@@ -225,6 +225,27 @@ inkbunny_result_t inkbunny_parse_submission(const cJSON *json, inkbunny_submissi
     parse_content_rating_array(cJSON_GetObjectItemCaseSensitive(json, "ratings"), &out->content_ratings);
     parse_keyword_array(cJSON_GetObjectItemCaseSensitive(json, "keywords"), &out->keywords);
     parse_file_array(cJSON_GetObjectItemCaseSensitive(json, "files"), &out->files);
+    /* api_search.php (unlike api_submissions.php) puts the file fields
+     * directly on the submission object instead of nesting them in a
+     * "files" array -- confirmed against the live API, 2026-11-05. Without
+     * this, every post synced via a saved search (sync_inkbunny_search)
+     * got files.count == 0, so file_url/file_ext ended up NULL in the DB
+     * until PostDetailScreen's own live per-submission refetch patched it
+     * up later -- the detail view showed nothing at all until that extra
+     * round trip finished, which read as "Inkbunny images take forever to
+     * load." parse_file() already defaults file_id/md5/full_width/
+     * full_height to 0/NULL when absent, which matches this endpoint's own
+     * documented limitation (it omits dimensions, unlike the single/batch
+     * submission endpoints) -- only url_full/url_screen/url_preview/
+     * file_name/mimetype are expected to come through here. */
+    if (out->files.count == 0 && bunny_json_get_string_or(json, "file_url_full", NULL)) {
+        inkbunny_file_t *synthesized = calloc(1, sizeof(inkbunny_file_t));
+        if (synthesized) {
+            parse_file(json, synthesized);
+            out->files.items = synthesized;
+            out->files.count = 1;
+        }
+    }
     parse_pool_array(cJSON_GetObjectItemCaseSensitive(json, "pools"), &out->pools);
 
     out->thumbnail_url = dup_or_null(bunny_json_get_string_or(json, "thumbnail_url_large_noncustom", NULL));
