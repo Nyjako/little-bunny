@@ -18,7 +18,7 @@ void main() {
   test('enable then verify accepts the correct secret and rejects a wrong one', () async {
     final service = AppLockService(FakeSecretStore());
 
-    await service.enable('1234');
+    await service.enable('1234', mode: AppLockMode.password);
 
     expect(await service.isEnabled(), isTrue);
     expect(await service.verify('1234'), isTrue);
@@ -27,7 +27,7 @@ void main() {
 
   test('disable clears both the flag and the stored secret', () async {
     final service = AppLockService(FakeSecretStore());
-    await service.enable('1234');
+    await service.enable('1234', mode: AppLockMode.password);
 
     await service.disable();
 
@@ -39,5 +39,40 @@ void main() {
     final service = AppLockService(FakeSecretStore());
 
     expect(await service.verify('anything'), isFalse);
+  });
+
+  test('getMode/getPinLength default to password/4 before anything is enabled', () async {
+    final service = AppLockService(FakeSecretStore());
+
+    expect(await service.getMode(), AppLockMode.password);
+    expect(await service.getPinLength(), 4);
+  });
+
+  test('enable with pin mode persists mode and pin length', () async {
+    final service = AppLockService(FakeSecretStore());
+
+    await service.enable('135790', mode: AppLockMode.pin, pinLength: 6);
+
+    expect(await service.getMode(), AppLockMode.pin);
+    expect(await service.getPinLength(), 6);
+  });
+
+  test('enable with password mode leaves pin length at its default', () async {
+    final service = AppLockService(FakeSecretStore());
+
+    await service.enable('hunter2', mode: AppLockMode.password);
+
+    expect(await service.getMode(), AppLockMode.password);
+    expect(await service.getPinLength(), 4);
+  });
+
+  test('disable resets mode and pin length back to defaults', () async {
+    final service = AppLockService(FakeSecretStore());
+    await service.enable('1234', mode: AppLockMode.pin, pinLength: 5);
+
+    await service.disable();
+
+    expect(await service.getMode(), AppLockMode.password);
+    expect(await service.getPinLength(), 4);
   });
 }

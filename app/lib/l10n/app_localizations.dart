@@ -1141,7 +1141,7 @@ abstract class AppLocalizations {
   /// No description provided for @lockScreenPinLabel.
   ///
   /// In en, this message translates to:
-  /// **'PIN/password'**
+  /// **'Password'**
   String get lockScreenPinLabel;
 
   /// No description provided for @lockScreenUnlock.
@@ -1159,8 +1159,14 @@ abstract class AppLocalizations {
   /// No description provided for @lockScreenIncorrectPin.
   ///
   /// In en, this message translates to:
-  /// **'Incorrect PIN/password'**
+  /// **'Incorrect PIN or password'**
   String get lockScreenIncorrectPin;
+
+  /// No description provided for @lockScreenEnterPinHeading.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter PIN'**
+  String get lockScreenEnterPinHeading;
 
   /// No description provided for @lockSetupScreenTitle.
   ///
@@ -1174,11 +1180,35 @@ abstract class AppLocalizations {
   /// **'Set a PIN or password to lock this app on startup.'**
   String get lockSetupDescription;
 
+  /// No description provided for @lockSetupModePin.
+  ///
+  /// In en, this message translates to:
+  /// **'PIN'**
+  String get lockSetupModePin;
+
+  /// No description provided for @lockSetupModePassword.
+  ///
+  /// In en, this message translates to:
+  /// **'Password'**
+  String get lockSetupModePassword;
+
+  /// No description provided for @lockSetupPinLengthLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'PIN length'**
+  String get lockSetupPinLengthLabel;
+
   /// No description provided for @lockSetupNewPinLabel.
   ///
   /// In en, this message translates to:
-  /// **'New PIN/password'**
+  /// **'New password'**
   String get lockSetupNewPinLabel;
+
+  /// No description provided for @lockSetupNewPinHeading.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter new PIN'**
+  String get lockSetupNewPinHeading;
 
   /// No description provided for @lockSetupConfirmLabel.
   ///
@@ -1207,8 +1237,14 @@ abstract class AppLocalizations {
   /// No description provided for @lockSetupCurrentPinLabel.
   ///
   /// In en, this message translates to:
-  /// **'Enter current PIN/password to disable'**
+  /// **'Enter current password to disable'**
   String get lockSetupCurrentPinLabel;
+
+  /// No description provided for @lockSetupCurrentPinHeading.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter current PIN to disable'**
+  String get lockSetupCurrentPinHeading;
 
   /// No description provided for @lockSetupDisableButton.
   ///
