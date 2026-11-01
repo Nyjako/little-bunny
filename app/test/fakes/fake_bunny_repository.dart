@@ -619,9 +619,18 @@ class FakeBunnyRepository implements BunnyRepository {
     queueCommentCalls.add((postId, body, anonymous));
   }
 
+  /// Overrides [processQueue]'s default behavior when set -- lets a test
+  /// gate/delay a drain (e.g. via a `Completer`) to prove a caller doesn't
+  /// block on it, without needing to touch [processQueueCallCount]/
+  /// [processQueueResult] bookkeeping itself (still does so, see below).
+  Future<BunnyQueueStats> Function()? processQueueImpl;
+
   @override
   Future<BunnyQueueStats> processQueue() async {
     processQueueCallCount++;
+    if (processQueueImpl != null) {
+      return processQueueImpl!();
+    }
     return processQueueResult;
   }
 

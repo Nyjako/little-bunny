@@ -114,16 +114,64 @@ void main() {
     expect(notifier.summaryCalls, [(3, 0, 0)]);
   });
 
-  test('auto-favorite drains the action queue once per item, not once per batch', () async {
+  test('auto-favorite drains the action queue once via the final flush, for a batch under the sync threshold', () async {
     SharedPreferences.setMockInitialValues({'download_destination_folder': destinationDir.path, 'auto_favorite_on_download': true});
     final service = buildService(client: MockClient((_) async => http.Response.bytes([1, 2, 3], 200)));
-    final posts = [_post(id: 1), _post(id: 2)];
+    // Fewer than the throttle threshold -- exercises the "final flush covers
+    // a batch that never hit the threshold" path.
+    final posts = List.generate(9, (i) => _post(id: i + 1));
 
     service.enqueueAll(posts, repository);
     await waitUntilIdle(service);
 
-    expect(repository.favoriteAddCalls, [1, 2]);
-    expect(repository.processQueueCallCount, 2);
+    expect(repository.favoriteAddCalls, posts.map((p) => p.id).toList());
+    expect(repository.processQueueCallCount, 1);
+  });
+
+  test('a batch larger than the sync threshold does not drain the action queue once per item', () async {
+    SharedPreferences.setMockInitialValues({'download_destination_folder': destinationDir.path, 'auto_favorite_on_download': true});
+    final service = buildService(client: MockClient((_) async => http.Response.bytes([1, 2, 3], 200)));
+    final posts = List.generate(25, (i) => _post(id: i + 1));
+
+    service.enqueueAll(posts, repository);
+    await waitUntilIdle(service);
+
+    expect(repository.favoriteAddCalls, hasLength(25));
+    // Far fewer than one-per-item (25) -- the exact count depends on the
+    // throttle threshold, deliberately not hardcoded here so this test isn't
+    // coupled to that literal constant.
+    expect(repository.processQueueCallCount, greaterThan(0));
+    expect(repository.processQueueCallCount, lessThan(10));
+  });
+
+  test('auto-favorite off never drains the action queue at all', () async {
+    SharedPreferences.setMockInitialValues({'download_destination_folder': destinationDir.path});
+    final service = buildService(client: MockClient((_) async => http.Response.bytes([1, 2, 3], 200)));
+
+    service.enqueueAll(List.generate(12, (i) => _post(id: i + 1)), repository);
+    await waitUntilIdle(service);
+
+    expect(repository.processQueueCallCount, 0);
+  });
+
+  test('a slow action-queue drain does not block the next item\'s download', () async {
+    SharedPreferences.setMockInitialValues({'download_destination_folder': destinationDir.path, 'auto_favorite_on_download': true});
+    final drainGate = Completer<void>();
+    repository.processQueueImpl = () async {
+      await drainGate.future;
+      return repository.processQueueResult;
+    };
+    final service = buildService(client: MockClient((_) async => http.Response.bytes([1, 2, 3], 200)));
+
+    service.enqueue(_post(id: 1), repository);
+    // The download itself (file write) completes independent of the gated
+    // final-flush drain -- proving the drain isn't on the download's own
+    // critical path. If it were, this would hang until drainGate completes.
+    while (!await File('${destinationDir.path}/someartist/1.png').exists()) {
+      await Future<void>.delayed(const Duration(milliseconds: 1));
+    }
+    drainGate.complete();
+    await waitUntilIdle(service);
   });
 
   test('enqueueing more items mid-flight extends the total without losing progress', () async {
