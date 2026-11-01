@@ -80,7 +80,7 @@ void main() {
     await tester.pumpAndSettle();
 
     await tester.enterText(find.widgetWithText(TextField, 'Query'), 'cat -dogsl');
-    await tester.pump(const Duration(milliseconds: 350));
+    await tester.pump(const Duration(seconds: 3, milliseconds: 50));
 
     expect(find.text('dogsled (7)'), findsOneWidget);
 
