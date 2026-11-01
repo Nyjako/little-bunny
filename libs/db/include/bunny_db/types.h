@@ -89,6 +89,24 @@ typedef struct
     size_t count;
 } bunny_db_search_list_t;
 
+/* Bits for bunny_db_search_list_posts' rating_mask/media_mask params (M28).
+ * "UNKNOWN" covers a rating string that doesn't match any recognized
+ * e621/Inkbunny pattern -- there's no UI control for it, callers should
+ * always OR it into whatever mask they build so an unrecognized rating is
+ * never silently hidden by a filter the user never actually toggled. */
+#define BUNNY_DB_RATING_MASK_SAFE 1
+#define BUNNY_DB_RATING_MASK_QUESTIONABLE 2
+#define BUNNY_DB_RATING_MASK_EXPLICIT 4
+#define BUNNY_DB_RATING_MASK_UNKNOWN 8
+#define BUNNY_DB_RATING_MASK_ALL 15
+
+/* webm/mp4 both bucket as "video" -- see BUNNY_DB_MEDIA_MASK_CASE's own doc
+ * comment in posts.c for why they can't be split further. */
+#define BUNNY_DB_MEDIA_MASK_IMAGE 1
+#define BUNNY_DB_MEDIA_MASK_VIDEO 2
+#define BUNNY_DB_MEDIA_MASK_GIF 4
+#define BUNNY_DB_MEDIA_MASK_ALL 7
+
 typedef struct
 {
     int64_t id; /* local db id, stable across syncs */

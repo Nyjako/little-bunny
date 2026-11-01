@@ -18,6 +18,36 @@ GOBLIN_DYN_ARRAY_DECL(bunny_db_int64, int64_t)
  * than matching e621/Inkbunny's own limits. */
 #define BUNNY_DB_SEARCH_POSTS_PAGE_SIZE 200
 
+/* Per-row rating/media-type bucket, bitwise-ANDed against a caller-supplied
+ * mask (M28) -- see the BUNNY_DB_RATING_MASK_ and BUNNY_DB_MEDIA_MASK_
+ * constants in db.h for the bit meanings. Mirrors app/lib/widgets/rating_badge.dart's own per-site
+ * bucketing exactly (explicit `p.site =` guards, not just hoping e621's
+ * single-char ratings and Inkbunny's free-text rating_name never collide) --
+ * keep the two in sync if either changes. Always ends in an ELSE so this can
+ * never evaluate to SQL NULL (NULL & mask is NULL, which WHERE treats as
+ * excluding the row -- not what an unrecognized rating/extension should do).
+ * Touches only WHERE-clause inputs (p.rating/p.file_ext), never anything the
+ * ORDER BY or the sr.post_sort_key index depends on -- see this file's own
+ * big comment on bunny_db_search_list_posts for why that distinction matters
+ * for this query's performance. */
+#define BUNNY_DB_RATING_MASK_CASE                                                                                                                          \
+    "(CASE WHEN p.site = 'e621' AND p.rating = 's' THEN 1 "                                                                                                \
+    "WHEN p.site = 'e621' AND p.rating = 'q' THEN 2 "                                                                                                      \
+    "WHEN p.site = 'e621' AND p.rating = 'e' THEN 4 "                                                                                                      \
+    "WHEN p.site = 'inkbunny' AND (LOWER(p.rating) LIKE '%general%' OR LOWER(p.rating) LIKE '%safe%') THEN 1 "                                             \
+    "WHEN p.site = 'inkbunny' AND (LOWER(p.rating) LIKE '%mature%' OR LOWER(p.rating) LIKE '%moderate%' OR LOWER(p.rating) LIKE '%questionable%') THEN 2 " \
+    "WHEN p.site = 'inkbunny' AND (LOWER(p.rating) LIKE '%explicit%' OR LOWER(p.rating) LIKE '%adult%') THEN 4 "                                           \
+    "ELSE 8 END)"
+
+/* webm/mp4 can't be reliably split into "video" vs. a silent gif-style loop
+ * without downloading and probing the file (neither e621's nor Inkbunny's
+ * API exposes a duration/has-audio field) -- both bucket as "video" here,
+ * matching app/lib/util/media_type.dart's own isVideoExt/isGifExt exactly. A
+ * NULL file_ext (e.g. a not-yet-refreshed post) falls into "image" via the
+ * ELSE, same "don't hide things by default" reasoning as the rating case's
+ * unknown bucket. */
+#define BUNNY_DB_MEDIA_MASK_CASE "(CASE WHEN LOWER(p.file_ext) IN ('webm', 'mp4') THEN 2 WHEN LOWER(p.file_ext) = 'gif' THEN 4 ELSE 1 END)"
+
 bunny_db_result_t bunny_db_post_upsert(bunny_db_t *db, const bunny_db_post_upsert_t *post, int64_t *out_id)
 {
     if (!db || !post) {
@@ -489,7 +519,7 @@ bunny_db_result_t bunny_db_search_has_result(bunny_db_t *db, int64_t search_id, 
     return (rc == SQLITE_ROW || rc == SQLITE_DONE) ? BUNNY_DB_OK : bunny_db_sqlite_rc_to_result(rc);
 }
 
-bunny_db_result_t bunny_db_search_list_posts(bunny_db_t *db, int64_t search_id, bool unseen_only, bool apply_blacklist, int page, bunny_db_post_list_t *out_list)
+bunny_db_result_t bunny_db_search_list_posts(bunny_db_t *db, int64_t search_id, bool unseen_only, bool apply_blacklist, int rating_mask, int media_mask, int page, bunny_db_post_list_t *out_list)
 {
     if (!db || !out_list || page < 1) {
         return BUNNY_DB_ERR_INVALID_ARG;
@@ -517,22 +547,34 @@ bunny_db_result_t bunny_db_search_list_posts(bunny_db_t *db, int64_t search_id, 
      * for a favorites search (see bunny_core_is_favorites_query), which is
      * meant to show everything favorited, not a filtered subset. Matching
      * on t.site rather than joining the searches table means this works
-     * without knowing this search's own site. */
+     * without knowing this search's own site.
+     *
+     * The two mask clauses (M28) are always present in all four variants,
+     * unlike unseen_only/apply_blacklist's own all-or-nothing branching --
+     * BUNNY_DB_RATING_MASK_ALL/BUNNY_DB_MEDIA_MASK_ALL (passed when the
+     * caller wants no filtering) make them pass every row for free rather
+     * than needing yet more static SQL variants; see the macros' own doc
+     * comments for why this can't regress the index usage this comment is
+     * about. */
     const char *sql_seen_filtered = "SELECT " BUNNY_DB_POST_SELECT_COLUMNS BUNNY_DB_POST_SELECT_FROM_JOIN "JOIN search_results sr ON sr.post_id = p.id "
                                     "WHERE sr.search_id = ? "
                                     "AND NOT EXISTS (SELECT 1 FROM post_tags pt JOIN tags t ON t.id = pt.tag_id "
                                     "JOIN blacklist_tags bl ON bl.site = t.site AND bl.tag = t.name WHERE pt.post_id = p.id) "
+                                    "AND " BUNNY_DB_RATING_MASK_CASE " & ? != 0 AND " BUNNY_DB_MEDIA_MASK_CASE " & ? != 0 "
                                     "ORDER BY sr.post_sort_key DESC LIMIT ? OFFSET ?;";
     const char *sql_seen_unfiltered = "SELECT " BUNNY_DB_POST_SELECT_COLUMNS BUNNY_DB_POST_SELECT_FROM_JOIN "JOIN search_results sr ON sr.post_id = p.id "
                                       "WHERE sr.search_id = ? "
+                                      "AND " BUNNY_DB_RATING_MASK_CASE " & ? != 0 AND " BUNNY_DB_MEDIA_MASK_CASE " & ? != 0 "
                                       "ORDER BY sr.post_sort_key DESC LIMIT ? OFFSET ?;";
     const char *sql_unseen_filtered = "SELECT " BUNNY_DB_POST_SELECT_COLUMNS BUNNY_DB_POST_SELECT_FROM_JOIN "JOIN search_results sr ON sr.post_id = p.id "
                                       "WHERE sr.search_id = ? AND seen.post_id IS NULL "
                                       "AND NOT EXISTS (SELECT 1 FROM post_tags pt JOIN tags t ON t.id = pt.tag_id "
                                       "JOIN blacklist_tags bl ON bl.site = t.site AND bl.tag = t.name WHERE pt.post_id = p.id) "
+                                      "AND " BUNNY_DB_RATING_MASK_CASE " & ? != 0 AND " BUNNY_DB_MEDIA_MASK_CASE " & ? != 0 "
                                       "ORDER BY sr.post_sort_key DESC LIMIT ? OFFSET ?;";
     const char *sql_unseen_unfiltered = "SELECT " BUNNY_DB_POST_SELECT_COLUMNS BUNNY_DB_POST_SELECT_FROM_JOIN "JOIN search_results sr ON sr.post_id = p.id "
                                         "WHERE sr.search_id = ? AND seen.post_id IS NULL "
+                                        "AND " BUNNY_DB_RATING_MASK_CASE " & ? != 0 AND " BUNNY_DB_MEDIA_MASK_CASE " & ? != 0 "
                                         "ORDER BY sr.post_sort_key DESC LIMIT ? OFFSET ?;";
 
     const char *sql = unseen_only ? (apply_blacklist ? sql_unseen_filtered : sql_unseen_unfiltered) : (apply_blacklist ? sql_seen_filtered : sql_seen_unfiltered);
@@ -541,8 +583,10 @@ bunny_db_result_t bunny_db_search_list_posts(bunny_db_t *db, int64_t search_id, 
         return BUNNY_DB_ERR_QUERY_FAILED;
     }
     sqlite3_bind_int64(stmt, 1, search_id);
-    sqlite3_bind_int(stmt, 2, BUNNY_DB_SEARCH_POSTS_PAGE_SIZE);
-    sqlite3_bind_int64(stmt, 3, (int64_t)(page - 1) * BUNNY_DB_SEARCH_POSTS_PAGE_SIZE);
+    sqlite3_bind_int(stmt, 2, rating_mask);
+    sqlite3_bind_int(stmt, 3, media_mask);
+    sqlite3_bind_int(stmt, 4, BUNNY_DB_SEARCH_POSTS_PAGE_SIZE);
+    sqlite3_bind_int64(stmt, 5, (int64_t)(page - 1) * BUNNY_DB_SEARCH_POSTS_PAGE_SIZE);
 
     bunny_db_post_array arr;
     bunny_db_post_array_init(&arr);

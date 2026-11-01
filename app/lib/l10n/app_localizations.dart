@@ -760,6 +760,60 @@ abstract class AppLocalizations {
   /// **'Show unseen only'**
   String get postGridUnseenOnlyTooltip;
 
+  /// No description provided for @postGridFilterTooltip.
+  ///
+  /// In en, this message translates to:
+  /// **'Filter by rating/media type'**
+  String get postGridFilterTooltip;
+
+  /// No description provided for @postGridFilterRatingLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Rating'**
+  String get postGridFilterRatingLabel;
+
+  /// No description provided for @postGridFilterRatingSafe.
+  ///
+  /// In en, this message translates to:
+  /// **'Safe'**
+  String get postGridFilterRatingSafe;
+
+  /// No description provided for @postGridFilterRatingQuestionable.
+  ///
+  /// In en, this message translates to:
+  /// **'Questionable'**
+  String get postGridFilterRatingQuestionable;
+
+  /// No description provided for @postGridFilterRatingExplicit.
+  ///
+  /// In en, this message translates to:
+  /// **'Explicit'**
+  String get postGridFilterRatingExplicit;
+
+  /// No description provided for @postGridFilterMediaLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Media type'**
+  String get postGridFilterMediaLabel;
+
+  /// No description provided for @postGridFilterMediaImage.
+  ///
+  /// In en, this message translates to:
+  /// **'Image'**
+  String get postGridFilterMediaImage;
+
+  /// No description provided for @postGridFilterMediaVideo.
+  ///
+  /// In en, this message translates to:
+  /// **'Video'**
+  String get postGridFilterMediaVideo;
+
+  /// No description provided for @postGridFilterMediaGif.
+  ///
+  /// In en, this message translates to:
+  /// **'GIF'**
+  String get postGridFilterMediaGif;
+
   /// No description provided for @postGridRefreshTooltip.
   ///
   /// In en, this message translates to:

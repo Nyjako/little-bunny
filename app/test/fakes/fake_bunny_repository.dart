@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:little_bunny/repository/bunny_models.dart';
 import 'package:little_bunny/repository/bunny_repository.dart';
+import 'package:little_bunny/util/media_type.dart';
 
 /// In-memory fake for widget tests that exercise account login/verify/list/
 /// remove and search/post browsing -- fakes the dependency, not the business
@@ -229,14 +230,60 @@ class FakeBunnyRepository implements BunnyRepository {
   /// of posts to hit a realistic page size.
   int searchPostsPageSize = 1000000;
 
-  /// Each entry is the `(searchId, unseenOnly, page)` passed to [listSearchPosts].
-  final List<(int, bool, int)> listSearchPostsCalls = [];
+  /// Each entry is the `(searchId, unseenOnly, ratingMask, mediaMask, page)`
+  /// passed to [listSearchPosts].
+  final List<(int, bool, int, int, int)> listSearchPostsCalls = [];
+
+  /// Mirrors [ratingBadgeFor]'s own per-site bucketing (rating_badge.dart) --
+  /// an unrecognized rating string always lands in [kRatingMaskUnknown].
+  static int _ratingMaskFor(BunnyPost post) {
+    final rating = post.rating;
+    if (rating == null || rating.isEmpty) {
+      return kRatingMaskUnknown;
+    }
+    if (post.site == BunnySite.e621) {
+      switch (rating.toLowerCase()) {
+        case 's':
+          return kRatingMaskSafe;
+        case 'q':
+          return kRatingMaskQuestionable;
+        case 'e':
+          return kRatingMaskExplicit;
+        default:
+          return kRatingMaskUnknown;
+      }
+    }
+    final normalized = rating.toLowerCase();
+    if (normalized.contains('general') || normalized.contains('safe')) {
+      return kRatingMaskSafe;
+    }
+    if (normalized.contains('mature') || normalized.contains('moderate') || normalized.contains('questionable')) {
+      return kRatingMaskQuestionable;
+    }
+    if (normalized.contains('explicit') || normalized.contains('adult')) {
+      return kRatingMaskExplicit;
+    }
+    return kRatingMaskUnknown;
+  }
+
+  /// Mirrors [isVideoExt]/[isGifExt] (util/media_type.dart) -- anything else
+  /// (including a null extension) buckets as an image.
+  static int _mediaMaskFor(BunnyPost post) {
+    if (isVideoExt(post.fileExt)) {
+      return kMediaMaskVideo;
+    }
+    if (isGifExt(post.fileExt)) {
+      return kMediaMaskGif;
+    }
+    return kMediaMaskImage;
+  }
 
   @override
-  Future<List<BunnyPost>> listSearchPosts(int searchId, {bool unseenOnly = false, int page = 1}) async {
-    listSearchPostsCalls.add((searchId, unseenOnly, page));
+  Future<List<BunnyPost>> listSearchPosts(int searchId, {bool unseenOnly = false, int ratingMask = kRatingMaskAll, int mediaMask = kMediaMaskAll, int page = 1}) async {
+    listSearchPostsCalls.add((searchId, unseenOnly, ratingMask, mediaMask, page));
     final posts = postsBySearchId[searchId] ?? const [];
-    final filtered = unseenOnly ? posts.where((post) => !post.isSeen).toList() : List.of(posts);
+    var filtered = unseenOnly ? posts.where((post) => !post.isSeen).toList() : List.of(posts);
+    filtered = filtered.where((post) => (_ratingMaskFor(post) & ratingMask) != 0 && (_mediaMaskFor(post) & mediaMask) != 0).toList();
     final start = (page - 1) * searchPostsPageSize;
     if (start >= filtered.length) {
       return [];

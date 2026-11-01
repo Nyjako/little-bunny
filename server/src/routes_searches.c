@@ -162,8 +162,20 @@ static int handle_get_search_posts(struct mg_connection *conn, server_context_t 
         return server_json_respond_error(conn, BUNNY_CORE_ERR_INVALID_ARG);
     }
 
+    char rating_mask_value[16];
+    int64_t rating_mask = BUNNY_DB_RATING_MASK_ALL;
+    if (query_string && mg_get_var(query_string, strlen(query_string), "rating_mask", rating_mask_value, sizeof(rating_mask_value)) > 0 && !server_route_parse_id(rating_mask_value, &rating_mask)) {
+        return server_json_respond_error(conn, BUNNY_CORE_ERR_INVALID_ARG);
+    }
+
+    char media_mask_value[16];
+    int64_t media_mask = BUNNY_DB_MEDIA_MASK_ALL;
+    if (query_string && mg_get_var(query_string, strlen(query_string), "media_mask", media_mask_value, sizeof(media_mask_value)) > 0 && !server_route_parse_id(media_mask_value, &media_mask)) {
+        return server_json_respond_error(conn, BUNNY_CORE_ERR_INVALID_ARG);
+    }
+
     bunny_db_post_list_t list;
-    bunny_core_result_t result = bunny_core_search_list_posts(ctx->core, search_id, unseen_only, (int)page, &list);
+    bunny_core_result_t result = bunny_core_search_list_posts(ctx->core, search_id, unseen_only, (int)rating_mask, (int)media_mask, (int)page, &list);
 
     if (result != BUNNY_CORE_OK) {
         return server_json_respond_error(conn, result);

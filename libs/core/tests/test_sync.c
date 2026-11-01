@@ -160,7 +160,7 @@ void test_sync_e621_search_upserts_post(void)
     TEST_ASSERT_EQUAL(1, stats.posts_upserted);
 
     bunny_db_post_list_t posts;
-    result = bunny_core_search_list_posts(g_core, search_id, false, 1, &posts);
+    result = bunny_core_search_list_posts(g_core, search_id, false, BUNNY_DB_RATING_MASK_ALL, BUNNY_DB_MEDIA_MASK_ALL, 1, &posts);
     TEST_ASSERT_EQUAL(BUNNY_CORE_OK, result);
     TEST_ASSERT_EQUAL(1, (int)posts.count);
     TEST_ASSERT_EQUAL(1, posts.items[0].external_id);
@@ -171,6 +171,41 @@ void test_sync_e621_search_upserts_post(void)
     TEST_ASSERT_EQUAL(1, posts.items[0].score_up);
     TEST_ASSERT_EQUAL(0, posts.items[0].score_down);
     bunny_db_post_list_free(&posts);
+
+    free(fixture);
+}
+
+void test_core_search_list_posts_forwards_rating_and_media_masks_to_the_db_layer(void)
+{
+    /* Not a DB-layer masking-logic test (that's covered in libs/db/tests/
+     * test_db.c) -- this only proves bunny_core_search_list_posts actually
+     * forwards rating_mask/media_mask through instead of dropping them, by
+     * asking for a bucket the fixture's single "s"-rated post can't match. */
+    char *fixture = read_fixture("e621_posts_search.json");
+    TEST_ASSERT_NOT_NULL(fixture);
+    g_e621_state.bodies[0] = fixture;
+    g_e621_state.body_count = 1;
+
+    int64_t search_id = 0;
+    bunny_core_result_t result = bunny_core_search_create(g_core, BUNNY_DB_SITE_E621, "wolves", "wolf", 24, NULL, &search_id);
+    TEST_ASSERT_EQUAL(BUNNY_CORE_OK, result);
+
+    bunny_core_sync_stats_t stats;
+    result = bunny_core_sync_due_searches(g_core, &stats);
+    TEST_ASSERT_EQUAL(BUNNY_CORE_OK, result);
+    TEST_ASSERT_EQUAL(1, stats.posts_upserted);
+
+    bunny_db_post_list_t excluded;
+    result = bunny_core_search_list_posts(g_core, search_id, false, BUNNY_DB_RATING_MASK_EXPLICIT, BUNNY_DB_MEDIA_MASK_ALL, 1, &excluded);
+    TEST_ASSERT_EQUAL(BUNNY_CORE_OK, result);
+    TEST_ASSERT_EQUAL(0, (int)excluded.count);
+    bunny_db_post_list_free(&excluded);
+
+    bunny_db_post_list_t included;
+    result = bunny_core_search_list_posts(g_core, search_id, false, BUNNY_DB_RATING_MASK_ALL, BUNNY_DB_MEDIA_MASK_ALL, 1, &included);
+    TEST_ASSERT_EQUAL(BUNNY_CORE_OK, result);
+    TEST_ASSERT_EQUAL(1, (int)included.count);
+    bunny_db_post_list_free(&included);
 
     free(fixture);
 }
@@ -209,7 +244,7 @@ void test_sync_e621_search_marks_a_favorited_post_locally(void)
     TEST_ASSERT_EQUAL(2, stats.posts_upserted);
 
     bunny_db_post_list_t posts;
-    result = bunny_core_search_list_posts(g_core, search_id, false, 1, &posts);
+    result = bunny_core_search_list_posts(g_core, search_id, false, BUNNY_DB_RATING_MASK_ALL, BUNNY_DB_MEDIA_MASK_ALL, 1, &posts);
     TEST_ASSERT_EQUAL(BUNNY_CORE_OK, result);
     TEST_ASSERT_EQUAL(2, (int)posts.count);
     for (size_t i = 0; i < posts.count; i++) {
@@ -238,7 +273,7 @@ void test_sync_e621_search_upserts_post_tag_categories(void)
     TEST_ASSERT_EQUAL(BUNNY_CORE_OK, result);
 
     bunny_db_post_list_t posts;
-    result = bunny_core_search_list_posts(g_core, search_id, false, 1, &posts);
+    result = bunny_core_search_list_posts(g_core, search_id, false, BUNNY_DB_RATING_MASK_ALL, BUNNY_DB_MEDIA_MASK_ALL, 1, &posts);
     TEST_ASSERT_EQUAL(BUNNY_CORE_OK, result);
     TEST_ASSERT_EQUAL(1, (int)posts.count);
     int64_t post_id = posts.items[0].id;
@@ -278,7 +313,7 @@ void test_sync_e621_search_upserts_post_sources(void)
     TEST_ASSERT_EQUAL(BUNNY_CORE_OK, result);
 
     bunny_db_post_list_t posts;
-    result = bunny_core_search_list_posts(g_core, search_id, false, 1, &posts);
+    result = bunny_core_search_list_posts(g_core, search_id, false, BUNNY_DB_RATING_MASK_ALL, BUNNY_DB_MEDIA_MASK_ALL, 1, &posts);
     TEST_ASSERT_EQUAL(BUNNY_CORE_OK, result);
     TEST_ASSERT_EQUAL(1, (int)posts.count);
     int64_t post_id = posts.items[0].id;
@@ -310,7 +345,7 @@ void test_sync_e621_search_upserts_post_relationships_and_pools(void)
     TEST_ASSERT_EQUAL(BUNNY_CORE_OK, result);
 
     bunny_db_post_list_t posts;
-    result = bunny_core_search_list_posts(g_core, search_id, false, 1, &posts);
+    result = bunny_core_search_list_posts(g_core, search_id, false, BUNNY_DB_RATING_MASK_ALL, BUNNY_DB_MEDIA_MASK_ALL, 1, &posts);
     TEST_ASSERT_EQUAL(BUNNY_CORE_OK, result);
     TEST_ASSERT_EQUAL(1, (int)posts.count);
     int64_t post_id = posts.items[0].id;
@@ -526,7 +561,7 @@ void test_syncing_a_pool_search_orders_posts_by_e621s_own_pool_order(void)
     TEST_ASSERT_EQUAL(3, stats.posts_upserted);
 
     bunny_db_post_list_t posts;
-    result = bunny_core_search_list_posts(g_core, search_id, false, 1, &posts);
+    result = bunny_core_search_list_posts(g_core, search_id, false, BUNNY_DB_RATING_MASK_ALL, BUNNY_DB_MEDIA_MASK_ALL, 1, &posts);
     TEST_ASSERT_EQUAL(BUNNY_CORE_OK, result);
     TEST_ASSERT_EQUAL(3, (int)posts.count);
     TEST_ASSERT_EQUAL(1, posts.items[0].external_id);
@@ -609,7 +644,7 @@ void test_search_list_posts_favorites_search_is_unaffected_by_the_tag_blacklist(
     bunny_core_blacklist_add(g_core, BUNNY_DB_SITE_E621, "one");
 
     bunny_db_post_list_t posts;
-    result = bunny_core_search_list_posts(g_core, search_id, false, 1, &posts);
+    result = bunny_core_search_list_posts(g_core, search_id, false, BUNNY_DB_RATING_MASK_ALL, BUNNY_DB_MEDIA_MASK_ALL, 1, &posts);
     TEST_ASSERT_EQUAL(BUNNY_CORE_OK, result);
     TEST_ASSERT_EQUAL(1, (int)posts.count);
     bunny_db_post_list_free(&posts);
@@ -817,7 +852,7 @@ void test_sync_e621_search_upserts_post_sample_url(void)
     TEST_ASSERT_EQUAL(BUNNY_CORE_OK, result);
 
     bunny_db_post_list_t posts;
-    result = bunny_core_search_list_posts(g_core, search_id, false, 1, &posts);
+    result = bunny_core_search_list_posts(g_core, search_id, false, BUNNY_DB_RATING_MASK_ALL, BUNNY_DB_MEDIA_MASK_ALL, 1, &posts);
     TEST_ASSERT_EQUAL(BUNNY_CORE_OK, result);
     TEST_ASSERT_EQUAL(1, (int)posts.count);
     TEST_ASSERT_EQUAL_STRING("https://static1.e621.net/data/sample/1.png", posts.items[0].sample_url);
@@ -1088,7 +1123,7 @@ void test_mark_seen_flips_is_seen_on_a_synced_post(void)
     bunny_core_sync_due_searches(g_core, NULL);
 
     bunny_db_post_list_t posts;
-    bunny_core_search_list_posts(g_core, search_id, false, 1, &posts);
+    bunny_core_search_list_posts(g_core, search_id, false, BUNNY_DB_RATING_MASK_ALL, BUNNY_DB_MEDIA_MASK_ALL, 1, &posts);
     TEST_ASSERT_EQUAL(1, (int)posts.count);
     TEST_ASSERT_FALSE(posts.items[0].is_seen);
     int64_t post_id = posts.items[0].id;
@@ -1097,7 +1132,7 @@ void test_mark_seen_flips_is_seen_on_a_synced_post(void)
     bunny_core_result_t result = bunny_core_post_mark_seen(g_core, post_id);
     TEST_ASSERT_EQUAL(BUNNY_CORE_OK, result);
 
-    bunny_core_search_list_posts(g_core, search_id, false, 1, &posts);
+    bunny_core_search_list_posts(g_core, search_id, false, BUNNY_DB_RATING_MASK_ALL, BUNNY_DB_MEDIA_MASK_ALL, 1, &posts);
     TEST_ASSERT_TRUE(posts.items[0].is_seen);
     bunny_db_post_list_free(&posts);
 
@@ -1144,7 +1179,7 @@ void test_sync_inkbunny_search_upserts_post(void)
     TEST_ASSERT_EQUAL(3, (int)g_inkbunny_state.next_index);
 
     bunny_db_post_list_t posts;
-    result = bunny_core_search_list_posts(g_core, search_id, false, 1, &posts);
+    result = bunny_core_search_list_posts(g_core, search_id, false, BUNNY_DB_RATING_MASK_ALL, BUNNY_DB_MEDIA_MASK_ALL, 1, &posts);
     TEST_ASSERT_EQUAL(BUNNY_CORE_OK, result);
     TEST_ASSERT_EQUAL(1, (int)posts.count);
     TEST_ASSERT_EQUAL(3955918, posts.items[0].external_id);
@@ -1269,7 +1304,7 @@ void test_sync_inkbunny_search_marks_a_favorited_submission_locally(void)
     TEST_ASSERT_EQUAL(1, stats.posts_upserted);
 
     bunny_db_post_list_t posts;
-    result = bunny_core_search_list_posts(g_core, search_id, false, 1, &posts);
+    result = bunny_core_search_list_posts(g_core, search_id, false, BUNNY_DB_RATING_MASK_ALL, BUNNY_DB_MEDIA_MASK_ALL, 1, &posts);
     TEST_ASSERT_EQUAL(BUNNY_CORE_OK, result);
     TEST_ASSERT_EQUAL(1, (int)posts.count);
     TEST_ASSERT_TRUE(posts.items[0].is_favorited);
@@ -1357,7 +1392,7 @@ void test_sync_inkbunny_search_second_sync_upserts_only_the_new_submission(void)
     TEST_ASSERT_EQUAL(1, stats.posts_upserted);
 
     bunny_db_post_list_t posts;
-    result = bunny_core_search_list_posts(g_core, search_id, false, 1, &posts);
+    result = bunny_core_search_list_posts(g_core, search_id, false, BUNNY_DB_RATING_MASK_ALL, BUNNY_DB_MEDIA_MASK_ALL, 1, &posts);
     TEST_ASSERT_EQUAL(BUNNY_CORE_OK, result);
     TEST_ASSERT_EQUAL(2, (int)posts.count);
     bunny_db_post_list_free(&posts);
@@ -1800,6 +1835,7 @@ int main(void)
 {
     UNITY_BEGIN();
     RUN_TEST(test_sync_e621_search_upserts_post);
+    RUN_TEST(test_core_search_list_posts_forwards_rating_and_media_masks_to_the_db_layer);
     RUN_TEST(test_sync_e621_search_marks_a_favorited_post_locally);
     RUN_TEST(test_sync_e621_search_upserts_post_tag_categories);
     RUN_TEST(test_sync_e621_search_upserts_post_sources);

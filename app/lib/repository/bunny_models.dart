@@ -15,6 +15,26 @@ enum BunnySite {
   };
 }
 
+/// Bits for [BunnyRepository.listSearchPosts]'s ratingMask/mediaMask params
+/// (M28) -- mirrors `BUNNY_DB_RATING_MASK_*`/`BUNNY_DB_MEDIA_MASK_*`
+/// (libs/db/include/bunny_db/types.h). kRatingMaskUnknown covers a rating
+/// string that doesn't match any recognized e621/Inkbunny pattern -- there's
+/// no UI control for it, callers should always OR it into whatever mask they
+/// build so an unrecognized rating is never silently hidden by a filter the
+/// user never actually toggled.
+const int kRatingMaskSafe = 1;
+const int kRatingMaskQuestionable = 2;
+const int kRatingMaskExplicit = 4;
+const int kRatingMaskUnknown = 8;
+const int kRatingMaskAll = 15;
+
+/// webm/mp4 both bucket as "video" -- see BUNNY_DB_MEDIA_MASK_CASE's own doc
+/// comment in posts.c for why they can't be split further.
+const int kMediaMaskImage = 1;
+const int kMediaMaskVideo = 2;
+const int kMediaMaskGif = 4;
+const int kMediaMaskAll = 7;
+
 /// A stored site account, without its secret -- neither implementation of
 /// [BunnyRepository] echoes it back (the server never does, per M5's
 /// `GET /accounts/{site}`, so the FFI implementation deliberately doesn't

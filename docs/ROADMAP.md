@@ -1943,10 +1943,18 @@ this file is the single source of truth for "what's done" across sessions.
 - [ ] **M28 — Search filters, Inkbunny type coverage, and diagnostics (in progress)**
   Backlog from the same round of feedback that produced M27, roughly in the order the
   user asked to tackle them.
-  - [ ] **Rating + media-type filters.** Post-grid filtering by rating (safe/
+  - [x] **Rating + media-type filters.** Post-grid filtering by rating (safe/
     questionable/explicit, color-coded the same as the existing `RatingBadge`) and by
-    media type (image/video/gif). No existing filter infrastructure at all yet --
-    greenfield across the DB query layer, core, FFI, HTTP routes, and `PostGridScreen`.
+    media type (image/video/gif). Implemented as a bitmask threaded through every layer
+    (`bunny_db_search_list_posts` -> `bunny_core_search_list_posts` -> the HTTP route's
+    `rating_mask`/`media_mask` query params -> the FFI binding/isolate wrapper -> both
+    `BunnyRepository` implementations -> `PostGridScreen`'s new filter-chip bottom sheet),
+    avoiding both a combinatorial SQL-variant explosion and new FFI array-marshaling
+    infrastructure. webm/mp4 both bucket as "video" (no duration/audio signal exists in
+    either site's API to split a silent looping webm from a real video without
+    downloading it); a post with an unrecognized rating always stays visible regardless
+    of which rating chips are toggled, via a permanently-set "unknown" bit the UI never
+    exposes a control for.
   - [ ] **Inkbunny submission-type coverage.** `inkbunny_submission_t.submission_type_id`/
     `.type_name` are already parsed by the Inkbunny client but discarded before reaching
     the database -- same shape of gap M27's `file_ext` fix addressed. Needs auditing
