@@ -195,7 +195,6 @@
       "count": {"type": "int"}
     }
   },
-
   "tagBrowseEmptyState": "No posts found for this search.",
   "tagBrowseAddToSearchesTooltip": "Save as a search",
   "tagBrowseAlreadySavedTooltip": "Already saved -- tap to remove",
@@ -402,13 +401,20 @@
 
   "downloadQueueScreenTitle": "Downloads",
   "downloadQueueDownloadingLabel": "Downloading",
-  "downloadQueueQueuedLabel": "Queued",
   "downloadQueueFailedLabel": "Failed",
   "downloadQueueEmptyState": "Nothing here right now.",
   "downloadQueueRetryTooltip": "Retry",
   "downloadQueueRetryAllTooltip": "Retry all",
   "downloadQueueClearFinishedTooltip": "Clear finished",
   "downloadQueueChecksumMismatchReason": "Downloaded, but the checksum didn't match",
+  "downloadQueueQueuedCount": "{count} queued",
+  "@downloadQueueQueuedCount": {
+    "placeholders": {"count": {"type": "int"}}
+  },
+  "downloadQueueDoneCount": "{count} done",
+  "@downloadQueueDoneCount": {
+    "placeholders": {"count": {"type": "int"}}
+  },
 
   "updateAvailableTitle": "Update available ({tagName})",
   "@updateAvailableTitle": {

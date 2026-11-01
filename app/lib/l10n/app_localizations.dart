@@ -1712,12 +1712,6 @@ abstract class AppLocalizations {
   /// **'Downloading'**
   String get downloadQueueDownloadingLabel;
 
-  /// No description provided for @downloadQueueQueuedLabel.
-  ///
-  /// In en, this message translates to:
-  /// **'Queued'**
-  String get downloadQueueQueuedLabel;
-
   /// No description provided for @downloadQueueFailedLabel.
   ///
   /// In en, this message translates to:
@@ -1753,6 +1747,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Downloaded, but the checksum didn\'t match'**
   String get downloadQueueChecksumMismatchReason;
+
+  /// No description provided for @downloadQueueQueuedCount.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} queued'**
+  String downloadQueueQueuedCount(int count);
+
+  /// No description provided for @downloadQueueDoneCount.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} done'**
+  String downloadQueueDoneCount(int count);
 
   /// No description provided for @updateAvailableTitle.
   ///

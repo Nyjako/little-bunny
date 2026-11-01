@@ -899,9 +899,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get downloadQueueDownloadingLabel => 'Downloading';
 
   @override
-  String get downloadQueueQueuedLabel => 'Queued';
-
-  @override
   String get downloadQueueFailedLabel => 'Failed';
 
   @override
@@ -919,6 +916,16 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get downloadQueueChecksumMismatchReason =>
       'Downloaded, but the checksum didn\'t match';
+
+  @override
+  String downloadQueueQueuedCount(int count) {
+    return '$count queued';
+  }
+
+  @override
+  String downloadQueueDoneCount(int count) {
+    return '$count done';
+  }
 
   @override
   String updateAvailableTitle(String tagName) {
