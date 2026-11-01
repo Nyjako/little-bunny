@@ -376,6 +376,33 @@ class AppLocalizationsEn extends AppLocalizations {
   String get postGridUnseenOnlyTooltip => 'Show unseen only';
 
   @override
+  String get postGridFilterTooltip => 'Filter by rating/media type';
+
+  @override
+  String get postGridFilterRatingLabel => 'Rating';
+
+  @override
+  String get postGridFilterRatingSafe => 'Safe';
+
+  @override
+  String get postGridFilterRatingQuestionable => 'Questionable';
+
+  @override
+  String get postGridFilterRatingExplicit => 'Explicit';
+
+  @override
+  String get postGridFilterMediaLabel => 'Media type';
+
+  @override
+  String get postGridFilterMediaImage => 'Image';
+
+  @override
+  String get postGridFilterMediaVideo => 'Video';
+
+  @override
+  String get postGridFilterMediaGif => 'GIF';
+
+  @override
   String get postGridRefreshTooltip => 'Refresh';
 
   @override

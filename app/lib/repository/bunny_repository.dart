@@ -120,6 +120,8 @@ abstract interface class BunnyRepository {
   Future<List<BunnyPost>> listSearchPosts(
     int searchId, {
     bool unseenOnly = false,
+    int ratingMask = kRatingMaskAll,
+    int mediaMask = kMediaMaskAll,
     int page = 1,
   });
 

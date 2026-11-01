@@ -172,7 +172,7 @@ void main() {
     await tester.pumpWidget(wrapWithLocalization(PostGridScreen(search: search, repository: repository, displaySettingsStore: const DisplaySettingsStore(), downloadSettingsStore: const DownloadSettingsStore(), downloadQueueService: _downloadQueueService())));
     await tester.pumpAndSettle();
 
-    expect(repository.listSearchPostsCalls, [(1, false, 1)]);
+    expect(repository.listSearchPostsCalls, [(1, false, kRatingMaskAll, kMediaMaskAll, 1)]);
 
     // A bounded drag (rather than an enormous one) keeps the scroll position
     // at the grid's real bottom without overshooting past it -- same
@@ -180,7 +180,7 @@ void main() {
     await tester.drag(find.byType(GridView), const Offset(0, -5000));
     await tester.pumpAndSettle();
 
-    expect(repository.listSearchPostsCalls, contains((1, false, 2)));
+    expect(repository.listSearchPostsCalls, contains((1, false, kRatingMaskAll, kMediaMaskAll, 2)));
   });
 
   testWidgets('a short/empty page stops further loading (M34)', (WidgetTester tester) async {
@@ -198,7 +198,7 @@ void main() {
 
     // Only ever asked for page 2 once -- an empty page flips _hasMore to
     // false, so further scroll-triggered loads are skipped entirely.
-    expect(repository.listSearchPostsCalls.where((call) => call.$3 == 2), hasLength(1));
+    expect(repository.listSearchPostsCalls.where((call) => call.$5 == 2), hasLength(1));
   });
 
   testWidgets('toggling unseen-only filters out seen posts', (WidgetTester tester) async {
@@ -215,6 +215,46 @@ void main() {
 
     expect(find.byKey(const ValueKey(1)), findsOneWidget);
     expect(find.byKey(const ValueKey(2)), findsNothing);
+  });
+
+  testWidgets('toggling one rating and one media chip off sends the expected non-default mask', (WidgetTester tester) async {
+    final repository = FakeBunnyRepository();
+    repository.postsBySearchId[1] = [_post(id: 1, isSeen: false)];
+
+    await tester.pumpWidget(wrapWithLocalization(PostGridScreen(search: search, repository: repository, displaySettingsStore: const DisplaySettingsStore(), downloadSettingsStore: const DownloadSettingsStore(), downloadQueueService: _downloadQueueService())));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byIcon(Icons.filter_list));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.widgetWithText(FilterChip, 'Explicit'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(FilterChip, 'GIF'));
+    await tester.pumpAndSettle();
+
+    // 15 (all) minus the explicit bit (4) == 11; 7 (all) minus the gif bit (4) == 3.
+    expect(repository.listSearchPostsCalls.last.$3, 11);
+    expect(repository.listSearchPostsCalls.last.$4, 3);
+  });
+
+  testWidgets('toggling every visible rating chip off still sends the unknown bit, never zero', (WidgetTester tester) async {
+    final repository = FakeBunnyRepository();
+    repository.postsBySearchId[1] = [_post(id: 1, isSeen: false)];
+
+    await tester.pumpWidget(wrapWithLocalization(PostGridScreen(search: search, repository: repository, displaySettingsStore: const DisplaySettingsStore(), downloadSettingsStore: const DownloadSettingsStore(), downloadQueueService: _downloadQueueService())));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byIcon(Icons.filter_list));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.widgetWithText(FilterChip, 'Safe'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(FilterChip, 'Questionable'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(FilterChip, 'Explicit'));
+    await tester.pumpAndSettle();
+
+    expect(repository.listSearchPostsCalls.last.$3, kRatingMaskUnknown);
   });
 
   testWidgets('tapping a post opens PostDetailScreen, marking it seen and clearing its marker on return', (WidgetTester tester) async {

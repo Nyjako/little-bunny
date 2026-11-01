@@ -418,8 +418,11 @@ class HttpBunnyRepository implements BunnyRepository {
   }
 
   @override
-  Future<List<BunnyPost>> listSearchPosts(int searchId, {bool unseenOnly = false, int page = 1}) async {
-    final response = await _client.get(_uri('/searches/$searchId/posts', {'unseen_only': unseenOnly.toString(), 'page': '$page'}), headers: _headers);
+  Future<List<BunnyPost>> listSearchPosts(int searchId, {bool unseenOnly = false, int ratingMask = kRatingMaskAll, int mediaMask = kMediaMaskAll, int page = 1}) async {
+    final response = await _client.get(
+      _uri('/searches/$searchId/posts', {'unseen_only': unseenOnly.toString(), 'rating_mask': '$ratingMask', 'media_mask': '$mediaMask', 'page': '$page'}),
+      headers: _headers,
+    );
     if (response.statusCode != 200) {
       _throwError(response);
     }

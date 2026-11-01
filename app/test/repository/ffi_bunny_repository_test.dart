@@ -120,6 +120,13 @@ void main() {
     expect(searches.single.autoFavorite, isFalse);
   });
 
+  test('listSearchPosts is empty for a freshly created search regardless of rating/media mask', () async {
+    final id = await repository.createSearch(BunnySite.e621, 'my search', 'rating:safe', intervalHours: 12);
+
+    expect(await repository.listSearchPosts(id), isEmpty);
+    expect(await repository.listSearchPosts(id, ratingMask: kRatingMaskSafe, mediaMask: kMediaMaskImage), isEmpty);
+  });
+
   test('createSearch with autoFavorite, then updateSearch round-trips (M9.7.2)', () async {
     final id = await repository.createSearch(BunnySite.e621, 'my search', 'rating:safe', autoFavorite: true);
 
