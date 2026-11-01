@@ -89,8 +89,11 @@ bunny_core_result_t bunny_core_search_merge_duplicate(bunny_core_t *core, int64_
 bunny_core_result_t bunny_core_search_list(bunny_core_t *core, bunny_db_search_list_t *out_list);
 /* page is 1-indexed -- see bunny_db_search_list_posts' own doc comment for
  * why this is paginated at all (an unbounded response for a search with
- * thousands of posts routinely timed out client-side). */
-bunny_core_result_t bunny_core_search_list_posts(bunny_core_t *core, int64_t search_id, bool unseen_only, int page, bunny_db_post_list_t *out_list);
+ * thousands of posts routinely timed out client-side). rating_mask/media_mask
+ * are the BUNNY_DB_RATING_MASK_ and BUNNY_DB_MEDIA_MASK_ bitmask constants
+ * (M28) -- forwarded only to the non-pool bunny_db_search_list_posts branch;
+ * a pool search ignores both, same as it already ignores apply_blacklist. */
+bunny_core_result_t bunny_core_search_list_posts(bunny_core_t *core, int64_t search_id, bool unseen_only, int rating_mask, int media_mask, int page, bunny_db_post_list_t *out_list);
 
 /* Pin/unpin a search, toggled directly from the searches list row (M14.1)
  * rather than through the full edit form -- see bunny_db_search_set_pinned. */
