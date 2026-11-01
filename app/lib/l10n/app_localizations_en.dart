@@ -553,7 +553,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get lockScreenBiometricReason => 'Unlock LittleBunny';
 
   @override
-  String get lockScreenPinLabel => 'PIN/password';
+  String get lockScreenPinLabel => 'Password';
 
   @override
   String get lockScreenUnlock => 'Unlock';
@@ -562,7 +562,10 @@ class AppLocalizationsEn extends AppLocalizations {
   String get lockScreenTryFingerprintAgain => 'Try fingerprint again';
 
   @override
-  String get lockScreenIncorrectPin => 'Incorrect PIN/password';
+  String get lockScreenIncorrectPin => 'Incorrect PIN or password';
+
+  @override
+  String get lockScreenEnterPinHeading => 'Enter PIN';
 
   @override
   String get lockSetupScreenTitle => 'App lock';
@@ -572,7 +575,19 @@ class AppLocalizationsEn extends AppLocalizations {
       'Set a PIN or password to lock this app on startup.';
 
   @override
-  String get lockSetupNewPinLabel => 'New PIN/password';
+  String get lockSetupModePin => 'PIN';
+
+  @override
+  String get lockSetupModePassword => 'Password';
+
+  @override
+  String get lockSetupPinLengthLabel => 'PIN length';
+
+  @override
+  String get lockSetupNewPinLabel => 'New password';
+
+  @override
+  String get lockSetupNewPinHeading => 'Enter new PIN';
 
   @override
   String get lockSetupConfirmLabel => 'Confirm';
@@ -587,8 +602,10 @@ class AppLocalizationsEn extends AppLocalizations {
   String get lockSetupCurrentlyOn => 'App lock is currently on.';
 
   @override
-  String get lockSetupCurrentPinLabel =>
-      'Enter current PIN/password to disable';
+  String get lockSetupCurrentPinLabel => 'Enter current password to disable';
+
+  @override
+  String get lockSetupCurrentPinHeading => 'Enter current PIN to disable';
 
   @override
   String get lockSetupDisableButton => 'Disable app lock';

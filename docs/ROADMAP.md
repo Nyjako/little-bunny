@@ -2913,19 +2913,18 @@ this file is the single source of truth for "what's done" across sessions.
     Linux/systemd only, matching `updater.c`'s own existing scope (no self-update story
     for a Windows service, and no equivalent Windows service to stop/start anyway).
 
-- [ ] **M60 — Real PIN entry for app-lock, distinct from the password fallback**
-  Follow-up to M7.4's existing `AppLockService`/`LockScreen`/`LockSetupScreen`: today
-  "PIN" and "password" are the same free-text field under the hood (any characters,
-  compared by string equality, unlocked via an explicit submit action) -- M7.4's own
-  biometric-first flow (`local_auth`, Android only so far) already covers "fingerprint
-  on the phone", but the typed fallback doesn't behave like a real PIN pad anywhere.
-  The user wants an actual PIN entry mode: digits-only input, and -- unlike a
-  password field, which always needs an explicit submit/click -- auto-checks as soon
-  as the 4th digit is entered (standard mobile lock-screen PIN UX). Needs its own
-  design pass before implementation: whether PIN and password become two distinct,
-  user-selectable lock modes (`LockSetupScreen` choosing between them) or whether PIN
-  only applies on mobile with password staying as-is on desktop (matching M7.4's
-  own platform-specific precedent for biometric availability), whether the PIN length
-  is fixed at 4 digits or configurable, and how `LockSetupScreen`'s existing
-  "re-enter current PIN/password to disable" flow adapts to a digits-only keypad
-  instead of a text field.
+- [x] **M60 — Real PIN entry for app-lock, distinct from the password fallback**
+  Follow-up to M7.4's existing `AppLockService`/`LockScreen`/`LockSetupScreen`: PIN and
+  password used to be the same free-text field under the hood. The user picks a mode
+  (`AppLockMode.pin`/`.password`) when enabling the lock in `LockSetupScreen`; PIN mode
+  is a real digits-only keypad (new `PinEntry` widget, shared across unlock/new-PIN/
+  confirm-PIN/current-PIN-to-disable) at a user-chosen length (4-6 digits), auto-
+  submitting the instant that length is reached -- no button, unlike password mode
+  which still needs an explicit submit since free text has no inherent "done" signal.
+  `AppLockService.enable()` now takes `mode`/`pinLength`, persisted (mode written
+  before the enabled flag, so a concurrent read can never see the lock on with a
+  stale mode) and read back via new `getMode()`/`getPinLength()`. M7.4's Android
+  biometric-first flow is unchanged and mode-independent -- it already runs (and its
+  "Try fingerprint again" retry button already shows) regardless of which typed
+  fallback is configured, exactly the relationship wanted: fingerprint first, PIN or
+  password if that fails/isn't available.
