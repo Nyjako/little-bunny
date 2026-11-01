@@ -1150,11 +1150,18 @@ void test_sync_inkbunny_search_upserts_post(void)
     TEST_ASSERT_EQUAL(3955918, posts.items[0].external_id);
     TEST_ASSERT_EQUAL_STRING("OvineSatanOMG", posts.items[0].artist);
     TEST_ASSERT_EQUAL_STRING("Thank you, Digimon Beatbreak", posts.items[0].title);
-    /* Inkbunny's search endpoint doesn't return a "files" array at all (see
-     * architecture.md's note on description/keywords having the same gap) --
-     * sample_url (like file_url/file_md5/width/height) is only ever
-     * populated via a full inkbunny_get_submission fetch, not a search sync. */
-    TEST_ASSERT_NULL(posts.items[0].sample_url);
+    /* Inkbunny's search endpoint doesn't return a "files" array -- it puts
+     * the same file_url_full/file_url_screen/file_name fields directly on
+     * the submission object instead (confirmed against the live API), which
+     * inkbunny_parse_submission's fallback now picks up. file_md5/width/
+     * height genuinely aren't present at this level at all (unlike the
+     * URLs) -- those stay unpopulated until a full inkbunny_get_submission
+     * fetch, same as description/keywords' own documented gap. */
+    TEST_ASSERT_EQUAL_STRING("https://nl1.ib.metapix.net/files/full/6175/6175043_tribute.jpg", posts.items[0].file_url);
+    TEST_ASSERT_EQUAL_STRING("https://nl1.ib.metapix.net/files/screen/6175/6175043_tribute.jpg", posts.items[0].sample_url);
+    TEST_ASSERT_NULL(posts.items[0].file_md5);
+    TEST_ASSERT_EQUAL(0, posts.items[0].width);
+    TEST_ASSERT_EQUAL(0, posts.items[0].height);
     int64_t post_id = posts.items[0].id;
     bunny_db_post_list_free(&posts);
 
