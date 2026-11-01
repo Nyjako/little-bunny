@@ -261,9 +261,11 @@ class _DeleteGroupRequest extends _Request {
 class _ListSearchPostsRequest extends _Request {
   final int searchId;
   final bool unseenOnly;
+  final int ratingMask;
+  final int mediaMask;
   final int page;
 
-  const _ListSearchPostsRequest(this.searchId, this.unseenOnly, this.page);
+  const _ListSearchPostsRequest(this.searchId, this.unseenOnly, this.ratingMask, this.mediaMask, this.page);
 }
 
 class _GetPostByIdRequest extends _Request {
@@ -849,7 +851,7 @@ Map<String, Object?> _handleGetPostById(Pointer<bunny_core_t> core, _GetPostById
 List<Map<String, Object?>> _handleListSearchPosts(Pointer<bunny_core_t> core, _ListSearchPostsRequest r) {
   return using((arena) {
     final out = arena<bunny_db_post_list_t>();
-    _check(_bindings.bunny_core_search_list_posts(core, r.searchId, r.unseenOnly, r.page, out));
+    _check(_bindings.bunny_core_search_list_posts(core, r.searchId, r.unseenOnly, r.ratingMask, r.mediaMask, r.page, out));
     final items = <Map<String, Object?>>[];
     for (var i = 0; i < out.ref.count; i++) {
       items.add(_postToMap(out.ref.items[i]));
@@ -1144,7 +1146,8 @@ class BunnyCoreNative {
 
   Future<void> setDefaultSyncIntervalHours(int hours) => _send<void>(_SetDefaultSyncIntervalHoursRequest(hours));
 
-  Future<List<Map<String, Object?>>> listSearchPosts(int searchId, bool unseenOnly, int page) => _send<List<Map<String, Object?>>>(_ListSearchPostsRequest(searchId, unseenOnly, page));
+  Future<List<Map<String, Object?>>> listSearchPosts(int searchId, bool unseenOnly, int ratingMask, int mediaMask, int page) =>
+      _send<List<Map<String, Object?>>>(_ListSearchPostsRequest(searchId, unseenOnly, ratingMask, mediaMask, page));
 
   Future<Map<String, Object?>> getPostById(int postId) => _send<Map<String, Object?>>(_GetPostByIdRequest(postId));
 
