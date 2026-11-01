@@ -1039,6 +1039,24 @@ returning one, or the data genuinely changes) overwrites the old value via `excl
 rather than leaving it stale -- same reasoning the M8.5.5a relationships row already
 established.
 
+**Correction (bug found 2026-11-05):** the paragraph below (and the old
+`test_sync_inkbunny_search_upserts_post` assertion) claimed Inkbunny's search endpoint never
+returns file data at all, only via a full `inkbunny_get_submission(s)` fetch. That's wrong --
+confirmed against the live API, `api_search.php` *does* return `file_url_full`/
+`file_url_screen`/`file_url_preview`/`file_name`/`mimetype` per submission, just as top-level
+fields on the submission object instead of nested in a `"files"` array the way
+`api_submissions.php` returns them. `inkbunny_parse_submission` (`libs/inkbunny/src/types.c`)
+only ever read the nested array, so `out->files.count` was 0 for every search-synced
+submission and `file_url`/`file_ext`/`sample_url` ended up NULL in the DB -- every Inkbunny
+post's detail view showed nothing until `PostDetailScreen`'s own one-off live refetch patched
+it up, which read as "Inkbunny images take forever to load." Fixed with a fallback in
+`inkbunny_parse_submission`: when the `"files"` array is absent but `file_url_full` is present
+directly on the submission object, synthesize a single-entry file list from those top-level
+fields by calling the same per-file parser on the submission's own JSON object (the field
+names are identical). Width/height/md5 genuinely aren't present at the search-endpoint level
+(confirmed live) and stay unpopulated from a search sync, same as description/keywords below --
+only the URLs/filename/mimetype come through this path.
+
 This sub-milestone's test-writing incidentally surfaced a real test-coverage gap unrelated to
 the feature itself: `bunny_core_fetch_and_cache_post` (added in M8.5.5a) only ever had e621
 test coverage -- its Inkbunny branch (`site != BUNNY_DB_SITE_E621`) had never been exercised

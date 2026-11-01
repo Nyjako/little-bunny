@@ -104,7 +104,7 @@ void main() {
     await tester.pumpAndSettle();
 
     await tester.enterText(find.widgetWithText(TextFormField, 'Query'), 'canine foxta');
-    await tester.pump(const Duration(milliseconds: 350));
+    await tester.pump(const Duration(seconds: 3, milliseconds: 50));
 
     expect(find.text('foxtail (10)'), findsOneWidget);
     expect(find.text('wolfpack (5)'), findsNothing);
@@ -124,7 +124,7 @@ void main() {
     await tester.pumpAndSettle();
 
     await tester.enterText(find.widgetWithText(TextFormField, 'Query'), 'canine fo');
-    await tester.pump(const Duration(milliseconds: 350));
+    await tester.pump(const Duration(seconds: 3, milliseconds: 50));
 
     expect(find.text('fox (10)'), findsNothing);
   });
@@ -137,7 +137,7 @@ void main() {
     await tester.pumpAndSettle();
 
     await tester.enterText(find.widgetWithText(TextFormField, 'Query'), 'cat -dogsl');
-    await tester.pump(const Duration(milliseconds: 350));
+    await tester.pump(const Duration(seconds: 3, milliseconds: 50));
 
     expect(find.text('dogsled (7)'), findsOneWidget);
 
@@ -156,7 +156,7 @@ void main() {
     await tester.pumpAndSettle();
 
     await tester.enterText(find.widgetWithText(TextFormField, 'Query'), 'african_*');
-    await tester.pump(const Duration(milliseconds: 350));
+    await tester.pump(const Duration(seconds: 3, milliseconds: 50));
 
     expect(find.text('african_wild_dog (3)'), findsNothing);
   });
@@ -232,7 +232,7 @@ void main() {
     await tester.pumpAndSettle();
 
     await tester.enterText(find.widgetWithText(TextFormField, 'Query'), 'pool:12345');
-    await tester.pump(const Duration(milliseconds: 350));
+    await tester.pump(const Duration(seconds: 3, milliseconds: 50));
     await tester.pumpAndSettle();
 
     expect(tester.widget<TextFormField>(find.widgetWithText(TextFormField, 'Label')).controller!.text, 'Some Comic');
@@ -245,7 +245,7 @@ void main() {
     await tester.pumpAndSettle();
 
     await tester.enterText(find.widgetWithText(TextFormField, 'Query'), 'pool:99999');
-    await tester.pump(const Duration(milliseconds: 350));
+    await tester.pump(const Duration(seconds: 3, milliseconds: 50));
     await tester.pumpAndSettle();
 
     expect(tester.widget<TextFormField>(find.widgetWithText(TextFormField, 'Label')).controller!.text, 'pool:99999');
@@ -259,7 +259,7 @@ void main() {
       wrapWithLocalization(CreateSearchScreen(repository: repository, initialSite: BunnySite.e621, initialQuery: 'pool:12345', initialLabel: 'My Own Label')),
     );
     await tester.pumpAndSettle();
-    await tester.pump(const Duration(milliseconds: 350));
+    await tester.pump(const Duration(seconds: 3, milliseconds: 50));
     await tester.pumpAndSettle();
 
     expect(tester.widget<TextFormField>(find.widgetWithText(TextFormField, 'Label')).controller!.text, 'My Own Label');

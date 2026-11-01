@@ -880,6 +880,30 @@ abstract class AppLocalizations {
   /// **'{count} queued for download'**
   String postGridMassDownloadQueued(int count);
 
+  /// No description provided for @postGridSelectEntireSearch.
+  ///
+  /// In en, this message translates to:
+  /// **'Select entire search ({count})'**
+  String postGridSelectEntireSearch(int count);
+
+  /// No description provided for @postGridSelectEntireSearchDialogTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Selecting entire search…'**
+  String get postGridSelectEntireSearchDialogTitle;
+
+  /// No description provided for @postGridSelectEntireSearchProgress.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} of {total}'**
+  String postGridSelectEntireSearchProgress(int count, int total);
+
+  /// No description provided for @postGridSelectEntireSearchError.
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t load the full search. Try again.'**
+  String get postGridSelectEntireSearchError;
+
   /// No description provided for @tagBrowseEmptyState.
   ///
   /// In en, this message translates to:
@@ -1141,7 +1165,7 @@ abstract class AppLocalizations {
   /// No description provided for @lockScreenPinLabel.
   ///
   /// In en, this message translates to:
-  /// **'PIN/password'**
+  /// **'Password'**
   String get lockScreenPinLabel;
 
   /// No description provided for @lockScreenUnlock.
@@ -1159,8 +1183,14 @@ abstract class AppLocalizations {
   /// No description provided for @lockScreenIncorrectPin.
   ///
   /// In en, this message translates to:
-  /// **'Incorrect PIN/password'**
+  /// **'Incorrect PIN or password'**
   String get lockScreenIncorrectPin;
+
+  /// No description provided for @lockScreenEnterPinHeading.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter PIN'**
+  String get lockScreenEnterPinHeading;
 
   /// No description provided for @lockSetupScreenTitle.
   ///
@@ -1174,11 +1204,35 @@ abstract class AppLocalizations {
   /// **'Set a PIN or password to lock this app on startup.'**
   String get lockSetupDescription;
 
+  /// No description provided for @lockSetupModePin.
+  ///
+  /// In en, this message translates to:
+  /// **'PIN'**
+  String get lockSetupModePin;
+
+  /// No description provided for @lockSetupModePassword.
+  ///
+  /// In en, this message translates to:
+  /// **'Password'**
+  String get lockSetupModePassword;
+
+  /// No description provided for @lockSetupPinLengthLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'PIN length'**
+  String get lockSetupPinLengthLabel;
+
   /// No description provided for @lockSetupNewPinLabel.
   ///
   /// In en, this message translates to:
-  /// **'New PIN/password'**
+  /// **'New password'**
   String get lockSetupNewPinLabel;
+
+  /// No description provided for @lockSetupNewPinHeading.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter new PIN'**
+  String get lockSetupNewPinHeading;
 
   /// No description provided for @lockSetupConfirmLabel.
   ///
@@ -1207,8 +1261,14 @@ abstract class AppLocalizations {
   /// No description provided for @lockSetupCurrentPinLabel.
   ///
   /// In en, this message translates to:
-  /// **'Enter current PIN/password to disable'**
+  /// **'Enter current password to disable'**
   String get lockSetupCurrentPinLabel;
+
+  /// No description provided for @lockSetupCurrentPinHeading.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter current PIN to disable'**
+  String get lockSetupCurrentPinHeading;
 
   /// No description provided for @lockSetupDisableButton.
   ///
@@ -1766,12 +1826,6 @@ abstract class AppLocalizations {
   /// **'Downloading'**
   String get downloadQueueDownloadingLabel;
 
-  /// No description provided for @downloadQueueQueuedLabel.
-  ///
-  /// In en, this message translates to:
-  /// **'Queued'**
-  String get downloadQueueQueuedLabel;
-
   /// No description provided for @downloadQueueFailedLabel.
   ///
   /// In en, this message translates to:
@@ -1807,6 +1861,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Downloaded, but the checksum didn\'t match'**
   String get downloadQueueChecksumMismatchReason;
+
+  /// No description provided for @downloadQueueQueuedCount.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} queued'**
+  String downloadQueueQueuedCount(int count);
+
+  /// No description provided for @downloadQueueDoneCount.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} done'**
+  String downloadQueueDoneCount(int count);
 
   /// No description provided for @updateAvailableTitle.
   ///

@@ -204,6 +204,19 @@
       "count": {"type": "int"}
     }
   },
+  "postGridSelectEntireSearch": "Select entire search ({count})",
+  "@postGridSelectEntireSearch": {
+    "placeholders": {"count": {"type": "int"}}
+  },
+  "postGridSelectEntireSearchDialogTitle": "Selecting entire search…",
+  "postGridSelectEntireSearchProgress": "{count} of {total}",
+  "@postGridSelectEntireSearchProgress": {
+    "placeholders": {
+      "count": {"type": "int"},
+      "total": {"type": "int"}
+    }
+  },
+  "postGridSelectEntireSearchError": "Couldn't load the full search. Try again.",
 
   "tagBrowseEmptyState": "No posts found for this search.",
   "tagBrowseAddToSearchesTooltip": "Save as a search",
@@ -266,19 +279,25 @@
 
   "lockScreenMessage": "LittleBunny is locked",
   "lockScreenBiometricReason": "Unlock LittleBunny",
-  "lockScreenPinLabel": "PIN/password",
+  "lockScreenPinLabel": "Password",
   "lockScreenUnlock": "Unlock",
   "lockScreenTryFingerprintAgain": "Try fingerprint again",
-  "lockScreenIncorrectPin": "Incorrect PIN/password",
+  "lockScreenIncorrectPin": "Incorrect PIN or password",
+  "lockScreenEnterPinHeading": "Enter PIN",
 
   "lockSetupScreenTitle": "App lock",
   "lockSetupDescription": "Set a PIN or password to lock this app on startup.",
-  "lockSetupNewPinLabel": "New PIN/password",
+  "lockSetupModePin": "PIN",
+  "lockSetupModePassword": "Password",
+  "lockSetupPinLengthLabel": "PIN length",
+  "lockSetupNewPinLabel": "New password",
+  "lockSetupNewPinHeading": "Enter new PIN",
   "lockSetupConfirmLabel": "Confirm",
   "lockSetupEntriesDoNotMatch": "Entries do not match",
   "lockSetupEnableButton": "Enable app lock",
   "lockSetupCurrentlyOn": "App lock is currently on.",
-  "lockSetupCurrentPinLabel": "Enter current PIN/password to disable",
+  "lockSetupCurrentPinLabel": "Enter current password to disable",
+  "lockSetupCurrentPinHeading": "Enter current PIN to disable",
   "lockSetupDisableButton": "Disable app lock",
 
   "settingsScreenTitle": "Settings",
@@ -411,13 +430,20 @@
 
   "downloadQueueScreenTitle": "Downloads",
   "downloadQueueDownloadingLabel": "Downloading",
-  "downloadQueueQueuedLabel": "Queued",
   "downloadQueueFailedLabel": "Failed",
   "downloadQueueEmptyState": "Nothing here right now.",
   "downloadQueueRetryTooltip": "Retry",
   "downloadQueueRetryAllTooltip": "Retry all",
   "downloadQueueClearFinishedTooltip": "Clear finished",
   "downloadQueueChecksumMismatchReason": "Downloaded, but the checksum didn't match",
+  "downloadQueueQueuedCount": "{count} queued",
+  "@downloadQueueQueuedCount": {
+    "placeholders": {"count": {"type": "int"}}
+  },
+  "downloadQueueDoneCount": "{count} done",
+  "@downloadQueueDoneCount": {
+    "placeholders": {"count": {"type": "int"}}
+  },
 
   "updateAvailableTitle": "Update available ({tagName})",
   "@updateAvailableTitle": {

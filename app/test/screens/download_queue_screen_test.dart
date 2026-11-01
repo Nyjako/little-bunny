@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
@@ -19,16 +20,18 @@ import '../fakes/fake_path_provider.dart';
 import '../fakes/fake_wakelock_plus_platform.dart';
 import '../fakes/test_app.dart';
 
-BunnyPost _post({required int id, String? title}) => BunnyPost(
+BunnyPost _post({required int id, String? title, String? previewUrl, String? fileMd5}) => BunnyPost(
   id: id,
   site: BunnySite.e621,
   externalId: id,
   title: title,
+  previewUrl: previewUrl,
   score: 0,
   favCount: 0,
   commentCount: 0,
   fileUrl: 'https://static1.e621.net/data/$id.png',
   fileExt: 'png',
+  fileMd5: fileMd5,
   width: 100,
   height: 100,
   cachedAt: '2026-01-01T00:00:00Z',
@@ -102,15 +105,14 @@ void main() {
     });
 
     await tester.pumpWidget(wrap(service));
-    // Not pumpAndSettle -- the "Downloading" row's CircularProgressIndicator
-    // is indeterminate and animates forever, which pumpAndSettle would
-    // never consider "settled."
     await tester.pump();
 
     expect(find.text('Downloading'), findsOneWidget);
     expect(find.text('Second'), findsOneWidget);
-    expect(find.text('Queued'), findsOneWidget);
-    expect(find.text('Third'), findsOneWidget);
+    // Queued is a count, not a per-item list -- "Third" never renders by
+    // name, item 3 is just folded into the "1 queued" count.
+    expect(find.text('1 queued'), findsOneWidget);
+    expect(find.text('Third'), findsNothing);
     expect(find.text('Failed'), findsOneWidget);
     expect(find.text('First'), findsOneWidget);
     expect(find.text('HTTP 500'), findsOneWidget);
@@ -221,5 +223,117 @@ void main() {
 
     expect(service.items, isEmpty);
     expect(find.text('Nothing here right now.'), findsOneWidget);
+  });
+
+  testWidgets('the currently-downloading row shows a thumbnail and a determinate batch-progress bar', (WidgetTester tester) async {
+    final secondItemGate = Completer<void>();
+    final service = DownloadQueueService(
+      downloadManager: DownloadManager(
+        client: MockClient((request) async {
+          if (request.url.toString().endsWith('/2.png')) {
+            await secondItemGate.future;
+          }
+          return http.Response.bytes([1, 2, 3], 200);
+        }),
+      ),
+      downloadSettingsStore: const DownloadSettingsStore(),
+    );
+
+    await tester.runAsync(() async {
+      service.enqueueAll([_post(id: 1, title: 'First'), _post(id: 2, title: 'Second', previewUrl: 'https://example.com/2_preview.jpg')], repository);
+      while (service.currentItem?.post.id != 2) {
+        await Future<void>.delayed(const Duration(milliseconds: 1));
+      }
+    });
+
+    await tester.pumpWidget(wrap(service));
+    await tester.pump();
+
+    final progressBar = tester.widget<LinearProgressIndicator>(find.byType(LinearProgressIndicator));
+    // Item 1 of 2 already done, item 2 (this row) actively downloading.
+    expect(progressBar.value, 0.5);
+    expect(find.byType(CachedNetworkImage), findsOneWidget);
+
+    await tester.runAsync(() async {
+      secondItemGate.complete();
+      while (service.isActive) {
+        await Future<void>.delayed(const Duration(milliseconds: 1));
+      }
+    });
+  });
+
+  testWidgets('a batch of queued items renders as a single count, not one row each', (WidgetTester tester) async {
+    // A small item count here, not literally hundreds/thousands -- the
+    // screen's rendering has no count-dependent branch (the count-row path
+    // is taken identically whether pending is 5 or 5000). Item 1 resolves
+    // immediately and item 2 is the one left gated/"currently downloading"
+    // -- same shape as the "shows downloading/queued/failed sections" test
+    // above, deliberately not leaving the *very first* item's request
+    // perpetually pending across a `runAsync` boundary (confirmed directly:
+    // doing that reliably deadlocks this test harness's second `runAsync`
+    // call waiting on `service.isActive`, regardless of item count -- a
+    // harness quirk unrelated to the service logic itself, which drains
+    // hundreds of items in milliseconds in a plain, non-widget `test()`).
+    final secondItemGate = Completer<void>();
+    final service = DownloadQueueService(
+      downloadManager: DownloadManager(
+        client: MockClient((request) async {
+          if (request.url.toString().endsWith('/2.png')) {
+            await secondItemGate.future;
+          }
+          return http.Response.bytes([1, 2, 3], 200);
+        }),
+      ),
+      downloadSettingsStore: const DownloadSettingsStore(),
+    );
+
+    await tester.runAsync(() async {
+      service.enqueueAll(List.generate(5, (i) => _post(id: i + 1)), repository);
+      while (service.currentItem?.post.id != 2) {
+        await Future<void>.delayed(const Duration(milliseconds: 1));
+      }
+    });
+
+    await tester.pumpWidget(wrap(service));
+    await tester.pump();
+
+    // 3 still queued (items 3-5) -- item 1 already succeeded, item 2 is the
+    // one actively downloading.
+    expect(find.text('3 queued'), findsOneWidget);
+    expect(find.text('1 done'), findsOneWidget);
+    // 3 ListTiles total (currently-downloading row + "3 queued" row + "1
+    // done" row) -- no per-item rows were built for the 3 queued posts.
+    expect(find.byType(ListTile), findsNWidgets(3));
+
+    await tester.runAsync(() async {
+      secondItemGate.complete();
+      while (service.isActive) {
+        await Future<void>.delayed(const Duration(milliseconds: 1));
+      }
+    });
+  });
+
+  testWidgets('"Done" counts succeeded items only, unaffected by a checksum-mismatch item', (WidgetTester tester) async {
+    final service = DownloadQueueService(
+      downloadManager: DownloadManager(client: MockClient((_) async => http.Response.bytes([1, 2, 3], 200))),
+      downloadSettingsStore: const DownloadSettingsStore(),
+    );
+
+    await tester.runAsync(() async {
+      // Post 1 has no published checksum -- downloads verified. Post 2
+      // claims a checksum the fake bytes won't match -- checksumMismatch,
+      // which must stay out of the "Done" count and show under Failed.
+      service.enqueueAll([_post(id: 1, title: 'First'), _post(id: 2, title: 'Second', fileMd5: 'deadbeef')], repository);
+      while (service.isActive) {
+        await Future<void>.delayed(const Duration(milliseconds: 1));
+      }
+    });
+
+    await tester.pumpWidget(wrap(service));
+    await tester.pumpAndSettle();
+
+    expect(find.text('1 done'), findsOneWidget);
+    expect(find.text('Failed'), findsOneWidget);
+    expect(find.text('Second'), findsOneWidget);
   });
 }

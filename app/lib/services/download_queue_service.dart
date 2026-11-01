@@ -66,6 +66,19 @@ class DownloadQueueService extends ChangeNotifier {
 
   DownloadQueueService({required this.downloadManager, required this.downloadSettingsStore, this.notifier = const NoopDownloadQueueNotifier()});
 
+  /// Persisting (re-serializes the whole [_items] list) and draining the
+  /// favorite/upvote action queue (a blocking network/FFI round trip) both
+  /// used to happen after *every single item* -- fine for a handful of
+  /// items, but for a multi-thousand-item batch that's O(n) work repeated n
+  /// times, and it put a full network round trip on the critical path of
+  /// every single download. Throttling to once every N items divides the
+  /// total cost by a constant factor (it doesn't change the shape -- pair
+  /// with occasional [clearFinished] if multi-thousand-item batches become
+  /// routine), and gets the favorite/upvote drain off the per-item path
+  /// entirely except for this periodic catch-up plus the unconditional final
+  /// flush below.
+  static const _syncEveryNItems = 10;
+
   /// Every item the queue currently knows about, regardless of status --
   /// only [clearFinished] ever removes one. Use [queuedItems]/[currentItem]/
   /// [failedItems] below for the views a UI actually wants; this is exposed
@@ -87,7 +100,19 @@ class DownloadQueueService extends ChangeNotifier {
   int _mismatched = 0;
   int _failed = 0;
 
+  /// Set by [_processItem] whenever a download actually queues a
+  /// favorite/upvote action -- lets [_processQueue] skip [_drainActionQueue]
+  /// entirely (not just skip it cheaply) when auto-favorite/auto-upvote are
+  /// both off, the common case, instead of firing an empty-queue network
+  /// round trip every [_syncEveryNItems] items for nothing.
+  bool _actionsQueuedSinceSync = false;
+
   int get pendingCount => queuedItems.length;
+
+  /// Count of items that finished cleanly -- checksum-mismatch items are
+  /// deliberately excluded (they stay in [failedItems], individually listed
+  /// with a retry action, since the file didn't match what was published).
+  int get succeededCount => _items.where((item) => item.status == DownloadQueueItemStatus.succeeded).length;
   int get completedCount => _sessionDone;
   int get totalCount => _sessionTotal;
   bool get isActive => _sessionTotal > 0;
@@ -200,6 +225,8 @@ class DownloadQueueService extends ChangeNotifier {
     } catch (_) {
       // Best-effort.
     }
+    var itemsSinceSync = 0;
+    DownloadQueueItem? lastItem;
     try {
       while (true) {
         final item = queuedItems.firstOrNull;
@@ -218,16 +245,39 @@ class DownloadQueueService extends ChangeNotifier {
           _failed++;
         }
         _sessionDone++;
-        await _persist();
+        lastItem = item;
+        itemsSinceSync++;
+        if (itemsSinceSync >= _syncEveryNItems) {
+          await _persist();
+          if (_actionsQueuedSinceSync) {
+            await _drainActionQueue(item);
+            _actionsQueuedSinceSync = false;
+          }
+          itemsSinceSync = 0;
+        }
         // A broken notifier (any implementation, not just the real one, which
         // already swallows its own exceptions -- this is the queue's own
         // backstop) must never stop subsequent items from being processed.
+        // Unlike persist/drain above, this keeps firing every item -- it's
+        // neither an expensive disk write nor a network round trip, so there's
+        // no reason to reduce how often the UI/notification sees progress.
         try {
           await notifier.showProgress(done: _sessionDone, total: _sessionTotal);
         } catch (_) {
           // Best-effort.
         }
         notifyListeners();
+      }
+      // Unconditional final flush -- covers both a batch smaller than the
+      // threshold above (today's common case: a single download, or a small
+      // mass-selection, which never reaches _syncEveryNItems) and the tail of
+      // a large batch that didn't land exactly on a multiple of it.
+      if (lastItem != null) {
+        await _persist();
+        if (_actionsQueuedSinceSync) {
+          await _drainActionQueue(lastItem);
+          _actionsQueuedSinceSync = false;
+        }
       }
       try {
         await notifier.showSummary(succeeded: _succeeded, mismatched: _mismatched, failed: _failed);
@@ -261,9 +311,15 @@ class DownloadQueueService extends ChangeNotifier {
       case DownloadOutcome.verified:
         _succeeded++;
         item.status = DownloadQueueItemStatus.succeeded;
+        if (autoFavorite || autoUpvote) {
+          _actionsQueuedSinceSync = true;
+        }
       case DownloadOutcome.checksumMismatch:
         _mismatched++;
         item.status = DownloadQueueItemStatus.checksumMismatch;
+        if (autoFavorite || autoUpvote) {
+          _actionsQueuedSinceSync = true;
+        }
       case DownloadOutcome.noFileUrl:
         _failed++;
         item.status = DownloadQueueItemStatus.failed;
@@ -273,13 +329,21 @@ class DownloadQueueService extends ChangeNotifier {
         item.status = DownloadQueueItemStatus.failed;
         item.failureReason = result.errorMessage;
     }
-    final downloaded = result.outcome == DownloadOutcome.verified || result.outcome == DownloadOutcome.checksumMismatch;
-    // After every single item, not once per batch (M43) -- there's no
-    // well-defined "last item in the batch" once the queue is open-ended
-    // (enqueueAll can be called again mid-flight), so per-item draining is
-    // the only option that doesn't need artificial batch-boundary tracking.
-    if ((autoFavorite || autoUpvote) && downloaded) {
+  }
+
+  /// Best-effort drain of [item]'s favorite/upvote action queue -- called
+  /// periodically from [_processQueue]'s loop (see [_syncEveryNItems]) and
+  /// once more unconditionally after it, never per-item: `processQueue()` is
+  /// a blocking network/FFI round trip, and putting it on every single
+  /// item's critical path (the old M43 behavior) made a whole batch's
+  /// wall-clock time include one such round trip per item for no benefit --
+  /// [DownloadManager.downloadPost]'s own doc comment already says draining
+  /// "is left to the caller," which decides its own batching needs.
+  Future<void> _drainActionQueue(DownloadQueueItem item) async {
+    try {
       await item.repository.processQueue();
+    } catch (_) {
+      // Best-effort, same as every other notifier/drain call in this class.
     }
   }
 
@@ -289,10 +353,21 @@ class DownloadQueueService extends ChangeNotifier {
   }
 
   /// Rewritten on every change to [_items] -- always the whole list, never
-  /// appended to, since it's always small. Best-effort: a write failure
-  /// here doesn't stop the queue itself from processing, it just means a
-  /// crash right after would lose the resume/history information for
-  /// whatever changed since the last successful write.
+  /// appended to. Best-effort: a write failure here doesn't stop the queue
+  /// itself from processing, it just means a crash right after would lose
+  /// the resume/history information for whatever changed since the last
+  /// successful write.
+  ///
+  /// Written to a temp file first, then renamed into place (same pattern as
+  /// [DownloadManager.downloadPost]'s own atomic write) -- a kill mid-write
+  /// must never leave `pending_downloads.json` truncated/corrupt, since
+  /// [restore]'s `jsonDecode` would then silently fail and nothing would
+  /// resume on next launch. The temp filename is unique per call (not a
+  /// fixed name) because this method can be called from several places
+  /// without any of them awaiting each other (`unawaited()` from
+  /// `enqueueAll`/`retryFailed`/`retryAllFailed`/`clearFinished`, plus from
+  /// inside `_processQueue`'s own loop) -- two calls' temp-file lifecycles
+  /// can overlap, and a fixed name would let them race on the same path.
   Future<void> _persist() async {
     try {
       final file = await _persistenceFile();
@@ -301,7 +376,15 @@ class DownloadQueueService extends ChangeNotifier {
             (item) => {'id': item.post.id, 'status': item.status.name, if (item.failureReason != null) 'failureReason': item.failureReason},
           )
           .toList();
-      await file.writeAsString(jsonEncode(json));
+      final tempDir = await getTemporaryDirectory();
+      final tempFile = File('${tempDir.path}/pending_downloads_${DateTime.now().microsecondsSinceEpoch}.json.tmp');
+      await tempFile.writeAsString(jsonEncode(json));
+      try {
+        await tempFile.rename(file.path);
+      } catch (_) {
+        await tempFile.copy(file.path);
+        await tempFile.delete();
+      }
     } catch (_) {
       // Best-effort.
     }
@@ -369,8 +452,10 @@ class DownloadQueueService extends ChangeNotifier {
       if (toEnqueue.isNotEmpty) {
         enqueueAll(toEnqueue, repository);
       }
-    } catch (_) {
-      // Best-effort.
+    } catch (e) {
+      // Best-effort, but not silent -- a parse failure here means nothing
+      // resumes on this launch at all, worth a trace during development.
+      debugPrint('DownloadQueueService.restore failed: $e');
     }
   }
 }

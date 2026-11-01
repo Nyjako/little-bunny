@@ -174,7 +174,7 @@ class _CreateSearchScreenState extends State<CreateSearchScreen> {
       setState(() => _suggestions = []);
       return;
     }
-    _debounce = Timer(const Duration(milliseconds: 300), () async {
+    _debounce = Timer(const Duration(seconds: 3), () async {
       final suggestions = await widget.repository.tagAutocomplete(_site, tag);
       if (mounted) {
         setState(() => _suggestions = suggestions);
