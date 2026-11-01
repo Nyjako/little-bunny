@@ -278,8 +278,17 @@ class FakeBunnyRepository implements BunnyRepository {
     return kMediaMaskImage;
   }
 
+  /// Set by a test to pause each [listSearchPosts] call until it completes --
+  /// lets a test catch "select entire search"-style multi-page fetching
+  /// mid-flight (e.g. to exercise a cancel button) without a real network
+  /// delay. `null` (the default) means no pause at all.
+  Completer<void>? pauseBeforePage;
+
   @override
   Future<List<BunnyPost>> listSearchPosts(int searchId, {bool unseenOnly = false, int ratingMask = kRatingMaskAll, int mediaMask = kMediaMaskAll, int page = 1}) async {
+    if (pauseBeforePage != null) {
+      await pauseBeforePage!.future;
+    }
     listSearchPostsCalls.add((searchId, unseenOnly, ratingMask, mediaMask, page));
     final posts = postsBySearchId[searchId] ?? const [];
     var filtered = unseenOnly ? posts.where((post) => !post.isSeen).toList() : List.of(posts);

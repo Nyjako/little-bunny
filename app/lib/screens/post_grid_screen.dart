@@ -78,6 +78,21 @@ class _PostGridScreenState extends State<PostGridScreen> {
 
   bool get _selectionMode => _selectedPostIds.isNotEmpty;
 
+  /// Set only by [_selectEntireSearch] -- the full fetched result of paging
+  /// through every post this search matches (could be well beyond [_posts],
+  /// which only ever holds what infinite scroll has loaded so far). `null`
+  /// means the current selection is resolved from [_posts] instead (the
+  /// normal, loaded-only case). Holding up to tens of thousands of
+  /// [BunnyPost] objects here is a real memory cost (unlike [_posts], which
+  /// infinite scroll deliberately keeps bounded) but an acceptable one for
+  /// a short-lived bulk-selection action.
+  List<BunnyPost>? _entireSearchSelection;
+
+  /// The actual [BunnyPost]s behind [_selectedPostIds] -- resolved from
+  /// [_entireSearchSelection] when a "select entire search" is active,
+  /// otherwise from [_posts] (today's loaded-only behavior, unchanged).
+  List<BunnyPost> get _selectedPosts => (_entireSearchSelection ?? _posts).where((post) => _selectedPostIds.contains(post.id)).toList();
+
   /// Non-null only when this search is itself a pool browse ("pool:`<id>`"),
   /// same convention as [TagBrowseScreen._poolId] -- parsed once up front
   /// rather than re-parsed on every build.
@@ -310,13 +325,18 @@ class _PostGridScreenState extends State<PostGridScreen> {
 
   /// Full reset back to page 1 -- for when the matching post *set* itself
   /// changes (the unseen filter, or a sync that may have added new posts),
-  /// as opposed to [_refreshLoadedPages] below.
+  /// as opposed to [_refreshLoadedPages] below. Also drops any selection --
+  /// a changed post set can make a prior "select entire search" snapshot
+  /// (or even a plain loaded-only selection) stale/inconsistent with what's
+  /// now showing.
   Future<void> _resetAndReload() async {
     setState(() {
       _posts.clear();
       _loading = true;
       _hasMore = true;
       _nextPage = 1;
+      _selectedPostIds.clear();
+      _entireSearchSelection = null;
     });
     await _loadInitial();
   }
@@ -459,13 +479,85 @@ class _PostGridScreenState extends State<PostGridScreen> {
   /// Scoped to posts already loaded via infinite scroll, not every post
   /// matching this search -- fetching every remaining page first would
   /// reintroduce the same unbounded-load problem this screen's pagination
-  /// (M34) exists to avoid.
+  /// (M34) exists to avoid. [_selectEntireSearch] below is the "I actually
+  /// want everything, even unloaded" counterpart.
   void _selectAll() {
     setState(() {
+      _entireSearchSelection = null;
       _selectedPostIds
         ..clear()
         ..addAll(_posts.map((post) => post.id));
     });
+  }
+
+  /// Pages through every post this search matches (not just what's loaded),
+  /// via the same [_fetchPage] infinite scroll already uses -- so it
+  /// automatically respects the current unseen-only filter too. Shows a
+  /// cancelable, determinate progress dialog (using [BunnySearch.totalCount]
+  /// as the expected total -- an estimate, not a guarantee, since it can be
+  /// stale if posts arrived since the last sync). Sequential, one page at a
+  /// time, matching this screen's/TagBrowseScreen's existing infinite-scroll
+  /// convention rather than introducing a different, parallel-fetch pattern
+  /// just for this one action.
+  Future<void> _selectEntireSearch(AppLocalizations l10n) async {
+    var cancelled = false;
+    final fetchedCount = ValueNotifier<int>(0);
+    final all = <BunnyPost>[];
+
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        title: Text(l10n.postGridSelectEntireSearchDialogTitle),
+        content: ValueListenableBuilder<int>(
+          valueListenable: fetchedCount,
+          builder: (context, count, child) => Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              LinearProgressIndicator(value: widget.search.totalCount > 0 ? count / widget.search.totalCount : null),
+              const SizedBox(height: 8),
+              Text(l10n.postGridSelectEntireSearchProgress(count, widget.search.totalCount)),
+            ],
+          ),
+        ),
+        // Only flips the flag -- the fetch loop below is the single place
+        // that pops this dialog (whether it exits via cancellation or an
+        // empty page), so a cancel landing right as the fetch would have
+        // finished normally can never double-pop.
+        actions: [TextButton(onPressed: () => cancelled = true, child: Text(l10n.commonCancel))],
+      ),
+    );
+
+    try {
+      var page = 1;
+      while (!cancelled) {
+        final pageItems = await _fetchPage(page);
+        if (pageItems.isEmpty) {
+          break;
+        }
+        all.addAll(pageItems);
+        fetchedCount.value = all.length;
+        page++;
+      }
+      if (!mounted) {
+        return;
+      }
+      Navigator.pop(context);
+      if (!cancelled && all.isNotEmpty) {
+        setState(() {
+          _entireSearchSelection = all;
+          _selectedPostIds
+            ..clear()
+            ..addAll(all.map((post) => post.id));
+        });
+      }
+    } catch (_) {
+      if (!mounted) {
+        return;
+      }
+      Navigator.pop(context);
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(l10n.postGridSelectEntireSearchError)));
+    }
   }
 
   Future<void> _openPost(List<BunnyPost> posts, BunnyPost post) async {
@@ -510,7 +602,10 @@ class _PostGridScreenState extends State<PostGridScreen> {
   }
 
   void _exitSelectionMode() {
-    setState(() => _selectedPostIds.clear());
+    setState(() {
+      _selectedPostIds.clear();
+      _entireSearchSelection = null;
+    });
   }
 
   Future<void> _massFavorite() async {
@@ -522,7 +617,10 @@ class _PostGridScreenState extends State<PostGridScreen> {
     if (!mounted) {
       return;
     }
-    setState(() => _selectedPostIds.clear());
+    setState(() {
+      _selectedPostIds.clear();
+      _entireSearchSelection = null;
+    });
     await _refreshLoadedPages();
   }
 
@@ -535,7 +633,10 @@ class _PostGridScreenState extends State<PostGridScreen> {
     if (!mounted) {
       return;
     }
-    setState(() => _selectedPostIds.clear());
+    setState(() {
+      _selectedPostIds.clear();
+      _entireSearchSelection = null;
+    });
     await _refreshLoadedPages();
   }
 
@@ -546,14 +647,19 @@ class _PostGridScreenState extends State<PostGridScreen> {
   /// than this screen's own state. No `_refreshLoadedPages()` afterward:
   /// downloading never mutates any post field this grid displays (unlike
   /// [_massFavorite]/[_massVote], which call it themselves after their own
-  /// direct, still-synchronous actions).
+  /// direct, still-synchronous actions). Resolves via [_selectedPosts], so a
+  /// "select entire search" selection enqueues every matched post, not just
+  /// what [_posts] had loaded.
   void _massDownload(AppLocalizations l10n) {
-    final selected = _posts.where((post) => _selectedPostIds.contains(post.id)).toList();
+    final selected = _selectedPosts;
     if (selected.isEmpty) {
       return;
     }
     widget.downloadQueueService.enqueueAll(selected, widget.repository);
-    setState(() => _selectedPostIds.clear());
+    setState(() {
+      _selectedPostIds.clear();
+      _entireSearchSelection = null;
+    });
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(l10n.postGridMassDownloadQueued(selected.length))));
   }
 
@@ -566,6 +672,7 @@ class _PostGridScreenState extends State<PostGridScreen> {
         leading: IconButton(icon: const Icon(Icons.close), tooltip: l10n.postGridExitSelectionTooltip, onPressed: _exitSelectionMode),
         title: Text(l10n.postGridSelectionCount(_selectedPostIds.length)),
         actions: [
+          IconButton(icon: const Icon(Icons.select_all), tooltip: l10n.postGridSelectAll, onPressed: _selectAll),
           IconButton(icon: const Icon(Icons.favorite), tooltip: l10n.postGridMassFavoriteTooltip, onPressed: _massFavorite),
           if (votingEnabled) IconButton(icon: const Icon(Icons.arrow_upward), tooltip: l10n.postGridMassUpvoteTooltip, onPressed: () => _massVote(1)),
           if (votingEnabled) IconButton(icon: const Icon(Icons.arrow_downward), tooltip: l10n.postGridMassDownvoteTooltip, onPressed: () => _massVote(-1)),
@@ -588,7 +695,7 @@ class _PostGridScreenState extends State<PostGridScreen> {
         PopupMenuButton<void>(
           itemBuilder: (context) => [
             PopupMenuItem(onTap: _markAllSeen, child: Text(l10n.postGridMarkAllSeen)),
-            PopupMenuItem(onTap: _selectAll, child: Text(l10n.postGridSelectAll)),
+            PopupMenuItem(onTap: () => _selectEntireSearch(l10n), child: Text(l10n.postGridSelectEntireSearch(widget.search.totalCount))),
           ],
         ),
       ],

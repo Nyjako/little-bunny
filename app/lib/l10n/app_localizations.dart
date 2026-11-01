@@ -880,6 +880,30 @@ abstract class AppLocalizations {
   /// **'{count} queued for download'**
   String postGridMassDownloadQueued(int count);
 
+  /// No description provided for @postGridSelectEntireSearch.
+  ///
+  /// In en, this message translates to:
+  /// **'Select entire search ({count})'**
+  String postGridSelectEntireSearch(int count);
+
+  /// No description provided for @postGridSelectEntireSearchDialogTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Selecting entire search…'**
+  String get postGridSelectEntireSearchDialogTitle;
+
+  /// No description provided for @postGridSelectEntireSearchProgress.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} of {total}'**
+  String postGridSelectEntireSearchProgress(int count, int total);
+
+  /// No description provided for @postGridSelectEntireSearchError.
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t load the full search. Try again.'**
+  String get postGridSelectEntireSearchError;
+
   /// No description provided for @tagBrowseEmptyState.
   ///
   /// In en, this message translates to:

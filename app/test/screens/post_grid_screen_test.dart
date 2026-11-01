@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:cached_network_image/cached_network_image.dart';
@@ -350,20 +351,97 @@ void main() {
     expect(repository.postsBySearchId[1]!.every((post) => post.isSeen), isTrue);
   });
 
-  testWidgets('select all enters selection mode with every loaded post selected', (WidgetTester tester) async {
+  testWidgets('the select-all-loaded icon (in selection mode) selects every loaded post', (WidgetTester tester) async {
     final repository = FakeBunnyRepository();
     repository.postsBySearchId[1] = [_post(id: 1, isSeen: false), _post(id: 2, isSeen: false), _post(id: 3, isSeen: false)];
 
     await tester.pumpWidget(wrapWithLocalization(PostGridScreen(search: search, repository: repository, displaySettingsStore: const DisplaySettingsStore(), downloadSettingsStore: const DownloadSettingsStore(), downloadQueueService: _downloadQueueService())));
     await tester.pumpAndSettle();
 
-    await tester.tap(find.byType(PopupMenuButton<void>));
+    // "Select all loaded" only exists once already in selection mode --
+    // enter it first via a long-press, same as any other gallery app.
+    await tester.longPress(find.byKey(const ValueKey(1)));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Select all'));
+    expect(find.text('1 selected'), findsOneWidget);
+
+    await tester.tap(find.byIcon(Icons.select_all));
     await tester.pumpAndSettle();
 
     expect(find.text('3 selected'), findsOneWidget);
     expect(find.byIcon(Icons.check_circle), findsNWidgets(3));
+  });
+
+  testWidgets('select entire search fetches every page and selects posts beyond what is loaded', (WidgetTester tester) async {
+    final repository = FakeBunnyRepository()..searchPostsPageSize = 3;
+    final allPosts = List.generate(7, (i) => _post(id: i + 1, isSeen: false));
+    repository.postsBySearchId[1] = allPosts;
+    final searchWithTotal = BunnySearch(id: 1, site: BunnySite.e621, label: 'Foxes', query: 'fox', intervalHours: 24, createdAt: '2026-01-01T00:00:00Z', totalCount: 7);
+
+    await tester.pumpWidget(
+      wrapWithLocalization(PostGridScreen(search: searchWithTotal, repository: repository, displaySettingsStore: const DisplaySettingsStore(), downloadSettingsStore: const DownloadSettingsStore(), downloadQueueService: _downloadQueueService())),
+    );
+    await tester.pumpAndSettle();
+    // Only page 1 (3 of the 7 posts) loaded via infinite scroll so far.
+    expect(find.byType(PostGridTile), findsNWidgets(3));
+
+    await tester.tap(find.byType(PopupMenuButton<void>));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Select entire search (7)'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('7 selected'), findsOneWidget);
+  });
+
+  testWidgets('mass-download after select-entire-search enqueues every fetched post, including unloaded ones', (WidgetTester tester) async {
+    final repository = FakeBunnyRepository()..searchPostsPageSize = 3;
+    final allPosts = List.generate(7, (i) => _post(id: i + 1, isSeen: false, fileUrl: 'https://static1.e621.net/data/${i + 1}.png', fileExt: 'png'));
+    repository.postsBySearchId[1] = allPosts;
+    final searchWithTotal = BunnySearch(id: 1, site: BunnySite.e621, label: 'Foxes', query: 'fox', intervalHours: 24, createdAt: '2026-01-01T00:00:00Z', totalCount: 7);
+    final queueService = _downloadQueueService();
+
+    await tester.pumpWidget(
+      wrapWithLocalization(PostGridScreen(search: searchWithTotal, repository: repository, displaySettingsStore: const DisplaySettingsStore(), downloadSettingsStore: const DownloadSettingsStore(), downloadQueueService: queueService)),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byType(PopupMenuButton<void>));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Select entire search (7)'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byIcon(Icons.download));
+    await tester.pumpAndSettle();
+
+    expect(queueService.items, hasLength(7));
+  });
+
+  testWidgets('cancelling select-entire-search leaves the selection untouched', (WidgetTester tester) async {
+    final repository = FakeBunnyRepository();
+    repository.postsBySearchId[1] = List.generate(50, (i) => _post(id: i + 1, isSeen: false));
+    final searchWithTotal = BunnySearch(id: 1, site: BunnySite.e621, label: 'Foxes', query: 'fox', intervalHours: 24, createdAt: '2026-01-01T00:00:00Z', totalCount: 50);
+
+    await tester.pumpWidget(
+      wrapWithLocalization(PostGridScreen(search: searchWithTotal, repository: repository, displaySettingsStore: const DisplaySettingsStore(), downloadSettingsStore: const DownloadSettingsStore(), downloadQueueService: _downloadQueueService())),
+    );
+    await tester.pumpAndSettle();
+
+    // "Select entire search" only exists in the non-selection-mode overflow
+    // menu (M9.2's manual selection mode has its own "select loaded" icon
+    // instead, see the test above) -- so there's no pre-existing selection
+    // to preserve here; cancelling must just leave the grid in its normal,
+    // no-selection state rather than entering selection mode at all.
+    repository.pauseBeforePage = Completer<void>();
+    await tester.tap(find.byType(PopupMenuButton<void>));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Select entire search (50)'));
+    await tester.pump(); // dialog shows; the fetch itself is gated
+
+    await tester.tap(find.text('Cancel'));
+    repository.pauseBeforePage!.complete();
+    await tester.pumpAndSettle();
+
+    expect(find.text('Foxes'), findsOneWidget); // still the normal app bar
+    expect(find.textContaining('selected'), findsNothing);
   });
 
   testWidgets('honors a non-default grid column count from settings', (WidgetTester tester) async {
