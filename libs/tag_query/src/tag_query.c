@@ -33,8 +33,8 @@ struct bunny_tag_query_node
 {
     bunny_tag_query_mode_t mode;
     bunny_tag_query_kind_t kind;
-    char *tag; /* KIND_TAG only; owned; may contain '*' */
-    bool has_wildcard; /* KIND_TAG only */
+    char *tag;                               /* KIND_TAG only; owned; may contain '*' */
+    bool has_wildcard;                       /* KIND_TAG only */
     bunny_tag_query_node_ptr_array children; /* KIND_GROUP only */
 };
 

@@ -4,8 +4,10 @@
 
 #include "bunny_tag_query/tag_query.h"
 
-void setUp(void) {}
-void tearDown(void) {}
+void setUp(void)
+{}
+void tearDown(void)
+{}
 
 static bool matches(const char *query, const char *const *tags, size_t tag_count)
 {
