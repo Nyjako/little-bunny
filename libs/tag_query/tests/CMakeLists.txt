@@ -1,0 +1,3 @@
+add_executable(bunny_tag_query_test_tag_query test_tag_query.c)
+target_link_libraries(bunny_tag_query_test_tag_query PRIVATE bunny_tag_query unity::framework)
+add_test(NAME bunny_tag_query_test_tag_query COMMAND bunny_tag_query_test_tag_query)
