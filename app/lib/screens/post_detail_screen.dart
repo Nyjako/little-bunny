@@ -42,6 +42,14 @@ const _imageExtensions = {'jpg', 'jpeg', 'png', 'gif', 'webp'};
 
 bool _isImage(BunnyPost post) => post.fileExt != null && _imageExtensions.contains(post.fileExt!.toLowerCase());
 
+/// Extensions routed through [GifPlayer] rather than a plain `Image` --
+/// gif and webp are the only formats here that can actually be animated;
+/// jpg/jpeg/png never are. Deliberately separate from `isGifExt`
+/// (util/media_type.dart), which has other callers (grid badges, M28's
+/// rating/media bitmask bucketing) that treat webp as a plain "image" for
+/// unrelated reasons -- this is purely a detail-view rendering decision.
+const _animatedViaGifPlayerExtensions = {'gif', 'webp'};
+
 /// Rebuilds [post] with the given fields adjusted -- used to optimistically
 /// reflect a favorite/vote action (M8.5.14) in the UI immediately, without
 /// waiting for a resync. No `copyWith` exists on [BunnyPost] (nothing else
@@ -745,7 +753,7 @@ class _PostDetailPageState extends State<_PostDetailPage> {
       // CachedNetworkImage already resolves through, which is already
       // proven compatible with this test suite's existing pumpAndSettle
       // calls.
-      final content = isGifExt(ext)
+      final content = _animatedViaGifPlayerExtensions.contains(ext)
           ? GifPlayer(imageUrl: post.fileUrl!, httpHeaders: imageHeadersFor(post.site))
           : Image(
               image: CachedNetworkImageProvider(post.fileUrl!, headers: imageHeadersFor(post.site)),
