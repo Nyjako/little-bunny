@@ -101,6 +101,55 @@ static bunny_http_result_t fake_inkbunny_send(void *user_data, const bunny_http_
     return BUNNY_HTTP_OK;
 }
 
+/* M28: a search-sync-shaped response (no "files" array) -- same gap
+ * api_search.php always has. */
+static const char *INKBUNNY_THIN_SEARCH_FIXTURE = "{\"sid\":\"x\",\"results_count_all\":1,\"results_count_thispage\":1,\"pages_count\":1,\"page\":1,"
+                                                  "\"user_location\":\"\",\"search_params\":[],\"submissions\":["
+                                                  "{\"submission_id\":\"501\",\"hidden\":\"f\",\"username\":\"someone\",\"user_id\":\"628881\","
+                                                  "\"create_datetime\":\"2026-01-01 00:00:00+00\",\"thumbnail_url_large_noncustom\":\"https://example.invalid/501.jpg\","
+                                                  "\"title\":\"a tribute\",\"deleted\":\"f\",\"public\":\"t\",\"rating_id\":\"0\",\"rating_name\":\"General\","
+                                                  "\"submission_type_id\":\"1\",\"friends_only\":\"f\",\"guest_block\":\"f\",\"scraps\":\"f\",\"favorite\":\"f\",\"keywords\":[]}"
+                                                  "]}";
+
+/* M28: an api_submissions.php-shaped response (has a "files" array), same
+ * submission_id as the thin fixture above -- what
+ * bunny_core_backfill_inkbunny_details's own batch request returns. */
+static const char *INKBUNNY_FULL_SUBMISSION_BATCH_FIXTURE = "{\"sid\":\"x\",\"results_count\":1,\"user_location\":\"\",\"submissions\":["
+                                                            "{\"submission_id\":\"501\",\"keywords\":[{\"keyword_id\":\"1\",\"keyword_name\":\"tribute\"}],"
+                                                            "\"hidden\":\"f\",\"scraps\":\"f\",\"favorite\":\"f\",\"favorites_count\":\"0\","
+                                                            "\"create_datetime\":\"2026-01-01 00:00:00+00\",\"username\":\"someone\",\"user_id\":\"628881\","
+                                                            "\"file_name\":\"501_tribute.jpg\",\"files\":[{\"file_id\":\"501\",\"file_name\":\"501_tribute.jpg\","
+                                                            "\"file_url_full\":\"https://example.invalid/501.jpg\",\"file_url_screen\":\"https://example.invalid/501_screen.jpg\","
+                                                            "\"file_url_preview\":\"https://example.invalid/501_preview.jpg\",\"mimetype\":\"image/jpeg\","
+                                                            "\"submission_id\":\"501\",\"user_id\":\"628881\",\"submission_file_order\":\"0\","
+                                                            "\"full_size_x\":\"1234\",\"full_size_y\":\"5678\",\"full_file_md5\":\"deadbeefcafef00d\"}],"
+                                                            "\"pools\":[],\"description\":\"full details now\",\"pools_count\":0,\"title\":\"a tribute\","
+                                                            "\"deleted\":\"f\",\"public\":\"t\",\"mimetype\":\"image/jpeg\",\"pagecount\":\"1\","
+                                                            "\"rating_id\":\"0\",\"rating_name\":\"General\",\"ratings\":[],\"submission_type_id\":\"1\","
+                                                            "\"type_name\":\"Picture/Pinup\",\"guest_block\":\"f\",\"friends_only\":\"f\",\"comments_count\":\"0\",\"views\":\"0\"}"
+                                                            "]}";
+
+/* Distinguishes the search-sync call (api_search.php, thin) from the
+ * backfill's own bulk-fetch call (api_submissions.php, full details) by
+ * URL, so a single test can exercise both phases with a real "thin ->
+ * backfilled" transition instead of both calls returning identical data. */
+static bunny_http_result_t fake_inkbunny_backfill_send(void *user_data, const bunny_http_request_t *request, bunny_http_response_t *out_response)
+{
+    (void)user_data;
+    const char *body;
+    if (strstr(request->url, "api_login.php")) {
+        body = INKBUNNY_LOGIN_FIXTURE;
+    } else if (strstr(request->url, "api_submissions.php")) {
+        body = INKBUNNY_FULL_SUBMISSION_BATCH_FIXTURE;
+    } else {
+        body = INKBUNNY_THIN_SEARCH_FIXTURE;
+    }
+    out_response->status = 200;
+    out_response->body = strdup(body);
+    out_response->body_len = strlen(body);
+    return BUNNY_HTTP_OK;
+}
+
 /* Sleeps ~1s before returning the normal fixture -- the "slow sync" this
  * test's concurrency check needs. Only ever installed by
  * test_concurrent_request_is_not_blocked_by_a_slow_sync below; every other
@@ -962,6 +1011,48 @@ void test_scheduler_backs_up_database_automatically(void)
     TEST_ASSERT_TRUE(found > 0);
 }
 
+void test_scheduler_backfills_inkbunny_post_details_automatically(void)
+{
+    /* Same restart-with-a-short-poll-interval shape as the sync test above,
+     * but with fake_inkbunny_backfill_send swapped in -- it returns a thin
+     * (search-shaped) response for api_search.php and a full-details
+     * (files-array) response for api_submissions.php, so this test can
+     * tell "still thin" from "backfilled" apart by checking for file
+     * metadata (file_md5) that only the full-details response provides --
+     * no HTTP route exists for the backfill job itself, it's purely
+     * scheduler-triggered (M28, server/src/scheduler.c). */
+    server_app_stop(g_app);
+    g_inkbunny_transport.send = fake_inkbunny_backfill_send;
+
+    bunny_core_config_t core_config;
+    memset(&core_config, 0, sizeof(core_config));
+    core_config.db_path = ":memory:";
+    core_config.user_agent = "bunny-tests/1.0 (integration)";
+    core_config.inkbunny_transport = &g_inkbunny_transport;
+    core_config.min_request_interval_sec = 0.001;
+
+    g_app = server_app_start(&core_config, g_data_dir, TEST_PORT, 1);
+    TEST_ASSERT_NOT_NULL(g_app);
+    usleep(100000);
+
+    response_buffer_t response = {0};
+    long status = do_request("POST", "/searches", "{\"site\":\"inkbunny\",\"label\":\"tribute\",\"query\":\"tribute\",\"interval_hours\":24}", &response, true, NULL);
+    TEST_ASSERT_EQUAL(201, status);
+    free(response.data);
+    memset(&response, 0, sizeof(response));
+
+    /* Several ticks, not just one -- the first due-sync tick creates the
+     * thin post, a later tick's backfill fetches full details for it (both
+     * LOW priority, enqueued every tick regardless of processing order). */
+    sleep(5);
+
+    status = do_request("GET", "/searches/1/posts", NULL, &response, true, NULL);
+    TEST_ASSERT_EQUAL(200, status);
+    TEST_ASSERT_NOT_NULL(strstr(response.data, "\"external_id\":501"));
+    TEST_ASSERT_NOT_NULL(strstr(response.data, "\"file_md5\":\"deadbeefcafef00d\""));
+    free(response.data);
+}
+
 void test_get_logs_returns_json_array_with_access_log_line(void)
 {
     response_buffer_t response = {0};
@@ -1294,6 +1385,7 @@ int main(void)
     RUN_TEST(test_my_inkbunny_favorites_searches_and_caches_with_favorite_marked);
     RUN_TEST(test_scheduler_syncs_search_automatically);
     RUN_TEST(test_scheduler_backs_up_database_automatically);
+    RUN_TEST(test_scheduler_backfills_inkbunny_post_details_automatically);
     RUN_TEST(test_get_logs_returns_json_array_with_access_log_line);
     RUN_TEST(test_concurrent_request_is_not_blocked_by_a_slow_sync);
     RUN_TEST(test_settings_get_and_put_default_sync_interval_hours);
