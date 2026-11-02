@@ -28,6 +28,10 @@ target_link_libraries(bunny_core
     PRIVATE
         bunny_e621
         bunny_inkbunny
+        # M28/M54 blacklist-add validation + e621 blacklist sync -- see
+        # blacklist.c. bunny_db already links this too (PRIVATE, for its
+        # own matching), but that doesn't propagate transitively.
+        bunny_tag_query
 )
 
 # bunny_db links sqlite3 PRIVATE, so pthread doesn't propagate transitively

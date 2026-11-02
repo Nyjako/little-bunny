@@ -136,7 +136,7 @@ static int handle_post_blacklist_e621_sync(struct mg_connection *conn, server_co
     cJSON *response = cJSON_CreateObject();
     cJSON_AddNumberToObject(response, "added", stats.added);
     cJSON_AddNumberToObject(response, "already_present", stats.already_present);
-    cJSON_AddNumberToObject(response, "skipped_multi_tag", stats.skipped_multi_tag);
+    cJSON_AddNumberToObject(response, "skipped_invalid", stats.skipped_invalid);
     int status = server_json_respond(conn, 200, response);
     cJSON_Delete(response);
     return status;
