@@ -230,6 +230,11 @@ bunny_core_result_t bunny_core_post_get_tags_by_category(bunny_core_t *core, int
  * bunny_db. Empty for a post with none (e.g. every Inkbunny submission). */
 bunny_core_result_t bunny_core_post_get_sources(bunny_core_t *core, int64_t post_id, bunny_db_string_list_t *out_list);
 
+/* Every file on a post, in position order (M28) -- a thin pass-through to
+ * bunny_db. A single-file post (including every e621 post) still returns
+ * exactly one entry. */
+bunny_core_result_t bunny_core_post_get_files(bunny_core_t *core, int64_t post_id, bunny_db_post_file_list_t *out_list);
+
 /* A post's parent/child relationships (e621 only) -- a thin pass-through to
  * bunny_db. See bunny_db_post_get_relationships's doc comment for the
  * "no row = all-empty/OK, not NOT_FOUND" convention this follows. */

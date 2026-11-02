@@ -281,6 +281,40 @@ static bunny_core_result_t upsert_inkbunny_submission(bunny_db_t *db, const inkb
     const inkbunny_file_t *file = submission->files.count > 0 ? &submission->files.items[0] : NULL;
     char *file_ext = file ? inkbunny_file_ext(file->file_name) : NULL;
 
+    /* Every file on this submission, not just the first (M28) -- a
+     * multi-file Inkbunny submission (Picture Series/Comic/Portfolio/
+     * Music - Album) would otherwise lose every file after the first.
+     * Purely additive: file/file_ext above (and the upsert.file_url/width/
+     * height/etc. fields below) still independently represent just the
+     * first file, unchanged from before this existed. */
+    bunny_db_post_file_upsert_t *file_upserts = NULL;
+    char **file_exts = NULL;
+    size_t file_upsert_count = submission->files.count;
+    if (file_upsert_count > 0) {
+        file_upserts = calloc(file_upsert_count, sizeof(*file_upserts));
+        file_exts = calloc(file_upsert_count, sizeof(*file_exts));
+        if (file_upserts && file_exts) {
+            for (size_t i = 0; i < file_upsert_count; i++) {
+                const inkbunny_file_t *f = &submission->files.items[i];
+                file_exts[i] = inkbunny_file_ext(f->file_name);
+                file_upserts[i].file_url = f->url_full;
+                file_upserts[i].sample_url = f->url_screen;
+                file_upserts[i].preview_url = f->url_preview;
+                file_upserts[i].file_ext = file_exts[i];
+                file_upserts[i].file_md5 = f->md5;
+                file_upserts[i].width = f->full_width;
+                file_upserts[i].height = f->full_height;
+                file_upserts[i].mimetype = f->mimetype;
+            }
+        } else {
+            free(file_upserts);
+            free(file_exts);
+            file_upserts = NULL;
+            file_exts = NULL;
+            file_upsert_count = 0;
+        }
+    }
+
     bunny_db_post_upsert_t upsert;
     memset(&upsert, 0, sizeof(upsert));
     upsert.site = BUNNY_DB_SITE_INKBUNNY;
@@ -301,6 +335,8 @@ static bunny_core_result_t upsert_inkbunny_submission(bunny_db_t *db, const inkb
     upsert.tags = tags.items;
     upsert.tag_count = tags.count;
     upsert.sample_url = file ? file->url_screen : NULL;
+    upsert.files = file_upserts;
+    upsert.file_count = file_upsert_count;
 
     bunny_db_result_t result = bunny_db_post_upsert(db, &upsert, out_post_id);
     /* Same reasoning as upsert_e621_post's own mirror above (M10.3). */
@@ -310,6 +346,11 @@ static bunny_core_result_t upsert_inkbunny_submission(bunny_db_t *db, const inkb
 
     free((void *)tags.items);
     free(file_ext);
+    free(file_upserts);
+    for (size_t i = 0; i < file_upsert_count; i++) {
+        free(file_exts[i]);
+    }
+    free(file_exts);
 
     return bunny_core_map_db_result(result);
 }

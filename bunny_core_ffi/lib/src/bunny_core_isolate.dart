@@ -101,6 +101,17 @@ Map<String, Object?> _tagStatToMap(bunny_db_tag_stat_t stat) => {'name': _readNu
 
 Map<String, Object?> _postTagToMap(bunny_db_post_tag_t tag) => {'name': _readNullableString(tag.name), 'category': _readNullableString(tag.category)};
 
+Map<String, Object?> _postFileToMap(bunny_db_post_file_t file) => {
+  'fileUrl': _readNullableString(file.file_url),
+  'sampleUrl': _readNullableString(file.sample_url),
+  'previewUrl': _readNullableString(file.preview_url),
+  'fileExt': _readNullableString(file.file_ext),
+  'fileMd5': _readNullableString(file.file_md5),
+  'width': file.width,
+  'height': file.height,
+  'mimetype': _readNullableString(file.mimetype),
+};
+
 Map<String, Object?> _syncStatsToMap(bunny_core_sync_stats_t stats) => {'searchesChecked': stats.searches_checked, 'searchesSynced': stats.searches_synced, 'postsUpserted': stats.posts_upserted};
 
 Map<String, Object?> _blacklistSyncStatsToMap(bunny_core_blacklist_sync_stats_t stats) => {'added': stats.added, 'alreadyPresent': stats.already_present, 'skippedMultiTag': stats.skipped_multi_tag};
@@ -336,6 +347,12 @@ class _GetPostSourcesRequest extends _Request {
   final int postId;
 
   const _GetPostSourcesRequest(this.postId);
+}
+
+class _GetPostFilesRequest extends _Request {
+  final int postId;
+
+  const _GetPostFilesRequest(this.postId);
 }
 
 class _GetPostRelationshipsRequest extends _Request {
@@ -637,6 +654,19 @@ List<String> _handleGetPostSources(Pointer<bunny_core_t> core, _GetPostSourcesRe
       items.add(out.ref.items[i].cast<Utf8>().toDartString());
     }
     _bindings.bunny_db_string_list_free(out);
+    return items;
+  });
+}
+
+List<Map<String, Object?>> _handleGetPostFiles(Pointer<bunny_core_t> core, _GetPostFilesRequest r) {
+  return using((arena) {
+    final out = arena<bunny_db_post_file_list_t>();
+    _check(_bindings.bunny_core_post_get_files(core, r.postId, out));
+    final items = <Map<String, Object?>>[];
+    for (var i = 0; i < out.ref.count; i++) {
+      items.add(_postFileToMap(out.ref.items[i]));
+    }
+    _bindings.bunny_db_post_file_list_free(out);
     return items;
   });
 }
@@ -971,6 +1001,8 @@ Object? _dispatch(Pointer<bunny_core_t>? core, _Request request, void Function(P
         return _handleGetPostTagsByCategory(c, r);
       case _GetPostSourcesRequest r:
         return _handleGetPostSources(c, r);
+      case _GetPostFilesRequest r:
+        return _handleGetPostFiles(c, r);
       case _GetPostRelationshipsRequest r:
         return _handleGetPostRelationships(c, r);
       case _BlacklistListRequest r:
@@ -1172,6 +1204,8 @@ class BunnyCoreNative {
   Future<List<Map<String, Object?>>> getPostTagsByCategory(int postId) => _send<List<Map<String, Object?>>>(_GetPostTagsByCategoryRequest(postId));
 
   Future<List<String>> getPostSources(int postId) => _send<List<String>>(_GetPostSourcesRequest(postId));
+
+  Future<List<Map<String, Object?>>> getPostFiles(int postId) => _send<List<Map<String, Object?>>>(_GetPostFilesRequest(postId));
 
   Future<List<String>> blacklistList(String site) => _send<List<String>>(_BlacklistListRequest(site));
 

@@ -273,6 +273,33 @@ class BunnyPostTag {
   const BunnyPostTag({required this.name, this.category});
 }
 
+/// One file on a post (M28) -- a multi-file Inkbunny submission (Picture
+/// Series/Comic/Portfolio/Music - Album) has more than one of these; every
+/// other post (including every e621 post) has exactly one, the same file
+/// [BunnyPost.fileUrl]/[BunnyPost.width]/etc. already represent. Mirrors
+/// `bunny_db_post_file_t`.
+class BunnyPostFile {
+  final String fileUrl;
+  final String? sampleUrl;
+  final String? previewUrl;
+  final String? fileExt;
+  final String? fileMd5;
+  final int width;
+  final int height;
+  final String? mimetype;
+
+  const BunnyPostFile({
+    required this.fileUrl,
+    this.sampleUrl,
+    this.previewUrl,
+    this.fileExt,
+    this.fileMd5,
+    required this.width,
+    required this.height,
+    this.mimetype,
+  });
+}
+
 /// A post's e621 parent/child relationships (site's own external ids --
 /// always empty/false for Inkbunny). Mirrors `bunny_db_post_relationships_t`.
 class BunnyPostRelationships {

@@ -152,6 +152,33 @@ void bunny_db_post_tag_list_free(bunny_db_post_tag_list_t *list)
     list->count = 0;
 }
 
+void bunny_db_post_file_free(bunny_db_post_file_t *file)
+{
+    if (!file) {
+        return;
+    }
+    free(file->file_url);
+    free(file->sample_url);
+    free(file->preview_url);
+    free(file->file_ext);
+    free(file->file_md5);
+    free(file->mimetype);
+    memset(file, 0, sizeof(*file));
+}
+
+void bunny_db_post_file_list_free(bunny_db_post_file_list_t *list)
+{
+    if (!list) {
+        return;
+    }
+    for (size_t i = 0; i < list->count; i++) {
+        bunny_db_post_file_free(&list->items[i]);
+    }
+    free(list->items);
+    list->items = NULL;
+    list->count = 0;
+}
+
 void bunny_db_string_list_free(bunny_db_string_list_t *list)
 {
     if (!list) {
