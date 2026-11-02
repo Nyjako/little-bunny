@@ -87,6 +87,17 @@ BunnyStatsReport _statsReportFromJson(Map<String, Object?> j) => BunnyStatsRepor
 
 BunnyPostTag _postTagFromJson(Map<String, Object?> j) => BunnyPostTag(name: j['name'] as String, category: j['category'] as String?);
 
+BunnyPostFile _postFileFromJson(Map<String, Object?> j) => BunnyPostFile(
+  fileUrl: j['file_url'] as String,
+  sampleUrl: j['sample_url'] as String?,
+  previewUrl: j['preview_url'] as String?,
+  fileExt: j['file_ext'] as String?,
+  fileMd5: j['file_md5'] as String?,
+  width: (j['width'] as num).toInt(),
+  height: (j['height'] as num).toInt(),
+  mimetype: j['mimetype'] as String?,
+);
+
 BunnyPostRelationships _relationshipsFromJson(Map<String, Object?> j) => BunnyPostRelationships(
   hasParent: j['has_parent'] as bool,
   parentExternalId: (j['parent_external_id'] as num?)?.toInt(),
@@ -488,6 +499,15 @@ class HttpBunnyRepository implements BunnyRepository {
       _throwError(response);
     }
     return (jsonDecode(response.body) as List).cast<String>();
+  }
+
+  @override
+  Future<List<BunnyPostFile>> getPostFiles(int postId) async {
+    final response = await _client.get(_uri('/posts/$postId/files'), headers: _headers);
+    if (response.statusCode != 200) {
+      _throwError(response);
+    }
+    return _decodeList(response).map(_postFileFromJson).toList();
   }
 
   @override

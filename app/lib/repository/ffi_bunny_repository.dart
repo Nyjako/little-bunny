@@ -73,6 +73,17 @@ BunnyStatsReport _statsReportFromMap(Map<String, Object?> m) => BunnyStatsReport
 
 BunnyPostTag _postTagFromMap(Map<String, Object?> m) => BunnyPostTag(name: m['name'] as String, category: m['category'] as String?);
 
+BunnyPostFile _postFileFromMap(Map<String, Object?> m) => BunnyPostFile(
+  fileUrl: m['fileUrl'] as String,
+  sampleUrl: m['sampleUrl'] as String?,
+  previewUrl: m['previewUrl'] as String?,
+  fileExt: m['fileExt'] as String?,
+  fileMd5: m['fileMd5'] as String?,
+  width: m['width'] as int,
+  height: m['height'] as int,
+  mimetype: m['mimetype'] as String?,
+);
+
 BunnyPostRelationships _relationshipsFromMap(Map<String, Object?> m) => BunnyPostRelationships(
   hasParent: m['hasParent'] as bool,
   parentExternalId: m['parentExternalId'] as int?,
@@ -307,6 +318,12 @@ class FfiBunnyRepository implements BunnyRepository {
 
   @override
   Future<List<String>> getPostSources(int postId) => _wrapped(() => _native.getPostSources(postId));
+
+  @override
+  Future<List<BunnyPostFile>> getPostFiles(int postId) async {
+    final items = await _wrapped(() => _native.getPostFiles(postId));
+    return items.map(_postFileFromMap).toList();
+  }
 
   @override
   Future<BunnyPostRelationships> getPostRelationships(int postId) async {

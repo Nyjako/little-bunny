@@ -63,6 +63,10 @@ void main() {
     expect(await repository.getPostSources(1), isEmpty);
   });
 
+  test('getPostFiles returns an empty list for a nonexistent post', () async {
+    expect(await repository.getPostFiles(1), isEmpty);
+  });
+
   test('addBlacklistTag/getBlacklist/removeBlacklistTag round-trip per site (M13.3)', () async {
     expect(await repository.getBlacklist(BunnySite.e621), isEmpty);
 

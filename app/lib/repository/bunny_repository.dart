@@ -181,6 +181,11 @@ abstract interface class BunnyRepository {
   /// none (e.g. every Inkbunny submission -- no such field there).
   Future<List<String>> getPostSources(int postId);
 
+  /// Every file on a post, in position order (M28). A single-file post
+  /// (including every e621 post) still returns exactly one entry, the same
+  /// file [BunnyPost.fileUrl]/[BunnyPost.width]/etc. already represent.
+  Future<List<BunnyPostFile>> getPostFiles(int postId);
+
   /// A post's e621 parent/child relationships (always empty/false for
   /// Inkbunny, which has no such concept).
   Future<BunnyPostRelationships> getPostRelationships(int postId);
