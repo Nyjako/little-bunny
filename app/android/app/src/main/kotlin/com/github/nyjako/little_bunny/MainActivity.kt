@@ -29,6 +29,8 @@ class MainActivity : FlutterFragmentActivity() {
                     intent.action = DownloadForegroundService.ACTION_UPDATE_PROGRESS
                     intent.putExtra(DownloadForegroundService.EXTRA_DONE, call.argument<Int>("done") ?: 0)
                     intent.putExtra(DownloadForegroundService.EXTRA_TOTAL, call.argument<Int>("total") ?: 0)
+                    intent.putExtra(DownloadForegroundService.EXTRA_FAILED, call.argument<Int>("failed") ?: 0)
+                    intent.putExtra(DownloadForegroundService.EXTRA_ETA_TEXT, call.argument<String>("etaText"))
                     ContextCompat.startForegroundService(this, intent)
                     result.success(null)
                 }

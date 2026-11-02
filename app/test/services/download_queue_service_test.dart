@@ -97,7 +97,7 @@ void main() {
     await waitUntilIdle(service);
 
     expect(notifier.startingCalls, [1]);
-    expect(notifier.progressCalls, [(1, 1)]);
+    expect(notifier.progressCalls, [(1, 1, 0, null)]);
     expect(notifier.summaryCalls, [(1, 0, 0)]);
     expect(await File('${destinationDir.path}/someartist/1.png').exists(), isTrue);
   });
@@ -110,7 +110,11 @@ void main() {
     await waitUntilIdle(service);
 
     expect(notifier.startingCalls, [3]);
-    expect(notifier.progressCalls, [(1, 3), (2, 3), (3, 3)]);
+    expect(notifier.progressCalls.map((call) => (call.$1, call.$2, call.$3)), [(1, 3, 0), (2, 3, 0), (3, 3, 0)]);
+    // eta is null until there's at least one completed item to estimate a rate from.
+    expect(notifier.progressCalls[0].$4, isNull);
+    expect(notifier.progressCalls[1].$4, isNotNull);
+    expect(notifier.progressCalls[2].$4, isNotNull);
     expect(notifier.summaryCalls, [(3, 0, 0)]);
   });
 
@@ -332,6 +336,7 @@ void main() {
       expect(service.failedItems, hasLength(1));
       expect(service.failedItems.single.post.id, 1);
       expect(service.failedItems.single.failureReason, 'HTTP 500');
+      expect(notifier.progressCalls.last.$3, 1);
     });
 
     test('retryFailed moves one failed item back to queued and it gets reprocessed', () async {
@@ -475,7 +480,7 @@ class _ThrowingDownloadQueueNotifier implements DownloadQueueNotifier {
   Future<void> showStarting({required int total}) async => throw StateError('boom');
 
   @override
-  Future<void> showProgress({required int done, required int total}) async => throw StateError('boom');
+  Future<void> showProgress({required int done, required int total, required int failed, Duration? eta}) async => throw StateError('boom');
 
   @override
   Future<void> showSummary({required int succeeded, required int mismatched, required int failed}) async => throw StateError('boom');
