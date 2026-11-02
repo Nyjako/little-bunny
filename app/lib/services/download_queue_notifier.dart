@@ -15,7 +15,9 @@ abstract class DownloadQueueNotifier {
   /// process before anything ever told the service to start.
   Future<void> showStarting({required int total});
 
-  Future<void> showProgress({required int done, required int total});
+  /// [failed] is this session's running failed-item count; [eta] is `null`
+  /// until there's at least one completed item to estimate a rate from.
+  Future<void> showProgress({required int done, required int total, required int failed, Duration? eta});
 
   Future<void> showSummary({required int succeeded, required int mismatched, required int failed});
 
@@ -31,7 +33,7 @@ class NoopDownloadQueueNotifier implements DownloadQueueNotifier {
   Future<void> showStarting({required int total}) async {}
 
   @override
-  Future<void> showProgress({required int done, required int total}) async {}
+  Future<void> showProgress({required int done, required int total, required int failed, Duration? eta}) async {}
 
   @override
   Future<void> showSummary({required int succeeded, required int mismatched, required int failed}) async {}

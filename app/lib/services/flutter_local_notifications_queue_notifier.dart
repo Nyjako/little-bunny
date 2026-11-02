@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
+import '../util/duration_format.dart';
 import 'download_queue_notifier.dart';
 
 /// A fixed, reused id for every call -- `flutter_local_notifications` treats
@@ -40,7 +41,12 @@ class FlutterLocalNotificationsQueueNotifier implements DownloadQueueNotifier {
     try {
       await _plugin.initialize(
         settings: const InitializationSettings(
-          android: AndroidInitializationSettings('@mipmap/ic_launcher'),
+          // The full adaptive-icon mipmap renders as a garbled blob here --
+          // Android force-silhouettes a notification's small icon using only
+          // its alpha channel, which only works cleanly for a flat,
+          // high-contrast shape like the foreground layer below, not the
+          // full-color multi-layer launcher icon.
+          android: AndroidInitializationSettings('@drawable/ic_launcher_foreground'),
           iOS: DarwinInitializationSettings(),
           macOS: DarwinInitializationSettings(),
           linux: LinuxInitializationSettings(defaultActionName: 'Open'),
@@ -70,15 +76,17 @@ class FlutterLocalNotificationsQueueNotifier implements DownloadQueueNotifier {
   );
 
   @override
-  Future<void> showStarting({required int total}) => showProgress(done: 0, total: total);
+  Future<void> showStarting({required int total}) => showProgress(done: 0, total: total, failed: 0, eta: null);
 
   @override
-  Future<void> showProgress({required int done, required int total}) async {
+  Future<void> showProgress({required int done, required int total, required int failed, Duration? eta}) async {
     try {
+      final failedText = failed > 0 ? ' · $failed failed' : '';
+      final etaText = eta != null ? ' · ~${formatDurationCompact(eta)} left' : '';
       await _plugin.show(
         id: _notificationId,
         title: 'Downloading',
-        body: '$done of $total',
+        body: '$done of $total$failedText$etaText',
         notificationDetails: _details(showProgress: true, maxProgress: total, progress: done),
       );
     } catch (e) {

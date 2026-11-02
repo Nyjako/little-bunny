@@ -497,7 +497,7 @@ void main() {
     expect(find.text('freshly_loaded_tag'), findsOneWidget);
   });
 
-  for (final ext in ['jpg', 'png', 'webp']) {
+  for (final ext in ['jpg', 'png']) {
     testWidgets('renders a CachedNetworkImage for a $ext post', (WidgetTester tester) async {
       final repository = FakeBunnyRepository();
       final post = _post(fileExt: ext);
@@ -519,6 +519,18 @@ void main() {
   testWidgets('renders a GifPlayer (not a plain CachedNetworkImage) for a gif post (M49)', (WidgetTester tester) async {
     final repository = FakeBunnyRepository();
     final post = _post(fileExt: 'gif');
+
+    await tester.pumpWidget(wrapWithLocalization(PostDetailScreen(post: post, repository: repository, displaySettingsStore: const DisplaySettingsStore(), downloadSettingsStore: const DownloadSettingsStore(), downloadQueueService: _downloadQueueService())));
+    await tester.pump();
+
+    expect(find.byType(GifPlayer), findsOneWidget);
+    expect(find.byType(CachedNetworkImage), findsNothing);
+    expect(find.byType(VideoPlayer), findsNothing);
+  });
+
+  testWidgets('renders a GifPlayer (not a plain CachedNetworkImage) for a webp post', (WidgetTester tester) async {
+    final repository = FakeBunnyRepository();
+    final post = _post(fileExt: 'webp');
 
     await tester.pumpWidget(wrapWithLocalization(PostDetailScreen(post: post, repository: repository, displaySettingsStore: const DisplaySettingsStore(), downloadSettingsStore: const DownloadSettingsStore(), downloadQueueService: _downloadQueueService())));
     await tester.pump();

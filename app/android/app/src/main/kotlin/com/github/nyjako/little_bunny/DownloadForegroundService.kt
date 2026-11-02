@@ -35,6 +35,7 @@ class DownloadForegroundService : Service() {
         const val EXTRA_SUCCEEDED = "succeeded"
         const val EXTRA_MISMATCHED = "mismatched"
         const val EXTRA_FAILED = "failed"
+        const val EXTRA_ETA_TEXT = "etaText"
 
         private const val CHANNEL_ID = "download_queue"
         private const val CHANNEL_NAME = "Downloads"
@@ -55,12 +56,14 @@ class DownloadForegroundService : Service() {
         when (intent?.action) {
             ACTION_START -> {
                 val total = intent.getIntExtra(EXTRA_TOTAL, 0)
-                startForegroundCompat(progressNotification(0, total))
+                startForegroundCompat(progressNotification(0, total, 0, null))
             }
             ACTION_UPDATE_PROGRESS -> {
                 val done = intent.getIntExtra(EXTRA_DONE, 0)
                 val total = intent.getIntExtra(EXTRA_TOTAL, 0)
-                startForegroundCompat(progressNotification(done, total))
+                val failed = intent.getIntExtra(EXTRA_FAILED, 0)
+                val etaText = intent.getStringExtra(EXTRA_ETA_TEXT)
+                startForegroundCompat(progressNotification(done, total, failed, etaText))
             }
             ACTION_SHOW_SUMMARY -> {
                 val succeeded = intent.getIntExtra(EXTRA_SUCCEEDED, 0)
@@ -93,22 +96,25 @@ class DownloadForegroundService : Service() {
         )
     }
 
-    private fun progressNotification(done: Int, total: Int): Notification =
-        NotificationCompat.Builder(this, CHANNEL_ID)
+    private fun progressNotification(done: Int, total: Int, failed: Int, etaText: String?): Notification {
+        val failedPart = if (failed > 0) " · $failed failed" else ""
+        val etaPart = if (etaText != null) " · ~$etaText left" else ""
+        return NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle("Downloading")
-            .setContentText("$done of $total")
-            .setSmallIcon(R.mipmap.ic_launcher)
+            .setContentText("$done of $total$failedPart$etaPart")
+            .setSmallIcon(R.drawable.ic_launcher_foreground)
             .setOngoing(true)
             .setOnlyAlertOnce(true)
             .setProgress(total, done, false)
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .build()
+    }
 
     private fun summaryNotification(succeeded: Int, mismatched: Int, failed: Int): Notification =
         NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle("Downloads finished")
             .setContentText("$succeeded downloaded, $mismatched checksum mismatch, $failed failed")
-            .setSmallIcon(R.mipmap.ic_launcher)
+            .setSmallIcon(R.drawable.ic_launcher_foreground)
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .build()
 
