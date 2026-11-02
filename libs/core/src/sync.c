@@ -275,11 +275,36 @@ static char *inkbunny_file_ext(const char *file_name)
     return ext;
 }
 
+/* True for a primary file this app genuinely cannot render at all, with no
+ * preview/thumbnail fallback available from the API either (M28) -- checked
+ * by actual file type, not Inkbunny's own submission_type_id category:
+ * confirmed live that a "Shockwave/Flash - Animation" submission can
+ * legitimately BE a plain renderable .gif (someone converted it before
+ * uploading), so filtering by category alone would incorrectly drop real
+ * content. Only "Shockwave/Flash - Interactive" submissions were confirmed
+ * to always be genuine, unplayable .swf files. */
+static bool is_unsupported_inkbunny_file(const inkbunny_file_t *file, const char *file_ext)
+{
+    if (!file) {
+        return false;
+    }
+    if (file->mimetype && strcmp(file->mimetype, "application/x-shockwave-flash") == 0) {
+        return true;
+    }
+    return file_ext && strcmp(file_ext, "swf") == 0;
+}
+
 static bunny_core_result_t upsert_inkbunny_submission(bunny_db_t *db, const inkbunny_submission_t *submission, int64_t *out_post_id)
 {
     flat_tag_list_t tags = flatten_inkbunny_keywords(submission);
     const inkbunny_file_t *file = submission->files.count > 0 ? &submission->files.items[0] : NULL;
     char *file_ext = file ? inkbunny_file_ext(file->file_name) : NULL;
+
+    if (is_unsupported_inkbunny_file(file, file_ext)) {
+        free((void *)tags.items);
+        free(file_ext);
+        return BUNNY_CORE_ERR_UNSUPPORTED_FORMAT;
+    }
 
     /* Every file on this submission, not just the first (M28) -- a
      * multi-file Inkbunny submission (Picture Series/Comic/Portfolio/
@@ -826,9 +851,24 @@ bunny_core_result_t bunny_core_backfill_inkbunny_details(bunny_core_t *core, bun
 
     for (size_t i = 0; i < submissions.count; i++) {
         int64_t post_id = 0;
-        if (upsert_inkbunny_submission(core->db, &submissions.items[i], &post_id) == BUNNY_CORE_OK) {
+        bunny_core_result_t upsert_result = upsert_inkbunny_submission(core->db, &submissions.items[i], &post_id);
+        if (upsert_result == BUNNY_CORE_OK) {
             bunny_db_post_mark_inkbunny_details_backfilled(core->db, post_id);
             stats.found++;
+            continue;
+        }
+        /* Present in the response but rejected for a reason unrelated to
+         * whether it exists (M28: BUNNY_CORE_ERR_UNSUPPORTED_FORMAT, e.g. a
+         * Flash submission) -- mark it backfilled anyway, same reasoning as
+         * the "absent from the response entirely" loop below, so it isn't
+         * retried forever either. Its existing (thin) data is left as-is. */
+        if (upsert_result == BUNNY_CORE_ERR_UNSUPPORTED_FORMAT) {
+            bunny_db_post_t post;
+            memset(&post, 0, sizeof(post));
+            if (bunny_db_post_get(core->db, BUNNY_DB_SITE_INKBUNNY, submissions.items[i].submission_id, &post) == BUNNY_DB_OK) {
+                bunny_db_post_mark_inkbunny_details_backfilled(core->db, post.id);
+                bunny_db_post_free(&post);
+            }
         }
     }
 

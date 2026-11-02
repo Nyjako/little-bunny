@@ -1,0 +1,54 @@
+{
+  "sid": "77N2zxwuZFvRduEQzvE15zGkiR",
+  "results_count": 1,
+  "user_location": "",
+  "submissions": [
+    {
+      "submission_id": "1921637",
+      "keywords": [
+        {"keyword_id": "1", "keyword_name": "flash"}
+      ],
+      "hidden": "f",
+      "scraps": "f",
+      "favorite": "f",
+      "favorites_count": "0",
+      "create_datetime": "2026-01-01 00:00:00+00",
+      "username": "WAtheAnum",
+      "user_id": "1",
+      "file_name": "2789753_WAtheAnum_stiff_digging_2_1.1.swf",
+      "file_url_full": "https://de.ib.metapix.net/files/full/2789/2789753_WAtheAnum_stiff_digging_2_1.1.swf",
+      "file_url_screen": "https://de.ib.metapix.net/files/screen/2789/2789753_WAtheAnum_stiff_digging_2_1.1.swf",
+      "file_url_preview": "https://de.ib.metapix.net/files/preview/2789/2789753_WAtheAnum_stiff_digging_2_1.1.swf",
+      "files": [
+        {
+          "file_id": "2789753",
+          "file_name": "2789753_WAtheAnum_stiff_digging_2_1.1.swf",
+          "file_url_full": "https://de.ib.metapix.net/files/full/2789/2789753_WAtheAnum_stiff_digging_2_1.1.swf",
+          "file_url_screen": "https://de.ib.metapix.net/files/screen/2789/2789753_WAtheAnum_stiff_digging_2_1.1.swf",
+          "file_url_preview": "https://de.ib.metapix.net/files/preview/2789/2789753_WAtheAnum_stiff_digging_2_1.1.swf",
+          "mimetype": "application/x-shockwave-flash",
+          "submission_id": "1921637",
+          "user_id": "1",
+          "submission_file_order": "0"
+        }
+      ],
+      "pools": [],
+      "description": "a flash animation",
+      "pools_count": 0,
+      "title": "stiff digging 2",
+      "deleted": "f",
+      "public": "t",
+      "mimetype": "application/x-shockwave-flash",
+      "pagecount": "1",
+      "rating_id": "0",
+      "rating_name": "General",
+      "ratings": [],
+      "submission_type_id": "7",
+      "type_name": "Shockwave/Flash - Interactive",
+      "guest_block": "f",
+      "friends_only": "f",
+      "comments_count": "0",
+      "views": "0"
+    }
+  ]
+}

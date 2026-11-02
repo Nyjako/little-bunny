@@ -484,6 +484,24 @@ void test_fetch_and_cache_post_stores_every_file_on_a_multi_file_inkbunny_submis
     free(submission_fixture);
 }
 
+void test_fetch_and_cache_post_rejects_a_flash_submission(void)
+{
+    char *login_fixture = read_fixture("inkbunny_login_success.json");
+    char *submission_fixture = read_fixture("inkbunny_submission_flash.json");
+    TEST_ASSERT_NOT_NULL(login_fixture);
+    TEST_ASSERT_NOT_NULL(submission_fixture);
+    g_inkbunny_state.bodies[0] = login_fixture;
+    g_inkbunny_state.bodies[1] = submission_fixture;
+    g_inkbunny_state.body_count = 2;
+
+    int64_t post_id = 0;
+    bunny_core_result_t result = bunny_core_fetch_and_cache_post(g_core, BUNNY_DB_SITE_INKBUNNY, 1921637, &post_id);
+    TEST_ASSERT_EQUAL(BUNNY_CORE_ERR_UNSUPPORTED_FORMAT, result);
+
+    free(login_fixture);
+    free(submission_fixture);
+}
+
 void test_backfill_inkbunny_details_is_a_noop_with_no_thin_posts(void)
 {
     bunny_core_backfill_stats_t stats;
@@ -616,6 +634,56 @@ void test_backfill_inkbunny_details_marks_a_missing_submission_backfilled_anyway
 
     free(backfill_login_fixture);
     free(partial_fixture);
+}
+
+void test_backfill_inkbunny_details_marks_a_flash_submission_backfilled_without_counting_it(void)
+{
+    /* M28: covers a thin post that was already sitting in the DB from
+     * before Flash filtering existed (sync_inkbunny_search now rejects
+     * Flash submissions at the source, so this can only happen to a
+     * pre-existing row) -- the backfill's own batch response reveals it's
+     * actually Flash. It must still be marked backfilled (never retried
+     * forever), but not counted as "found" since nothing new was stored. */
+    char *login_fixture = read_fixture("inkbunny_login_success.json");
+    char *search_fixture = read_fixture("inkbunny_search_response.json");
+    char *empty_fixture = read_fixture("inkbunny_search_response_empty.json");
+    g_inkbunny_state.bodies[0] = login_fixture;
+    g_inkbunny_state.bodies[1] = search_fixture;
+    g_inkbunny_state.bodies[2] = empty_fixture;
+    g_inkbunny_state.body_count = 3;
+    int64_t search_id = 0;
+    TEST_ASSERT_EQUAL(BUNNY_CORE_OK, bunny_core_search_create(g_core, BUNNY_DB_SITE_INKBUNNY, "tribute", "tribute", 24, NULL, &search_id));
+    bunny_core_sync_stats_t sync_stats;
+    TEST_ASSERT_EQUAL(BUNNY_CORE_OK, bunny_core_sync_due_searches(g_core, &sync_stats));
+    TEST_ASSERT_EQUAL(1, sync_stats.posts_upserted);
+    free(login_fixture);
+    free(search_fixture);
+    free(empty_fixture);
+
+    memset(&g_inkbunny_state, 0, sizeof(g_inkbunny_state));
+    char *backfill_login_fixture = read_fixture("inkbunny_login_success.json");
+    char *flash_batch_fixture = read_fixture("inkbunny_submissions_batch_flash.json");
+    TEST_ASSERT_NOT_NULL(backfill_login_fixture);
+    TEST_ASSERT_NOT_NULL(flash_batch_fixture);
+    g_inkbunny_state.bodies[0] = backfill_login_fixture;
+    g_inkbunny_state.bodies[1] = flash_batch_fixture;
+    g_inkbunny_state.body_count = 2;
+
+    bunny_core_backfill_stats_t stats;
+    bunny_core_result_t result = bunny_core_backfill_inkbunny_details(g_core, &stats);
+    TEST_ASSERT_EQUAL(BUNNY_CORE_OK, result);
+    TEST_ASSERT_EQUAL(1, stats.attempted);
+    TEST_ASSERT_EQUAL(0, stats.found);
+    TEST_ASSERT_EQUAL(0, stats.failed);
+
+    /* Marked backfilled despite not being "found" -- a later call has
+     * nothing left to retry. */
+    bunny_core_backfill_stats_t second_stats;
+    TEST_ASSERT_EQUAL(BUNNY_CORE_OK, bunny_core_backfill_inkbunny_details(g_core, &second_stats));
+    TEST_ASSERT_EQUAL(0, second_stats.attempted);
+
+    free(backfill_login_fixture);
+    free(flash_batch_fixture);
 }
 
 void test_backfill_inkbunny_details_leaves_posts_thin_on_api_failure(void)
@@ -1443,6 +1511,45 @@ void test_sync_inkbunny_search_upserts_post(void)
     free(empty_fixture);
 }
 
+void test_sync_inkbunny_search_skips_a_flash_submission(void)
+{
+    /* M28: Shockwave/Flash - Interactive submissions are a genuine .swf
+     * (application/x-shockwave-flash) with no runtime or preview available
+     * in this app -- confirmed filtered by actual file type, not Inkbunny's
+     * submission_type_id category (a "Flash - Animation" submission can
+     * legitimately be a real, renderable .gif instead). */
+    char *login_fixture = read_fixture("inkbunny_login_success.json");
+    char *search_fixture = read_fixture("inkbunny_search_response_flash.json");
+    char *empty_fixture = read_fixture("inkbunny_search_response_empty.json");
+    TEST_ASSERT_NOT_NULL(login_fixture);
+    TEST_ASSERT_NOT_NULL(search_fixture);
+    TEST_ASSERT_NOT_NULL(empty_fixture);
+    g_inkbunny_state.bodies[0] = login_fixture;
+    g_inkbunny_state.bodies[1] = search_fixture;
+    g_inkbunny_state.bodies[2] = empty_fixture;
+    g_inkbunny_state.body_count = 3;
+
+    int64_t search_id = 0;
+    bunny_core_result_t result = bunny_core_search_create(g_core, BUNNY_DB_SITE_INKBUNNY, "tribute", "tribute", 24, NULL, &search_id);
+    TEST_ASSERT_EQUAL(BUNNY_CORE_OK, result);
+
+    bunny_core_sync_stats_t stats;
+    result = bunny_core_sync_due_searches(g_core, &stats);
+    TEST_ASSERT_EQUAL(BUNNY_CORE_OK, result);
+    TEST_ASSERT_EQUAL(1, stats.searches_synced);
+    TEST_ASSERT_EQUAL(0, stats.posts_upserted);
+
+    bunny_db_post_list_t posts;
+    result = bunny_core_search_list_posts(g_core, search_id, false, BUNNY_DB_RATING_MASK_ALL, BUNNY_DB_MEDIA_MASK_ALL, 1, &posts);
+    TEST_ASSERT_EQUAL(BUNNY_CORE_OK, result);
+    TEST_ASSERT_EQUAL(0, (int)posts.count);
+    bunny_db_post_list_free(&posts);
+
+    free(login_fixture);
+    free(search_fixture);
+    free(empty_fixture);
+}
+
 void test_sync_inkbunny_favorites_search_requests_the_logged_in_users_own_favorites(void)
 {
     /* A search whose query is exactly "favorited_by:me" (M27) is the
@@ -2078,9 +2185,11 @@ int main(void)
     RUN_TEST(test_fetch_and_cache_post_upserts_live_e621_post);
     RUN_TEST(test_fetch_and_cache_post_upserts_live_inkbunny_submission);
     RUN_TEST(test_fetch_and_cache_post_stores_every_file_on_a_multi_file_inkbunny_submission);
+    RUN_TEST(test_fetch_and_cache_post_rejects_a_flash_submission);
     RUN_TEST(test_backfill_inkbunny_details_is_a_noop_with_no_thin_posts);
     RUN_TEST(test_backfill_inkbunny_details_upserts_and_marks_fetched_posts);
     RUN_TEST(test_backfill_inkbunny_details_marks_a_missing_submission_backfilled_anyway);
+    RUN_TEST(test_backfill_inkbunny_details_marks_a_flash_submission_backfilled_without_counting_it);
     RUN_TEST(test_backfill_inkbunny_details_leaves_posts_thin_on_api_failure);
     RUN_TEST(test_list_comments_returns_live_e621_comments);
     RUN_TEST(test_list_comments_rejects_inkbunny_posts);
@@ -2112,6 +2221,7 @@ int main(void)
     RUN_TEST(test_mark_seen_flips_is_seen_on_a_synced_post);
     RUN_TEST(test_mark_seen_rejects_a_nonexistent_post);
     RUN_TEST(test_sync_inkbunny_search_upserts_post);
+    RUN_TEST(test_sync_inkbunny_search_skips_a_flash_submission);
     RUN_TEST(test_sync_inkbunny_favorites_search_requests_the_logged_in_users_own_favorites);
     RUN_TEST(test_sync_inkbunny_pool_search_sends_pool_id_not_literal_text);
     RUN_TEST(test_sync_inkbunny_search_marks_a_favorited_submission_locally);
