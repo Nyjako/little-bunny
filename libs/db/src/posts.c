@@ -903,3 +903,56 @@ bunny_db_result_t bunny_db_count_unseen(bunny_db_t *db, int64_t *out_count)
     sqlite3_finalize(stmt);
     return BUNNY_DB_OK;
 }
+
+bunny_db_result_t bunny_db_post_mark_inkbunny_details_backfilled(bunny_db_t *db, int64_t post_id)
+{
+    if (!db) {
+        return BUNNY_DB_ERR_INVALID_ARG;
+    }
+    const char *sql = "UPDATE posts SET inkbunny_details_backfilled = 1 WHERE id = ?;";
+    sqlite3_stmt *stmt = NULL;
+    if (sqlite3_prepare_v2(db->handle, sql, -1, &stmt, NULL) != SQLITE_OK) {
+        return BUNNY_DB_ERR_QUERY_FAILED;
+    }
+    sqlite3_bind_int64(stmt, 1, post_id);
+    int rc = sqlite3_step(stmt);
+    sqlite3_finalize(stmt);
+    return rc == SQLITE_DONE ? BUNNY_DB_OK : bunny_db_sqlite_rc_to_result(rc);
+}
+
+bunny_db_result_t bunny_db_inkbunny_list_thin_post_ids(bunny_db_t *db, int limit, bunny_db_int64_list_t *out_external_ids)
+{
+    if (!db || !out_external_ids || limit <= 0) {
+        return BUNNY_DB_ERR_INVALID_ARG;
+    }
+    memset(out_external_ids, 0, sizeof(*out_external_ids));
+
+    const char *sql = "SELECT external_id FROM posts WHERE site = 'inkbunny' AND inkbunny_details_backfilled = 0 LIMIT ?;";
+    sqlite3_stmt *stmt = NULL;
+    if (sqlite3_prepare_v2(db->handle, sql, -1, &stmt, NULL) != SQLITE_OK) {
+        return BUNNY_DB_ERR_QUERY_FAILED;
+    }
+    sqlite3_bind_int(stmt, 1, limit);
+
+    bunny_db_int64_array arr;
+    bunny_db_int64_array_init(&arr);
+
+    int rc;
+    while ((rc = sqlite3_step(stmt)) == SQLITE_ROW) {
+        if (!bunny_db_int64_array_push(&arr, sqlite3_column_int64(stmt, 0))) {
+            sqlite3_finalize(stmt);
+            bunny_db_int64_array_free(&arr);
+            return BUNNY_DB_ERR_UNKNOWN;
+        }
+    }
+    sqlite3_finalize(stmt);
+
+    if (rc != SQLITE_DONE) {
+        bunny_db_int64_array_free(&arr);
+        return bunny_db_sqlite_rc_to_result(rc);
+    }
+
+    out_external_ids->items = arr.items;
+    out_external_ids->count = arr.count;
+    return BUNNY_DB_OK;
+}

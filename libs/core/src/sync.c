@@ -705,10 +705,122 @@ bunny_core_result_t bunny_core_fetch_and_cache_post(bunny_core_t *core, bunny_db
 
     bunny_core_db_lock(core);
     bunny_core_result_t result = upsert_inkbunny_submission(core->db, &submission, out_post_id);
+    /* This is a full submission fetch (unlike a search sync), so mark it
+     * backfilled too (M28) -- otherwise a post a user already opened via
+     * PostDetailScreen's own live refresh would still show up as thin and
+     * get redundantly re-fetched by the periodic bulk backfill later. */
+    if (result == BUNNY_CORE_OK) {
+        bunny_db_post_mark_inkbunny_details_backfilled(core->db, *out_post_id);
+    }
     bunny_core_db_unlock(core);
     inkbunny_submission_free(&submission);
     inkbunny_client_destroy(client);
     return result;
+}
+
+/* See this function's own doc comment in core.h for the overall shape.
+ * inkbunny_get_submissions succeeds or fails for the WHOLE batch in one
+ * HTTP call, never partially -- a requested id simply absent from a
+ * successful response is gone/inaccessible since the original search
+ * sync, and is marked backfilled anyway so it's never retried forever. */
+bunny_core_result_t bunny_core_backfill_inkbunny_details(bunny_core_t *core, bunny_core_backfill_stats_t *out_stats)
+{
+    if (!core) {
+        return BUNNY_CORE_ERR_INVALID_ARG;
+    }
+
+    bunny_core_backfill_stats_t stats;
+    memset(&stats, 0, sizeof(stats));
+
+    bunny_db_int64_list_t thin_ids;
+    memset(&thin_ids, 0, sizeof(thin_ids));
+    size_t read_slot;
+    bunny_db_t *read_db = bunny_core_db_read_lock(core, &read_slot);
+    bunny_db_result_t list_result = bunny_db_inkbunny_list_thin_post_ids(read_db, 100, &thin_ids);
+    bunny_core_db_read_unlock(core, read_slot);
+    if (list_result != BUNNY_DB_OK) {
+        if (out_stats) {
+            *out_stats = stats;
+        }
+        return bunny_core_map_db_result(list_result);
+    }
+    if (thin_ids.count == 0) {
+        bunny_db_int64_list_free(&thin_ids);
+        if (out_stats) {
+            *out_stats = stats;
+        }
+        return BUNNY_CORE_OK;
+    }
+
+    stats.attempted = (int)thin_ids.count;
+
+    inkbunny_client_t *client = bunny_core_build_inkbunny_client(core);
+    if (!client) {
+        bunny_core_log(core, "ERROR", "Failed to build Inkbunny client for details backfill");
+        stats.failed = stats.attempted;
+        bunny_db_int64_list_free(&thin_ids);
+        if (out_stats) {
+            *out_stats = stats;
+        }
+        return BUNNY_CORE_ERR_SITE;
+    }
+
+    inkbunny_submission_list_t submissions;
+    memset(&submissions, 0, sizeof(submissions));
+    inkbunny_result_t fetch_result = inkbunny_get_submissions(client, thin_ids.items, thin_ids.count, &submissions);
+    inkbunny_client_destroy(client);
+
+    if (fetch_result != INKBUNNY_OK) {
+        bunny_core_log(core, "ERROR", "Inkbunny details backfill request failed (%d id(s) left thin)", stats.attempted);
+        stats.failed = stats.attempted;
+        bunny_db_int64_list_free(&thin_ids);
+        if (out_stats) {
+            *out_stats = stats;
+        }
+        return BUNNY_CORE_ERR_SITE;
+    }
+
+    bunny_core_db_lock(core);
+    bunny_db_begin_transaction(core->db);
+
+    for (size_t i = 0; i < submissions.count; i++) {
+        int64_t post_id = 0;
+        if (upsert_inkbunny_submission(core->db, &submissions.items[i], &post_id) == BUNNY_CORE_OK) {
+            bunny_db_post_mark_inkbunny_details_backfilled(core->db, post_id);
+            stats.found++;
+        }
+    }
+
+    for (size_t i = 0; i < thin_ids.count; i++) {
+        bool was_returned = false;
+        for (size_t j = 0; j < submissions.count; j++) {
+            if (submissions.items[j].submission_id == thin_ids.items[i]) {
+                was_returned = true;
+                break;
+            }
+        }
+        if (!was_returned) {
+            bunny_db_post_t post;
+            memset(&post, 0, sizeof(post));
+            if (bunny_db_post_get(core->db, BUNNY_DB_SITE_INKBUNNY, thin_ids.items[i], &post) == BUNNY_DB_OK) {
+                bunny_db_post_mark_inkbunny_details_backfilled(core->db, post.id);
+                bunny_db_post_free(&post);
+            }
+        }
+    }
+
+    bunny_db_commit_transaction(core->db);
+    bunny_core_db_unlock(core);
+
+    inkbunny_submission_list_free(&submissions);
+    bunny_db_int64_list_free(&thin_ids);
+
+    bunny_core_log(core, "INFO", "Inkbunny details backfill: %d/%d post(s) fetched", stats.found, stats.attempted);
+
+    if (out_stats) {
+        *out_stats = stats;
+    }
+    return BUNNY_CORE_OK;
 }
 
 bunny_core_result_t bunny_core_preview_search(bunny_core_t *core, bunny_db_site_t site, const char *query, int page, bunny_db_post_list_t *out_list)

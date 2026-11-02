@@ -1962,17 +1962,25 @@ this file is the single source of truth for "what's done" across sessions.
     to confirm what actually renders correctly today. Flash submissions (Shockwave/Flash
     - Animation, Shockwave/Flash - Interactive) are to be **permanently dropped/filtered
     out**, not supported, once this is scoped.
-  - [ ] **Bulk Inkbunny submission detail fetch (background job).** The user pointed out
+  - [x] **Bulk Inkbunny submission detail fetch (background job).** The user pointed out
     `api_submissions.php` (see `docs/API - Inkbunny.pdf`, gitignored -- Inkbunny's
     official docs, kept locally): takes up to 100 comma-separated submission ids per
     call and returns full details for all of them at once (tags, descriptions,
     dimensions, comment counts, pool membership, ...) -- the same data a search sync
     currently can only get one submission at a time via `inkbunny_get_submission`
-    (confirmed limited to single ids, unlike this batched endpoint). A background job
-    batching already-synced-but-thin Inkbunny posts through this in groups of 100 would
-    backfill the M26.5/M27-era "search sync returns no tags/dimensions/comment count"
-    gap proactively, instead of relying on `PostDetailScreen`'s live per-post refresh
-    on open (M26.5) to fill it in lazily, post by post.
+    (confirmed limited to single ids, unlike this batched endpoint; the bulk client
+    function, `inkbunny_get_submissions`, already existed). Implemented as a server-only
+    periodic job (`bunny_core_backfill_inkbunny_details`, `libs/core/src/sync.c`),
+    enqueued every scheduler tick alongside due-search sync -- no FFI/HTTP exposure;
+    standalone mode keeps relying on `PostDetailScreen`'s live per-post refresh on open
+    (M26.5), unchanged. A thin post is tracked via a new `posts.inkbunny_details_backfilled`
+    flag (migration 17) rather than NULL/zero-value heuristics, since a genuinely sparse
+    real post (0 comments, few tags) is indistinguishable from a never-fetched one by
+    value alone; deliberately kept out of `bunny_db_post_upsert`'s own column set so an
+    ordinary search resync (which never has full details) can't silently reset it back to
+    thin. A submission id requested but absent from a successful batch response (deleted/
+    inaccessible since the original search sync) is marked backfilled anyway, so it's
+    never retried forever.
   - [ ] **Blacklist "AND" groups.** M27's e621 blacklist sync only imports single-tag
     lines; multi-tag space-separated lines (e621's "AND" semantics -- a post is
     blacklisted only when *every* tag on that line matches) are skipped and merely
