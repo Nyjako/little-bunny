@@ -13,6 +13,8 @@ const char *bunny_core_result_to_string(bunny_core_result_t result)
             return "database error";
         case BUNNY_CORE_ERR_SITE:
             return "site client error";
+        case BUNNY_CORE_ERR_UNSUPPORTED_FORMAT:
+            return "unsupported format";
         case BUNNY_CORE_ERR_UNKNOWN:
         default:
             return "unknown error";

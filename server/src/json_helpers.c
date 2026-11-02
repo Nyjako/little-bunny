@@ -48,6 +48,8 @@ static const char *status_text_for(int status)
             return "Unauthorized";
         case 404:
             return "Not Found";
+        case 415:
+            return "Unsupported Media Type";
         case 502:
             return "Bad Gateway";
         default:
@@ -84,6 +86,9 @@ int server_json_respond_error(struct mg_connection *conn, bunny_core_result_t re
             break;
         case BUNNY_CORE_ERR_SITE:
             status = 502;
+            break;
+        case BUNNY_CORE_ERR_UNSUPPORTED_FORMAT:
+            status = 415;
             break;
         default:
             status = 500;
