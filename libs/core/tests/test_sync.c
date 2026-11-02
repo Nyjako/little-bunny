@@ -441,6 +441,190 @@ void test_fetch_and_cache_post_upserts_live_inkbunny_submission(void)
     free(submission_fixture);
 }
 
+void test_backfill_inkbunny_details_is_a_noop_with_no_thin_posts(void)
+{
+    bunny_core_backfill_stats_t stats;
+    bunny_core_result_t result = bunny_core_backfill_inkbunny_details(g_core, &stats);
+    TEST_ASSERT_EQUAL(BUNNY_CORE_OK, result);
+    TEST_ASSERT_EQUAL(0, stats.attempted);
+    TEST_ASSERT_EQUAL(0, stats.found);
+    TEST_ASSERT_EQUAL(0, stats.failed);
+    /* No client ever built, no request ever sent. */
+    TEST_ASSERT_EQUAL(0, (int)g_inkbunny_state.next_index);
+}
+
+void test_backfill_inkbunny_details_upserts_and_marks_fetched_posts(void)
+{
+    /* Seeds one thin Inkbunny post (3955918) the same way a real search
+     * sync would -- width/height/file_md5/tags all unset, exactly the gap
+     * bunny_core_backfill_inkbunny_details exists to close. */
+    char *login_fixture = read_fixture("inkbunny_login_success.json");
+    char *search_fixture = read_fixture("inkbunny_search_response.json");
+    char *empty_fixture = read_fixture("inkbunny_search_response_empty.json");
+    TEST_ASSERT_NOT_NULL(login_fixture);
+    TEST_ASSERT_NOT_NULL(search_fixture);
+    TEST_ASSERT_NOT_NULL(empty_fixture);
+    g_inkbunny_state.bodies[0] = login_fixture;
+    g_inkbunny_state.bodies[1] = search_fixture;
+    g_inkbunny_state.bodies[2] = empty_fixture;
+    g_inkbunny_state.body_count = 3;
+
+    int64_t search_id = 0;
+    TEST_ASSERT_EQUAL(BUNNY_CORE_OK, bunny_core_search_create(g_core, BUNNY_DB_SITE_INKBUNNY, "tribute", "tribute", 24, NULL, &search_id));
+    bunny_core_sync_stats_t sync_stats;
+    TEST_ASSERT_EQUAL(BUNNY_CORE_OK, bunny_core_sync_due_searches(g_core, &sync_stats));
+    TEST_ASSERT_EQUAL(1, sync_stats.posts_upserted);
+    free(login_fixture);
+    free(search_fixture);
+    free(empty_fixture);
+
+    memset(&g_inkbunny_state, 0, sizeof(g_inkbunny_state));
+    char *backfill_login_fixture = read_fixture("inkbunny_login_success.json");
+    char *submission_fixture = read_fixture("inkbunny_submission_full.json");
+    TEST_ASSERT_NOT_NULL(backfill_login_fixture);
+    TEST_ASSERT_NOT_NULL(submission_fixture);
+    g_inkbunny_state.bodies[0] = backfill_login_fixture;
+    g_inkbunny_state.bodies[1] = submission_fixture;
+    g_inkbunny_state.body_count = 2;
+
+    bunny_core_backfill_stats_t stats;
+    bunny_core_result_t result = bunny_core_backfill_inkbunny_details(g_core, &stats);
+    TEST_ASSERT_EQUAL(BUNNY_CORE_OK, result);
+    TEST_ASSERT_EQUAL(1, stats.attempted);
+    TEST_ASSERT_EQUAL(1, stats.found);
+    TEST_ASSERT_EQUAL(0, stats.failed);
+
+    bunny_db_post_list_t posts;
+    TEST_ASSERT_EQUAL(BUNNY_CORE_OK, bunny_core_search_list_posts(g_core, search_id, false, BUNNY_DB_RATING_MASK_ALL, BUNNY_DB_MEDIA_MASK_ALL, 1, &posts));
+    TEST_ASSERT_EQUAL(1, (int)posts.count);
+    TEST_ASSERT_EQUAL_STRING("7669594067d7153074250653c72ad34b", posts.items[0].file_md5);
+    TEST_ASSERT_EQUAL(3385, posts.items[0].width);
+    bunny_db_post_list_free(&posts);
+
+    /* Now backfilled -- a second call has nothing left to do. */
+    bunny_core_backfill_stats_t second_stats;
+    TEST_ASSERT_EQUAL(BUNNY_CORE_OK, bunny_core_backfill_inkbunny_details(g_core, &second_stats));
+    TEST_ASSERT_EQUAL(0, second_stats.attempted);
+
+    free(backfill_login_fixture);
+    free(submission_fixture);
+}
+
+void test_backfill_inkbunny_details_marks_a_missing_submission_backfilled_anyway(void)
+{
+    /* Seeds two thin posts via two separate searches (3955918 and
+     * 9999999), but the batch response fixture only contains 3955918 --
+     * simulates a submission deleted/hidden on Inkbunny's side since the
+     * original search sync. */
+    char *login_fixture = read_fixture("inkbunny_login_success.json");
+    char *search_fixture = read_fixture("inkbunny_search_response.json");
+    char *empty_fixture = read_fixture("inkbunny_search_response_empty.json");
+    g_inkbunny_state.bodies[0] = login_fixture;
+    g_inkbunny_state.bodies[1] = search_fixture;
+    g_inkbunny_state.bodies[2] = empty_fixture;
+    g_inkbunny_state.body_count = 3;
+    int64_t search_id_1 = 0;
+    TEST_ASSERT_EQUAL(BUNNY_CORE_OK, bunny_core_search_create(g_core, BUNNY_DB_SITE_INKBUNNY, "tribute", "tribute", 24, NULL, &search_id_1));
+    bunny_core_sync_stats_t sync_stats_1;
+    TEST_ASSERT_EQUAL(BUNNY_CORE_OK, bunny_core_sync_due_searches(g_core, &sync_stats_1));
+    TEST_ASSERT_EQUAL(1, sync_stats_1.posts_upserted);
+    free(login_fixture);
+    free(search_fixture);
+    free(empty_fixture);
+
+    memset(&g_inkbunny_state, 0, sizeof(g_inkbunny_state));
+    char *login_fixture_2 = read_fixture("inkbunny_login_success.json");
+    char *search_fixture_2 = read_fixture("inkbunny_search_response_second.json");
+    char *empty_fixture_2 = read_fixture("inkbunny_search_response_empty.json");
+    g_inkbunny_state.bodies[0] = login_fixture_2;
+    g_inkbunny_state.bodies[1] = search_fixture_2;
+    g_inkbunny_state.bodies[2] = empty_fixture_2;
+    g_inkbunny_state.body_count = 3;
+    int64_t search_id_2 = 0;
+    TEST_ASSERT_EQUAL(BUNNY_CORE_OK, bunny_core_search_create(g_core, BUNNY_DB_SITE_INKBUNNY, "other", "other", 24, NULL, &search_id_2));
+    bunny_core_sync_stats_t sync_stats_2;
+    TEST_ASSERT_EQUAL(BUNNY_CORE_OK, bunny_core_sync_due_searches(g_core, &sync_stats_2));
+    TEST_ASSERT_EQUAL(1, sync_stats_2.posts_upserted);
+    free(login_fixture_2);
+    free(search_fixture_2);
+    free(empty_fixture_2);
+
+    memset(&g_inkbunny_state, 0, sizeof(g_inkbunny_state));
+    char *backfill_login_fixture = read_fixture("inkbunny_login_success.json");
+    char *partial_fixture = read_fixture("inkbunny_submissions_batch_partial.json");
+    TEST_ASSERT_NOT_NULL(backfill_login_fixture);
+    TEST_ASSERT_NOT_NULL(partial_fixture);
+    g_inkbunny_state.bodies[0] = backfill_login_fixture;
+    g_inkbunny_state.bodies[1] = partial_fixture;
+    g_inkbunny_state.body_count = 2;
+
+    bunny_core_backfill_stats_t stats;
+    bunny_core_result_t result = bunny_core_backfill_inkbunny_details(g_core, &stats);
+    TEST_ASSERT_EQUAL(BUNNY_CORE_OK, result);
+    TEST_ASSERT_EQUAL(2, stats.attempted);
+    TEST_ASSERT_EQUAL(1, stats.found);
+    TEST_ASSERT_EQUAL(0, stats.failed);
+
+    /* Both are marked backfilled (neither is thin anymore), even though
+     * only one actually got new data. */
+    bunny_core_backfill_stats_t second_stats;
+    TEST_ASSERT_EQUAL(BUNNY_CORE_OK, bunny_core_backfill_inkbunny_details(g_core, &second_stats));
+    TEST_ASSERT_EQUAL(0, second_stats.attempted);
+
+    free(backfill_login_fixture);
+    free(partial_fixture);
+}
+
+void test_backfill_inkbunny_details_leaves_posts_thin_on_api_failure(void)
+{
+    char *login_fixture = read_fixture("inkbunny_login_success.json");
+    char *search_fixture = read_fixture("inkbunny_search_response.json");
+    char *empty_fixture = read_fixture("inkbunny_search_response_empty.json");
+    g_inkbunny_state.bodies[0] = login_fixture;
+    g_inkbunny_state.bodies[1] = search_fixture;
+    g_inkbunny_state.bodies[2] = empty_fixture;
+    g_inkbunny_state.body_count = 3;
+    int64_t search_id = 0;
+    TEST_ASSERT_EQUAL(BUNNY_CORE_OK, bunny_core_search_create(g_core, BUNNY_DB_SITE_INKBUNNY, "tribute", "tribute", 24, NULL, &search_id));
+    bunny_core_sync_stats_t sync_stats;
+    TEST_ASSERT_EQUAL(BUNNY_CORE_OK, bunny_core_sync_due_searches(g_core, &sync_stats));
+    TEST_ASSERT_EQUAL(1, sync_stats.posts_upserted);
+    free(login_fixture);
+    free(search_fixture);
+    free(empty_fixture);
+
+    /* No fixture queued for the backfill's own submissions request --
+     * fake_send returns an empty 200 body, which fails JSON parsing, same
+     * pattern test_verify_e621_rejects_when_site_call_fails already uses. */
+    memset(&g_inkbunny_state, 0, sizeof(g_inkbunny_state));
+    char *backfill_login_fixture = read_fixture("inkbunny_login_success.json");
+    g_inkbunny_state.bodies[0] = backfill_login_fixture;
+    g_inkbunny_state.body_count = 1;
+
+    bunny_core_backfill_stats_t stats;
+    bunny_core_result_t result = bunny_core_backfill_inkbunny_details(g_core, &stats);
+    TEST_ASSERT_EQUAL(BUNNY_CORE_ERR_SITE, result);
+    TEST_ASSERT_EQUAL(1, stats.attempted);
+    TEST_ASSERT_EQUAL(0, stats.found);
+    TEST_ASSERT_EQUAL(1, stats.failed);
+
+    /* The post is still thin -- a later call would retry it. */
+    memset(&g_inkbunny_state, 0, sizeof(g_inkbunny_state));
+    char *retry_login_fixture = read_fixture("inkbunny_login_success.json");
+    char *submission_fixture = read_fixture("inkbunny_submission_full.json");
+    g_inkbunny_state.bodies[0] = retry_login_fixture;
+    g_inkbunny_state.bodies[1] = submission_fixture;
+    g_inkbunny_state.body_count = 2;
+    bunny_core_backfill_stats_t retry_stats;
+    TEST_ASSERT_EQUAL(BUNNY_CORE_OK, bunny_core_backfill_inkbunny_details(g_core, &retry_stats));
+    TEST_ASSERT_EQUAL(1, retry_stats.attempted);
+    TEST_ASSERT_EQUAL(1, retry_stats.found);
+
+    free(backfill_login_fixture);
+    free(retry_login_fixture);
+    free(submission_fixture);
+}
+
 void test_list_comments_returns_live_e621_comments(void)
 {
     char *post_fixture = read_fixture("e621_post_single.json");
@@ -1850,6 +2034,10 @@ int main(void)
     RUN_TEST(test_sync_e621_search_upserts_post_relationships_and_pools);
     RUN_TEST(test_fetch_and_cache_post_upserts_live_e621_post);
     RUN_TEST(test_fetch_and_cache_post_upserts_live_inkbunny_submission);
+    RUN_TEST(test_backfill_inkbunny_details_is_a_noop_with_no_thin_posts);
+    RUN_TEST(test_backfill_inkbunny_details_upserts_and_marks_fetched_posts);
+    RUN_TEST(test_backfill_inkbunny_details_marks_a_missing_submission_backfilled_anyway);
+    RUN_TEST(test_backfill_inkbunny_details_leaves_posts_thin_on_api_failure);
     RUN_TEST(test_list_comments_returns_live_e621_comments);
     RUN_TEST(test_list_comments_rejects_inkbunny_posts);
     RUN_TEST(test_fetch_pool_returns_live_pool_info);

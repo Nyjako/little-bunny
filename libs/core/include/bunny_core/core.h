@@ -275,6 +275,23 @@ bunny_core_result_t bunny_core_sync_e621_blacklist(bunny_core_t *core, bunny_cor
  * independently synced. Returns the (possibly pre-existing) local post id. */
 bunny_core_result_t bunny_core_fetch_and_cache_post(bunny_core_t *core, bunny_db_site_t site, int64_t external_id, int64_t *out_post_id);
 
+/* M28: a search-synced Inkbunny post only ever gets the partial field
+ * subset search results return (upsert_inkbunny_submission, sync.c) -- no
+ * tags, width/height forced to 0, possibly-stale comment_count. This
+ * periodically catches up to 100 such posts at a time (Inkbunny's own
+ * per-call cap on inkbunny_get_submissions) via one bulk fetch, called
+ * from the server scheduler only (server/src/scheduler.c) -- no FFI/HTTP
+ * exposure; standalone mode keeps relying on PostDetailScreen's existing
+ * per-post lazy refresh instead (M26.5). */
+typedef struct
+{
+    int attempted; /* thin ids looked at this call, capped at 100 */
+    int found;     /* of those, how many Inkbunny actually returned data for */
+    int failed;    /* 0 unless the whole batch call itself failed, in which case == attempted */
+} bunny_core_backfill_stats_t;
+
+bunny_core_result_t bunny_core_backfill_inkbunny_details(bunny_core_t *core, bunny_core_backfill_stats_t *out_stats);
+
 /* A pool's own metadata, fetched live (e621 only -- no persistence, no
  * equivalent on Inkbunny). Used to auto-fill a pool search's label at
  * creation time, and to show the pool's own description (M26) -- the
