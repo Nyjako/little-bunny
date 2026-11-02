@@ -12,7 +12,7 @@ void tearDown(void)
 static bool matches(const char *query, const char *const *tags, size_t tag_count)
 {
     bunny_tag_query_node_t *root = NULL;
-    TEST_ASSERT_TRUE(bunny_tag_query_parse(query, &root, NULL));
+    TEST_ASSERT_TRUE(bunny_tag_query_parse(query, BUNNY_TAG_QUERY_DIALECT_E621, &root, NULL));
     bool result = bunny_tag_query_matches(root, tags, tag_count);
     bunny_tag_query_free(root);
     return result;
@@ -23,7 +23,7 @@ static bool matches(const char *query, const char *const *tags, size_t tag_count
 void test_parse_accepts_a_single_bare_tag(void)
 {
     bunny_tag_query_node_t *root = NULL;
-    TEST_ASSERT_TRUE(bunny_tag_query_parse("cat", &root, NULL));
+    TEST_ASSERT_TRUE(bunny_tag_query_parse("cat", BUNNY_TAG_QUERY_DIALECT_E621, &root, NULL));
     TEST_ASSERT_NOT_NULL(root);
     bunny_tag_query_free(root);
 }
@@ -31,7 +31,7 @@ void test_parse_accepts_a_single_bare_tag(void)
 void test_parse_accepts_multiple_and_tags(void)
 {
     bunny_tag_query_node_t *root = NULL;
-    TEST_ASSERT_TRUE(bunny_tag_query_parse("cat dog bird", &root, NULL));
+    TEST_ASSERT_TRUE(bunny_tag_query_parse("cat dog bird", BUNNY_TAG_QUERY_DIALECT_E621, &root, NULL));
     TEST_ASSERT_NOT_NULL(root);
     bunny_tag_query_free(root);
 }
@@ -39,7 +39,7 @@ void test_parse_accepts_multiple_and_tags(void)
 void test_parse_accepts_negation_or_and_wildcard(void)
 {
     bunny_tag_query_node_t *root = NULL;
-    TEST_ASSERT_TRUE(bunny_tag_query_parse("cat -dog ~bird ~fox tag_*", &root, NULL));
+    TEST_ASSERT_TRUE(bunny_tag_query_parse("cat -dog ~bird ~fox tag_*", BUNNY_TAG_QUERY_DIALECT_E621, &root, NULL));
     TEST_ASSERT_NOT_NULL(root);
     bunny_tag_query_free(root);
 }
@@ -47,7 +47,7 @@ void test_parse_accepts_negation_or_and_wildcard(void)
 void test_parse_accepts_a_group_with_or_terms(void)
 {
     bunny_tag_query_node_t *root = NULL;
-    TEST_ASSERT_TRUE(bunny_tag_query_parse("( ~a ~b )", &root, NULL));
+    TEST_ASSERT_TRUE(bunny_tag_query_parse("( ~a ~b )", BUNNY_TAG_QUERY_DIALECT_E621, &root, NULL));
     TEST_ASSERT_NOT_NULL(root);
     bunny_tag_query_free(root);
 }
@@ -55,7 +55,7 @@ void test_parse_accepts_a_group_with_or_terms(void)
 void test_parse_accepts_a_negated_group(void)
 {
     bunny_tag_query_node_t *root = NULL;
-    TEST_ASSERT_TRUE(bunny_tag_query_parse("-( ~a ~b )", &root, NULL));
+    TEST_ASSERT_TRUE(bunny_tag_query_parse("-( ~a ~b )", BUNNY_TAG_QUERY_DIALECT_E621, &root, NULL));
     TEST_ASSERT_NOT_NULL(root);
     bunny_tag_query_free(root);
 }
@@ -63,12 +63,12 @@ void test_parse_accepts_a_negated_group(void)
 void test_parse_accepts_an_empty_or_whitespace_only_query_as_vacuously_valid(void)
 {
     bunny_tag_query_node_t *root = NULL;
-    TEST_ASSERT_TRUE(bunny_tag_query_parse("", &root, NULL));
+    TEST_ASSERT_TRUE(bunny_tag_query_parse("", BUNNY_TAG_QUERY_DIALECT_E621, &root, NULL));
     TEST_ASSERT_NOT_NULL(root);
     bunny_tag_query_free(root);
 
     root = NULL;
-    TEST_ASSERT_TRUE(bunny_tag_query_parse("   ", &root, NULL));
+    TEST_ASSERT_TRUE(bunny_tag_query_parse("   ", BUNNY_TAG_QUERY_DIALECT_E621, &root, NULL));
     TEST_ASSERT_NOT_NULL(root);
     bunny_tag_query_free(root);
 }
@@ -77,7 +77,7 @@ void test_parse_treats_a_hyphen_mid_tag_as_literal_text_not_an_operator(void)
 {
     /* Only a LEADING '-'/'~' is a prefix -- "x-ray" is one ordinary tag. */
     bunny_tag_query_node_t *root = NULL;
-    TEST_ASSERT_TRUE(bunny_tag_query_parse("x-ray", &root, NULL));
+    TEST_ASSERT_TRUE(bunny_tag_query_parse("x-ray", BUNNY_TAG_QUERY_DIALECT_E621, &root, NULL));
     TEST_ASSERT_NOT_NULL(root);
     const char *tags[] = {"x-ray"};
     TEST_ASSERT_TRUE(bunny_tag_query_matches(root, tags, 1));
@@ -104,7 +104,7 @@ void test_parse_accepts_exactly_10_levels_of_nesting(void)
     char buf[128];
     build_nested_query(buf, 10);
     bunny_tag_query_node_t *root = NULL;
-    TEST_ASSERT_TRUE(bunny_tag_query_parse(buf, &root, NULL));
+    TEST_ASSERT_TRUE(bunny_tag_query_parse(buf, BUNNY_TAG_QUERY_DIALECT_E621, &root, NULL));
     TEST_ASSERT_NOT_NULL(root);
     bunny_tag_query_free(root);
 }
@@ -115,7 +115,7 @@ void test_parse_rejects_11_levels_of_nesting_at_the_11th_open_paren(void)
     build_nested_query(buf, 11);
     bunny_tag_query_node_t *root = NULL;
     size_t error_pos = 999;
-    TEST_ASSERT_FALSE(bunny_tag_query_parse(buf, &root, &error_pos));
+    TEST_ASSERT_FALSE(bunny_tag_query_parse(buf, BUNNY_TAG_QUERY_DIALECT_E621, &root, &error_pos));
     TEST_ASSERT_NULL(root);
     TEST_ASSERT_EQUAL(20, (int)error_pos);
 }
@@ -126,7 +126,7 @@ void test_parse_rejects_an_empty_group_at_the_open_paren(void)
 {
     bunny_tag_query_node_t *root = NULL;
     size_t error_pos = 999;
-    TEST_ASSERT_FALSE(bunny_tag_query_parse("(  )", &root, &error_pos));
+    TEST_ASSERT_FALSE(bunny_tag_query_parse("(  )", BUNNY_TAG_QUERY_DIALECT_E621, &root, &error_pos));
     TEST_ASSERT_NULL(root);
     TEST_ASSERT_EQUAL(0, (int)error_pos);
 }
@@ -135,7 +135,7 @@ void test_parse_rejects_a_missing_space_right_after_open_paren(void)
 {
     bunny_tag_query_node_t *root = NULL;
     size_t error_pos = 999;
-    TEST_ASSERT_FALSE(bunny_tag_query_parse("(~a )", &root, &error_pos));
+    TEST_ASSERT_FALSE(bunny_tag_query_parse("(~a )", BUNNY_TAG_QUERY_DIALECT_E621, &root, &error_pos));
     TEST_ASSERT_NULL(root);
     TEST_ASSERT_EQUAL(1, (int)error_pos);
 }
@@ -144,7 +144,7 @@ void test_parse_rejects_a_missing_space_right_before_close_paren(void)
 {
     bunny_tag_query_node_t *root = NULL;
     size_t error_pos = 999;
-    TEST_ASSERT_FALSE(bunny_tag_query_parse("( ~a)", &root, &error_pos));
+    TEST_ASSERT_FALSE(bunny_tag_query_parse("( ~a)", BUNNY_TAG_QUERY_DIALECT_E621, &root, &error_pos));
     TEST_ASSERT_NULL(root);
     TEST_ASSERT_EQUAL(4, (int)error_pos);
 }
@@ -153,7 +153,7 @@ void test_parse_rejects_an_unmatched_close_paren(void)
 {
     bunny_tag_query_node_t *root = NULL;
     size_t error_pos = 999;
-    TEST_ASSERT_FALSE(bunny_tag_query_parse("cat )", &root, &error_pos));
+    TEST_ASSERT_FALSE(bunny_tag_query_parse("cat )", BUNNY_TAG_QUERY_DIALECT_E621, &root, &error_pos));
     TEST_ASSERT_NULL(root);
     TEST_ASSERT_EQUAL(4, (int)error_pos);
 }
@@ -162,7 +162,7 @@ void test_parse_rejects_an_unterminated_group(void)
 {
     bunny_tag_query_node_t *root = NULL;
     size_t error_pos = 999;
-    TEST_ASSERT_FALSE(bunny_tag_query_parse("( ~a", &root, &error_pos));
+    TEST_ASSERT_FALSE(bunny_tag_query_parse("( ~a", BUNNY_TAG_QUERY_DIALECT_E621, &root, &error_pos));
     TEST_ASSERT_NULL(root);
     TEST_ASSERT_EQUAL(4, (int)error_pos);
 }
@@ -171,7 +171,7 @@ void test_parse_rejects_a_bare_operator_with_nothing_after_it(void)
 {
     bunny_tag_query_node_t *root = NULL;
     size_t error_pos = 999;
-    TEST_ASSERT_FALSE(bunny_tag_query_parse("-", &root, &error_pos));
+    TEST_ASSERT_FALSE(bunny_tag_query_parse("-", BUNNY_TAG_QUERY_DIALECT_E621, &root, &error_pos));
     TEST_ASSERT_NULL(root);
     TEST_ASSERT_EQUAL(1, (int)error_pos);
 }
@@ -180,7 +180,7 @@ void test_parse_rejects_a_term_directly_glued_to_a_following_group_with_no_space
 {
     bunny_tag_query_node_t *root = NULL;
     size_t error_pos = 999;
-    TEST_ASSERT_FALSE(bunny_tag_query_parse("cat( ~a )", &root, &error_pos));
+    TEST_ASSERT_FALSE(bunny_tag_query_parse("cat( ~a )", BUNNY_TAG_QUERY_DIALECT_E621, &root, &error_pos));
     TEST_ASSERT_NULL(root);
     TEST_ASSERT_EQUAL(3, (int)error_pos);
 }
@@ -189,18 +189,70 @@ void test_parse_rejects_a_term_directly_glued_after_a_closing_group_with_no_spac
 {
     bunny_tag_query_node_t *root = NULL;
     size_t error_pos = 999;
-    TEST_ASSERT_FALSE(bunny_tag_query_parse("( ~a )cat", &root, &error_pos));
+    TEST_ASSERT_FALSE(bunny_tag_query_parse("( ~a )cat", BUNNY_TAG_QUERY_DIALECT_E621, &root, &error_pos));
     TEST_ASSERT_NULL(root);
     TEST_ASSERT_EQUAL(6, (int)error_pos);
+}
+
+/* --- Inkbunny dialect: a strict subset (AND + '-' exclude only) -------- */
+
+void test_inkbunny_accepts_bare_words_and_negation(void)
+{
+    bunny_tag_query_node_t *root = NULL;
+    TEST_ASSERT_TRUE(bunny_tag_query_parse("leopard -snow", BUNNY_TAG_QUERY_DIALECT_INKBUNNY, &root, NULL));
+    TEST_ASSERT_NOT_NULL(root);
+    const char *leopard_only[] = {"leopard"};
+    TEST_ASSERT_TRUE(bunny_tag_query_matches(root, leopard_only, 1));
+    const char *snow_leopard[] = {"leopard", "snow"};
+    TEST_ASSERT_FALSE(bunny_tag_query_matches(root, snow_leopard, 2));
+    bunny_tag_query_free(root);
+}
+
+void test_inkbunny_rejects_or_syntax(void)
+{
+    bunny_tag_query_node_t *root = NULL;
+    size_t error_pos = 999;
+    TEST_ASSERT_FALSE(bunny_tag_query_parse("~cat", BUNNY_TAG_QUERY_DIALECT_INKBUNNY, &root, &error_pos));
+    TEST_ASSERT_NULL(root);
+    TEST_ASSERT_EQUAL(0, (int)error_pos);
+}
+
+void test_inkbunny_rejects_wildcard_syntax(void)
+{
+    bunny_tag_query_node_t *root = NULL;
+    size_t error_pos = 999;
+    TEST_ASSERT_FALSE(bunny_tag_query_parse("cat_*", BUNNY_TAG_QUERY_DIALECT_INKBUNNY, &root, &error_pos));
+    TEST_ASSERT_NULL(root);
+    TEST_ASSERT_EQUAL(4, (int)error_pos);
+}
+
+void test_inkbunny_rejects_group_syntax(void)
+{
+    bunny_tag_query_node_t *root = NULL;
+    size_t error_pos = 999;
+    TEST_ASSERT_FALSE(bunny_tag_query_parse("( cat dog )", BUNNY_TAG_QUERY_DIALECT_INKBUNNY, &root, &error_pos));
+    TEST_ASSERT_NULL(root);
+    TEST_ASSERT_EQUAL(0, (int)error_pos);
+}
+
+void test_inkbunny_accepts_the_same_valid_syntax_e621_would_parse_identically(void)
+{
+    /* Confirms both dialects produce the exact same AST shape for syntax
+     * they both support -- the matcher never needs dialect-awareness. */
+    const char *tags[] = {"cat", "dog"};
+    bunny_tag_query_node_t *root = NULL;
+    TEST_ASSERT_TRUE(bunny_tag_query_parse("cat dog", BUNNY_TAG_QUERY_DIALECT_INKBUNNY, &root, NULL));
+    TEST_ASSERT_TRUE(bunny_tag_query_matches(root, tags, 2));
+    bunny_tag_query_free(root);
 }
 
 /* --- Validate-only surface ---------------------------------------------- */
 
 void test_validate_matches_parse_success_and_failure(void)
 {
-    TEST_ASSERT_TRUE(bunny_tag_query_validate("cat ~dog -bird ( ~a ~b )", NULL));
+    TEST_ASSERT_TRUE(bunny_tag_query_validate("cat ~dog -bird ( ~a ~b )", BUNNY_TAG_QUERY_DIALECT_E621, NULL));
     size_t error_pos = 999;
-    TEST_ASSERT_FALSE(bunny_tag_query_validate("(  )", &error_pos));
+    TEST_ASSERT_FALSE(bunny_tag_query_validate("(  )", BUNNY_TAG_QUERY_DIALECT_E621, &error_pos));
     TEST_ASSERT_EQUAL(0, (int)error_pos);
 }
 
@@ -294,6 +346,11 @@ int main(void)
     RUN_TEST(test_parse_rejects_a_bare_operator_with_nothing_after_it);
     RUN_TEST(test_parse_rejects_a_term_directly_glued_to_a_following_group_with_no_space);
     RUN_TEST(test_parse_rejects_a_term_directly_glued_after_a_closing_group_with_no_space);
+    RUN_TEST(test_inkbunny_accepts_bare_words_and_negation);
+    RUN_TEST(test_inkbunny_rejects_or_syntax);
+    RUN_TEST(test_inkbunny_rejects_wildcard_syntax);
+    RUN_TEST(test_inkbunny_rejects_group_syntax);
+    RUN_TEST(test_inkbunny_accepts_the_same_valid_syntax_e621_would_parse_identically);
     RUN_TEST(test_validate_matches_parse_success_and_failure);
     RUN_TEST(test_matches_and_requires_every_tag);
     RUN_TEST(test_matches_or_requires_at_least_one_of_the_set);

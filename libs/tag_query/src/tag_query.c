@@ -103,7 +103,7 @@ static bool is_delim(char c)
  * this level -- in that case *pos is left pointing AT the ')' (not
  * consumed), so the caller (the '(' handling branch below) can consume it
  * itself after also checking the child list isn't empty. */
-static bool parse_term_list(const char *text, size_t *pos, size_t depth, bool in_group, bunny_tag_query_node_t *group_node, size_t *out_error_pos)
+static bool parse_term_list(const char *text, size_t *pos, bunny_tag_query_dialect_t dialect, size_t depth, bool in_group, bunny_tag_query_node_t *group_node, size_t *out_error_pos)
 {
     bool first = true;
     for (;;) {
@@ -149,12 +149,24 @@ static bool parse_term_list(const char *text, size_t *pos, size_t depth, bool in
             mode = BUNNY_TAG_QUERY_MODE_FORBIDDEN;
             (*pos)++;
         } else if (text[*pos] == '~') {
+            if (dialect != BUNNY_TAG_QUERY_DIALECT_E621) {
+                if (out_error_pos) {
+                    *out_error_pos = *pos; /* '~' (OR) isn't supported on Inkbunny */
+                }
+                return false;
+            }
             mode = BUNNY_TAG_QUERY_MODE_OR;
             (*pos)++;
         }
 
         if (text[*pos] == '(') {
             size_t open_pos = *pos;
+            if (dialect != BUNNY_TAG_QUERY_DIALECT_E621) {
+                if (out_error_pos) {
+                    *out_error_pos = open_pos; /* groups aren't supported on Inkbunny */
+                }
+                return false;
+            }
             if (depth + 1 > BUNNY_TAG_QUERY_MAX_DEPTH) {
                 if (out_error_pos) {
                     *out_error_pos = open_pos;
@@ -175,7 +187,7 @@ static bool parse_term_list(const char *text, size_t *pos, size_t depth, bool in
                 }
                 return false;
             }
-            if (!parse_term_list(text, pos, depth + 1, true, child, out_error_pos)) {
+            if (!parse_term_list(text, pos, dialect, depth + 1, true, child, out_error_pos)) {
                 bunny_tag_query_free(child);
                 return false;
             }
@@ -207,6 +219,15 @@ static bool parse_term_list(const char *text, size_t *pos, size_t depth, bool in
                 }
                 return false; /* bare '-'/'~' with nothing after it */
             }
+            if (dialect != BUNNY_TAG_QUERY_DIALECT_E621) {
+                const char *star = (const char *)memchr(text + tag_start, '*', tag_len);
+                if (star) {
+                    if (out_error_pos) {
+                        *out_error_pos = (size_t)(star - text); /* wildcards aren't supported on Inkbunny */
+                    }
+                    return false;
+                }
+            }
             bunny_tag_query_node_t *child = node_new_tag(text + tag_start, tag_len, mode);
             if (!child) {
                 if (out_error_pos) {
@@ -226,7 +247,7 @@ static bool parse_term_list(const char *text, size_t *pos, size_t depth, bool in
     }
 }
 
-bool bunny_tag_query_parse(const char *text, bunny_tag_query_node_t **out_root, size_t *out_error_pos)
+bool bunny_tag_query_parse(const char *text, bunny_tag_query_dialect_t dialect, bunny_tag_query_node_t **out_root, size_t *out_error_pos)
 {
     if (out_root) {
         *out_root = NULL;
@@ -247,7 +268,7 @@ bool bunny_tag_query_parse(const char *text, bunny_tag_query_node_t **out_root, 
     }
 
     size_t pos = 0;
-    if (!parse_term_list(text, &pos, 0, false, root, out_error_pos)) {
+    if (!parse_term_list(text, &pos, dialect, 0, false, root, out_error_pos)) {
         bunny_tag_query_free(root);
         return false;
     }
@@ -256,10 +277,10 @@ bool bunny_tag_query_parse(const char *text, bunny_tag_query_node_t **out_root, 
     return true;
 }
 
-bool bunny_tag_query_validate(const char *text, size_t *out_error_pos)
+bool bunny_tag_query_validate(const char *text, bunny_tag_query_dialect_t dialect, size_t *out_error_pos)
 {
     bunny_tag_query_node_t *root = NULL;
-    bool ok = bunny_tag_query_parse(text, &root, out_error_pos);
+    bool ok = bunny_tag_query_parse(text, dialect, &root, out_error_pos);
     if (root) {
         bunny_tag_query_free(root);
     }
