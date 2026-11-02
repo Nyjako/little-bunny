@@ -2158,6 +2158,79 @@ void test_distinct_pool_ids_lists_every_pool_referenced_by_any_post(void)
     bunny_db_int64_list_free(&pools);
 }
 
+void test_post_mark_inkbunny_details_backfilled_sets_the_flag(void)
+{
+    bunny_db_post_upsert_t post;
+    make_test_post(&post, 801, 1);
+    post.site = BUNNY_DB_SITE_INKBUNNY;
+
+    int64_t post_id = 0;
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, bunny_db_post_upsert(g_db, &post, &post_id));
+
+    bunny_db_int64_list_t before;
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, bunny_db_inkbunny_list_thin_post_ids(g_db, 100, &before));
+    TEST_ASSERT_EQUAL(1, before.count);
+    bunny_db_int64_list_free(&before);
+
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, bunny_db_post_mark_inkbunny_details_backfilled(g_db, post_id));
+
+    bunny_db_int64_list_t after;
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, bunny_db_inkbunny_list_thin_post_ids(g_db, 100, &after));
+    TEST_ASSERT_EQUAL(0, after.count);
+    bunny_db_int64_list_free(&after);
+}
+
+void test_post_mark_inkbunny_details_backfilled_is_idempotent(void)
+{
+    bunny_db_post_upsert_t post;
+    make_test_post(&post, 802, 1);
+    post.site = BUNNY_DB_SITE_INKBUNNY;
+
+    int64_t post_id = 0;
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, bunny_db_post_upsert(g_db, &post, &post_id));
+
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, bunny_db_post_mark_inkbunny_details_backfilled(g_db, post_id));
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, bunny_db_post_mark_inkbunny_details_backfilled(g_db, post_id));
+}
+
+void test_inkbunny_list_thin_post_ids_returns_only_unbackfilled_inkbunny_posts(void)
+{
+    bunny_db_post_upsert_t thin_post, backfilled_post, e621_post;
+    make_test_post(&thin_post, 811, 1);
+    thin_post.site = BUNNY_DB_SITE_INKBUNNY;
+    make_test_post(&backfilled_post, 812, 1);
+    backfilled_post.site = BUNNY_DB_SITE_INKBUNNY;
+    make_test_post(&e621_post, 813, 1); /* defaults to e621 */
+
+    int64_t thin_id = 0, backfilled_id = 0, e621_id = 0;
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, bunny_db_post_upsert(g_db, &thin_post, &thin_id));
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, bunny_db_post_upsert(g_db, &backfilled_post, &backfilled_id));
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, bunny_db_post_upsert(g_db, &e621_post, &e621_id));
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, bunny_db_post_mark_inkbunny_details_backfilled(g_db, backfilled_id));
+
+    bunny_db_int64_list_t thin_ids;
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, bunny_db_inkbunny_list_thin_post_ids(g_db, 100, &thin_ids));
+    TEST_ASSERT_EQUAL(1, thin_ids.count);
+    TEST_ASSERT_EQUAL(811, thin_ids.items[0]);
+    bunny_db_int64_list_free(&thin_ids);
+}
+
+void test_inkbunny_list_thin_post_ids_respects_limit(void)
+{
+    for (int i = 0; i < 3; i++) {
+        bunny_db_post_upsert_t post;
+        make_test_post(&post, 820 + i, 1);
+        post.site = BUNNY_DB_SITE_INKBUNNY;
+        int64_t post_id = 0;
+        TEST_ASSERT_EQUAL(BUNNY_DB_OK, bunny_db_post_upsert(g_db, &post, &post_id));
+    }
+
+    bunny_db_int64_list_t thin_ids;
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, bunny_db_inkbunny_list_thin_post_ids(g_db, 2, &thin_ids));
+    TEST_ASSERT_EQUAL(2, thin_ids.count);
+    bunny_db_int64_list_free(&thin_ids);
+}
+
 void test_pool_positions_backfilled_flag_round_trips(void)
 {
     bool done = true;
@@ -2413,6 +2486,10 @@ int main(void)
     RUN_TEST(test_pool_search_list_posts_orders_by_position_not_creation_date);
     RUN_TEST(test_resyncing_a_post_preserves_its_existing_pool_position);
     RUN_TEST(test_distinct_pool_ids_lists_every_pool_referenced_by_any_post);
+    RUN_TEST(test_post_mark_inkbunny_details_backfilled_sets_the_flag);
+    RUN_TEST(test_post_mark_inkbunny_details_backfilled_is_idempotent);
+    RUN_TEST(test_inkbunny_list_thin_post_ids_returns_only_unbackfilled_inkbunny_posts);
+    RUN_TEST(test_inkbunny_list_thin_post_ids_respects_limit);
     RUN_TEST(test_pool_positions_backfilled_flag_round_trips);
     RUN_TEST(test_post_sample_url_round_trips_and_is_nullable);
     RUN_TEST(test_post_upsert_replaces_sample_url_wholesale_on_resync);

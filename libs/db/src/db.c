@@ -96,6 +96,15 @@ static const bunny_db_migration_t BUNNY_DB_MIGRATIONS[] = {
      * table (and its index, dropped implicitly with it) has no remaining
      * reader or writer. */
     {16, "DROP TABLE IF EXISTS downloads;"},
+    /* Tracks whether a search-synced Inkbunny post's cached row still has
+     * only the thin subset of data search results return (no tags, no
+     * real width/height, possibly-stale comment_count) -- see
+     * bunny_core_backfill_inkbunny_details (libs/core/src/sync.c, M28),
+     * which periodically bulk-fetches full details for every row still at
+     * 0 here. Deliberately NOT part of bunny_db_post_upsert's own column
+     * set -- see that function's own doc comment for why. Always 0 for
+     * e621 rows, which never go through the thin/full distinction. */
+    {17, "ALTER TABLE posts ADD COLUMN inkbunny_details_backfilled INTEGER NOT NULL DEFAULT 0;"},
 };
 // clang-format on
 

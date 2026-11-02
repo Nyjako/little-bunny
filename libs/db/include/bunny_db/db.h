@@ -164,6 +164,13 @@ typedef struct
     const char *sample_url; /* medium-quality variant (e621's "sample", Inkbunny's "screen"); may be NULL */
 } bunny_db_post_upsert_t;
 
+/* Deliberately has no inkbunny_details_backfilled param (M28) -- this runs
+ * on every ordinary Inkbunny search resync too, which never has full
+ * submission details to pass; including it in this struct/its ON CONFLICT
+ * clause would silently reset an already-backfilled post back to thin on
+ * its next resync. See bunny_db_post_mark_inkbunny_details_backfilled
+ * below, called explicitly only by code paths that actually have full
+ * details. */
 bunny_db_result_t bunny_db_post_upsert(bunny_db_t *db, const bunny_db_post_upsert_t *post, int64_t *out_id);
 bunny_db_result_t bunny_db_post_get(bunny_db_t *db, bunny_db_site_t site, int64_t external_id, bunny_db_post_t *out_post);
 
@@ -237,6 +244,20 @@ bunny_db_result_t bunny_db_pool_set_post_positions(bunny_db_t *db, int64_t pool_
  * one-time backfill (M26) that re-fetches each already-known pool from
  * e621 to populate `position` for data that predates that column. */
 bunny_db_result_t bunny_db_list_distinct_pool_ids(bunny_db_t *db, bunny_db_int64_list_t *out_list);
+
+/* Idempotent -- marking an already-marked post is a harmless no-op.
+ * post_id is the LOCAL id (bunny_db_post_upsert's out_id), not
+ * external_id. See migration 17's own comment (libs/db/src/db.c) and
+ * bunny_db_post_upsert's doc comment above for why this is a separate
+ * function rather than part of the shared upsert. */
+bunny_db_result_t bunny_db_post_mark_inkbunny_details_backfilled(bunny_db_t *db, int64_t post_id);
+
+/* Up to `limit` Inkbunny posts' EXTERNAL ids still at
+ * inkbunny_details_backfilled = 0 -- feeds
+ * bunny_core_backfill_inkbunny_details's periodic batch (M28), which caps
+ * `limit` at 100 to match inkbunny_get_submissions()'s own hard per-call
+ * limit. */
+bunny_db_result_t bunny_db_inkbunny_list_thin_post_ids(bunny_db_t *db, int limit, bunny_db_int64_list_t *out_external_ids);
 
 /* Same contract as bunny_db_search_list_posts, but for a search whose query
  * is a pool browse ("pool:<pool_id>", M9.6.3/M22) -- orders by this pool's
