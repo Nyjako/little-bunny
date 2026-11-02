@@ -137,7 +137,7 @@ BunnyQueueStats _queueStatsFromMap(Map<String, Object?> m) => BunnyQueueStats(
 BunnyBlacklistSyncStats _blacklistSyncStatsFromMap(Map<String, Object?> m) => BunnyBlacklistSyncStats(
   added: m['added'] as int,
   alreadyPresent: m['alreadyPresent'] as int,
-  skippedMultiTag: m['skippedMultiTag'] as int,
+  skippedInvalid: m['skippedInvalid'] as int,
 );
 
 Future<T> _wrapped<T>(Future<T> Function() call) async {

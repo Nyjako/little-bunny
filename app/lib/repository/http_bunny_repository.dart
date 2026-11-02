@@ -157,7 +157,7 @@ BunnyQueueStats _queueStatsFromJson(Map<String, Object?> j) => BunnyQueueStats(
 BunnyBlacklistSyncStats _blacklistSyncStatsFromJson(Map<String, Object?> j) => BunnyBlacklistSyncStats(
   added: (j['added'] as num).toInt(),
   alreadyPresent: (j['already_present'] as num).toInt(),
-  skippedMultiTag: (j['skipped_multi_tag'] as num).toInt(),
+  skippedInvalid: (j['skipped_invalid'] as num).toInt(),
 );
 
 /// True if [certificateDerBytes]' SHA-256 hash matches

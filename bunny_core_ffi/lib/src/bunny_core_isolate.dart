@@ -114,7 +114,7 @@ Map<String, Object?> _postFileToMap(bunny_db_post_file_t file) => {
 
 Map<String, Object?> _syncStatsToMap(bunny_core_sync_stats_t stats) => {'searchesChecked': stats.searches_checked, 'searchesSynced': stats.searches_synced, 'postsUpserted': stats.posts_upserted};
 
-Map<String, Object?> _blacklistSyncStatsToMap(bunny_core_blacklist_sync_stats_t stats) => {'added': stats.added, 'alreadyPresent': stats.already_present, 'skippedMultiTag': stats.skipped_multi_tag};
+Map<String, Object?> _blacklistSyncStatsToMap(bunny_core_blacklist_sync_stats_t stats) => {'added': stats.added, 'alreadyPresent': stats.already_present, 'skippedInvalid': stats.skipped_invalid};
 
 Map<String, Object?> _queueStatsToMap(bunny_core_queue_stats_t stats) => {'actionsProcessed': stats.actions_processed, 'actionsSucceeded': stats.actions_succeeded, 'actionsFailed': stats.actions_failed};
 

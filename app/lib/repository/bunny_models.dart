@@ -511,17 +511,20 @@ class BunnyQueueStats {
 }
 
 /// Mirrors `bunny_core_blacklist_sync_stats_t` -- the result of pulling the
-/// configured e621 account's own blacklist and importing new single-tag
-/// entries (M27). [skippedMultiTag] counts e621 "AND" lines (e.g.
-/// "rating:e young") the local blacklist has no concept of yet.
+/// configured e621 account's own blacklist and importing new entries (M27;
+/// M28/M54 extended this to multi-tag/grammar lines too, not just bare
+/// tags). [skippedInvalid] counts lines that failed to parse under e621's
+/// grammar (libs/tag_query) -- a much narrower set than "any line with a
+/// space" now that multi-tag AND lines (e.g. "rating:e young") are
+/// understood and stored verbatim.
 class BunnyBlacklistSyncStats {
   final int added;
   final int alreadyPresent;
-  final int skippedMultiTag;
+  final int skippedInvalid;
 
   const BunnyBlacklistSyncStats({
     required this.added,
     required this.alreadyPresent,
-    required this.skippedMultiTag,
+    required this.skippedInvalid,
   });
 }

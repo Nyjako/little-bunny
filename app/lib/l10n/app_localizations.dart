@@ -1711,11 +1711,11 @@ abstract class AppLocalizations {
   /// No description provided for @settingsBlacklistSyncE621Result.
   ///
   /// In en, this message translates to:
-  /// **'Added {added}, {alreadyPresent} already present, skipped {skippedMultiTag} multi-tag rule(s)'**
+  /// **'Added {added}, {alreadyPresent} already present, skipped {skippedInvalid} invalid rule(s)'**
   String settingsBlacklistSyncE621Result(
     int added,
     int alreadyPresent,
-    int skippedMultiTag,
+    int skippedInvalid,
   );
 
   /// No description provided for @settingsBlacklistSyncE621Failed.
