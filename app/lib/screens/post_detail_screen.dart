@@ -361,6 +361,16 @@ class _PostDetailPageState extends State<_PostDetailPage> {
   Future<BunnyPostRelationships>? _relationshipsFuture;
   Future<List<int>>? _poolIdsFuture;
 
+  /// Resolved contents of a multi-file Inkbunny submission (M28 Phase 3,
+  /// Picture Series/Comic/Portfolio) -- null until the live refresh below
+  /// resolves (search-sync only ever stores a single synthesized file, same
+  /// reason [_tagsFuture]/[_sourcesFuture] are gated the same way) and for
+  /// every e621 post, which never populates `post_files` at all. `_buildMedia`
+  /// treats null (or a single-entry list) identically to today's single-file
+  /// rendering -- the gallery UI only appears once this resolves with >1 entry.
+  List<BunnyPostFile>? _files;
+  int _filePageIndex = 0;
+
   /// Not `late final` like the futures above -- posting a new comment
   /// reassigns this to a fresh fetch so the new comment shows up without a
   /// full screen reload.
@@ -412,6 +422,13 @@ class _PostDetailPageState extends State<_PostDetailPage> {
       _relationshipsFuture = widget.repository.getPostRelationships(widget.post.id);
       _poolIdsFuture = widget.repository.getPostPoolIds(widget.post.id);
       _commentsFuture = widget.repository.getPostComments(widget.post.id);
+    }
+    if (widget.post.site == BunnySite.inkbunny) {
+      refreshedPost.then((_) => widget.repository.getPostFiles(widget.post.id)).then((files) {
+        if (mounted) {
+          setState(() => _files = files);
+        }
+      });
     }
 
     _maybeInitVideo(widget.post);
@@ -730,7 +747,26 @@ class _PostDetailPageState extends State<_PostDetailPage> {
     );
   }
 
+  /// True only once [_files] has resolved with more than one entry that are
+  /// *all* plain images -- the only shape the paging gallery below knows how
+  /// to render. A video (never observed with more than one file in practice)
+  /// or a bonus audio track alongside the art pages (seen live on a real
+  /// Picture Series submission) falls back to [_buildSingleFileMedia]'s
+  /// existing single-primary-file rendering untouched, same as any other
+  /// post -- no gallery controls, no behavior change.
+  bool get _hasImageGallery {
+    final files = _files;
+    return files != null && files.length > 1 && files.every((f) => _imageExtensions.contains(f.fileExt?.toLowerCase()));
+  }
+
   Widget _buildMedia(AppLocalizations l10n) {
+    if (_hasImageGallery) {
+      return _buildImageGallery(_files!);
+    }
+    return _buildSingleFileMedia(l10n);
+  }
+
+  Widget _buildSingleFileMedia(AppLocalizations l10n) {
     final post = _post;
     final ext = post.fileExt?.toLowerCase();
     if (ext == null || post.fileUrl == null) {
@@ -743,29 +779,7 @@ class _PostDetailPageState extends State<_PostDetailPage> {
     final maxHeight = MediaQuery.sizeOf(context).height * 0.6;
     Widget bounded(Widget child) => ConstrainedBox(constraints: BoxConstraints(maxHeight: maxHeight), child: AspectRatio(aspectRatio: aspectRatio, child: child));
     if (_imageExtensions.contains(ext)) {
-      // Image's own loadingBuilder (standard ImageStream/ImageChunkEvent
-      // machinery), not CachedNetworkImage's progressIndicatorBuilder --
-      // the latter switches CachedNetworkImage's internal rendering onto a
-      // different, flutter_cache_manager-streaming-backed path that never
-      // settles under `flutter_test` (confirmed: it hung even the simplest
-      // tests in this screen's own test suite, unrelated to gifs at all).
-      // This uses the exact same CachedNetworkImageProvider plain
-      // CachedNetworkImage already resolves through, which is already
-      // proven compatible with this test suite's existing pumpAndSettle
-      // calls.
-      final content = _animatedViaGifPlayerExtensions.contains(ext)
-          ? GifPlayer(imageUrl: post.fileUrl!, httpHeaders: imageHeadersFor(post.site))
-          : Image(
-              image: CachedNetworkImageProvider(post.fileUrl!, headers: imageHeadersFor(post.site)),
-              fit: BoxFit.contain,
-              loadingBuilder: (context, child, loadingProgress) {
-                if (loadingProgress == null) {
-                  return child;
-                }
-                final total = loadingProgress.expectedTotalBytes;
-                return DownloadProgressIndicator(progress: total != null ? loadingProgress.cumulativeBytesLoaded / total : null);
-              },
-            );
+      final content = _buildImageContent(post.fileUrl!, ext, post.site);
       return GestureDetector(key: const Key('postDetailImageTapTarget'), onTap: _openFullScreenViewer, child: bounded(content));
     }
     if (isVideoExt(ext)) {
@@ -781,6 +795,74 @@ class _PostDetailPageState extends State<_PostDetailPage> {
       );
     }
     return SizedBox(height: 200, child: Center(child: Text(l10n.postDetailUnsupportedFormat(ext))));
+  }
+
+  /// Image's own loadingBuilder (standard ImageStream/ImageChunkEvent
+  /// machinery), not CachedNetworkImage's progressIndicatorBuilder -- the
+  /// latter switches CachedNetworkImage's internal rendering onto a
+  /// different, flutter_cache_manager-streaming-backed path that never
+  /// settles under `flutter_test` (confirmed: it hung even the simplest
+  /// tests in this screen's own test suite, unrelated to gifs at all). This
+  /// uses the exact same CachedNetworkImageProvider plain CachedNetworkImage
+  /// already resolves through, which is already proven compatible with this
+  /// test suite's existing pumpAndSettle calls.
+  Widget _buildImageContent(String fileUrl, String ext, BunnySite site) {
+    return _animatedViaGifPlayerExtensions.contains(ext)
+        ? GifPlayer(imageUrl: fileUrl, httpHeaders: imageHeadersFor(site))
+        : Image(
+            image: CachedNetworkImageProvider(fileUrl, headers: imageHeadersFor(site)),
+            fit: BoxFit.contain,
+            loadingBuilder: (context, child, loadingProgress) {
+              if (loadingProgress == null) {
+                return child;
+              }
+              final total = loadingProgress.expectedTotalBytes;
+              return DownloadProgressIndicator(progress: total != null ? loadingProgress.cumulativeBytesLoaded / total : null);
+            },
+          );
+  }
+
+  /// Explicit prev/next controls rather than a nested `PageView` -- this
+  /// widget already lives inside the outer sibling-posts `PageView`
+  /// (different-posts paging), and a horizontal-swipe `PageView` nested
+  /// inside another horizontal-swipe `PageView` is a well-known Flutter
+  /// gesture-conflict trap. Buttons also make the >1-file case trivial to
+  /// drive from a widget test (tap by key, no drag simulation needed).
+  Widget _buildImageGallery(List<BunnyPostFile> files) {
+    final index = _filePageIndex.clamp(0, files.length - 1);
+    final file = files[index];
+    final aspectRatio = (file.width > 0 && file.height > 0) ? file.width / file.height : 16 / 9;
+    final maxHeight = MediaQuery.sizeOf(context).height * 0.6;
+    Widget bounded(Widget child) => ConstrainedBox(constraints: BoxConstraints(maxHeight: maxHeight), child: AspectRatio(aspectRatio: aspectRatio, child: child));
+    final content = _buildImageContent(file.fileUrl, file.fileExt?.toLowerCase() ?? '', _post.site);
+    return Stack(
+      alignment: Alignment.bottomCenter,
+      children: [
+        GestureDetector(key: const Key('postDetailImageTapTarget'), onTap: _openFullScreenViewer, child: bounded(content)),
+        Padding(
+          padding: const EdgeInsets.only(bottom: 8),
+          child: DecoratedBox(
+            decoration: BoxDecoration(color: Colors.black54, borderRadius: BorderRadius.circular(20)),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                IconButton(
+                  key: const Key('postDetailGalleryPrevButton'),
+                  icon: const Icon(Icons.chevron_left, color: Colors.white),
+                  onPressed: index > 0 ? () => setState(() => _filePageIndex = index - 1) : null,
+                ),
+                Text('${index + 1}/${files.length}', style: const TextStyle(color: Colors.white)),
+                IconButton(
+                  key: const Key('postDetailGalleryNextButton'),
+                  icon: const Icon(Icons.chevron_right, color: Colors.white),
+                  onPressed: index < files.length - 1 ? () => setState(() => _filePageIndex = index + 1) : null,
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
   }
 
   Widget _metadataRow(String label, String value) => Padding(

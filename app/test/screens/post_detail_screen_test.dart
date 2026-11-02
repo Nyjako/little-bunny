@@ -565,6 +565,66 @@ void main() {
     expect(find.byType(VideoPlayer), findsNothing);
   });
 
+  group('multi-file image gallery (M28 Phase 3)', () {
+    testWidgets('a multi-file image post shows page controls and paging switches the displayed image', (WidgetTester tester) async {
+      final repository = FakeBunnyRepository();
+      final post = _post(site: BunnySite.inkbunny, fileExt: 'jpg');
+      repository.filesByPostId[1] = const [
+        BunnyPostFile(fileUrl: 'https://example.invalid/page1.jpg', fileExt: 'jpg', width: 640, height: 480),
+        BunnyPostFile(fileUrl: 'https://example.invalid/page2.jpg', fileExt: 'jpg', width: 640, height: 480),
+        BunnyPostFile(fileUrl: 'https://example.invalid/page3.jpg', fileExt: 'jpg', width: 640, height: 480),
+      ];
+
+      await tester.pumpWidget(wrapWithLocalization(PostDetailScreen(post: post, repository: repository, displaySettingsStore: const DisplaySettingsStore(), downloadSettingsStore: const DownloadSettingsStore(), downloadQueueService: _downloadQueueService())));
+      await tester.pumpAndSettle();
+
+      expect(find.text('1/3'), findsOneWidget);
+      expect(find.byKey(const Key('postDetailGalleryPrevButton')), findsOneWidget);
+      expect(find.byKey(const Key('postDetailGalleryNextButton')), findsOneWidget);
+
+      await tester.tap(find.byKey(const Key('postDetailGalleryNextButton')));
+      await tester.pumpAndSettle();
+
+      expect(find.text('2/3'), findsOneWidget);
+    });
+
+    testWidgets('a single-file post shows no gallery page controls', (WidgetTester tester) async {
+      final repository = FakeBunnyRepository();
+      final post = _post(site: BunnySite.inkbunny, fileExt: 'jpg');
+      repository.filesByPostId[1] = const [BunnyPostFile(fileUrl: 'https://example.invalid/file.jpg', fileExt: 'jpg', width: 640, height: 480)];
+
+      await tester.pumpWidget(wrapWithLocalization(PostDetailScreen(post: post, repository: repository, displaySettingsStore: const DisplaySettingsStore(), downloadSettingsStore: const DownloadSettingsStore(), downloadQueueService: _downloadQueueService())));
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const Key('postDetailGalleryPrevButton')), findsNothing);
+      expect(find.byKey(const Key('postDetailGalleryNextButton')), findsNothing);
+      expect(_findCachedNetworkImage(), findsOneWidget);
+    });
+
+    // Real shape live-checked on a Picture Series submission (M28): 9 png +
+    // 1 jpg art pages plus a bonus mp3 track mixed into the same files list.
+    // Mixed file types fall back to the single-primary-file rendering rather
+    // than paging a non-image file through the image gallery -- there's
+    // nothing in `_buildMedia`'s image dispatch that could render the mp3
+    // entry anyway.
+    testWidgets('a Picture Series post with a mixed image+audio file list shows no gallery controls', (WidgetTester tester) async {
+      final repository = FakeBunnyRepository();
+      final post = _post(site: BunnySite.inkbunny, fileExt: 'png');
+      repository.filesByPostId[1] = [
+        for (var i = 0; i < 9; i++) BunnyPostFile(fileUrl: 'https://example.invalid/page$i.png', fileExt: 'png', width: 1200, height: 900),
+        const BunnyPostFile(fileUrl: 'https://example.invalid/page9.jpg', fileExt: 'jpg', width: 1200, height: 900),
+        const BunnyPostFile(fileUrl: 'https://example.invalid/bonus.mp3', fileExt: 'mp3', width: 0, height: 0),
+      ];
+
+      await tester.pumpWidget(wrapWithLocalization(PostDetailScreen(post: post, repository: repository, displaySettingsStore: const DisplaySettingsStore(), downloadSettingsStore: const DownloadSettingsStore(), downloadQueueService: _downloadQueueService())));
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const Key('postDetailGalleryPrevButton')), findsNothing);
+      expect(find.byKey(const Key('postDetailGalleryNextButton')), findsNothing);
+      expect(_findCachedNetworkImage(), findsOneWidget);
+    });
+  });
+
   testWidgets('shows tag chips grouped by category', (WidgetTester tester) async {
     final repository = FakeBunnyRepository();
     final post = _post(fileExt: 'jpg');
