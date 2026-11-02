@@ -1859,6 +1859,107 @@ void test_post_upsert_replaces_sources_wholesale_on_resync(void)
     bunny_db_string_list_free(&list);
 }
 
+void test_post_get_files_preserves_order_and_fields(void)
+{
+    const bunny_db_post_file_upsert_t files[] = {
+        {.file_url = "https://example.com/1.jpg", .sample_url = "https://example.com/1_sample.jpg", .file_ext = "jpg", .file_md5 = "aaa", .width = 100, .height = 200, .mimetype = "image/jpeg"},
+        {.file_url = "https://example.com/2.jpg", .file_ext = "jpg", .width = 150, .height = 250},
+        {.file_url = "https://example.com/3.mp3", .file_ext = "mp3", .mimetype = "audio/mpeg"},
+    };
+    bunny_db_post_upsert_t post;
+    make_test_post(&post, 650, 1);
+    post.site = BUNNY_DB_SITE_INKBUNNY;
+    post.files = files;
+    post.file_count = 3;
+
+    int64_t post_id = 0;
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, bunny_db_post_upsert(g_db, &post, &post_id));
+
+    bunny_db_post_file_list_t list;
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, bunny_db_post_get_files(g_db, post_id, &list));
+    TEST_ASSERT_EQUAL(3, list.count);
+    TEST_ASSERT_EQUAL_STRING("https://example.com/1.jpg", list.items[0].file_url);
+    TEST_ASSERT_EQUAL_STRING("https://example.com/1_sample.jpg", list.items[0].sample_url);
+    TEST_ASSERT_EQUAL_STRING("aaa", list.items[0].file_md5);
+    TEST_ASSERT_EQUAL(100, list.items[0].width);
+    TEST_ASSERT_EQUAL(200, list.items[0].height);
+    TEST_ASSERT_EQUAL_STRING("image/jpeg", list.items[0].mimetype);
+    TEST_ASSERT_EQUAL_STRING("https://example.com/2.jpg", list.items[1].file_url);
+    TEST_ASSERT_NULL(list.items[1].sample_url);
+    TEST_ASSERT_EQUAL_STRING("https://example.com/3.mp3", list.items[2].file_url);
+    TEST_ASSERT_EQUAL_STRING("audio/mpeg", list.items[2].mimetype);
+
+    bunny_db_post_file_list_free(&list);
+}
+
+void test_post_get_files_empty_when_none_given(void)
+{
+    bunny_db_post_upsert_t post;
+    make_test_post(&post, 651, 1);
+    /* files/file_count left at their memset-zero defaults. */
+
+    int64_t post_id = 0;
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, bunny_db_post_upsert(g_db, &post, &post_id));
+
+    bunny_db_post_file_list_t list;
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, bunny_db_post_get_files(g_db, post_id, &list));
+    TEST_ASSERT_EQUAL(0, list.count);
+
+    bunny_db_post_file_list_free(&list);
+}
+
+void test_post_files_never_populated_for_e621(void)
+{
+    /* e621 posts are structurally always single-file (e621's own
+     * multi-image concept is entirely separate posts linked via pools) --
+     * upsert_e621_post never sets files/file_count, so this table stays
+     * empty for every e621 post. */
+    bunny_db_post_upsert_t post;
+    make_test_post(&post, 652, 1); /* defaults to BUNNY_DB_SITE_E621 */
+
+    int64_t post_id = 0;
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, bunny_db_post_upsert(g_db, &post, &post_id));
+
+    bunny_db_post_file_list_t list;
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, bunny_db_post_get_files(g_db, post_id, &list));
+    TEST_ASSERT_EQUAL(0, list.count);
+
+    bunny_db_post_file_list_free(&list);
+}
+
+void test_post_upsert_replaces_files_wholesale_on_resync(void)
+{
+    const bunny_db_post_file_upsert_t files1[] = {
+        {.file_url = "https://example.com/old.jpg", .file_ext = "jpg"},
+    };
+    bunny_db_post_upsert_t post;
+    make_test_post(&post, 653, 1);
+    post.site = BUNNY_DB_SITE_INKBUNNY;
+    post.files = files1;
+    post.file_count = 1;
+
+    int64_t post_id = 0;
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, bunny_db_post_upsert(g_db, &post, &post_id));
+
+    const bunny_db_post_file_upsert_t files2[] = {
+        {.file_url = "https://example.com/new1.jpg", .file_ext = "jpg"},
+        {.file_url = "https://example.com/new2.jpg", .file_ext = "jpg"},
+    };
+    post.files = files2;
+    post.file_count = 2;
+    int64_t second_id = 0;
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, bunny_db_post_upsert(g_db, &post, &second_id));
+    TEST_ASSERT_EQUAL(post_id, second_id);
+
+    bunny_db_post_file_list_t list;
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, bunny_db_post_get_files(g_db, post_id, &list));
+    TEST_ASSERT_EQUAL(2, list.count);
+    TEST_ASSERT_EQUAL_STRING("https://example.com/new1.jpg", list.items[0].file_url);
+    TEST_ASSERT_EQUAL_STRING("https://example.com/new2.jpg", list.items[1].file_url);
+
+    bunny_db_post_file_list_free(&list);
+}
+
 void test_post_get_relationships_defaults_when_no_row(void)
 {
     bunny_db_post_upsert_t post;
@@ -2476,6 +2577,10 @@ int main(void)
     RUN_TEST(test_post_get_sources_preserves_order);
     RUN_TEST(test_post_get_sources_empty_when_none_given);
     RUN_TEST(test_post_upsert_replaces_sources_wholesale_on_resync);
+    RUN_TEST(test_post_get_files_preserves_order_and_fields);
+    RUN_TEST(test_post_get_files_empty_when_none_given);
+    RUN_TEST(test_post_files_never_populated_for_e621);
+    RUN_TEST(test_post_upsert_replaces_files_wholesale_on_resync);
     RUN_TEST(test_post_get_relationships_defaults_when_no_row);
     RUN_TEST(test_post_get_relationships_with_parent_and_children);
     RUN_TEST(test_post_upsert_replaces_relationships_wholesale_on_resync);

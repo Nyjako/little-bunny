@@ -122,6 +122,20 @@ bunny_db_result_t bunny_db_group_delete(bunny_db_t *db, int64_t group_id);
  * Upserts are keyed on (site, external_id): calling this again for a post
  * already cached updates it in place rather than duplicating it. */
 
+/* One entry of bunny_db_post_upsert_t's own files array below (M28) -- see
+ * that field's doc comment for the full reasoning. */
+typedef struct
+{
+    const char *file_url; /* required */
+    const char *sample_url;
+    const char *preview_url;
+    const char *file_ext;
+    const char *file_md5;
+    int width;
+    int height;
+    const char *mimetype;
+} bunny_db_post_file_upsert_t;
+
 typedef struct
 {
     bunny_db_site_t site;
@@ -162,6 +176,15 @@ typedef struct
     const int64_t *pool_ids; /* may be NULL */
     size_t pool_count;
     const char *sample_url; /* medium-quality variant (e621's "sample", Inkbunny's "screen"); may be NULL */
+    /* Every file on this post, in order (M28) -- purely additive alongside
+     * the single-file fields above (file_url/width/height/etc.), which keep
+     * representing just the first file exactly as before. May be NULL/0
+     * (the common case -- always NULL/0 for e621, which is structurally
+     * single-file); wholesale-replaces post_files on every call, same as
+     * sources/tags above, including clearing it to empty when NULL/0 is
+     * passed on a resync. */
+    const bunny_db_post_file_upsert_t *files;
+    size_t file_count;
 } bunny_db_post_upsert_t;
 
 /* Deliberately has no inkbunny_details_backfilled param (M28) -- this runs
@@ -219,6 +242,12 @@ bunny_db_result_t bunny_db_post_get_tags_by_category(bunny_db_t *db, int64_t pos
  * comment). Empty for a post with none (e.g. every Inkbunny submission --
  * no such field there). */
 bunny_db_result_t bunny_db_post_get_sources(bunny_db_t *db, int64_t post_id, bunny_db_string_list_t *out_list);
+
+/* Every file on a post, in position order (M28, see post_files' schema
+ * comment) -- a single-file post (the overwhelming majority, including
+ * every e621 post) still returns exactly one entry, the same file
+ * posts.file_url/width/height/etc. already represent. */
+bunny_db_result_t bunny_db_post_get_files(bunny_db_t *db, int64_t post_id, bunny_db_post_file_list_t *out_list);
 
 /* A post's parent/child relationships (e621 only -- see bunny_db_post_relationships_t's
  * doc comment). A post with no row in post_relationships (never had a parent or active

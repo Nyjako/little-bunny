@@ -11,6 +11,7 @@ GOBLIN_DYN_ARRAY_DECL(bunny_db_post, bunny_db_post_t)
 GOBLIN_DYN_ARRAY_DECL(bunny_db_post_tag, bunny_db_post_tag_t)
 GOBLIN_DYN_ARRAY_DECL(bunny_db_string, char *)
 GOBLIN_DYN_ARRAY_DECL(bunny_db_int64, int64_t)
+GOBLIN_DYN_ARRAY_DECL(bunny_db_post_file, bunny_db_post_file_t)
 
 /* Posts per page for bunny_db_search_list_posts/bunny_db_pool_search_list_posts
  * (see their own doc comments in db.h) -- a local DB listing, not a site API
@@ -188,6 +189,42 @@ bunny_db_result_t bunny_db_post_upsert(bunny_db_t *db, const bunny_db_post_upser
             sqlite3_bind_text(source_stmt, 3, url, -1, SQLITE_TRANSIENT);
             sqlite3_step(source_stmt);
             sqlite3_finalize(source_stmt);
+        }
+    }
+
+    /* Replace this post's files wholesale, same reasoning as post_sources
+     * above -- purely additive alongside the single-file columns already
+     * bound earlier in this function (M28). */
+    const char *del_files_sql = "DELETE FROM post_files WHERE post_id = ?;";
+    sqlite3_stmt *del_files_stmt = NULL;
+    if (sqlite3_prepare_v2(db->handle, del_files_sql, -1, &del_files_stmt, NULL) == SQLITE_OK) {
+        sqlite3_bind_int64(del_files_stmt, 1, post_id);
+        sqlite3_step(del_files_stmt);
+        sqlite3_finalize(del_files_stmt);
+    }
+
+    for (size_t i = 0; i < post->file_count; i++) {
+        const bunny_db_post_file_upsert_t *file = &post->files[i];
+        if (!file->file_url || !file->file_url[0]) {
+            continue;
+        }
+
+        const char *file_sql = "INSERT INTO post_files (post_id, position, file_url, sample_url, preview_url, file_ext, file_md5, width, height, mimetype) "
+                               "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);";
+        sqlite3_stmt *file_stmt = NULL;
+        if (sqlite3_prepare_v2(db->handle, file_sql, -1, &file_stmt, NULL) == SQLITE_OK) {
+            sqlite3_bind_int64(file_stmt, 1, post_id);
+            sqlite3_bind_int(file_stmt, 2, (int)i);
+            sqlite3_bind_text(file_stmt, 3, file->file_url, -1, SQLITE_TRANSIENT);
+            bunny_db_bind_text_or_null(file_stmt, 4, file->sample_url);
+            bunny_db_bind_text_or_null(file_stmt, 5, file->preview_url);
+            bunny_db_bind_text_or_null(file_stmt, 6, file->file_ext);
+            bunny_db_bind_text_or_null(file_stmt, 7, file->file_md5);
+            sqlite3_bind_int(file_stmt, 8, file->width);
+            sqlite3_bind_int(file_stmt, 9, file->height);
+            bunny_db_bind_text_or_null(file_stmt, 10, file->mimetype);
+            sqlite3_step(file_stmt);
+            sqlite3_finalize(file_stmt);
         }
     }
 
@@ -844,6 +881,60 @@ bunny_db_result_t bunny_db_post_get_sources(bunny_db_t *db, int64_t post_id, bun
             free(arr.items[i]);
         }
         bunny_db_string_array_free(&arr);
+        return bunny_db_sqlite_rc_to_result(rc);
+    }
+
+    out_list->items = arr.items;
+    out_list->count = arr.count;
+    return BUNNY_DB_OK;
+}
+
+bunny_db_result_t bunny_db_post_get_files(bunny_db_t *db, int64_t post_id, bunny_db_post_file_list_t *out_list)
+{
+    if (!db || !out_list) {
+        return BUNNY_DB_ERR_INVALID_ARG;
+    }
+    memset(out_list, 0, sizeof(*out_list));
+
+    const char *sql = "SELECT file_url, sample_url, preview_url, file_ext, file_md5, width, height, mimetype "
+                      "FROM post_files WHERE post_id = ? ORDER BY position ASC;";
+    sqlite3_stmt *stmt = NULL;
+    if (sqlite3_prepare_v2(db->handle, sql, -1, &stmt, NULL) != SQLITE_OK) {
+        return BUNNY_DB_ERR_QUERY_FAILED;
+    }
+    sqlite3_bind_int64(stmt, 1, post_id);
+
+    bunny_db_post_file_array arr;
+    bunny_db_post_file_array_init(&arr);
+
+    int rc;
+    while ((rc = sqlite3_step(stmt)) == SQLITE_ROW) {
+        bunny_db_post_file_t item;
+        item.file_url = bunny_db_column_text_dup(stmt, 0);
+        item.sample_url = bunny_db_column_text_dup(stmt, 1);
+        item.preview_url = bunny_db_column_text_dup(stmt, 2);
+        item.file_ext = bunny_db_column_text_dup(stmt, 3);
+        item.file_md5 = bunny_db_column_text_dup(stmt, 4);
+        item.width = sqlite3_column_int(stmt, 5);
+        item.height = sqlite3_column_int(stmt, 6);
+        item.mimetype = bunny_db_column_text_dup(stmt, 7);
+        if (!bunny_db_post_file_array_push(&arr, item)) {
+            sqlite3_finalize(stmt);
+            bunny_db_post_file_free(&item);
+            for (size_t i = 0; i < arr.count; i++) {
+                bunny_db_post_file_free(&arr.items[i]);
+            }
+            bunny_db_post_file_array_free(&arr);
+            return BUNNY_DB_ERR_UNKNOWN;
+        }
+    }
+    sqlite3_finalize(stmt);
+
+    if (rc != SQLITE_DONE) {
+        for (size_t i = 0; i < arr.count; i++) {
+            bunny_db_post_file_free(&arr.items[i]);
+        }
+        bunny_db_post_file_array_free(&arr);
         return bunny_db_sqlite_rc_to_result(rc);
     }
 
