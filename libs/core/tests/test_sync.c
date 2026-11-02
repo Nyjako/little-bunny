@@ -915,6 +915,49 @@ void test_preview_search_applies_the_tag_blacklist_for_a_plain_query(void)
     free(fixture);
 }
 
+void test_preview_search_applies_a_complex_multi_tag_blacklist_rule(void)
+{
+    /* M28/M54: "one someartist" is a multi-tag AND rule -- the fixture post
+     * carries both, so it's blacklisted even though neither tag alone is a
+     * stored simple rule. Exercises the full bunny_core -> bunny_db ->
+     * libs/tag_query matching path end to end, not just the sync-import
+     * rename. */
+    char *fixture = read_fixture("e621_posts_search.json");
+    TEST_ASSERT_NOT_NULL(fixture);
+    g_e621_state.bodies[0] = fixture;
+    g_e621_state.body_count = 1;
+
+    bunny_core_blacklist_add(g_core, BUNNY_DB_SITE_E621, "one someartist");
+
+    bunny_db_post_list_t posts;
+    bunny_core_result_t result = bunny_core_preview_search(g_core, BUNNY_DB_SITE_E621, "wolf", 1, &posts);
+    TEST_ASSERT_EQUAL(BUNNY_CORE_OK, result);
+    TEST_ASSERT_EQUAL(0, (int)posts.count);
+    bunny_db_post_list_free(&posts);
+
+    free(fixture);
+}
+
+void test_blacklist_add_rejects_invalid_syntax(void)
+{
+    bunny_core_result_t result = bunny_core_blacklist_add(g_core, BUNNY_DB_SITE_E621, "( unbalanced");
+    TEST_ASSERT_EQUAL(BUNNY_CORE_ERR_INVALID_ARG, result);
+
+    bunny_db_string_list_t blacklist;
+    result = bunny_core_blacklist_list(g_core, BUNNY_DB_SITE_E621, &blacklist);
+    TEST_ASSERT_EQUAL(BUNNY_CORE_OK, result);
+    TEST_ASSERT_EQUAL(0, (int)blacklist.count);
+    bunny_db_string_list_free(&blacklist);
+}
+
+void test_blacklist_add_rejects_e621_only_syntax_for_inkbunny(void)
+{
+    /* Inkbunny's own search grammar has no OR -- see libs/tag_query's own
+     * dialect doc comment. */
+    bunny_core_result_t result = bunny_core_blacklist_add(g_core, BUNNY_DB_SITE_INKBUNNY, "~cat");
+    TEST_ASSERT_EQUAL(BUNNY_CORE_ERR_INVALID_ARG, result);
+}
+
 void test_search_list_posts_favorites_search_is_unaffected_by_the_tag_blacklist(void)
 {
     /* M37: bunny_core_search_list_posts detects a favorites search by its
@@ -1949,12 +1992,15 @@ void test_sync_e621_blacklist_requires_a_configured_account(void)
     TEST_ASSERT_EQUAL(BUNNY_CORE_ERR_SITE, result);
 }
 
-void test_sync_e621_blacklist_imports_new_tags_and_skips_multi_tag_lines(void)
+void test_sync_e621_blacklist_imports_multi_tag_lines_and_skips_invalid_ones(void)
 {
     bunny_core_account_set(g_core, BUNNY_DB_SITE_E621, "someuser", "someapikey");
     bunny_core_blacklist_add(g_core, BUNNY_DB_SITE_E621, "already_here");
 
-    const char *profile_json = "{\"id\":1,\"name\":\"someuser\",\"blacklisted_tags\":\"already_here\\nbrand_new\\nrating:e young\\n\"}";
+    /* "rating:e young" -- an e621 "AND" line -- now stores verbatim (M28/
+     * M54) instead of being skipped. "( unbalanced" is genuinely invalid
+     * syntax (unterminated group) and is still skipped and counted. */
+    const char *profile_json = "{\"id\":1,\"name\":\"someuser\",\"blacklisted_tags\":\"already_here\\nbrand_new\\nrating:e young\\n( unbalanced\\n\"}";
     g_e621_state.bodies[0] = profile_json;
     g_e621_state.body_count = 1;
 
@@ -1963,22 +2009,27 @@ void test_sync_e621_blacklist_imports_new_tags_and_skips_multi_tag_lines(void)
     bunny_core_result_t result = bunny_core_sync_e621_blacklist(g_core, &stats);
 
     TEST_ASSERT_EQUAL(BUNNY_CORE_OK, result);
-    TEST_ASSERT_EQUAL(1, stats.added);
+    TEST_ASSERT_EQUAL(2, stats.added); /* brand_new, rating:e young */
     TEST_ASSERT_EQUAL(1, stats.already_present);
-    TEST_ASSERT_EQUAL(1, stats.skipped_multi_tag);
+    TEST_ASSERT_EQUAL(1, stats.skipped_invalid); /* ( unbalanced */
 
     bunny_db_string_list_t blacklist;
     result = bunny_core_blacklist_list(g_core, BUNNY_DB_SITE_E621, &blacklist);
     TEST_ASSERT_EQUAL(BUNNY_CORE_OK, result);
-    TEST_ASSERT_EQUAL(2, (int)blacklist.count); /* already_here + brand_new -- never "rating:e young" */
+    TEST_ASSERT_EQUAL(3, (int)blacklist.count); /* already_here, brand_new, rating:e young */
     bool found_new = false;
+    bool found_multi_tag = false;
     for (size_t i = 0; i < blacklist.count; i++) {
         if (strcmp(blacklist.items[i], "brand_new") == 0) {
             found_new = true;
         }
-        TEST_ASSERT_NOT_EQUAL(0, strcmp(blacklist.items[i], "rating:e young"));
+        if (strcmp(blacklist.items[i], "rating:e young") == 0) {
+            found_multi_tag = true;
+        }
+        TEST_ASSERT_NOT_EQUAL(0, strcmp(blacklist.items[i], "( unbalanced"));
     }
     TEST_ASSERT_TRUE(found_new);
+    TEST_ASSERT_TRUE(found_multi_tag);
     bunny_db_string_list_free(&blacklist);
 }
 
@@ -2198,6 +2249,9 @@ int main(void)
     RUN_TEST(test_syncing_a_pool_search_orders_posts_by_e621s_own_pool_order);
     RUN_TEST(test_preview_search_upserts_posts_without_creating_a_search);
     RUN_TEST(test_preview_search_applies_the_tag_blacklist_for_a_plain_query);
+    RUN_TEST(test_preview_search_applies_a_complex_multi_tag_blacklist_rule);
+    RUN_TEST(test_blacklist_add_rejects_invalid_syntax);
+    RUN_TEST(test_blacklist_add_rejects_e621_only_syntax_for_inkbunny);
     RUN_TEST(test_preview_search_pool_browse_is_unaffected_by_the_tag_blacklist);
     RUN_TEST(test_preview_search_favorites_browse_is_unaffected_by_the_tag_blacklist);
     RUN_TEST(test_search_list_posts_favorites_search_is_unaffected_by_the_tag_blacklist);
@@ -2240,7 +2294,7 @@ int main(void)
     RUN_TEST(test_verify_inkbunny_accepts_valid_credentials);
     RUN_TEST(test_verify_inkbunny_rejects_invalid_credentials);
     RUN_TEST(test_sync_e621_blacklist_requires_a_configured_account);
-    RUN_TEST(test_sync_e621_blacklist_imports_new_tags_and_skips_multi_tag_lines);
+    RUN_TEST(test_sync_e621_blacklist_imports_multi_tag_lines_and_skips_invalid_ones);
     RUN_TEST(test_stats_report_top_used_tags_merges_both_sites_with_a_site_prefix);
     RUN_TEST(test_stats_report_top_favorited_tags_only_counts_favorited_posts);
     RUN_TEST(test_stats_report_top_pools_ranks_by_favorited_post_count);

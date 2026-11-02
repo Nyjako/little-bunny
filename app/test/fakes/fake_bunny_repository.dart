@@ -417,7 +417,7 @@ class FakeBunnyRepository implements BunnyRepository {
   /// Result returned by [syncE621Blacklist]; set this to simulate a sync
   /// outcome. Throws [syncE621BlacklistError] instead, if set (simulates no
   /// e621 account configured).
-  BunnyBlacklistSyncStats syncE621BlacklistResult = const BunnyBlacklistSyncStats(added: 0, alreadyPresent: 0, skippedMultiTag: 0);
+  BunnyBlacklistSyncStats syncE621BlacklistResult = const BunnyBlacklistSyncStats(added: 0, alreadyPresent: 0, skippedInvalid: 0);
   Object? syncE621BlacklistError;
 
   @override
