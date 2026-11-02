@@ -4,6 +4,7 @@ import 'dart:io' show Platform;
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:fvp/fvp.dart' as fvp;
+import 'package:just_audio_media_kit/just_audio_media_kit.dart';
 
 import 'bunny_repository_scope.dart';
 import 'l10n/app_localizations.dart';
@@ -29,6 +30,10 @@ Future<void> main() async {
   // gap for exactly those platforms via its own bundled decoder, leaving
   // Android/iOS on video_player's official backend untouched.
   fvp.registerWith(options: {'platforms': ['windows', 'linux']});
+  // just_audio (M28 Phase 4) has the same gap on Linux/Windows -- media_kit
+  // fills it here too. Android/iOS/macOS keep just_audio's own official
+  // backend untouched (default-disabled above).
+  JustAudioMediaKit.ensureInitialized();
   final secretStore = FlutterSecureStorageSecretStore();
   // Best-effort (M43) -- a platform this plugin doesn't support, or a denied
   // permission, must never block app startup; see the notifier's own doc
