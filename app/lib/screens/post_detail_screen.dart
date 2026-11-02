@@ -2,6 +2,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:chewie/chewie.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:just_audio/just_audio.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:video_player/video_player.dart';
 
@@ -19,6 +20,7 @@ import '../util/mouse_drag_scroll_behavior.dart';
 import '../util/post_navigation.dart';
 import '../util/responsive.dart';
 import '../util/tag_query.dart';
+import '../widgets/audio_player_widget.dart';
 import '../widgets/download_progress_indicator.dart';
 import '../widgets/gif_player.dart';
 import '../widgets/rating_badge.dart';
@@ -371,6 +373,14 @@ class _PostDetailPageState extends State<_PostDetailPage> {
   List<BunnyPostFile>? _files;
   int _filePageIndex = 0;
 
+  /// Lazily created on the first track tap (M28 Phase 4, Music - Album)
+  /// rather than one [AudioPlayer] per row -- eagerly creating N players
+  /// for an N-track album would mean preloading every track the moment the
+  /// post opens. This one shared player switches source via `setUrl`
+  /// whenever a different row is tapped.
+  AudioPlayer? _albumPlayer;
+  int? _albumPlayingIndex;
+
   /// Not `late final` like the futures above -- posting a new comment
   /// reassigns this to a fresh fetch so the new comment shows up without a
   /// full screen reload.
@@ -496,6 +506,7 @@ class _PostDetailPageState extends State<_PostDetailPage> {
   void dispose() {
     _chewieController?.dispose();
     _videoController?.dispose();
+    _albumPlayer?.dispose();
     _commentController.dispose();
     super.dispose();
   }
@@ -759,9 +770,20 @@ class _PostDetailPageState extends State<_PostDetailPage> {
     return files != null && files.length > 1 && files.every((f) => _imageExtensions.contains(f.fileExt?.toLowerCase()));
   }
 
+  /// Counterpart to [_hasImageGallery] for Inkbunny Music - Album
+  /// submissions -- true once [_files] resolves with more than one entry
+  /// that are all audio files.
+  bool get _hasAudioAlbum {
+    final files = _files;
+    return files != null && files.length > 1 && files.every((f) => isAudioExt(f.fileExt));
+  }
+
   Widget _buildMedia(AppLocalizations l10n) {
     if (_hasImageGallery) {
       return _buildImageGallery(_files!);
+    }
+    if (_hasAudioAlbum) {
+      return _buildAudioAlbum(_files!);
     }
     return _buildSingleFileMedia(l10n);
   }
@@ -793,6 +815,9 @@ class _PostDetailPageState extends State<_PostDetailPage> {
           return bounded(Chewie(controller: chewieController));
         },
       );
+    }
+    if (isAudioExt(ext)) {
+      return AudioPlayerWidget(key: ValueKey(post.fileUrl), url: post.fileUrl!, httpHeaders: imageHeadersFor(post.site));
     }
     return SizedBox(height: 200, child: Center(child: Text(l10n.postDetailUnsupportedFormat(ext))));
   }
@@ -862,6 +887,61 @@ class _PostDetailPageState extends State<_PostDetailPage> {
           ),
         ),
       ],
+    );
+  }
+
+  /// Switches the single shared [_albumPlayer] to [index]'s track if it
+  /// isn't already the active one, otherwise just toggles play/pause on it
+  /// -- see [_albumPlayer]'s own doc comment for why one shared player is
+  /// used instead of one per row.
+  Future<void> _toggleAlbumTrack(int index, String url) async {
+    final player = _albumPlayer ??= AudioPlayer();
+    if (_albumPlayingIndex == index) {
+      if (player.playing) {
+        await player.pause();
+      } else {
+        await player.play();
+      }
+      return;
+    }
+    setState(() => _albumPlayingIndex = index);
+    await player.setUrl(url, headers: imageHeadersFor(_post.site));
+    await player.play();
+  }
+
+  /// A vertical track list rather than [_buildImageGallery]'s horizontal
+  /// paging -- reads more naturally for an album's track order than
+  /// swiping art pages does, and lets every track's label stay visible at
+  /// once instead of one-at-a-time.
+  Widget _buildAudioAlbum(List<BunnyPostFile> files) {
+    return ListView.builder(
+      key: const Key('postDetailAudioAlbumList'),
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      itemCount: files.length,
+      itemBuilder: (context, index) {
+        final file = files[index];
+        final segments = Uri.tryParse(file.fileUrl)?.pathSegments ?? const [];
+        final fileName = segments.isNotEmpty ? segments.last : '';
+        final label = fileName.isNotEmpty ? fileName : AppLocalizations.of(context)!.postDetailAudioTrackLabel(index + 1);
+        final isActiveTrack = _albumPlayingIndex == index;
+        final player = _albumPlayer;
+        return ListTile(
+          key: ValueKey('postDetailAudioTrack$index'),
+          leading: StreamBuilder<PlayerState>(
+            stream: isActiveTrack && player != null ? player.playerStateStream : const Stream.empty(),
+            builder: (context, snapshot) {
+              final playing = isActiveTrack && (snapshot.data?.playing ?? false);
+              return IconButton(
+                key: ValueKey('postDetailAudioTrackPlayButton$index'),
+                icon: Icon(playing ? Icons.pause_circle_filled : Icons.play_circle_fill),
+                onPressed: () => _toggleAlbumTrack(index, file.fileUrl),
+              );
+            },
+          ),
+          title: Text('${index + 1}. $label'),
+        );
+      },
     );
   }
 

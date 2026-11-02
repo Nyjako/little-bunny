@@ -240,6 +240,10 @@
   "@postDetailUnsupportedFormat": {
     "placeholders": {"extension": {"type": "String"}}
   },
+  "postDetailAudioTrackLabel": "Track {position}",
+  "@postDetailAudioTrackLabel": {
+    "placeholders": {"position": {"type": "int"}}
+  },
   "postDetailTitleLabel": "Title",
   "postDetailDescriptionLabel": "Description",
   "postDetailCommentsLabel": "Comments",
