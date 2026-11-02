@@ -441,6 +441,49 @@ void test_fetch_and_cache_post_upserts_live_inkbunny_submission(void)
     free(submission_fixture);
 }
 
+void test_fetch_and_cache_post_stores_every_file_on_a_multi_file_inkbunny_submission(void)
+{
+    /* M28: a Picture Series (or Comic/Portfolio/Music - Album) submission
+     * can have more than one file -- upsert_inkbunny_submission used to
+     * only ever store files.items[0], silently discarding the rest. This
+     * fixture mirrors a real 11-file Picture Series (10 image pages + 1
+     * bonus mp3 track). */
+    char *login_fixture = read_fixture("inkbunny_login_success.json");
+    char *submission_fixture = read_fixture("inkbunny_submission_picture_series.json");
+    TEST_ASSERT_NOT_NULL(login_fixture);
+    TEST_ASSERT_NOT_NULL(submission_fixture);
+    g_inkbunny_state.bodies[0] = login_fixture;
+    g_inkbunny_state.bodies[1] = submission_fixture;
+    g_inkbunny_state.body_count = 2;
+
+    int64_t post_id = 0;
+    bunny_core_result_t result = bunny_core_fetch_and_cache_post(g_core, BUNNY_DB_SITE_INKBUNNY, 3961138, &post_id);
+    TEST_ASSERT_EQUAL(BUNNY_CORE_OK, result);
+    TEST_ASSERT_TRUE(post_id > 0);
+
+    /* The post's own single-file columns still represent just the first
+     * file, unchanged. */
+    bunny_db_post_t post;
+    result = bunny_core_post_get_by_id(g_core, post_id, &post);
+    TEST_ASSERT_EQUAL(BUNNY_CORE_OK, result);
+    TEST_ASSERT_EQUAL_STRING("png", post.file_ext);
+    bunny_db_post_free(&post);
+
+    bunny_db_post_file_list_t files;
+    result = bunny_core_post_get_files(g_core, post_id, &files);
+    TEST_ASSERT_EQUAL(BUNNY_CORE_OK, result);
+    TEST_ASSERT_EQUAL(11, (int)files.count);
+    TEST_ASSERT_EQUAL_STRING("png", files.items[0].file_ext);
+    TEST_ASSERT_EQUAL_STRING("jpg", files.items[8].file_ext); /* order 8 is the one jpg page */
+    TEST_ASSERT_EQUAL_STRING("png", files.items[9].file_ext); /* orders 0-7, 9 are png */
+    TEST_ASSERT_EQUAL_STRING("mp3", files.items[10].file_ext);
+    TEST_ASSERT_EQUAL_STRING("audio/mpeg", files.items[10].mimetype);
+    bunny_db_post_file_list_free(&files);
+
+    free(login_fixture);
+    free(submission_fixture);
+}
+
 void test_backfill_inkbunny_details_is_a_noop_with_no_thin_posts(void)
 {
     bunny_core_backfill_stats_t stats;
@@ -2034,6 +2077,7 @@ int main(void)
     RUN_TEST(test_sync_e621_search_upserts_post_relationships_and_pools);
     RUN_TEST(test_fetch_and_cache_post_upserts_live_e621_post);
     RUN_TEST(test_fetch_and_cache_post_upserts_live_inkbunny_submission);
+    RUN_TEST(test_fetch_and_cache_post_stores_every_file_on_a_multi_file_inkbunny_submission);
     RUN_TEST(test_backfill_inkbunny_details_is_a_noop_with_no_thin_posts);
     RUN_TEST(test_backfill_inkbunny_details_upserts_and_marks_fetched_posts);
     RUN_TEST(test_backfill_inkbunny_details_marks_a_missing_submission_backfilled_anyway);

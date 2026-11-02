@@ -456,6 +456,15 @@ void test_full_account_search_sync_favorite_flow(void)
     free(response.data);
     memset(&response, 0, sizeof(response));
 
+    /* M28: e621 posts never populate post_files -- empty, same as sources
+     * above is populated and pools below is empty, each reflecting what's
+     * actually site-specific vs. not. */
+    status = do_request("GET", "/posts/1/files", NULL, &response, true, NULL);
+    TEST_ASSERT_EQUAL(200, status);
+    TEST_ASSERT_EQUAL_STRING("[]", response.data);
+    free(response.data);
+    memset(&response, 0, sizeof(response));
+
     status = do_request("GET", "/posts/1/relationships", NULL, &response, true, NULL);
     TEST_ASSERT_EQUAL(200, status);
     TEST_ASSERT_NOT_NULL(strstr(response.data, "\"has_parent\":false"));
