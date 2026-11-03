@@ -21,12 +21,24 @@ void main() {
     TestWidgetsFlutterBinding.ensureInitialized().defaultBinaryMessenger.setMockMethodCallHandler(channel, null);
   });
 
-  test('showProgress invokes updateProgress with done/total', () async {
+  test('showProgress invokes updateProgress with done/total/failed/etaText', () async {
     final notifier = AndroidForegroundServiceQueueNotifier(channel: channel);
 
-    await notifier.showProgress(done: 3, total: 10);
+    await notifier.showProgress(done: 3, total: 10, failed: 1, eta: const Duration(seconds: 90));
 
-    expect(calls, [isA<MethodCall>().having((c) => c.method, 'method', 'updateProgress').having((c) => c.arguments, 'arguments', {'done': 3, 'total': 10})]);
+    expect(calls, [
+      isA<MethodCall>().having((c) => c.method, 'method', 'updateProgress').having((c) => c.arguments, 'arguments', {'done': 3, 'total': 10, 'failed': 1, 'etaText': '1m 30s'}),
+    ]);
+  });
+
+  test('showProgress sends a null etaText when eta is null', () async {
+    final notifier = AndroidForegroundServiceQueueNotifier(channel: channel);
+
+    await notifier.showProgress(done: 3, total: 10, failed: 0, eta: null);
+
+    expect(calls, [
+      isA<MethodCall>().having((c) => c.method, 'method', 'updateProgress').having((c) => c.arguments, 'arguments', {'done': 3, 'total': 10, 'failed': 0, 'etaText': null}),
+    ]);
   });
 
   test('showSummary invokes showSummary with succeeded/mismatched/failed', () async {
@@ -53,7 +65,7 @@ void main() {
     });
     final notifier = AndroidForegroundServiceQueueNotifier(channel: channel);
 
-    await notifier.showProgress(done: 1, total: 1);
+    await notifier.showProgress(done: 1, total: 1, failed: 0, eta: null);
     await notifier.showSummary(succeeded: 1, mismatched: 0, failed: 0);
     await notifier.clear();
     // Reaching here without an uncaught exception is the assertion.

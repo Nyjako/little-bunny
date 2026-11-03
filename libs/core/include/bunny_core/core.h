@@ -230,6 +230,11 @@ bunny_core_result_t bunny_core_post_get_tags_by_category(bunny_core_t *core, int
  * bunny_db. Empty for a post with none (e.g. every Inkbunny submission). */
 bunny_core_result_t bunny_core_post_get_sources(bunny_core_t *core, int64_t post_id, bunny_db_string_list_t *out_list);
 
+/* Every file on a post, in position order (M28) -- a thin pass-through to
+ * bunny_db. A single-file post (including every e621 post) still returns
+ * exactly one entry. */
+bunny_core_result_t bunny_core_post_get_files(bunny_core_t *core, int64_t post_id, bunny_db_post_file_list_t *out_list);
+
 /* A post's parent/child relationships (e621 only) -- a thin pass-through to
  * bunny_db. See bunny_db_post_get_relationships's doc comment for the
  * "no row = all-empty/OK, not NOT_FOUND" convention this follows. */
@@ -239,34 +244,50 @@ bunny_core_result_t bunny_core_post_get_relationships(bunny_core_t *core, int64_
  * in no pools) -- a thin pass-through to bunny_db. */
 bunny_core_result_t bunny_core_post_get_pool_ids(bunny_core_t *core, int64_t post_id, bunny_db_int64_list_t *out_list);
 
-/* --- Tag blacklist (M13.3) -- thin pass-throughs to bunny_db_blacklist_*.
+/* --- Tag blacklist (M13.3, M28/M54) -- thin pass-throughs to bunny_db_blacklist_*.
  * See bunny_db/db.h for which post-listing query the blacklist does (and
- * deliberately does not) apply to. */
+ * deliberately does not) apply to. bunny_core_blacklist_add validates
+ * `tag` (now really "the rule's raw text" -- see bunny_db's own blacklist
+ * doc comment) under `site`'s own e621/Inkbunny grammar dialect (libs/
+ * tag_query) before writing it, returning BUNNY_CORE_ERR_INVALID_ARG for
+ * anything that fails to parse -- the one write path where rejecting bad
+ * input outright, rather than storing-and-never-matching it, is correct. */
 bunny_core_result_t bunny_core_blacklist_list(bunny_core_t *core, bunny_db_site_t site, bunny_db_string_list_t *out_list);
 bunny_core_result_t bunny_core_blacklist_add(bunny_core_t *core, bunny_db_site_t site, const char *tag);
 bunny_core_result_t bunny_core_blacklist_remove(bunny_core_t *core, bunny_db_site_t site, const char *tag);
 
 typedef struct
 {
-    int added;             /* new single-tag entries imported */
-    int already_present;   /* entries that matched an existing local tag */
-    int skipped_multi_tag; /* e621 "AND" lines (e.g. "rating:e young") -- not yet a local blacklist concept */
+    int added;           /* new rules imported (bare tags and, as of M28/M54, multi-tag/grammar lines alike) */
+    int already_present; /* entries that matched an existing local rule */
+    int skipped_invalid; /* lines that failed to parse under e621's grammar (libs/tag_query) -- e.g. unbalanced parens */
 } bunny_core_blacklist_sync_stats_t;
 
 /* Pulls the e621 account's own blacklist (My Account -> Blacklisted Tags on
  * e621.net, see tools/e621_blacklist_experiment/e621_blacklist.py for the
- * API this mirrors) and imports every single-tag line that isn't already
- * present locally. Read-only on e621's side -- never writes anything back
- * to the site. Requires an e621 account to already be configured
+ * API this mirrors) and imports every line that isn't already present
+ * locally. Read-only on e621's side -- never writes anything back to the
+ * site. Requires an e621 account to already be configured
  * (bunny_core_account_set), since e621 only returns blacklisted_tags when
  * authenticated as that same account -- returns BUNNY_CORE_ERR_SITE
- * otherwise (same as any other e621 call with no usable client). Lines with
- * more than one space-separated tag are e621's "AND" groups (match only
- * when every tag on that line matches a post); the local blacklist has no
- * such concept yet, so those are skipped and counted separately in
- * out_stats rather than silently dropped or misinterpreted as one literal
- * (space-containing) tag. */
+ * otherwise (same as any other e621 call with no usable client). A line
+ * that fails to parse under e621's grammar (libs/tag_query) is skipped and
+ * counted separately in out_stats rather than silently dropped or stored
+ * as something that could never usefully match -- M28/M54 changed this
+ * from "any line with a space is skipped" (e621's own multi-tag AND lines
+ * used to be entirely unsupported) to "any line that parses is stored
+ * verbatim," since the local blacklist now understands that same grammar. */
 bunny_core_result_t bunny_core_sync_e621_blacklist(bunny_core_t *core, bunny_core_blacklist_sync_stats_t *out_stats);
+
+/* Syntax-only validation (M28/M54) under `site`'s own grammar dialect (full
+ * e621 grammar, or Inkbunny's narrower AND+exclude-only subset -- see libs/
+ * tag_query's own dialect doc comment) -- never touches the DB or any post's
+ * tags, just whether `text` parses. *out_valid is true/false; when false,
+ * *out_error_pos (if out_error_pos is non-NULL) is the byte offset into
+ * `text` nearest the problem, for highlighting in a text field. Used by
+ * both the blacklist editor's live-typing check and (Phase 4) the search
+ * query editor's -- the one grammar backs both UIs. */
+bunny_core_result_t bunny_core_tag_query_validate(bunny_core_t *core, bunny_db_site_t site, const char *text, bool *out_valid, size_t *out_error_pos);
 
 /* Fetches a single post live from its site and caches it (upserting into the
  * local post cache exactly like a sync pass would for one post), without
@@ -274,6 +295,23 @@ bunny_core_result_t bunny_core_sync_e621_blacklist(bunny_core_t *core, bunny_cor
  * parent/child/pool chip on the detail page points at a post that was never
  * independently synced. Returns the (possibly pre-existing) local post id. */
 bunny_core_result_t bunny_core_fetch_and_cache_post(bunny_core_t *core, bunny_db_site_t site, int64_t external_id, int64_t *out_post_id);
+
+/* M28: a search-synced Inkbunny post only ever gets the partial field
+ * subset search results return (upsert_inkbunny_submission, sync.c) -- no
+ * tags, width/height forced to 0, possibly-stale comment_count. This
+ * periodically catches up to 100 such posts at a time (Inkbunny's own
+ * per-call cap on inkbunny_get_submissions) via one bulk fetch, called
+ * from the server scheduler only (server/src/scheduler.c) -- no FFI/HTTP
+ * exposure; standalone mode keeps relying on PostDetailScreen's existing
+ * per-post lazy refresh instead (M26.5). */
+typedef struct
+{
+    int attempted; /* thin ids looked at this call, capped at 100 */
+    int found;     /* of those, how many Inkbunny actually returned data for */
+    int failed;    /* 0 unless the whole batch call itself failed, in which case == attempted */
+} bunny_core_backfill_stats_t;
+
+bunny_core_result_t bunny_core_backfill_inkbunny_details(bunny_core_t *core, bunny_core_backfill_stats_t *out_stats);
 
 /* A pool's own metadata, fetched live (e621 only -- no persistence, no
  * equivalent on Inkbunny). Used to auto-fill a pool search's label at

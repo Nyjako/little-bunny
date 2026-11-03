@@ -88,6 +88,32 @@ static const char *const BUNNY_DB_SCHEMA_SQL = "PRAGMA foreign_keys = ON;"
                                                "    url TEXT NOT NULL,"
                                                "    PRIMARY KEY (post_id, position)"
                                                ");"
+                                               /* Every file on a post, in Inkbunny's own submission_file_order
+                                                * (M28) -- a saved search's cached posts.file_url/width/height/etc.
+                                                * columns keep representing just the FIRST file, exactly as before;
+                                                * this table is purely additive, storing the complete set (including
+                                                * that same first file again, redundantly, same tradeoff as every
+                                                * other post_* side table here) so a multi-file submission (Inkbunny
+                                                * Picture Series/Comic/Portfolio/Music - Album) doesn't lose every
+                                                * file after the first. Generic capability, not Inkbunny-named --
+                                                * e621 posts are always structurally single-file (e621's own
+                                                * multi-image concept is entirely separate posts linked via pools),
+                                                * so this table simply stays empty for every e621 post, the mirror
+                                                * image of post_relationships/post_children always staying empty for
+                                                * Inkbunny. */
+                                               "CREATE TABLE IF NOT EXISTS post_files ("
+                                               "    post_id INTEGER NOT NULL REFERENCES posts(id) ON DELETE CASCADE,"
+                                               "    position INTEGER NOT NULL,"
+                                               "    file_url TEXT NOT NULL,"
+                                               "    sample_url TEXT,"
+                                               "    preview_url TEXT,"
+                                               "    file_ext TEXT,"
+                                               "    file_md5 TEXT,"
+                                               "    width INTEGER NOT NULL DEFAULT 0,"
+                                               "    height INTEGER NOT NULL DEFAULT 0,"
+                                               "    mimetype TEXT,"
+                                               "    PRIMARY KEY (post_id, position)"
+                                               ");"
                                                /* parent_external_id/has_active_children/child_external_id are the
                                                 * *site's own* ids, not local posts.id -- a parent/child may never
                                                 * have been synced locally, so there's nothing to foreign-key against.

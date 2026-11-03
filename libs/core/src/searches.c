@@ -184,9 +184,11 @@ bunny_core_result_t bunny_core_search_list_posts(bunny_core_t *core, int64_t sea
     int64_t pool_id = 0;
     bool is_pool = false;
     bool is_favorites = false;
+    bunny_db_site_t site = BUNNY_DB_SITE_E621;
     if (search_list_result == BUNNY_DB_OK) {
         for (size_t i = 0; i < searches.count; i++) {
             if (searches.items[i].id == search_id) {
+                site = searches.items[i].site;
                 is_pool = bunny_core_parse_pool_id_from_query(searches.items[i].query, &pool_id);
                 is_favorites = bunny_core_is_favorites_query(searches.items[i].site, searches.items[i].query);
                 break;
@@ -195,7 +197,7 @@ bunny_core_result_t bunny_core_search_list_posts(bunny_core_t *core, int64_t sea
         bunny_db_search_list_free(&searches);
     }
 
-    bunny_db_result_t result = is_pool ? bunny_db_pool_search_list_posts(read_db, search_id, pool_id, unseen_only, page, out_list) : bunny_db_search_list_posts(read_db, search_id, unseen_only, !is_favorites, rating_mask, media_mask, page, out_list);
+    bunny_db_result_t result = is_pool ? bunny_db_pool_search_list_posts(read_db, search_id, pool_id, unseen_only, page, out_list) : bunny_db_search_list_posts(read_db, search_id, site, unseen_only, !is_favorites, rating_mask, media_mask, page, out_list);
     bunny_core_db_read_unlock(core, slot);
     return bunny_core_map_db_result(result);
 }
@@ -303,6 +305,18 @@ bunny_core_result_t bunny_core_post_get_sources(bunny_core_t *core, int64_t post
     size_t slot;
     bunny_db_t *read_db = bunny_core_db_read_lock(core, &slot);
     bunny_db_result_t result = bunny_db_post_get_sources(read_db, post_id, out_list);
+    bunny_core_db_read_unlock(core, slot);
+    return bunny_core_map_db_result(result);
+}
+
+bunny_core_result_t bunny_core_post_get_files(bunny_core_t *core, int64_t post_id, bunny_db_post_file_list_t *out_list)
+{
+    if (!core) {
+        return BUNNY_CORE_ERR_INVALID_ARG;
+    }
+    size_t slot;
+    bunny_db_t *read_db = bunny_core_db_read_lock(core, &slot);
+    bunny_db_result_t result = bunny_db_post_get_files(read_db, post_id, out_list);
     bunny_core_db_read_unlock(core, slot);
     return bunny_core_map_db_result(result);
 }

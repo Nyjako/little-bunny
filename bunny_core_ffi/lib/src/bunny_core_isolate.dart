@@ -101,9 +101,20 @@ Map<String, Object?> _tagStatToMap(bunny_db_tag_stat_t stat) => {'name': _readNu
 
 Map<String, Object?> _postTagToMap(bunny_db_post_tag_t tag) => {'name': _readNullableString(tag.name), 'category': _readNullableString(tag.category)};
 
+Map<String, Object?> _postFileToMap(bunny_db_post_file_t file) => {
+  'fileUrl': _readNullableString(file.file_url),
+  'sampleUrl': _readNullableString(file.sample_url),
+  'previewUrl': _readNullableString(file.preview_url),
+  'fileExt': _readNullableString(file.file_ext),
+  'fileMd5': _readNullableString(file.file_md5),
+  'width': file.width,
+  'height': file.height,
+  'mimetype': _readNullableString(file.mimetype),
+};
+
 Map<String, Object?> _syncStatsToMap(bunny_core_sync_stats_t stats) => {'searchesChecked': stats.searches_checked, 'searchesSynced': stats.searches_synced, 'postsUpserted': stats.posts_upserted};
 
-Map<String, Object?> _blacklistSyncStatsToMap(bunny_core_blacklist_sync_stats_t stats) => {'added': stats.added, 'alreadyPresent': stats.already_present, 'skippedMultiTag': stats.skipped_multi_tag};
+Map<String, Object?> _blacklistSyncStatsToMap(bunny_core_blacklist_sync_stats_t stats) => {'added': stats.added, 'alreadyPresent': stats.already_present, 'skippedInvalid': stats.skipped_invalid};
 
 Map<String, Object?> _queueStatsToMap(bunny_core_queue_stats_t stats) => {'actionsProcessed': stats.actions_processed, 'actionsSucceeded': stats.actions_succeeded, 'actionsFailed': stats.actions_failed};
 
@@ -338,6 +349,12 @@ class _GetPostSourcesRequest extends _Request {
   const _GetPostSourcesRequest(this.postId);
 }
 
+class _GetPostFilesRequest extends _Request {
+  final int postId;
+
+  const _GetPostFilesRequest(this.postId);
+}
+
 class _GetPostRelationshipsRequest extends _Request {
   final int postId;
 
@@ -366,6 +383,16 @@ class _BlacklistRemoveRequest extends _Request {
 
 class _SyncE621BlacklistRequest extends _Request {
   const _SyncE621BlacklistRequest();
+}
+
+/// Syntax-only validation (M28/M54), not blacklist-specific -- also used by
+/// the search query editor (Phase 4). Lives near the blacklist requests
+/// since that's its first/primary caller.
+class _TagQueryValidateRequest extends _Request {
+  final String text;
+  final String site;
+
+  const _TagQueryValidateRequest(this.text, this.site);
 }
 
 class _GetPostPoolIdsRequest extends _Request {
@@ -637,6 +664,19 @@ List<String> _handleGetPostSources(Pointer<bunny_core_t> core, _GetPostSourcesRe
       items.add(out.ref.items[i].cast<Utf8>().toDartString());
     }
     _bindings.bunny_db_string_list_free(out);
+    return items;
+  });
+}
+
+List<Map<String, Object?>> _handleGetPostFiles(Pointer<bunny_core_t> core, _GetPostFilesRequest r) {
+  return using((arena) {
+    final out = arena<bunny_db_post_file_list_t>();
+    _check(_bindings.bunny_core_post_get_files(core, r.postId, out));
+    final items = <Map<String, Object?>>[];
+    for (var i = 0; i < out.ref.count; i++) {
+      items.add(_postFileToMap(out.ref.items[i]));
+    }
+    _bindings.bunny_db_post_file_list_free(out);
     return items;
   });
 }
@@ -971,6 +1011,8 @@ Object? _dispatch(Pointer<bunny_core_t>? core, _Request request, void Function(P
         return _handleGetPostTagsByCategory(c, r);
       case _GetPostSourcesRequest r:
         return _handleGetPostSources(c, r);
+      case _GetPostFilesRequest r:
+        return _handleGetPostFiles(c, r);
       case _GetPostRelationshipsRequest r:
         return _handleGetPostRelationships(c, r);
       case _BlacklistListRequest r:
@@ -985,6 +1027,11 @@ Object? _dispatch(Pointer<bunny_core_t>? core, _Request request, void Function(P
         final outStats = arena<bunny_core_blacklist_sync_stats_t>();
         _check(_bindings.bunny_core_sync_e621_blacklist(c, outStats));
         return _blacklistSyncStatsToMap(outStats.ref);
+      case _TagQueryValidateRequest r:
+        final validPtr = arena<Bool>();
+        final errorPosPtr = arena<Size>();
+        _check(_bindings.bunny_core_tag_query_validate(c, _siteFromWire(r.site), r.text.toNativeUtf8(allocator: arena).cast(), validPtr, errorPosPtr));
+        return validPtr.value ? null : errorPosPtr.value;
       case _GetPostPoolIdsRequest r:
         return _handleGetPostPoolIds(c, r);
       case _FetchAndCachePostRequest r:
@@ -1173,6 +1220,8 @@ class BunnyCoreNative {
 
   Future<List<String>> getPostSources(int postId) => _send<List<String>>(_GetPostSourcesRequest(postId));
 
+  Future<List<Map<String, Object?>>> getPostFiles(int postId) => _send<List<Map<String, Object?>>>(_GetPostFilesRequest(postId));
+
   Future<List<String>> blacklistList(String site) => _send<List<String>>(_BlacklistListRequest(site));
 
   Future<void> blacklistAdd(String site, String tag) => _send<void>(_BlacklistAddRequest(site, tag));
@@ -1180,6 +1229,10 @@ class BunnyCoreNative {
   Future<void> blacklistRemove(String site, String tag) => _send<void>(_BlacklistRemoveRequest(site, tag));
 
   Future<Map<String, Object?>> syncE621Blacklist() => _send<Map<String, Object?>>(const _SyncE621BlacklistRequest());
+
+  /// Returns null if `text` is syntactically valid, otherwise the byte
+  /// offset of the problem (M28/M54).
+  Future<int?> tagQueryValidate(String text, String site) => _send<int?>(_TagQueryValidateRequest(text, site));
 
   Future<Map<String, Object?>> getPostRelationships(int postId) => _send<Map<String, Object?>>(_GetPostRelationshipsRequest(postId));
 

@@ -122,6 +122,20 @@ bunny_db_result_t bunny_db_group_delete(bunny_db_t *db, int64_t group_id);
  * Upserts are keyed on (site, external_id): calling this again for a post
  * already cached updates it in place rather than duplicating it. */
 
+/* One entry of bunny_db_post_upsert_t's own files array below (M28) -- see
+ * that field's doc comment for the full reasoning. */
+typedef struct
+{
+    const char *file_url; /* required */
+    const char *sample_url;
+    const char *preview_url;
+    const char *file_ext;
+    const char *file_md5;
+    int width;
+    int height;
+    const char *mimetype;
+} bunny_db_post_file_upsert_t;
+
 typedef struct
 {
     bunny_db_site_t site;
@@ -162,8 +176,24 @@ typedef struct
     const int64_t *pool_ids; /* may be NULL */
     size_t pool_count;
     const char *sample_url; /* medium-quality variant (e621's "sample", Inkbunny's "screen"); may be NULL */
+    /* Every file on this post, in order (M28) -- purely additive alongside
+     * the single-file fields above (file_url/width/height/etc.), which keep
+     * representing just the first file exactly as before. May be NULL/0
+     * (the common case -- always NULL/0 for e621, which is structurally
+     * single-file); wholesale-replaces post_files on every call, same as
+     * sources/tags above, including clearing it to empty when NULL/0 is
+     * passed on a resync. */
+    const bunny_db_post_file_upsert_t *files;
+    size_t file_count;
 } bunny_db_post_upsert_t;
 
+/* Deliberately has no inkbunny_details_backfilled param (M28) -- this runs
+ * on every ordinary Inkbunny search resync too, which never has full
+ * submission details to pass; including it in this struct/its ON CONFLICT
+ * clause would silently reset an already-backfilled post back to thin on
+ * its next resync. See bunny_db_post_mark_inkbunny_details_backfilled
+ * below, called explicitly only by code paths that actually have full
+ * details. */
 bunny_db_result_t bunny_db_post_upsert(bunny_db_t *db, const bunny_db_post_upsert_t *post, int64_t *out_id);
 bunny_db_result_t bunny_db_post_get(bunny_db_t *db, bunny_db_site_t site, int64_t external_id, bunny_db_post_t *out_post);
 
@@ -194,13 +224,21 @@ bunny_db_result_t bunny_db_search_has_result(bunny_db_t *db, int64_t search_id, 
  * apply_blacklist (M37) should be false for a favorites search (see
  * bunny_core_is_favorites_query) -- a user's own favorites are meant to
  * show everything they favorited, not a filtered subset. Every other
- * search (including a plain tag search) passes true.
+ * search (including a plain tag search) passes true. `site` is this
+ * search's own site (the caller already has it in scope, see
+ * bunny_core_search_list_posts) -- when apply_blacklist is true and `site`
+ * has at least one "complex" blacklist rule (M28/M54, see
+ * bunny_db_post_is_blacklisted's own doc comment), the already-paginated
+ * (<=BUNNY_DB_SEARCH_POSTS_PAGE_SIZE) rows get a second, C-side pass
+ * dropping any that match one of those rules -- meaning a returned page
+ * CAN come back shorter than a full page even when more rows exist beyond
+ * this offset, same as the SQL-level exact-match filter below already can.
  *
  * rating_mask/media_mask (M28) are bitmasks of the BUNNY_DB_RATING_MASK_ and
  * BUNNY_DB_MEDIA_MASK_ constants (types.h) -- pass BUNNY_DB_RATING_MASK_ALL
  * and BUNNY_DB_MEDIA_MASK_ALL for "no filtering", matching this function's
  * pre-M28 behavior exactly. */
-bunny_db_result_t bunny_db_search_list_posts(bunny_db_t *db, int64_t search_id, bool unseen_only, bool apply_blacklist, int rating_mask, int media_mask, int page, bunny_db_post_list_t *out_list);
+bunny_db_result_t bunny_db_search_list_posts(bunny_db_t *db, int64_t search_id, bunny_db_site_t site, bool unseen_only, bool apply_blacklist, int rating_mask, int media_mask, int page, bunny_db_post_list_t *out_list);
 
 /* A post's tags with their categories, for a post detail view's sectioned
  * tag display (Artists/Characters/Copyrights/Species/General/Meta for e621;
@@ -212,6 +250,19 @@ bunny_db_result_t bunny_db_post_get_tags_by_category(bunny_db_t *db, int64_t pos
  * comment). Empty for a post with none (e.g. every Inkbunny submission --
  * no such field there). */
 bunny_db_result_t bunny_db_post_get_sources(bunny_db_t *db, int64_t post_id, bunny_db_string_list_t *out_list);
+
+/* A post's own tag names only, no category join -- the name-only sibling
+ * of bunny_db_post_get_tags_by_category, for the complex-blacklist-rule
+ * matching pass (M28/M54, see bunny_db_post_is_blacklisted below) where
+ * category data is never used; skipping that LEFT JOIN and its per-row
+ * alloc matters since this runs on a hot per-post path. */
+bunny_db_result_t bunny_db_post_get_tag_names(bunny_db_t *db, int64_t post_id, bunny_db_string_list_t *out_list);
+
+/* Every file on a post, in position order (M28, see post_files' schema
+ * comment) -- a single-file post (the overwhelming majority, including
+ * every e621 post) still returns exactly one entry, the same file
+ * posts.file_url/width/height/etc. already represent. */
+bunny_db_result_t bunny_db_post_get_files(bunny_db_t *db, int64_t post_id, bunny_db_post_file_list_t *out_list);
 
 /* A post's parent/child relationships (e621 only -- see bunny_db_post_relationships_t's
  * doc comment). A post with no row in post_relationships (never had a parent or active
@@ -237,6 +288,20 @@ bunny_db_result_t bunny_db_pool_set_post_positions(bunny_db_t *db, int64_t pool_
  * one-time backfill (M26) that re-fetches each already-known pool from
  * e621 to populate `position` for data that predates that column. */
 bunny_db_result_t bunny_db_list_distinct_pool_ids(bunny_db_t *db, bunny_db_int64_list_t *out_list);
+
+/* Idempotent -- marking an already-marked post is a harmless no-op.
+ * post_id is the LOCAL id (bunny_db_post_upsert's out_id), not
+ * external_id. See migration 17's own comment (libs/db/src/db.c) and
+ * bunny_db_post_upsert's doc comment above for why this is a separate
+ * function rather than part of the shared upsert. */
+bunny_db_result_t bunny_db_post_mark_inkbunny_details_backfilled(bunny_db_t *db, int64_t post_id);
+
+/* Up to `limit` Inkbunny posts' EXTERNAL ids still at
+ * inkbunny_details_backfilled = 0 -- feeds
+ * bunny_core_backfill_inkbunny_details's periodic batch (M28), which caps
+ * `limit` at 100 to match inkbunny_get_submissions()'s own hard per-call
+ * limit. */
+bunny_db_result_t bunny_db_inkbunny_list_thin_post_ids(bunny_db_t *db, int limit, bunny_db_int64_list_t *out_external_ids);
 
 /* Same contract as bunny_db_search_list_posts, but for a search whose query
  * is a pool browse ("pool:<pool_id>", M9.6.3/M22) -- orders by this pool's
@@ -275,20 +340,24 @@ bunny_db_result_t bunny_db_favorite_list(bunny_db_t *db, bunny_db_post_list_t *o
 
 bunny_db_result_t bunny_db_vote_set(bunny_db_t *db, int64_t post_id, int score /* -1 or 1 */);
 
-/* --- Tag blacklist (M13.3, M37) -----------------------------------------------
- * A per-site list of exact tag names -- not foreign-keyed into tags(id),
+/* --- Tag blacklist (M13.3, M37, M28/M54) --------------------------------------
+ * A per-site list of blacklist rules -- not foreign-keyed into tags(id),
  * since a tag someone wants to blacklist may never have been synced
- * locally. bunny_db_search_list_posts (below) excludes any post carrying a
- * blacklisted tag UNLESS that search is itself a favorites search (the
- * apply_blacklist param, M37) -- the user's own favorites and every pool
- * search (bunny_db_pool_search_list_posts, never filtered at all) are
- * exempt by design: both are meant to show everything you already favorited
- * or that's actually in the pool, not a filtered subset. An ordinary live
- * tag/author browse (bunny_core_preview_search) applies the same exemptions
- * (skips filtering for a pool or favorites query) but otherwise DOES filter
- * now -- see bunny_db_post_is_blacklisted below, used for exactly that case
- * since that function's own live-upsert loop has no listing query to attach
- * a NOT EXISTS clause to. */
+ * locally. `tag` historically stored exactly one bare tag name; M28/M54
+ * reinterpret it as the rule's whole raw text, which may now also be a
+ * multi-tag/`-`/`~`/`*`/`()` e621-grammar expression (see libs/tag_query)
+ * -- a plain bare tag is just the simplest, still most common, case of
+ * that same column. bunny_db_search_list_posts (below) excludes any post
+ * carrying a blacklisted tag UNLESS that search is itself a favorites
+ * search (the apply_blacklist param, M37) -- the user's own favorites and
+ * every pool search (bunny_db_pool_search_list_posts, never filtered at
+ * all) are exempt by design: both are meant to show everything you already
+ * favorited or that's actually in the pool, not a filtered subset. An
+ * ordinary live tag/author browse (bunny_core_preview_search) applies the
+ * same exemptions (skips filtering for a pool or favorites query) but
+ * otherwise DOES filter now -- see bunny_db_post_is_blacklisted below, used
+ * for exactly that case since that function's own live-upsert loop has no
+ * listing query to attach a NOT EXISTS clause to. */
 
 bunny_db_result_t bunny_db_blacklist_list(bunny_db_t *db, bunny_db_site_t site, bunny_db_string_list_t *out_list);
 bunny_db_result_t bunny_db_blacklist_add(bunny_db_t *db, bunny_db_site_t site, const char *tag);
@@ -297,8 +366,17 @@ bunny_db_result_t bunny_db_blacklist_remove(bunny_db_t *db, bunny_db_site_t site
 /* True if any of post_id's tags is blacklisted for its own site -- a
  * single-post check (as opposed to bunny_db_search_list_posts' own listing-
  * query NOT EXISTS clause) for a live upsert loop with no listing query of
- * its own to attach one to. */
-bunny_db_result_t bunny_db_post_is_blacklisted(bunny_db_t *db, int64_t post_id, bool *out_is_blacklisted);
+ * its own to attach one to. `site` must be post_id's own site (every tag a
+ * post carries is always that same site, but this function has no listing
+ * query of its own to derive it from, so the caller -- which already knows
+ * which site it's syncing -- passes it directly rather than this doing an
+ * extra lookup). Checks the existing fast exact-match-tag rules first; only
+ * for a site with at least one "complex" rule (anything beyond a single
+ * bare tag -- see libs/tag_query) does this fall back to fetching the
+ * post's own tag names and running the full grammar matcher, so a site
+ * with no complex rules (today, for every existing user) costs nothing
+ * beyond today's one indexed query. */
+bunny_db_result_t bunny_db_post_is_blacklisted(bunny_db_t *db, bunny_db_site_t site, int64_t post_id, bool *out_is_blacklisted);
 
 /* --- Tag stats -------------------------------------------------------------- */
 

@@ -524,6 +524,48 @@ void main() {
       expect(sources, ['https://example.com/a', 'https://example.com/b']);
     });
 
+    test('getPostFiles sends GET to the right path and maps the response', () async {
+      respond = (_) => http.Response(
+        jsonEncode([
+          {'file_url': 'https://example.com/1.jpg', 'sample_url': null, 'preview_url': null, 'file_ext': 'jpg', 'file_md5': 'aaa', 'width': 100, 'height': 200, 'mimetype': 'image/jpeg'},
+          {'file_url': 'https://example.com/2.mp3', 'sample_url': null, 'preview_url': null, 'file_ext': 'mp3', 'file_md5': null, 'width': 0, 'height': 0, 'mimetype': 'audio/mpeg'},
+        ]),
+        200,
+      );
+
+      final files = await buildRepository().getPostFiles(5);
+
+      expect(capturedMethod, 'GET');
+      expect(capturedUri.path, '/posts/5/files');
+      expect(files, hasLength(2));
+      expect(files[0].fileUrl, 'https://example.com/1.jpg');
+      expect(files[0].fileMd5, 'aaa');
+      expect(files[0].width, 100);
+      expect(files[1].fileExt, 'mp3');
+      expect(files[1].mimetype, 'audio/mpeg');
+    });
+
+    test('validateTagQuery sends GET with site/text and returns null when valid (M28/M54)', () async {
+      respond = (_) => http.Response(jsonEncode({'valid': true}), 200);
+
+      final result = await buildRepository().validateTagQuery(BunnySite.e621, 'cat -dog');
+
+      expect(capturedMethod, 'GET');
+      expect(capturedUri.path, '/tag_query/validate');
+      expect(capturedUri.queryParameters['site'], 'e621');
+      expect(capturedUri.queryParameters['text'], 'cat -dog');
+      expect(result, isNull);
+    });
+
+    test('validateTagQuery returns the error position when invalid (M28/M54)', () async {
+      respond = (_) => http.Response(jsonEncode({'valid': false, 'error_pos': 4}), 200);
+
+      final result = await buildRepository().validateTagQuery(BunnySite.inkbunny, 'cat ~dog');
+
+      expect(capturedUri.queryParameters['site'], 'inkbunny');
+      expect(result, 4);
+    });
+
     test('getBlacklist sends GET with the site query param and returns a list of strings (M13.3)', () async {
       respond = (_) => http.Response(jsonEncode(['gore', 'young']), 200);
 

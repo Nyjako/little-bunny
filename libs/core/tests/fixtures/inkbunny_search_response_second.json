@@ -1,0 +1,38 @@
+{
+  "sid": "77N2zxwuZFvRduEQzvE15zGkiR",
+  "results_count_all": 1,
+  "results_count_thispage": 1,
+  "pages_count": 1,
+  "page": 1,
+  "user_location": "",
+  "search_params": [],
+  "submissions": [
+    {
+      "submission_id": "9999999",
+      "hidden": "f",
+      "username": "SomeoneElse",
+      "user_id": "628882",
+      "create_datetime": "2026-09-28 10:00:00.000000+00",
+      "thumbnail_url_large_noncustom": "https://nl1.ib.metapix.net/thumbnails/large/9999/9999999_noncustom.jpg",
+      "file_name": "9999999_SomeoneElse_other.jpg",
+      "title": "A different submission",
+      "deleted": "f",
+      "public": "t",
+      "mimetype": "image/jpeg",
+      "pagecount": "1",
+      "rating_id": "0",
+      "rating_name": "General",
+      "file_url_full": "https://nl1.ib.metapix.net/files/full/9999/9999999_other.jpg",
+      "file_url_screen": "https://nl1.ib.metapix.net/files/screen/9999/9999999_other.jpg",
+      "file_url_preview": "https://nl1.ib.metapix.net/files/preview/9999/9999999_other.jpg",
+      "submission_type_id": "1",
+      "type_name": "Picture/Pinup",
+      "friends_only": "f",
+      "guest_block": "f",
+      "scraps": "f",
+      "keywords": [
+        {"keyword_id": "2", "keyword_name": "other"}
+      ]
+    }
+  ]
+}

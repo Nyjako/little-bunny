@@ -323,6 +323,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get createSearchQueryField => 'Query';
 
   @override
+  String get tagQueryInvalidSyntax => 'Invalid syntax';
+
+  @override
   String get createSearchIntervalLabel => 'Sync interval (hours)';
 
   @override
@@ -494,6 +497,11 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String postDetailUnsupportedFormat(String extension) {
     return 'This file format ($extension) isn\'t supported yet';
+  }
+
+  @override
+  String postDetailAudioTrackLabel(int position) {
+    return 'Track $position';
   }
 
   @override
@@ -894,9 +902,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String settingsBlacklistSyncE621Result(
     int added,
     int alreadyPresent,
-    int skippedMultiTag,
+    int skippedInvalid,
   ) {
-    return 'Added $added, $alreadyPresent already present, skipped $skippedMultiTag multi-tag rule(s)';
+    return 'Added $added, $alreadyPresent already present, skipped $skippedInvalid invalid rule(s)';
   }
 
   @override

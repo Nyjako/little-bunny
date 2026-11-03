@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
+import '../util/duration_format.dart';
 import 'download_queue_notifier.dart';
 
 const _channelName = 'little_bunny/download_foreground_service';
@@ -31,9 +32,9 @@ class AndroidForegroundServiceQueueNotifier implements DownloadQueueNotifier {
   }
 
   @override
-  Future<void> showProgress({required int done, required int total}) async {
+  Future<void> showProgress({required int done, required int total, required int failed, Duration? eta}) async {
     try {
-      await _channel.invokeMethod('updateProgress', {'done': done, 'total': total});
+      await _channel.invokeMethod('updateProgress', {'done': done, 'total': total, 'failed': failed, 'etaText': eta != null ? formatDurationCompact(eta) : null});
     } catch (e) {
       debugPrint('AndroidForegroundServiceQueueNotifier.showProgress failed: $e');
     }

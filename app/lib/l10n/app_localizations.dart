@@ -658,6 +658,12 @@ abstract class AppLocalizations {
   /// **'Query'**
   String get createSearchQueryField;
 
+  /// No description provided for @tagQueryInvalidSyntax.
+  ///
+  /// In en, this message translates to:
+  /// **'Invalid syntax'**
+  String get tagQueryInvalidSyntax;
+
   /// No description provided for @createSearchIntervalLabel.
   ///
   /// In en, this message translates to:
@@ -969,6 +975,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'This file format ({extension}) isn\'t supported yet'**
   String postDetailUnsupportedFormat(String extension);
+
+  /// No description provided for @postDetailAudioTrackLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Track {position}'**
+  String postDetailAudioTrackLabel(int position);
 
   /// No description provided for @postDetailTitleLabel.
   ///
@@ -1711,11 +1723,11 @@ abstract class AppLocalizations {
   /// No description provided for @settingsBlacklistSyncE621Result.
   ///
   /// In en, this message translates to:
-  /// **'Added {added}, {alreadyPresent} already present, skipped {skippedMultiTag} multi-tag rule(s)'**
+  /// **'Added {added}, {alreadyPresent} already present, skipped {skippedInvalid} invalid rule(s)'**
   String settingsBlacklistSyncE621Result(
     int added,
     int alreadyPresent,
-    int skippedMultiTag,
+    int skippedInvalid,
   );
 
   /// No description provided for @settingsBlacklistSyncE621Failed.

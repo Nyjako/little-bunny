@@ -477,7 +477,7 @@ void test_search_merge_duplicate_moves_results_and_deletes_the_duplicate(void)
     bunny_db_search_list_free(&list);
 
     bunny_db_post_list_t posts;
-    bunny_db_search_list_posts(g_db, keeper_id, false, false, BUNNY_DB_RATING_MASK_ALL, BUNNY_DB_MEDIA_MASK_ALL, 1, &posts);
+    bunny_db_search_list_posts(g_db, keeper_id, BUNNY_DB_SITE_E621, false, false, BUNNY_DB_RATING_MASK_ALL, BUNNY_DB_MEDIA_MASK_ALL, 1, &posts);
     TEST_ASSERT_EQUAL(2, (int)posts.count);
     bunny_db_post_list_free(&posts);
 }
@@ -849,14 +849,14 @@ void test_search_list_posts_excludes_blacklisted_tags(void)
     bunny_db_search_add_result(g_db, search_id, id2, NULL);
 
     bunny_db_post_list_t before;
-    bunny_db_search_list_posts(g_db, search_id, false, true, BUNNY_DB_RATING_MASK_ALL, BUNNY_DB_MEDIA_MASK_ALL, 1, &before);
+    bunny_db_search_list_posts(g_db, search_id, BUNNY_DB_SITE_E621, false, true, BUNNY_DB_RATING_MASK_ALL, BUNNY_DB_MEDIA_MASK_ALL, 1, &before);
     TEST_ASSERT_EQUAL(2, (int)before.count);
     bunny_db_post_list_free(&before);
 
     bunny_db_blacklist_add(g_db, BUNNY_DB_SITE_E621, "young");
 
     bunny_db_post_list_t after;
-    bunny_db_result_t result = bunny_db_search_list_posts(g_db, search_id, false, true, BUNNY_DB_RATING_MASK_ALL, BUNNY_DB_MEDIA_MASK_ALL, 1, &after);
+    bunny_db_result_t result = bunny_db_search_list_posts(g_db, search_id, BUNNY_DB_SITE_E621, false, true, BUNNY_DB_RATING_MASK_ALL, BUNNY_DB_MEDIA_MASK_ALL, 1, &after);
     TEST_ASSERT_EQUAL(BUNNY_DB_OK, result);
     TEST_ASSERT_EQUAL(1, (int)after.count);
     TEST_ASSERT_EQUAL(id1, after.items[0].id);
@@ -865,9 +865,208 @@ void test_search_list_posts_excludes_blacklisted_tags(void)
     /* A blacklist entry for a different site never affects this search. */
     bunny_db_blacklist_add(g_db, BUNNY_DB_SITE_INKBUNNY, "forest");
     bunny_db_post_list_t still_one;
-    bunny_db_search_list_posts(g_db, search_id, false, true, BUNNY_DB_RATING_MASK_ALL, BUNNY_DB_MEDIA_MASK_ALL, 1, &still_one);
+    bunny_db_search_list_posts(g_db, search_id, BUNNY_DB_SITE_E621, false, true, BUNNY_DB_RATING_MASK_ALL, BUNNY_DB_MEDIA_MASK_ALL, 1, &still_one);
     TEST_ASSERT_EQUAL(1, (int)still_one.count);
     bunny_db_post_list_free(&still_one);
+}
+
+void test_post_get_tag_names_round_trip(void)
+{
+    const char *tags[] = {"wolf", "forest", "young"};
+    bunny_db_post_upsert_t post;
+    make_test_post(&post, 1150, 1);
+    post.tags = tags;
+    post.tag_count = 3;
+
+    int64_t id = 0;
+    bunny_db_post_upsert(g_db, &post, &id);
+
+    bunny_db_string_list_t names;
+    bunny_db_result_t result = bunny_db_post_get_tag_names(g_db, id, &names);
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, result);
+    TEST_ASSERT_EQUAL(3, (int)names.count);
+    TEST_ASSERT_EQUAL_STRING("forest", names.items[0]); /* alphabetical */
+    TEST_ASSERT_EQUAL_STRING("wolf", names.items[1]);
+    TEST_ASSERT_EQUAL_STRING("young", names.items[2]);
+    bunny_db_string_list_free(&names);
+}
+
+void test_post_is_blacklisted_matches_a_multi_tag_and_rule(void)
+{
+    const char *tags1[] = {"rating:e", "young"};
+    const char *tags2[] = {"rating:e"}; /* only one of the AND rule's two tags */
+    bunny_db_post_upsert_t post1;
+    bunny_db_post_upsert_t post2;
+    make_test_post(&post1, 1151, 1);
+    make_test_post(&post2, 1152, 1);
+    post1.tags = tags1;
+    post1.tag_count = 2;
+    post2.tags = tags2;
+    post2.tag_count = 1;
+    int64_t id1 = 0;
+    int64_t id2 = 0;
+    bunny_db_post_upsert(g_db, &post1, &id1);
+    bunny_db_post_upsert(g_db, &post2, &id2);
+
+    bunny_db_blacklist_add(g_db, BUNNY_DB_SITE_E621, "rating:e young");
+
+    bool blacklisted1 = false;
+    bool blacklisted2 = false;
+    bunny_db_post_is_blacklisted(g_db, BUNNY_DB_SITE_E621, id1, &blacklisted1);
+    bunny_db_post_is_blacklisted(g_db, BUNNY_DB_SITE_E621, id2, &blacklisted2);
+    TEST_ASSERT_TRUE(blacklisted1);
+    TEST_ASSERT_FALSE(blacklisted2);
+}
+
+void test_post_is_blacklisted_matches_an_or_rule(void)
+{
+    const char *tags1[] = {"cat"};
+    const char *tags2[] = {"dog"};
+    const char *tags3[] = {"bird"};
+    bunny_db_post_upsert_t post1;
+    bunny_db_post_upsert_t post2;
+    bunny_db_post_upsert_t post3;
+    make_test_post(&post1, 1153, 1);
+    make_test_post(&post2, 1154, 1);
+    make_test_post(&post3, 1155, 1);
+    post1.tags = tags1;
+    post1.tag_count = 1;
+    post2.tags = tags2;
+    post2.tag_count = 1;
+    post3.tags = tags3;
+    post3.tag_count = 1;
+    int64_t id1 = 0;
+    int64_t id2 = 0;
+    int64_t id3 = 0;
+    bunny_db_post_upsert(g_db, &post1, &id1);
+    bunny_db_post_upsert(g_db, &post2, &id2);
+    bunny_db_post_upsert(g_db, &post3, &id3);
+
+    bunny_db_blacklist_add(g_db, BUNNY_DB_SITE_E621, "~cat ~dog");
+
+    bool blacklisted1 = false;
+    bool blacklisted2 = false;
+    bool blacklisted3 = false;
+    bunny_db_post_is_blacklisted(g_db, BUNNY_DB_SITE_E621, id1, &blacklisted1);
+    bunny_db_post_is_blacklisted(g_db, BUNNY_DB_SITE_E621, id2, &blacklisted2);
+    bunny_db_post_is_blacklisted(g_db, BUNNY_DB_SITE_E621, id3, &blacklisted3);
+    TEST_ASSERT_TRUE(blacklisted1);
+    TEST_ASSERT_TRUE(blacklisted2);
+    TEST_ASSERT_FALSE(blacklisted3);
+}
+
+void test_post_is_blacklisted_matches_a_wildcard_rule(void)
+{
+    const char *tags1[] = {"cat_girl"};
+    const char *tags2[] = {"dog_girl"};
+    bunny_db_post_upsert_t post1;
+    bunny_db_post_upsert_t post2;
+    make_test_post(&post1, 1156, 1);
+    make_test_post(&post2, 1157, 1);
+    post1.tags = tags1;
+    post1.tag_count = 1;
+    post2.tags = tags2;
+    post2.tag_count = 1;
+    int64_t id1 = 0;
+    int64_t id2 = 0;
+    bunny_db_post_upsert(g_db, &post1, &id1);
+    bunny_db_post_upsert(g_db, &post2, &id2);
+
+    bunny_db_blacklist_add(g_db, BUNNY_DB_SITE_E621, "cat_*");
+
+    bool blacklisted1 = false;
+    bool blacklisted2 = false;
+    bunny_db_post_is_blacklisted(g_db, BUNNY_DB_SITE_E621, id1, &blacklisted1);
+    bunny_db_post_is_blacklisted(g_db, BUNNY_DB_SITE_E621, id2, &blacklisted2);
+    TEST_ASSERT_TRUE(blacklisted1);
+    TEST_ASSERT_FALSE(blacklisted2);
+}
+
+void test_post_is_blacklisted_matches_a_negated_group_rule(void)
+{
+    /* "cat -( ~a ~b )" -- requires cat, and requires the group (at least
+     * one of a/b) to NOT hold. */
+    const char *tags1[] = {"cat"};
+    const char *tags2[] = {"cat", "a"};
+    bunny_db_post_upsert_t post1;
+    bunny_db_post_upsert_t post2;
+    make_test_post(&post1, 1158, 1);
+    make_test_post(&post2, 1159, 1);
+    post1.tags = tags1;
+    post1.tag_count = 1;
+    post2.tags = tags2;
+    post2.tag_count = 2;
+    int64_t id1 = 0;
+    int64_t id2 = 0;
+    bunny_db_post_upsert(g_db, &post1, &id1);
+    bunny_db_post_upsert(g_db, &post2, &id2);
+
+    bunny_db_blacklist_add(g_db, BUNNY_DB_SITE_E621, "cat -( ~a ~b )");
+
+    bool blacklisted1 = false;
+    bool blacklisted2 = false;
+    bunny_db_post_is_blacklisted(g_db, BUNNY_DB_SITE_E621, id1, &blacklisted1);
+    bunny_db_post_is_blacklisted(g_db, BUNNY_DB_SITE_E621, id2, &blacklisted2);
+    TEST_ASSERT_TRUE(blacklisted1);
+    TEST_ASSERT_FALSE(blacklisted2);
+}
+
+void test_search_list_posts_complex_blacklist_rule_filters_results(void)
+{
+    /* Confirms bunny_db_search_list_posts' own C-side second pass (not
+     * just bunny_db_post_is_blacklisted) applies a complex rule. */
+    int64_t search_id = 0;
+    bunny_db_search_create(g_db, BUNNY_DB_SITE_E621, "wolves", "wolf", 24, NULL, &search_id);
+
+    const char *tags1[] = {"wolf", "young", "rating:e"}; /* matches the AND rule */
+    const char *tags2[] = {"wolf", "young"};             /* missing rating:e -- survives */
+    bunny_db_post_upsert_t post1;
+    bunny_db_post_upsert_t post2;
+    make_test_post(&post1, 1160, 1);
+    make_test_post(&post2, 1161, 1);
+    post1.tags = tags1;
+    post1.tag_count = 3;
+    post2.tags = tags2;
+    post2.tag_count = 2;
+    int64_t id1 = 0;
+    int64_t id2 = 0;
+    bunny_db_post_upsert(g_db, &post1, &id1);
+    bunny_db_post_upsert(g_db, &post2, &id2);
+    bunny_db_search_add_result(g_db, search_id, id1, NULL);
+    bunny_db_search_add_result(g_db, search_id, id2, NULL);
+
+    bunny_db_blacklist_add(g_db, BUNNY_DB_SITE_E621, "rating:e young");
+
+    bunny_db_post_list_t results;
+    bunny_db_result_t result = bunny_db_search_list_posts(g_db, search_id, BUNNY_DB_SITE_E621, false, true, BUNNY_DB_RATING_MASK_ALL, BUNNY_DB_MEDIA_MASK_ALL, 1, &results);
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, result);
+    TEST_ASSERT_EQUAL(1, (int)results.count);
+    TEST_ASSERT_EQUAL(id2, results.items[0].id);
+    bunny_db_post_list_free(&results);
+}
+
+void test_search_list_posts_zero_complex_rules_matches_pre_m28_behavior(void)
+{
+    /* Regression guard: with no complex rules for this site at all, the
+     * complex-rule pass must be a pure no-op -- same row count as before
+     * it existed. */
+    int64_t search_id = 0;
+    bunny_db_search_create(g_db, BUNNY_DB_SITE_E621, "wolves", "wolf", 24, NULL, &search_id);
+
+    const char *tags1[] = {"wolf"};
+    bunny_db_post_upsert_t post1;
+    make_test_post(&post1, 1162, 1);
+    post1.tags = tags1;
+    post1.tag_count = 1;
+    int64_t id1 = 0;
+    bunny_db_post_upsert(g_db, &post1, &id1);
+    bunny_db_search_add_result(g_db, search_id, id1, NULL);
+
+    bunny_db_post_list_t results;
+    bunny_db_result_t result = bunny_db_search_list_posts(g_db, search_id, BUNNY_DB_SITE_E621, false, true, BUNNY_DB_RATING_MASK_ALL, BUNNY_DB_MEDIA_MASK_ALL, 1, &results);
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, result);
+    TEST_ASSERT_EQUAL(1, (int)results.count);
+    bunny_db_post_list_free(&results);
 }
 
 void test_search_results_and_list_posts(void)
@@ -891,7 +1090,7 @@ void test_search_results_and_list_posts(void)
     TEST_ASSERT_EQUAL(BUNNY_DB_OK, result);
 
     bunny_db_post_list_t all_results;
-    result = bunny_db_search_list_posts(g_db, search_id, false, true, BUNNY_DB_RATING_MASK_ALL, BUNNY_DB_MEDIA_MASK_ALL, 1, &all_results);
+    result = bunny_db_search_list_posts(g_db, search_id, BUNNY_DB_SITE_E621, false, true, BUNNY_DB_RATING_MASK_ALL, BUNNY_DB_MEDIA_MASK_ALL, 1, &all_results);
     TEST_ASSERT_EQUAL(BUNNY_DB_OK, result);
     TEST_ASSERT_EQUAL(2, (int)all_results.count);
     bunny_db_post_list_free(&all_results);
@@ -899,7 +1098,7 @@ void test_search_results_and_list_posts(void)
     bunny_db_post_mark_seen(g_db, id1);
 
     bunny_db_post_list_t unseen_results;
-    result = bunny_db_search_list_posts(g_db, search_id, true, true, BUNNY_DB_RATING_MASK_ALL, BUNNY_DB_MEDIA_MASK_ALL, 1, &unseen_results);
+    result = bunny_db_search_list_posts(g_db, search_id, BUNNY_DB_SITE_E621, true, true, BUNNY_DB_RATING_MASK_ALL, BUNNY_DB_MEDIA_MASK_ALL, 1, &unseen_results);
     TEST_ASSERT_EQUAL(BUNNY_DB_OK, result);
     TEST_ASSERT_EQUAL(1, (int)unseen_results.count);
     TEST_ASSERT_EQUAL(id2, unseen_results.items[0].id);
@@ -936,14 +1135,14 @@ void test_search_list_posts_filters_by_rating_mask(void)
     bunny_db_search_add_result(g_db, search_id, unknown_id, NULL);
 
     bunny_db_post_list_t safe_only;
-    bunny_db_result_t result = bunny_db_search_list_posts(g_db, search_id, false, true, BUNNY_DB_RATING_MASK_SAFE, BUNNY_DB_MEDIA_MASK_ALL, 1, &safe_only);
+    bunny_db_result_t result = bunny_db_search_list_posts(g_db, search_id, BUNNY_DB_SITE_E621, false, true, BUNNY_DB_RATING_MASK_SAFE, BUNNY_DB_MEDIA_MASK_ALL, 1, &safe_only);
     TEST_ASSERT_EQUAL(BUNNY_DB_OK, result);
     TEST_ASSERT_EQUAL(1, (int)safe_only.count);
     TEST_ASSERT_EQUAL(safe_id, safe_only.items[0].id);
     bunny_db_post_list_free(&safe_only);
 
     bunny_db_post_list_t all_ratings;
-    result = bunny_db_search_list_posts(g_db, search_id, false, true, BUNNY_DB_RATING_MASK_ALL, BUNNY_DB_MEDIA_MASK_ALL, 1, &all_ratings);
+    result = bunny_db_search_list_posts(g_db, search_id, BUNNY_DB_SITE_E621, false, true, BUNNY_DB_RATING_MASK_ALL, BUNNY_DB_MEDIA_MASK_ALL, 1, &all_ratings);
     TEST_ASSERT_EQUAL(BUNNY_DB_OK, result);
     TEST_ASSERT_EQUAL(4, (int)all_ratings.count);
     bunny_db_post_list_free(&all_ratings);
@@ -951,13 +1150,13 @@ void test_search_list_posts_filters_by_rating_mask(void)
     /* The unrecognized-rating post is excluded unless the UNKNOWN bit is set,
      * even when every recognized bucket is requested. */
     bunny_db_post_list_t without_unknown;
-    result = bunny_db_search_list_posts(g_db, search_id, false, true, BUNNY_DB_RATING_MASK_SAFE | BUNNY_DB_RATING_MASK_QUESTIONABLE | BUNNY_DB_RATING_MASK_EXPLICIT, BUNNY_DB_MEDIA_MASK_ALL, 1, &without_unknown);
+    result = bunny_db_search_list_posts(g_db, search_id, BUNNY_DB_SITE_E621, false, true, BUNNY_DB_RATING_MASK_SAFE | BUNNY_DB_RATING_MASK_QUESTIONABLE | BUNNY_DB_RATING_MASK_EXPLICIT, BUNNY_DB_MEDIA_MASK_ALL, 1, &without_unknown);
     TEST_ASSERT_EQUAL(BUNNY_DB_OK, result);
     TEST_ASSERT_EQUAL(3, (int)without_unknown.count);
     bunny_db_post_list_free(&without_unknown);
 
     bunny_db_post_list_t unknown_only;
-    result = bunny_db_search_list_posts(g_db, search_id, false, true, BUNNY_DB_RATING_MASK_UNKNOWN, BUNNY_DB_MEDIA_MASK_ALL, 1, &unknown_only);
+    result = bunny_db_search_list_posts(g_db, search_id, BUNNY_DB_SITE_E621, false, true, BUNNY_DB_RATING_MASK_UNKNOWN, BUNNY_DB_MEDIA_MASK_ALL, 1, &unknown_only);
     TEST_ASSERT_EQUAL(BUNNY_DB_OK, result);
     TEST_ASSERT_EQUAL(1, (int)unknown_only.count);
     TEST_ASSERT_EQUAL(unknown_id, unknown_only.items[0].id);
@@ -993,7 +1192,7 @@ void test_search_list_posts_filters_by_media_mask(void)
     bunny_db_search_add_result(g_db, search_id, no_ext_id, NULL);
 
     bunny_db_post_list_t video_only;
-    bunny_db_result_t result = bunny_db_search_list_posts(g_db, search_id, false, true, BUNNY_DB_RATING_MASK_ALL, BUNNY_DB_MEDIA_MASK_VIDEO, 1, &video_only);
+    bunny_db_result_t result = bunny_db_search_list_posts(g_db, search_id, BUNNY_DB_SITE_E621, false, true, BUNNY_DB_RATING_MASK_ALL, BUNNY_DB_MEDIA_MASK_VIDEO, 1, &video_only);
     TEST_ASSERT_EQUAL(BUNNY_DB_OK, result);
     TEST_ASSERT_EQUAL(1, (int)video_only.count);
     TEST_ASSERT_EQUAL(video_id, video_only.items[0].id);
@@ -1003,13 +1202,13 @@ void test_search_list_posts_filters_by_media_mask(void)
      * crash the CASE expression) lands in the image bucket, same as any
      * other unrecognized extension. */
     bunny_db_post_list_t image_only;
-    result = bunny_db_search_list_posts(g_db, search_id, false, true, BUNNY_DB_RATING_MASK_ALL, BUNNY_DB_MEDIA_MASK_IMAGE, 1, &image_only);
+    result = bunny_db_search_list_posts(g_db, search_id, BUNNY_DB_SITE_E621, false, true, BUNNY_DB_RATING_MASK_ALL, BUNNY_DB_MEDIA_MASK_IMAGE, 1, &image_only);
     TEST_ASSERT_EQUAL(BUNNY_DB_OK, result);
     TEST_ASSERT_EQUAL(2, (int)image_only.count);
     bunny_db_post_list_free(&image_only);
 
     bunny_db_post_list_t all_media;
-    result = bunny_db_search_list_posts(g_db, search_id, false, true, BUNNY_DB_RATING_MASK_ALL, BUNNY_DB_MEDIA_MASK_ALL, 1, &all_media);
+    result = bunny_db_search_list_posts(g_db, search_id, BUNNY_DB_SITE_E621, false, true, BUNNY_DB_RATING_MASK_ALL, BUNNY_DB_MEDIA_MASK_ALL, 1, &all_media);
     TEST_ASSERT_EQUAL(BUNNY_DB_OK, result);
     TEST_ASSERT_EQUAL(4, (int)all_media.count);
     bunny_db_post_list_free(&all_media);
@@ -1080,7 +1279,7 @@ void test_search_list_posts_combines_rating_media_unseen_and_blacklist_filters(v
     bunny_db_blacklist_add(g_db, BUNNY_DB_SITE_E621, "young");
 
     bunny_db_post_list_t results;
-    bunny_db_result_t result = bunny_db_search_list_posts(g_db, search_id, true, true, BUNNY_DB_RATING_MASK_SAFE, BUNNY_DB_MEDIA_MASK_IMAGE, 1, &results);
+    bunny_db_result_t result = bunny_db_search_list_posts(g_db, search_id, BUNNY_DB_SITE_E621, true, true, BUNNY_DB_RATING_MASK_SAFE, BUNNY_DB_MEDIA_MASK_IMAGE, 1, &results);
     TEST_ASSERT_EQUAL(BUNNY_DB_OK, result);
     TEST_ASSERT_EQUAL(1, (int)results.count);
     TEST_ASSERT_EQUAL(matching_id, results.items[0].id);
@@ -1111,7 +1310,7 @@ void test_search_list_posts_orders_newest_first_by_site_date(void)
     bunny_db_search_add_result(g_db, search_id, newer_id, NULL);
 
     bunny_db_post_list_t results;
-    bunny_db_result_t result = bunny_db_search_list_posts(g_db, search_id, false, true, BUNNY_DB_RATING_MASK_ALL, BUNNY_DB_MEDIA_MASK_ALL, 1, &results);
+    bunny_db_result_t result = bunny_db_search_list_posts(g_db, search_id, BUNNY_DB_SITE_E621, false, true, BUNNY_DB_RATING_MASK_ALL, BUNNY_DB_MEDIA_MASK_ALL, 1, &results);
     TEST_ASSERT_EQUAL(BUNNY_DB_OK, result);
     TEST_ASSERT_EQUAL(2, (int)results.count);
     TEST_ASSERT_EQUAL(newer_id, results.items[0].id);
@@ -1145,7 +1344,7 @@ void test_search_list_posts_orders_a_post_with_no_site_date_by_cached_at_instead
     bunny_db_search_add_result(g_db, search_id, no_date_id, NULL);
 
     bunny_db_post_list_t results;
-    bunny_db_result_t result = bunny_db_search_list_posts(g_db, search_id, false, true, BUNNY_DB_RATING_MASK_ALL, BUNNY_DB_MEDIA_MASK_ALL, 1, &results);
+    bunny_db_result_t result = bunny_db_search_list_posts(g_db, search_id, BUNNY_DB_SITE_E621, false, true, BUNNY_DB_RATING_MASK_ALL, BUNNY_DB_MEDIA_MASK_ALL, 1, &results);
     TEST_ASSERT_EQUAL(BUNNY_DB_OK, result);
     TEST_ASSERT_EQUAL(2, (int)results.count);
     TEST_ASSERT_EQUAL(no_date_id, results.items[0].id); /* cached_at (~now) beats the 2020 site date */
@@ -1175,21 +1374,21 @@ void test_search_list_posts_paginates(void)
     }
 
     bunny_db_post_list_t page1;
-    TEST_ASSERT_EQUAL(BUNNY_DB_OK, bunny_db_search_list_posts(g_db, search_id, false, true, BUNNY_DB_RATING_MASK_ALL, BUNNY_DB_MEDIA_MASK_ALL, 1, &page1));
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, bunny_db_search_list_posts(g_db, search_id, BUNNY_DB_SITE_E621, false, true, BUNNY_DB_RATING_MASK_ALL, BUNNY_DB_MEDIA_MASK_ALL, 1, &page1));
     TEST_ASSERT_EQUAL(200, (int)page1.count);
     TEST_ASSERT_EQUAL(3000 + 204, page1.items[0].external_id); /* newest first */
     TEST_ASSERT_EQUAL(3000 + 5, page1.items[199].external_id);
     bunny_db_post_list_free(&page1);
 
     bunny_db_post_list_t page2;
-    TEST_ASSERT_EQUAL(BUNNY_DB_OK, bunny_db_search_list_posts(g_db, search_id, false, true, BUNNY_DB_RATING_MASK_ALL, BUNNY_DB_MEDIA_MASK_ALL, 2, &page2));
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, bunny_db_search_list_posts(g_db, search_id, BUNNY_DB_SITE_E621, false, true, BUNNY_DB_RATING_MASK_ALL, BUNNY_DB_MEDIA_MASK_ALL, 2, &page2));
     TEST_ASSERT_EQUAL(5, (int)page2.count);
     TEST_ASSERT_EQUAL(3000 + 4, page2.items[0].external_id);
     TEST_ASSERT_EQUAL(3000 + 0, page2.items[4].external_id);
     bunny_db_post_list_free(&page2);
 
     bunny_db_post_list_t page3;
-    TEST_ASSERT_EQUAL(BUNNY_DB_OK, bunny_db_search_list_posts(g_db, search_id, false, true, BUNNY_DB_RATING_MASK_ALL, BUNNY_DB_MEDIA_MASK_ALL, 3, &page3));
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, bunny_db_search_list_posts(g_db, search_id, BUNNY_DB_SITE_E621, false, true, BUNNY_DB_RATING_MASK_ALL, BUNNY_DB_MEDIA_MASK_ALL, 3, &page3));
     TEST_ASSERT_EQUAL(0, (int)page3.count);
     bunny_db_post_list_free(&page3);
 }
@@ -1859,6 +2058,107 @@ void test_post_upsert_replaces_sources_wholesale_on_resync(void)
     bunny_db_string_list_free(&list);
 }
 
+void test_post_get_files_preserves_order_and_fields(void)
+{
+    const bunny_db_post_file_upsert_t files[] = {
+        {.file_url = "https://example.com/1.jpg", .sample_url = "https://example.com/1_sample.jpg", .file_ext = "jpg", .file_md5 = "aaa", .width = 100, .height = 200, .mimetype = "image/jpeg"},
+        {.file_url = "https://example.com/2.jpg", .file_ext = "jpg", .width = 150, .height = 250},
+        {.file_url = "https://example.com/3.mp3", .file_ext = "mp3", .mimetype = "audio/mpeg"},
+    };
+    bunny_db_post_upsert_t post;
+    make_test_post(&post, 650, 1);
+    post.site = BUNNY_DB_SITE_INKBUNNY;
+    post.files = files;
+    post.file_count = 3;
+
+    int64_t post_id = 0;
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, bunny_db_post_upsert(g_db, &post, &post_id));
+
+    bunny_db_post_file_list_t list;
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, bunny_db_post_get_files(g_db, post_id, &list));
+    TEST_ASSERT_EQUAL(3, list.count);
+    TEST_ASSERT_EQUAL_STRING("https://example.com/1.jpg", list.items[0].file_url);
+    TEST_ASSERT_EQUAL_STRING("https://example.com/1_sample.jpg", list.items[0].sample_url);
+    TEST_ASSERT_EQUAL_STRING("aaa", list.items[0].file_md5);
+    TEST_ASSERT_EQUAL(100, list.items[0].width);
+    TEST_ASSERT_EQUAL(200, list.items[0].height);
+    TEST_ASSERT_EQUAL_STRING("image/jpeg", list.items[0].mimetype);
+    TEST_ASSERT_EQUAL_STRING("https://example.com/2.jpg", list.items[1].file_url);
+    TEST_ASSERT_NULL(list.items[1].sample_url);
+    TEST_ASSERT_EQUAL_STRING("https://example.com/3.mp3", list.items[2].file_url);
+    TEST_ASSERT_EQUAL_STRING("audio/mpeg", list.items[2].mimetype);
+
+    bunny_db_post_file_list_free(&list);
+}
+
+void test_post_get_files_empty_when_none_given(void)
+{
+    bunny_db_post_upsert_t post;
+    make_test_post(&post, 651, 1);
+    /* files/file_count left at their memset-zero defaults. */
+
+    int64_t post_id = 0;
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, bunny_db_post_upsert(g_db, &post, &post_id));
+
+    bunny_db_post_file_list_t list;
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, bunny_db_post_get_files(g_db, post_id, &list));
+    TEST_ASSERT_EQUAL(0, list.count);
+
+    bunny_db_post_file_list_free(&list);
+}
+
+void test_post_files_never_populated_for_e621(void)
+{
+    /* e621 posts are structurally always single-file (e621's own
+     * multi-image concept is entirely separate posts linked via pools) --
+     * upsert_e621_post never sets files/file_count, so this table stays
+     * empty for every e621 post. */
+    bunny_db_post_upsert_t post;
+    make_test_post(&post, 652, 1); /* defaults to BUNNY_DB_SITE_E621 */
+
+    int64_t post_id = 0;
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, bunny_db_post_upsert(g_db, &post, &post_id));
+
+    bunny_db_post_file_list_t list;
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, bunny_db_post_get_files(g_db, post_id, &list));
+    TEST_ASSERT_EQUAL(0, list.count);
+
+    bunny_db_post_file_list_free(&list);
+}
+
+void test_post_upsert_replaces_files_wholesale_on_resync(void)
+{
+    const bunny_db_post_file_upsert_t files1[] = {
+        {.file_url = "https://example.com/old.jpg", .file_ext = "jpg"},
+    };
+    bunny_db_post_upsert_t post;
+    make_test_post(&post, 653, 1);
+    post.site = BUNNY_DB_SITE_INKBUNNY;
+    post.files = files1;
+    post.file_count = 1;
+
+    int64_t post_id = 0;
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, bunny_db_post_upsert(g_db, &post, &post_id));
+
+    const bunny_db_post_file_upsert_t files2[] = {
+        {.file_url = "https://example.com/new1.jpg", .file_ext = "jpg"},
+        {.file_url = "https://example.com/new2.jpg", .file_ext = "jpg"},
+    };
+    post.files = files2;
+    post.file_count = 2;
+    int64_t second_id = 0;
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, bunny_db_post_upsert(g_db, &post, &second_id));
+    TEST_ASSERT_EQUAL(post_id, second_id);
+
+    bunny_db_post_file_list_t list;
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, bunny_db_post_get_files(g_db, post_id, &list));
+    TEST_ASSERT_EQUAL(2, list.count);
+    TEST_ASSERT_EQUAL_STRING("https://example.com/new1.jpg", list.items[0].file_url);
+    TEST_ASSERT_EQUAL_STRING("https://example.com/new2.jpg", list.items[1].file_url);
+
+    bunny_db_post_file_list_free(&list);
+}
+
 void test_post_get_relationships_defaults_when_no_row(void)
 {
     bunny_db_post_upsert_t post;
@@ -2158,6 +2458,79 @@ void test_distinct_pool_ids_lists_every_pool_referenced_by_any_post(void)
     bunny_db_int64_list_free(&pools);
 }
 
+void test_post_mark_inkbunny_details_backfilled_sets_the_flag(void)
+{
+    bunny_db_post_upsert_t post;
+    make_test_post(&post, 801, 1);
+    post.site = BUNNY_DB_SITE_INKBUNNY;
+
+    int64_t post_id = 0;
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, bunny_db_post_upsert(g_db, &post, &post_id));
+
+    bunny_db_int64_list_t before;
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, bunny_db_inkbunny_list_thin_post_ids(g_db, 100, &before));
+    TEST_ASSERT_EQUAL(1, before.count);
+    bunny_db_int64_list_free(&before);
+
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, bunny_db_post_mark_inkbunny_details_backfilled(g_db, post_id));
+
+    bunny_db_int64_list_t after;
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, bunny_db_inkbunny_list_thin_post_ids(g_db, 100, &after));
+    TEST_ASSERT_EQUAL(0, after.count);
+    bunny_db_int64_list_free(&after);
+}
+
+void test_post_mark_inkbunny_details_backfilled_is_idempotent(void)
+{
+    bunny_db_post_upsert_t post;
+    make_test_post(&post, 802, 1);
+    post.site = BUNNY_DB_SITE_INKBUNNY;
+
+    int64_t post_id = 0;
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, bunny_db_post_upsert(g_db, &post, &post_id));
+
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, bunny_db_post_mark_inkbunny_details_backfilled(g_db, post_id));
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, bunny_db_post_mark_inkbunny_details_backfilled(g_db, post_id));
+}
+
+void test_inkbunny_list_thin_post_ids_returns_only_unbackfilled_inkbunny_posts(void)
+{
+    bunny_db_post_upsert_t thin_post, backfilled_post, e621_post;
+    make_test_post(&thin_post, 811, 1);
+    thin_post.site = BUNNY_DB_SITE_INKBUNNY;
+    make_test_post(&backfilled_post, 812, 1);
+    backfilled_post.site = BUNNY_DB_SITE_INKBUNNY;
+    make_test_post(&e621_post, 813, 1); /* defaults to e621 */
+
+    int64_t thin_id = 0, backfilled_id = 0, e621_id = 0;
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, bunny_db_post_upsert(g_db, &thin_post, &thin_id));
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, bunny_db_post_upsert(g_db, &backfilled_post, &backfilled_id));
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, bunny_db_post_upsert(g_db, &e621_post, &e621_id));
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, bunny_db_post_mark_inkbunny_details_backfilled(g_db, backfilled_id));
+
+    bunny_db_int64_list_t thin_ids;
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, bunny_db_inkbunny_list_thin_post_ids(g_db, 100, &thin_ids));
+    TEST_ASSERT_EQUAL(1, thin_ids.count);
+    TEST_ASSERT_EQUAL(811, thin_ids.items[0]);
+    bunny_db_int64_list_free(&thin_ids);
+}
+
+void test_inkbunny_list_thin_post_ids_respects_limit(void)
+{
+    for (int i = 0; i < 3; i++) {
+        bunny_db_post_upsert_t post;
+        make_test_post(&post, 820 + i, 1);
+        post.site = BUNNY_DB_SITE_INKBUNNY;
+        int64_t post_id = 0;
+        TEST_ASSERT_EQUAL(BUNNY_DB_OK, bunny_db_post_upsert(g_db, &post, &post_id));
+    }
+
+    bunny_db_int64_list_t thin_ids;
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, bunny_db_inkbunny_list_thin_post_ids(g_db, 2, &thin_ids));
+    TEST_ASSERT_EQUAL(2, thin_ids.count);
+    bunny_db_int64_list_free(&thin_ids);
+}
+
 void test_pool_positions_backfilled_flag_round_trips(void)
 {
     bool done = true;
@@ -2362,6 +2735,13 @@ int main(void)
     RUN_TEST(test_vote_set_rejects_an_invalid_score);
     RUN_TEST(test_blacklist_add_remove_list);
     RUN_TEST(test_search_list_posts_excludes_blacklisted_tags);
+    RUN_TEST(test_post_get_tag_names_round_trip);
+    RUN_TEST(test_post_is_blacklisted_matches_a_multi_tag_and_rule);
+    RUN_TEST(test_post_is_blacklisted_matches_an_or_rule);
+    RUN_TEST(test_post_is_blacklisted_matches_a_wildcard_rule);
+    RUN_TEST(test_post_is_blacklisted_matches_a_negated_group_rule);
+    RUN_TEST(test_search_list_posts_complex_blacklist_rule_filters_results);
+    RUN_TEST(test_search_list_posts_zero_complex_rules_matches_pre_m28_behavior);
     RUN_TEST(test_search_results_and_list_posts);
     RUN_TEST(test_search_list_posts_filters_by_rating_mask);
     RUN_TEST(test_search_list_posts_filters_by_media_mask);
@@ -2403,6 +2783,10 @@ int main(void)
     RUN_TEST(test_post_get_sources_preserves_order);
     RUN_TEST(test_post_get_sources_empty_when_none_given);
     RUN_TEST(test_post_upsert_replaces_sources_wholesale_on_resync);
+    RUN_TEST(test_post_get_files_preserves_order_and_fields);
+    RUN_TEST(test_post_get_files_empty_when_none_given);
+    RUN_TEST(test_post_files_never_populated_for_e621);
+    RUN_TEST(test_post_upsert_replaces_files_wholesale_on_resync);
     RUN_TEST(test_post_get_relationships_defaults_when_no_row);
     RUN_TEST(test_post_get_relationships_with_parent_and_children);
     RUN_TEST(test_post_upsert_replaces_relationships_wholesale_on_resync);
@@ -2413,6 +2797,10 @@ int main(void)
     RUN_TEST(test_pool_search_list_posts_orders_by_position_not_creation_date);
     RUN_TEST(test_resyncing_a_post_preserves_its_existing_pool_position);
     RUN_TEST(test_distinct_pool_ids_lists_every_pool_referenced_by_any_post);
+    RUN_TEST(test_post_mark_inkbunny_details_backfilled_sets_the_flag);
+    RUN_TEST(test_post_mark_inkbunny_details_backfilled_is_idempotent);
+    RUN_TEST(test_inkbunny_list_thin_post_ids_returns_only_unbackfilled_inkbunny_posts);
+    RUN_TEST(test_inkbunny_list_thin_post_ids_respects_limit);
     RUN_TEST(test_pool_positions_backfilled_flag_round_trips);
     RUN_TEST(test_post_sample_url_round_trips_and_is_nullable);
     RUN_TEST(test_post_upsert_replaces_sample_url_wholesale_on_resync);

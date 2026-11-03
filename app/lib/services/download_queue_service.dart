@@ -225,6 +225,10 @@ class DownloadQueueService extends ChangeNotifier {
     } catch (_) {
       // Best-effort.
     }
+    // Started after showStarting, not before -- an item-level average (no
+    // byte-level progress exists anywhere in DownloadManager), used below to
+    // estimate an ETA once at least one item has actually finished.
+    final sessionStopwatch = Stopwatch()..start();
     var itemsSinceSync = 0;
     DownloadQueueItem? lastItem;
     try {
@@ -261,8 +265,16 @@ class DownloadQueueService extends ChangeNotifier {
         // Unlike persist/drain above, this keeps firing every item -- it's
         // neither an expensive disk write nor a network round trip, so there's
         // no reason to reduce how often the UI/notification sees progress.
+        // _sessionDone > 1 (not > 0): on the very first completed item
+        // there's only one data point, not a rate yet -- eta stays null for
+        // that call, non-null from the second call onward.
+        Duration? eta;
+        if (_sessionDone > 1) {
+          final avgPerItem = sessionStopwatch.elapsed ~/ _sessionDone;
+          eta = avgPerItem * (_sessionTotal - _sessionDone);
+        }
         try {
-          await notifier.showProgress(done: _sessionDone, total: _sessionTotal);
+          await notifier.showProgress(done: _sessionDone, total: _sessionTotal, failed: _failed, eta: eta);
         } catch (_) {
           // Best-effort.
         }

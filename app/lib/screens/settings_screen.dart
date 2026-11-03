@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io' show Platform;
 import 'dart:typed_data';
@@ -87,11 +88,20 @@ class _SettingsScreenState extends State<SettingsScreen> {
   final _blacklistTagController = TextEditingController();
   bool _syncingE621Blacklist = false;
 
+  /// Byte offset of the first syntax problem in the add field's current
+  /// text (M28/M54), or null if it's valid (including empty -- see
+  /// bunny_tag_query_validate's own doc comment on why an empty query is
+  /// vacuously valid, not an error). Debounced so every keystroke doesn't
+  /// round-trip through validateTagQuery.
+  int? _blacklistQueryError;
+  Timer? _blacklistValidateDebounce;
+
   @override
   void initState() {
     super.initState();
     _load();
     _loadBlacklist();
+    _blacklistTagController.addListener(_onBlacklistTagChanged);
   }
 
   @override
@@ -99,8 +109,20 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _intervalController.dispose();
     _gridColumnsController.dispose();
     _preloadCountController.dispose();
+    _blacklistValidateDebounce?.cancel();
     _blacklistTagController.dispose();
     super.dispose();
+  }
+
+  void _onBlacklistTagChanged() {
+    _blacklistValidateDebounce?.cancel();
+    final text = _blacklistTagController.text;
+    _blacklistValidateDebounce = Timer(const Duration(milliseconds: 300), () async {
+      final errorPos = await widget.repository.validateTagQuery(_blacklistSite, text);
+      if (mounted) {
+        setState(() => _blacklistQueryError = errorPos);
+      }
+    });
   }
 
   Future<void> _load() async {
@@ -253,15 +275,20 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Future<void> _setBlacklistSite(BunnySite site) async {
     setState(() => _blacklistSite = site);
     await _loadBlacklist();
+    // The two sites' grammars differ (Inkbunny is a strict subset, M28/
+    // M54) -- whatever's currently typed needs re-checking under the new
+    // site's dialect, not just left showing the previous site's verdict.
+    _onBlacklistTagChanged();
   }
 
   Future<void> _addBlacklistTag() async {
     final tag = _blacklistTagController.text.trim();
-    if (tag.isEmpty) {
+    if (tag.isEmpty || _blacklistQueryError != null) {
       return;
     }
     await widget.repository.addBlacklistTag(_blacklistSite, tag);
     _blacklistTagController.clear();
+    setState(() => _blacklistQueryError = null);
     await _loadBlacklist();
   }
 
@@ -280,7 +307,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       }
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(SnackBar(content: Text(l10n.settingsBlacklistSyncE621Result(stats.added, stats.alreadyPresent, stats.skippedMultiTag))));
+      ).showSnackBar(SnackBar(content: Text(l10n.settingsBlacklistSyncE621Result(stats.added, stats.alreadyPresent, stats.skippedInvalid))));
     } catch (_) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(l10n.settingsBlacklistSyncE621Failed)));
@@ -592,9 +619,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
             Wrap(spacing: 8, runSpacing: 4, children: _blacklistTags.map((tag) => Chip(label: Text(tag), onDeleted: () => _removeBlacklistTag(tag))).toList()),
           const SizedBox(height: 8),
           Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Expanded(child: TextField(controller: _blacklistTagController, decoration: InputDecoration(labelText: l10n.settingsBlacklistAddLabel), onSubmitted: (_) => _addBlacklistTag())),
-              IconButton(icon: const Icon(Icons.add), onPressed: _addBlacklistTag),
+              Expanded(
+                child: TextField(
+                  key: const Key('settingsBlacklistAddField'),
+                  controller: _blacklistTagController,
+                  decoration: InputDecoration(labelText: l10n.settingsBlacklistAddLabel, errorText: _blacklistQueryError != null ? l10n.tagQueryInvalidSyntax : null),
+                  onSubmitted: (_) => _addBlacklistTag(),
+                ),
+              ),
+              IconButton(icon: const Icon(Icons.add), onPressed: _blacklistQueryError != null ? null : _addBlacklistTag),
             ],
           ),
           const SizedBox(height: 24),

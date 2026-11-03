@@ -302,4 +302,52 @@ void main() {
     expect(repository.searches.single.usesDefaultInterval, isFalse);
     expect(repository.searches.single.intervalHours, 12);
   });
+
+  testWidgets('an invalid query shows an error and blocks submission (M28/M54)', (WidgetTester tester) async {
+    final repository = FakeBunnyRepository();
+    await tester.pumpWidget(_wrap(repository));
+    await tester.pumpAndSettle();
+
+    repository.validateTagQueryResult = 0;
+    await tester.enterText(find.widgetWithText(TextFormField, 'Label'), 'Foxes');
+    await tester.enterText(find.widgetWithText(TextFormField, 'Query'), '( unbalanced');
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Invalid syntax'), findsOneWidget);
+    expect(tester.widget<FilledButton>(find.widgetWithText(FilledButton, 'Create')).onPressed, isNull);
+
+    await _tapCreate(tester);
+    await tester.pumpAndSettle();
+    expect(repository.searches, isEmpty);
+
+    repository.validateTagQueryResult = null;
+    await tester.enterText(find.widgetWithText(TextFormField, 'Query'), 'cat ~dog -bird ( ~a ~b )');
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Invalid syntax'), findsNothing);
+    await _tapCreate(tester);
+    await tester.pumpAndSettle();
+
+    expect(repository.searches, hasLength(1));
+  });
+
+  testWidgets('switching site re-validates the query under the new dialect (M28/M54)', (WidgetTester tester) async {
+    final repository = FakeBunnyRepository();
+    await tester.pumpWidget(_wrap(repository));
+    await tester.pumpAndSettle();
+
+    await tester.enterText(find.widgetWithText(TextFormField, 'Query'), '~cat');
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.pumpAndSettle();
+    expect(find.text('Invalid syntax'), findsNothing);
+
+    repository.validateTagQueryResult = 0;
+    await tester.tap(find.text('Inkbunny'));
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Invalid syntax'), findsOneWidget);
+  });
 }

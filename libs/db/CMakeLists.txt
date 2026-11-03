@@ -27,6 +27,8 @@ target_link_libraries(bunny_db
         # only needed for goblin_copy_cstr (see internal.h) -- bunny_db has
         # no other reason to depend on bunny_common's HTTP/JSON layer.
         bunny_common
+        # M28/M54 blacklist matching -- see blacklist.c.
+        bunny_tag_query
 )
 
 if(BUNNY_BUILD_TESTS)

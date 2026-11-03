@@ -9,3 +9,10 @@ bool isVideoExt(String? ext) => ext != null && _videoExtensions.contains(ext.toL
 /// `CachedNetworkImage`, not the video player, but still worth marking on a
 /// grid thumbnail (M9.7.3) the same way a video is.
 bool isGifExt(String? ext) => ext != null && ext.toLowerCase() == 'gif';
+
+const _audioExtensions = {'mp3'};
+
+/// True for an Inkbunny Music submission's file extension (M28 Phase 4) --
+/// the only one actually observed live is mp3. `PostDetailScreen` plays
+/// these with `AudioPlayerWidget` instead of the image/video dispatch.
+bool isAudioExt(String? ext) => ext != null && _audioExtensions.contains(ext.toLowerCase());

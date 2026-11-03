@@ -4,7 +4,7 @@ import 'package:little_bunny/services/download_queue_notifier.dart';
 /// `fake_saf_platform.dart`'s `FakeSafStreamPlatform.writeFileBytesCalls`.
 class FakeDownloadQueueNotifier implements DownloadQueueNotifier {
   final List<int> startingCalls = [];
-  final List<(int done, int total)> progressCalls = [];
+  final List<(int done, int total, int failed, Duration? eta)> progressCalls = [];
   final List<(int succeeded, int mismatched, int failed)> summaryCalls = [];
   int clearCallCount = 0;
 
@@ -14,8 +14,8 @@ class FakeDownloadQueueNotifier implements DownloadQueueNotifier {
   }
 
   @override
-  Future<void> showProgress({required int done, required int total}) async {
-    progressCalls.add((done, total));
+  Future<void> showProgress({required int done, required int total, required int failed, Duration? eta}) async {
+    progressCalls.add((done, total, failed, eta));
   }
 
   @override

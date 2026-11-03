@@ -466,9 +466,56 @@ void main() {
     expect(await repository.getBlacklist(BunnySite.inkbunny), isEmpty);
   });
 
+  testWidgets('typing invalid syntax into the blacklist field shows an error and disables Add (M28/M54)', (WidgetTester tester) async {
+    final repository = FakeBunnyRepository();
+
+    await tester.pumpWidget(
+      wrapWithLocalization(
+        SettingsScreen(
+          repository: repository,
+          themeSettingsStore: const ThemeSettingsStore(),
+          lockService: AppLockService(FakeSecretStore()),
+          downloadSettingsStore: const DownloadSettingsStore(),
+          displaySettingsStore: const DisplaySettingsStore(),
+          settingsStore: settingsStore(),
+          onThemeModeChanged: (_) {},
+          onThemeColorChanged: (_) {},
+          onAmoledChanged: (_) {},
+          onLanguageCodeChanged: (_) {},
+          onRepositoryConfigured: (_) {},
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.dragUntilVisible(find.text('Add tag'), find.byType(ListView), const Offset(0, -200));
+    await tester.pumpAndSettle();
+
+    repository.validateTagQueryResult = 0;
+    await tester.enterText(find.byKey(const Key('settingsBlacklistAddField')), '( unbalanced');
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Invalid syntax'), findsOneWidget);
+    expect(tester.widget<IconButton>(find.widgetWithIcon(IconButton, Icons.add)).onPressed, isNull);
+
+    repository.validateTagQueryResult = null;
+    await tester.enterText(find.byKey(const Key('settingsBlacklistAddField')), 'rating:e young');
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Invalid syntax'), findsNothing);
+    expect(tester.widget<IconButton>(find.widgetWithIcon(IconButton, Icons.add)).onPressed, isNotNull);
+
+    await tester.tap(find.byIcon(Icons.add));
+    await tester.pumpAndSettle();
+
+    expect(find.text('rating:e young'), findsOneWidget);
+  });
+
   testWidgets('"Sync from e621" pulls the blacklist and shows a result snackbar (M27)', (WidgetTester tester) async {
     final repository = FakeBunnyRepository();
-    repository.syncE621BlacklistResult = const BunnyBlacklistSyncStats(added: 2, alreadyPresent: 1, skippedMultiTag: 1);
+    repository.syncE621BlacklistResult = const BunnyBlacklistSyncStats(added: 2, alreadyPresent: 1, skippedInvalid: 1);
     repository.blacklistBySite[BunnySite.e621] = {'brand_new', 'another_new'};
 
     await tester.pumpWidget(
@@ -497,7 +544,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(repository.syncE621BlacklistCallCount, 1);
-    expect(find.text('Added 2, 1 already present, skipped 1 multi-tag rule(s)'), findsOneWidget);
+    expect(find.text('Added 2, 1 already present, skipped 1 invalid rule(s)'), findsOneWidget);
     expect(find.text('brand_new'), findsOneWidget);
     expect(find.text('another_new'), findsOneWidget);
   });

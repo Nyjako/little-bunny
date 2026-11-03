@@ -171,6 +171,40 @@ static int handle_get_post_sources(struct mg_connection *conn, server_context_t 
     return status;
 }
 
+static cJSON *post_file_to_json(const bunny_db_post_file_t *file)
+{
+    cJSON *json = cJSON_CreateObject();
+    cJSON_AddStringToObject(json, "file_url", file->file_url);
+    add_optional_string(json, "sample_url", file->sample_url);
+    add_optional_string(json, "preview_url", file->preview_url);
+    add_optional_string(json, "file_ext", file->file_ext);
+    add_optional_string(json, "file_md5", file->file_md5);
+    cJSON_AddNumberToObject(json, "width", file->width);
+    cJSON_AddNumberToObject(json, "height", file->height);
+    add_optional_string(json, "mimetype", file->mimetype);
+    return json;
+}
+
+static int handle_get_post_files(struct mg_connection *conn, server_context_t *ctx, int64_t post_id)
+{
+    bunny_db_post_file_list_t list;
+    bunny_core_result_t result = bunny_core_post_get_files(ctx->core, post_id, &list);
+
+    if (result != BUNNY_CORE_OK) {
+        return server_json_respond_error(conn, result);
+    }
+
+    cJSON *response = cJSON_CreateArray();
+    for (size_t i = 0; i < list.count; i++) {
+        cJSON_AddItemToArray(response, post_file_to_json(&list.items[i]));
+    }
+    bunny_db_post_file_list_free(&list);
+
+    int status = server_json_respond(conn, 200, response);
+    cJSON_Delete(response);
+    return status;
+}
+
 static int handle_get_post_relationships(struct mg_connection *conn, server_context_t *ctx, int64_t post_id)
 {
     bunny_db_post_relationships_t relationships;
@@ -348,6 +382,9 @@ static int posts_handler(struct mg_connection *conn, void *cbdata)
     }
     if (strcmp(method, "GET") == 0 && server_route_parse_id_with_suffix(sub_path, "sources", &post_id)) {
         return handle_get_post_sources(conn, ctx, post_id);
+    }
+    if (strcmp(method, "GET") == 0 && server_route_parse_id_with_suffix(sub_path, "files", &post_id)) {
+        return handle_get_post_files(conn, ctx, post_id);
     }
     if (strcmp(method, "GET") == 0 && server_route_parse_id_with_suffix(sub_path, "relationships", &post_id)) {
         return handle_get_post_relationships(conn, ctx, post_id);

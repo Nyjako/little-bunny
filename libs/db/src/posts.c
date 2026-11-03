@@ -11,6 +11,7 @@ GOBLIN_DYN_ARRAY_DECL(bunny_db_post, bunny_db_post_t)
 GOBLIN_DYN_ARRAY_DECL(bunny_db_post_tag, bunny_db_post_tag_t)
 GOBLIN_DYN_ARRAY_DECL(bunny_db_string, char *)
 GOBLIN_DYN_ARRAY_DECL(bunny_db_int64, int64_t)
+GOBLIN_DYN_ARRAY_DECL(bunny_db_post_file, bunny_db_post_file_t)
 
 /* Posts per page for bunny_db_search_list_posts/bunny_db_pool_search_list_posts
  * (see their own doc comments in db.h) -- a local DB listing, not a site API
@@ -188,6 +189,42 @@ bunny_db_result_t bunny_db_post_upsert(bunny_db_t *db, const bunny_db_post_upser
             sqlite3_bind_text(source_stmt, 3, url, -1, SQLITE_TRANSIENT);
             sqlite3_step(source_stmt);
             sqlite3_finalize(source_stmt);
+        }
+    }
+
+    /* Replace this post's files wholesale, same reasoning as post_sources
+     * above -- purely additive alongside the single-file columns already
+     * bound earlier in this function (M28). */
+    const char *del_files_sql = "DELETE FROM post_files WHERE post_id = ?;";
+    sqlite3_stmt *del_files_stmt = NULL;
+    if (sqlite3_prepare_v2(db->handle, del_files_sql, -1, &del_files_stmt, NULL) == SQLITE_OK) {
+        sqlite3_bind_int64(del_files_stmt, 1, post_id);
+        sqlite3_step(del_files_stmt);
+        sqlite3_finalize(del_files_stmt);
+    }
+
+    for (size_t i = 0; i < post->file_count; i++) {
+        const bunny_db_post_file_upsert_t *file = &post->files[i];
+        if (!file->file_url || !file->file_url[0]) {
+            continue;
+        }
+
+        const char *file_sql = "INSERT INTO post_files (post_id, position, file_url, sample_url, preview_url, file_ext, file_md5, width, height, mimetype) "
+                               "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);";
+        sqlite3_stmt *file_stmt = NULL;
+        if (sqlite3_prepare_v2(db->handle, file_sql, -1, &file_stmt, NULL) == SQLITE_OK) {
+            sqlite3_bind_int64(file_stmt, 1, post_id);
+            sqlite3_bind_int(file_stmt, 2, (int)i);
+            sqlite3_bind_text(file_stmt, 3, file->file_url, -1, SQLITE_TRANSIENT);
+            bunny_db_bind_text_or_null(file_stmt, 4, file->sample_url);
+            bunny_db_bind_text_or_null(file_stmt, 5, file->preview_url);
+            bunny_db_bind_text_or_null(file_stmt, 6, file->file_ext);
+            bunny_db_bind_text_or_null(file_stmt, 7, file->file_md5);
+            sqlite3_bind_int(file_stmt, 8, file->width);
+            sqlite3_bind_int(file_stmt, 9, file->height);
+            bunny_db_bind_text_or_null(file_stmt, 10, file->mimetype);
+            sqlite3_step(file_stmt);
+            sqlite3_finalize(file_stmt);
         }
     }
 
@@ -519,7 +556,7 @@ bunny_db_result_t bunny_db_search_has_result(bunny_db_t *db, int64_t search_id, 
     return (rc == SQLITE_ROW || rc == SQLITE_DONE) ? BUNNY_DB_OK : bunny_db_sqlite_rc_to_result(rc);
 }
 
-bunny_db_result_t bunny_db_search_list_posts(bunny_db_t *db, int64_t search_id, bool unseen_only, bool apply_blacklist, int rating_mask, int media_mask, int page, bunny_db_post_list_t *out_list)
+bunny_db_result_t bunny_db_search_list_posts(bunny_db_t *db, int64_t search_id, bunny_db_site_t site, bool unseen_only, bool apply_blacklist, int rating_mask, int media_mask, int page, bunny_db_post_list_t *out_list)
 {
     if (!db || !out_list || page < 1) {
         return BUNNY_DB_ERR_INVALID_ARG;
@@ -546,8 +583,12 @@ bunny_db_result_t bunny_db_search_list_posts(bunny_db_t *db, int64_t search_id, 
      * post carrying a tag blacklisted for its own site (M13.3) -- skipped
      * for a favorites search (see bunny_core_is_favorites_query), which is
      * meant to show everything favorited, not a filtered subset. Matching
-     * on t.site rather than joining the searches table means this works
-     * without knowing this search's own site.
+     * on t.site rather than joining the searches table means this clause
+     * itself doesn't need `site` at all -- it's only taken as a parameter
+     * for the SEPARATE complex-blacklist-rule pass below, over the page
+     * this query already returned (M28/M54, see
+     * bunny_db_post_is_blacklisted's own doc comment for what "complex"
+     * means and why this is a second C-side pass rather than more SQL).
      *
      * The two mask clauses (M28) are always present in all four variants,
      * unlike unseen_only/apply_blacklist's own all-or-nothing branching --
@@ -614,6 +655,46 @@ bunny_db_result_t bunny_db_search_list_posts(bunny_db_t *db, int64_t search_id, 
         }
         bunny_db_post_array_free(&arr);
         return bunny_db_sqlite_rc_to_result(rc);
+    }
+
+    /* Second pass (M28/M54): only runs when apply_blacklist is true AND
+     * `site` has at least one complex rule -- a site with none (today, for
+     * every existing user) costs nothing beyond the one indexed SELECT
+     * bunny_db_blacklist_fetch_complex_rules itself runs. Re-fetches each
+     * SURVIVING row's own tags (there's no way to push the full grammar
+     * down into the SQL above without itself re-implementing the grammar)
+     * and drops any that match, in place -- see this function's own doc
+     * comment above for why a page can come back shorter than
+     * BUNNY_DB_SEARCH_POSTS_PAGE_SIZE as a result. */
+    if (apply_blacklist && arr.count > 0) {
+        bunny_db_tag_query_node_ptr_array complex_asts;
+        bunny_db_result_t complex_result = bunny_db_blacklist_fetch_complex_rules(db, site, &complex_asts);
+        if (complex_result != BUNNY_DB_OK) {
+            for (size_t i = 0; i < arr.count; i++) {
+                bunny_db_post_free(&arr.items[i]);
+            }
+            bunny_db_post_array_free(&arr);
+            return complex_result;
+        }
+        if (complex_asts.count > 0) {
+            size_t write = 0;
+            for (size_t read = 0; read < arr.count; read++) {
+                bunny_db_string_list_t tag_names;
+                bunny_db_post_get_tag_names(db, arr.items[read].id, &tag_names);
+                bool blacklisted = false;
+                for (size_t i = 0; i < complex_asts.count && !blacklisted; i++) {
+                    blacklisted = bunny_tag_query_matches(complex_asts.items[i], (const char *const *)tag_names.items, tag_names.count);
+                }
+                bunny_db_string_list_free(&tag_names);
+                if (blacklisted) {
+                    bunny_db_post_free(&arr.items[read]);
+                } else {
+                    arr.items[write++] = arr.items[read];
+                }
+            }
+            arr.count = write;
+        }
+        bunny_db_blacklist_free_rule_asts(&complex_asts);
     }
 
     out_list->items = arr.items;
@@ -807,6 +888,51 @@ bunny_db_result_t bunny_db_post_get_tags_by_category(bunny_db_t *db, int64_t pos
     return BUNNY_DB_OK;
 }
 
+bunny_db_result_t bunny_db_post_get_tag_names(bunny_db_t *db, int64_t post_id, bunny_db_string_list_t *out_list)
+{
+    if (!db || !out_list) {
+        return BUNNY_DB_ERR_INVALID_ARG;
+    }
+    memset(out_list, 0, sizeof(*out_list));
+
+    const char *sql = "SELECT t.name FROM post_tags pt JOIN tags t ON t.id = pt.tag_id WHERE pt.post_id = ? ORDER BY t.name ASC;";
+    sqlite3_stmt *stmt = NULL;
+    if (sqlite3_prepare_v2(db->handle, sql, -1, &stmt, NULL) != SQLITE_OK) {
+        return BUNNY_DB_ERR_QUERY_FAILED;
+    }
+    sqlite3_bind_int64(stmt, 1, post_id);
+
+    bunny_db_string_array arr;
+    bunny_db_string_array_init(&arr);
+
+    int rc;
+    while ((rc = sqlite3_step(stmt)) == SQLITE_ROW) {
+        char *name = bunny_db_column_text_dup(stmt, 0);
+        if (!bunny_db_string_array_push(&arr, name)) {
+            sqlite3_finalize(stmt);
+            free(name);
+            for (size_t i = 0; i < arr.count; i++) {
+                free(arr.items[i]);
+            }
+            bunny_db_string_array_free(&arr);
+            return BUNNY_DB_ERR_UNKNOWN;
+        }
+    }
+    sqlite3_finalize(stmt);
+
+    if (rc != SQLITE_DONE) {
+        for (size_t i = 0; i < arr.count; i++) {
+            free(arr.items[i]);
+        }
+        bunny_db_string_array_free(&arr);
+        return bunny_db_sqlite_rc_to_result(rc);
+    }
+
+    out_list->items = arr.items;
+    out_list->count = arr.count;
+    return BUNNY_DB_OK;
+}
+
 bunny_db_result_t bunny_db_post_get_sources(bunny_db_t *db, int64_t post_id, bunny_db_string_list_t *out_list)
 {
     if (!db || !out_list) {
@@ -844,6 +970,60 @@ bunny_db_result_t bunny_db_post_get_sources(bunny_db_t *db, int64_t post_id, bun
             free(arr.items[i]);
         }
         bunny_db_string_array_free(&arr);
+        return bunny_db_sqlite_rc_to_result(rc);
+    }
+
+    out_list->items = arr.items;
+    out_list->count = arr.count;
+    return BUNNY_DB_OK;
+}
+
+bunny_db_result_t bunny_db_post_get_files(bunny_db_t *db, int64_t post_id, bunny_db_post_file_list_t *out_list)
+{
+    if (!db || !out_list) {
+        return BUNNY_DB_ERR_INVALID_ARG;
+    }
+    memset(out_list, 0, sizeof(*out_list));
+
+    const char *sql = "SELECT file_url, sample_url, preview_url, file_ext, file_md5, width, height, mimetype "
+                      "FROM post_files WHERE post_id = ? ORDER BY position ASC;";
+    sqlite3_stmt *stmt = NULL;
+    if (sqlite3_prepare_v2(db->handle, sql, -1, &stmt, NULL) != SQLITE_OK) {
+        return BUNNY_DB_ERR_QUERY_FAILED;
+    }
+    sqlite3_bind_int64(stmt, 1, post_id);
+
+    bunny_db_post_file_array arr;
+    bunny_db_post_file_array_init(&arr);
+
+    int rc;
+    while ((rc = sqlite3_step(stmt)) == SQLITE_ROW) {
+        bunny_db_post_file_t item;
+        item.file_url = bunny_db_column_text_dup(stmt, 0);
+        item.sample_url = bunny_db_column_text_dup(stmt, 1);
+        item.preview_url = bunny_db_column_text_dup(stmt, 2);
+        item.file_ext = bunny_db_column_text_dup(stmt, 3);
+        item.file_md5 = bunny_db_column_text_dup(stmt, 4);
+        item.width = sqlite3_column_int(stmt, 5);
+        item.height = sqlite3_column_int(stmt, 6);
+        item.mimetype = bunny_db_column_text_dup(stmt, 7);
+        if (!bunny_db_post_file_array_push(&arr, item)) {
+            sqlite3_finalize(stmt);
+            bunny_db_post_file_free(&item);
+            for (size_t i = 0; i < arr.count; i++) {
+                bunny_db_post_file_free(&arr.items[i]);
+            }
+            bunny_db_post_file_array_free(&arr);
+            return BUNNY_DB_ERR_UNKNOWN;
+        }
+    }
+    sqlite3_finalize(stmt);
+
+    if (rc != SQLITE_DONE) {
+        for (size_t i = 0; i < arr.count; i++) {
+            bunny_db_post_file_free(&arr.items[i]);
+        }
+        bunny_db_post_file_array_free(&arr);
         return bunny_db_sqlite_rc_to_result(rc);
     }
 
@@ -901,5 +1081,58 @@ bunny_db_result_t bunny_db_count_unseen(bunny_db_t *db, int64_t *out_count)
     }
     *out_count = sqlite3_column_int64(stmt, 0);
     sqlite3_finalize(stmt);
+    return BUNNY_DB_OK;
+}
+
+bunny_db_result_t bunny_db_post_mark_inkbunny_details_backfilled(bunny_db_t *db, int64_t post_id)
+{
+    if (!db) {
+        return BUNNY_DB_ERR_INVALID_ARG;
+    }
+    const char *sql = "UPDATE posts SET inkbunny_details_backfilled = 1 WHERE id = ?;";
+    sqlite3_stmt *stmt = NULL;
+    if (sqlite3_prepare_v2(db->handle, sql, -1, &stmt, NULL) != SQLITE_OK) {
+        return BUNNY_DB_ERR_QUERY_FAILED;
+    }
+    sqlite3_bind_int64(stmt, 1, post_id);
+    int rc = sqlite3_step(stmt);
+    sqlite3_finalize(stmt);
+    return rc == SQLITE_DONE ? BUNNY_DB_OK : bunny_db_sqlite_rc_to_result(rc);
+}
+
+bunny_db_result_t bunny_db_inkbunny_list_thin_post_ids(bunny_db_t *db, int limit, bunny_db_int64_list_t *out_external_ids)
+{
+    if (!db || !out_external_ids || limit <= 0) {
+        return BUNNY_DB_ERR_INVALID_ARG;
+    }
+    memset(out_external_ids, 0, sizeof(*out_external_ids));
+
+    const char *sql = "SELECT external_id FROM posts WHERE site = 'inkbunny' AND inkbunny_details_backfilled = 0 LIMIT ?;";
+    sqlite3_stmt *stmt = NULL;
+    if (sqlite3_prepare_v2(db->handle, sql, -1, &stmt, NULL) != SQLITE_OK) {
+        return BUNNY_DB_ERR_QUERY_FAILED;
+    }
+    sqlite3_bind_int(stmt, 1, limit);
+
+    bunny_db_int64_array arr;
+    bunny_db_int64_array_init(&arr);
+
+    int rc;
+    while ((rc = sqlite3_step(stmt)) == SQLITE_ROW) {
+        if (!bunny_db_int64_array_push(&arr, sqlite3_column_int64(stmt, 0))) {
+            sqlite3_finalize(stmt);
+            bunny_db_int64_array_free(&arr);
+            return BUNNY_DB_ERR_UNKNOWN;
+        }
+    }
+    sqlite3_finalize(stmt);
+
+    if (rc != SQLITE_DONE) {
+        bunny_db_int64_array_free(&arr);
+        return bunny_db_sqlite_rc_to_result(rc);
+    }
+
+    out_external_ids->items = arr.items;
+    out_external_ids->count = arr.count;
     return BUNNY_DB_OK;
 }

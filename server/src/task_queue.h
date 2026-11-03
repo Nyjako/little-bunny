@@ -54,6 +54,7 @@ typedef enum
     TASK_TYPE_SYNC_DUE,
     TASK_TYPE_PROCESS_ACTION_QUEUE,
     TASK_TYPE_BUILD_STATS_REPORT,
+    TASK_TYPE_INKBUNNY_BACKFILL_DETAILS,
 } task_type_t;
 
 typedef enum
@@ -117,6 +118,14 @@ bool task_queue_enqueue_background_action_queue(task_queue_t *queue);
  * pending/running, same dedupe shape as the other LOW-priority background
  * jobs above. */
 bool task_queue_enqueue_stats_report_build(task_queue_t *queue);
+
+/* LOW priority -- the scheduler's own periodic bulk-backfill of "thin"
+ * Inkbunny posts' full details (bunny_core_backfill_inkbunny_details,
+ * M28). No-op if a backfill of this type is already pending/running, same
+ * dedupe shape as task_queue_enqueue_background_action_queue/
+ * task_queue_enqueue_stats_report_build -- there's no HIGH-priority/
+ * user-triggered variant of this job to promote into. */
+bool task_queue_enqueue_background_inkbunny_backfill(task_queue_t *queue);
 
 typedef struct
 {

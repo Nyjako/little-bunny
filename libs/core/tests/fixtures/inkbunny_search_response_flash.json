@@ -1,0 +1,38 @@
+{
+  "sid": "77N2zxwuZFvRduEQzvE15zGkiR",
+  "results_count_all": 1,
+  "results_count_thispage": 1,
+  "pages_count": 1,
+  "page": 1,
+  "user_location": "",
+  "search_params": [],
+  "submissions": [
+    {
+      "submission_id": "1921637",
+      "hidden": "f",
+      "username": "WAtheAnum",
+      "user_id": "1",
+      "create_datetime": "2026-01-01 00:00:00+00",
+      "thumbnail_url_large_noncustom": "https://de.ib.metapix.net/thumbnails/large/2789/2789753_noncustom.jpg",
+      "file_name": "2789753_WAtheAnum_stiff_digging_2_1.1.swf",
+      "title": "stiff digging 2",
+      "deleted": "f",
+      "public": "t",
+      "mimetype": "application/x-shockwave-flash",
+      "pagecount": "1",
+      "rating_id": "0",
+      "rating_name": "General",
+      "file_url_full": "https://de.ib.metapix.net/files/full/2789/2789753_WAtheAnum_stiff_digging_2_1.1.swf",
+      "file_url_screen": "https://de.ib.metapix.net/files/screen/2789/2789753_WAtheAnum_stiff_digging_2_1.1.swf",
+      "file_url_preview": "https://de.ib.metapix.net/files/preview/2789/2789753_WAtheAnum_stiff_digging_2_1.1.swf",
+      "submission_type_id": "7",
+      "type_name": "Shockwave/Flash - Interactive",
+      "friends_only": "f",
+      "guest_block": "f",
+      "scraps": "f",
+      "keywords": [
+        {"keyword_id": "1", "keyword_name": "flash"}
+      ]
+    }
+  ]
+}

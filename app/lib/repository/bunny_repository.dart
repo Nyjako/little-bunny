@@ -181,6 +181,11 @@ abstract interface class BunnyRepository {
   /// none (e.g. every Inkbunny submission -- no such field there).
   Future<List<String>> getPostSources(int postId);
 
+  /// Every file on a post, in position order (M28). A single-file post
+  /// (including every e621 post) still returns exactly one entry, the same
+  /// file [BunnyPost.fileUrl]/[BunnyPost.width]/etc. already represent.
+  Future<List<BunnyPostFile>> getPostFiles(int postId);
+
   /// A post's e621 parent/child relationships (always empty/false for
   /// Inkbunny, which has no such concept).
   Future<BunnyPostRelationships> getPostRelationships(int postId);
@@ -189,9 +194,12 @@ abstract interface class BunnyRepository {
   /// post in no pools).
   Future<List<int>> getPostPoolIds(int postId);
 
-  /// The per-site tag blacklist (M13.3), exact-match tag names, alphabetical.
-  /// Applied only to [listSearchPosts] -- tag/pool browsing and favorites
-  /// previews are deliberately unaffected, so nothing is hidden there.
+  /// The per-site tag blacklist (M13.3), alphabetical. A rule is usually a
+  /// single bare tag, but may be a fuller e621-grammar expression (M28/M54,
+  /// see [validateTagQuery]) -- `young` and `rating:e young` can both
+  /// appear in this list. Applied only to [listSearchPosts] -- tag/pool
+  /// browsing and favorites previews are deliberately unaffected, so
+  /// nothing is hidden there.
   Future<List<String>> getBlacklist(BunnySite site);
 
   Future<void> addBlacklistTag(BunnySite site, String tag);
@@ -204,6 +212,13 @@ abstract interface class BunnyRepository {
   /// e621 account to already be configured -- throws [BunnyRepositoryException]
   /// otherwise, same as any other e621 call with no usable account.
   Future<BunnyBlacklistSyncStats> syncE621Blacklist();
+
+  /// Syntax-only validation (M28/M54) of a blacklist line or search query
+  /// under `site`'s own grammar dialect -- full e621 grammar, or
+  /// Inkbunny's narrower AND+exclude-only subset. Returns null if `text`
+  /// is valid, otherwise the byte offset of the problem (for highlighting
+  /// in a text field). Never touches the DB or a post's tags.
+  Future<int?> validateTagQuery(BunnySite site, String text);
 
   /// Fetches a single post live from its site and caches it, without
   /// requiring it to already be linked to any saved search -- used when a

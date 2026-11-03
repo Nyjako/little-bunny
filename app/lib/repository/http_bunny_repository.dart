@@ -87,6 +87,17 @@ BunnyStatsReport _statsReportFromJson(Map<String, Object?> j) => BunnyStatsRepor
 
 BunnyPostTag _postTagFromJson(Map<String, Object?> j) => BunnyPostTag(name: j['name'] as String, category: j['category'] as String?);
 
+BunnyPostFile _postFileFromJson(Map<String, Object?> j) => BunnyPostFile(
+  fileUrl: j['file_url'] as String,
+  sampleUrl: j['sample_url'] as String?,
+  previewUrl: j['preview_url'] as String?,
+  fileExt: j['file_ext'] as String?,
+  fileMd5: j['file_md5'] as String?,
+  width: (j['width'] as num).toInt(),
+  height: (j['height'] as num).toInt(),
+  mimetype: j['mimetype'] as String?,
+);
+
 BunnyPostRelationships _relationshipsFromJson(Map<String, Object?> j) => BunnyPostRelationships(
   hasParent: j['has_parent'] as bool,
   parentExternalId: (j['parent_external_id'] as num?)?.toInt(),
@@ -146,7 +157,7 @@ BunnyQueueStats _queueStatsFromJson(Map<String, Object?> j) => BunnyQueueStats(
 BunnyBlacklistSyncStats _blacklistSyncStatsFromJson(Map<String, Object?> j) => BunnyBlacklistSyncStats(
   added: (j['added'] as num).toInt(),
   alreadyPresent: (j['already_present'] as num).toInt(),
-  skippedMultiTag: (j['skipped_multi_tag'] as num).toInt(),
+  skippedInvalid: (j['skipped_invalid'] as num).toInt(),
 );
 
 /// True if [certificateDerBytes]' SHA-256 hash matches
@@ -491,6 +502,15 @@ class HttpBunnyRepository implements BunnyRepository {
   }
 
   @override
+  Future<List<BunnyPostFile>> getPostFiles(int postId) async {
+    final response = await _client.get(_uri('/posts/$postId/files'), headers: _headers);
+    if (response.statusCode != 200) {
+      _throwError(response);
+    }
+    return _decodeList(response).map(_postFileFromJson).toList();
+  }
+
+  @override
   Future<BunnyPostRelationships> getPostRelationships(int postId) async {
     final response = await _client.get(_uri('/posts/$postId/relationships'), headers: _headers);
     if (response.statusCode != 200) {
@@ -549,6 +569,16 @@ class HttpBunnyRepository implements BunnyRepository {
       _throwError(response);
     }
     return _blacklistSyncStatsFromJson(_decodeObject(response));
+  }
+
+  @override
+  Future<int?> validateTagQuery(BunnySite site, String text) async {
+    final response = await _client.get(_uri('/tag_query/validate', {'site': site.toWireString(), 'text': text}), headers: _headers);
+    if (response.statusCode != 200) {
+      _throwError(response);
+    }
+    final json = _decodeObject(response);
+    return json['valid'] == true ? null : (json['error_pos'] as num).toInt();
   }
 
   @override

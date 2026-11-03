@@ -206,6 +206,14 @@ static void run_slot(task_queue_t *queue, const task_slot_t *slot)
             server_log("INFO", "task queue: tag-stats report build finished");
             break;
         }
+        case TASK_TYPE_INKBUNNY_BACKFILL_DETAILS: {
+            /* Same reasoning as TASK_TYPE_BUILD_STATS_REPORT above --
+             * server_sync_status is specifically for search-sync progress. */
+            bunny_core_backfill_stats_t stats;
+            bunny_core_backfill_inkbunny_details(queue->core, &stats);
+            server_log("INFO", "task queue: backfilled %d/%d thin Inkbunny post(s)", stats.found, stats.attempted);
+            break;
+        }
     }
 }
 
@@ -384,6 +392,15 @@ bool task_queue_enqueue_stats_report_build(task_queue_t *queue)
     bunny_mutex_lock(&queue->mutex);
     bool already_covered = find_slot_by_type(queue, TASK_TYPE_BUILD_STATS_REPORT) >= 0;
     bool ok = already_covered || insert_slot(queue, TASK_TYPE_BUILD_STATS_REPORT, TASK_PRIORITY_LOW, goblin_copy_cstr("Build tag-stats report"), 0);
+    bunny_mutex_unlock(&queue->mutex);
+    return ok;
+}
+
+bool task_queue_enqueue_background_inkbunny_backfill(task_queue_t *queue)
+{
+    bunny_mutex_lock(&queue->mutex);
+    bool already_covered = find_slot_by_type(queue, TASK_TYPE_INKBUNNY_BACKFILL_DETAILS) >= 0;
+    bool ok = already_covered || insert_slot(queue, TASK_TYPE_INKBUNNY_BACKFILL_DETAILS, TASK_PRIORITY_LOW, goblin_copy_cstr("Backfill Inkbunny post details"), 0);
     bunny_mutex_unlock(&queue->mutex);
     return ok;
 }

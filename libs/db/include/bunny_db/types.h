@@ -170,6 +170,29 @@ typedef struct
     size_t count;
 } bunny_db_post_tag_list_t;
 
+/* One file on a post (M28) -- read-side counterpart of
+ * bunny_db_post_file_upsert_t (bunny_db/db.h). Feeds a multi-file Inkbunny
+ * submission's (Picture Series/Comic/Portfolio/Music - Album) gallery/track
+ * list in the post detail view; a single-file post still has exactly one of
+ * these (the same file posts.file_url etc. already represent). */
+typedef struct
+{
+    char *file_url;
+    char *sample_url;  /* may be NULL */
+    char *preview_url; /* may be NULL */
+    char *file_ext;    /* may be NULL */
+    char *file_md5;    /* may be NULL */
+    int width;
+    int height;
+    char *mimetype; /* may be NULL */
+} bunny_db_post_file_t;
+
+typedef struct
+{
+    bunny_db_post_file_t *items;
+    size_t count;
+} bunny_db_post_file_list_t;
+
 /* A generic ordered list of strings -- feeds bunny_db_post_get_sources
  * (position-ordered source URLs), and anything else that just needs "a list
  * of strings" without per-item metadata. */
@@ -247,6 +270,8 @@ void bunny_db_tag_stat_free(bunny_db_tag_stat_t *stat);
 void bunny_db_tag_stat_list_free(bunny_db_tag_stat_list_t *list);
 void bunny_db_post_tag_free(bunny_db_post_tag_t *tag);
 void bunny_db_post_tag_list_free(bunny_db_post_tag_list_t *list);
+void bunny_db_post_file_free(bunny_db_post_file_t *file);
+void bunny_db_post_file_list_free(bunny_db_post_file_list_t *list);
 void bunny_db_string_list_free(bunny_db_string_list_t *list);
 void bunny_db_int64_list_free(bunny_db_int64_list_t *list);
 void bunny_db_post_relationships_free(bunny_db_post_relationships_t *relationships);

@@ -18,6 +18,7 @@ class FakeBunnyRepository implements BunnyRepository {
   final List<BunnyTagStat> tagStats = [];
   final Map<int, List<BunnyPostTag>> tagsByPostId = {};
   final Map<int, List<String>> sourcesByPostId = {};
+  final Map<int, List<BunnyPostFile>> filesByPostId = {};
   final Map<int, BunnyPostRelationships> relationshipsByPostId = {};
   final Map<int, List<int>> poolIdsByPostId = {};
 
@@ -390,6 +391,9 @@ class FakeBunnyRepository implements BunnyRepository {
   Future<List<String>> getPostSources(int postId) async => List.of(sourcesByPostId[postId] ?? const []);
 
   @override
+  Future<List<BunnyPostFile>> getPostFiles(int postId) async => List.of(filesByPostId[postId] ?? const []);
+
+  @override
   Future<BunnyPostRelationships> getPostRelationships(int postId) async => relationshipsByPostId[postId] ?? const BunnyPostRelationships(hasParent: false, hasActiveChildren: false, children: []);
 
   @override
@@ -413,7 +417,7 @@ class FakeBunnyRepository implements BunnyRepository {
   /// Result returned by [syncE621Blacklist]; set this to simulate a sync
   /// outcome. Throws [syncE621BlacklistError] instead, if set (simulates no
   /// e621 account configured).
-  BunnyBlacklistSyncStats syncE621BlacklistResult = const BunnyBlacklistSyncStats(added: 0, alreadyPresent: 0, skippedMultiTag: 0);
+  BunnyBlacklistSyncStats syncE621BlacklistResult = const BunnyBlacklistSyncStats(added: 0, alreadyPresent: 0, skippedInvalid: 0);
   Object? syncE621BlacklistError;
 
   @override
@@ -424,6 +428,17 @@ class FakeBunnyRepository implements BunnyRepository {
     }
     return syncE621BlacklistResult;
   }
+
+  /// Result returned by [validateTagQuery] regardless of `text` -- doesn't
+  /// re-implement the real grammar (libs/tag_query) in Dart just for the
+  /// fake; a test drives a "type invalid, see error, then fix it" flow by
+  /// setting this to the value the real validator would return for each
+  /// piece of text right before triggering that text change. Defaults to
+  /// "always valid," matching the common case most tests don't care about.
+  int? validateTagQueryResult;
+
+  @override
+  Future<int?> validateTagQuery(BunnySite site, String text) async => validateTagQueryResult;
 
   @override
   Future<int> fetchPost(BunnySite site, int externalId) async {

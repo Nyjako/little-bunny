@@ -173,10 +173,11 @@ static void *scheduler_loop(void *arg)
             break;
         }
 
-        server_log("INFO", "scheduler: tick started, enqueuing due-search sync + action-queue drain");
+        server_log("INFO", "scheduler: tick started, enqueuing due-search sync + action-queue drain + Inkbunny details backfill");
 
         task_queue_enqueue_background_due_sync(scheduler->ctx->task_queue);
         task_queue_enqueue_background_action_queue(scheduler->ctx->task_queue);
+        task_queue_enqueue_background_inkbunny_backfill(scheduler->ctx->task_queue);
 
         if (scheduler->backups_dir) {
             backup_due_and_prune(scheduler->ctx, scheduler->backups_dir);

@@ -191,6 +191,32 @@ class BunnyCoreFfiBindings {
   late final _bunny_db_post_tag_list_free = _bunny_db_post_tag_list_freePtr
       .asFunction<void Function(ffi.Pointer<bunny_db_post_tag_list_t>)>();
 
+  void bunny_db_post_file_free(ffi.Pointer<bunny_db_post_file_t> file) {
+    return _bunny_db_post_file_free(file);
+  }
+
+  late final _bunny_db_post_file_freePtr =
+      _lookup<
+        ffi.NativeFunction<ffi.Void Function(ffi.Pointer<bunny_db_post_file_t>)>
+      >('bunny_db_post_file_free');
+  late final _bunny_db_post_file_free = _bunny_db_post_file_freePtr
+      .asFunction<void Function(ffi.Pointer<bunny_db_post_file_t>)>();
+
+  void bunny_db_post_file_list_free(
+    ffi.Pointer<bunny_db_post_file_list_t> list,
+  ) {
+    return _bunny_db_post_file_list_free(list);
+  }
+
+  late final _bunny_db_post_file_list_freePtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.Void Function(ffi.Pointer<bunny_db_post_file_list_t>)
+        >
+      >('bunny_db_post_file_list_free');
+  late final _bunny_db_post_file_list_free = _bunny_db_post_file_list_freePtr
+      .asFunction<void Function(ffi.Pointer<bunny_db_post_file_list_t>)>();
+
   void bunny_db_string_list_free(ffi.Pointer<bunny_db_string_list_t> list) {
     return _bunny_db_string_list_free(list);
   }
@@ -1239,6 +1265,38 @@ class BunnyCoreFfiBindings {
         )
       >();
 
+  /// Every file on a post, in position order (M28) -- a thin pass-through to
+  /// bunny_db. A single-file post (including every e621 post) still returns
+  /// exactly one entry.
+  bunny_core_result_t bunny_core_post_get_files(
+    ffi.Pointer<bunny_core_t> core,
+    int post_id,
+    ffi.Pointer<bunny_db_post_file_list_t> out_list,
+  ) {
+    return bunny_core_result_t.fromValue(
+      _bunny_core_post_get_files(core, post_id, out_list),
+    );
+  }
+
+  late final _bunny_core_post_get_filesPtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.UnsignedInt Function(
+            ffi.Pointer<bunny_core_t>,
+            ffi.Int64,
+            ffi.Pointer<bunny_db_post_file_list_t>,
+          )
+        >
+      >('bunny_core_post_get_files');
+  late final _bunny_core_post_get_files = _bunny_core_post_get_filesPtr
+      .asFunction<
+        int Function(
+          ffi.Pointer<bunny_core_t>,
+          int,
+          ffi.Pointer<bunny_db_post_file_list_t>,
+        )
+      >();
+
   /// A post's parent/child relationships (e621 only) -- a thin pass-through to
   /// bunny_db. See bunny_db_post_get_relationships's doc comment for the
   /// "no row = all-empty/OK, not NOT_FOUND" convention this follows.
@@ -1303,9 +1361,14 @@ class BunnyCoreFfiBindings {
         )
       >();
 
-  /// --- Tag blacklist (M13.3) -- thin pass-throughs to bunny_db_blacklist_*.
+  /// --- Tag blacklist (M13.3, M28/M54) -- thin pass-throughs to bunny_db_blacklist_*.
   /// See bunny_db/db.h for which post-listing query the blacklist does (and
-  /// deliberately does not) apply to.
+  /// deliberately does not) apply to. bunny_core_blacklist_add validates
+  /// `tag` (now really "the rule's raw text" -- see bunny_db's own blacklist
+  /// doc comment) under `site`'s own e621/Inkbunny grammar dialect (libs/
+  /// tag_query) before writing it, returning BUNNY_CORE_ERR_INVALID_ARG for
+  /// anything that fails to parse -- the one write path where rejecting bad
+  /// input outright, rather than storing-and-never-matching it, is correct.
   bunny_core_result_t bunny_core_blacklist_list(
     ffi.Pointer<bunny_core_t> core,
     bunny_db_site_t site,
@@ -1387,17 +1450,18 @@ class BunnyCoreFfiBindings {
 
   /// Pulls the e621 account's own blacklist (My Account -> Blacklisted Tags on
   /// e621.net, see tools/e621_blacklist_experiment/e621_blacklist.py for the
-  /// API this mirrors) and imports every single-tag line that isn't already
-  /// present locally. Read-only on e621's side -- never writes anything back
-  /// to the site. Requires an e621 account to already be configured
+  /// API this mirrors) and imports every line that isn't already present
+  /// locally. Read-only on e621's side -- never writes anything back to the
+  /// site. Requires an e621 account to already be configured
   /// (bunny_core_account_set), since e621 only returns blacklisted_tags when
   /// authenticated as that same account -- returns BUNNY_CORE_ERR_SITE
-  /// otherwise (same as any other e621 call with no usable client). Lines with
-  /// more than one space-separated tag are e621's "AND" groups (match only
-  /// when every tag on that line matches a post); the local blacklist has no
-  /// such concept yet, so those are skipped and counted separately in
-  /// out_stats rather than silently dropped or misinterpreted as one literal
-  /// (space-containing) tag.
+  /// otherwise (same as any other e621 call with no usable client). A line
+  /// that fails to parse under e621's grammar (libs/tag_query) is skipped and
+  /// counted separately in out_stats rather than silently dropped or stored
+  /// as something that could never usefully match -- M28/M54 changed this
+  /// from "any line with a space is skipped" (e621's own multi-tag AND lines
+  /// used to be entirely unsupported) to "any line that parses is stored
+  /// verbatim," since the local blacklist now understands that same grammar.
   bunny_core_result_t bunny_core_sync_e621_blacklist(
     ffi.Pointer<bunny_core_t> core,
     ffi.Pointer<bunny_core_blacklist_sync_stats_t> out_stats,
@@ -1424,6 +1488,55 @@ class BunnyCoreFfiBindings {
               ffi.Pointer<bunny_core_blacklist_sync_stats_t>,
             )
           >();
+
+  /// Syntax-only validation (M28/M54) under `site`'s own grammar dialect (full
+  /// e621 grammar, or Inkbunny's narrower AND+exclude-only subset -- see libs/
+  /// tag_query's own dialect doc comment) -- never touches the DB or any post's
+  /// tags, just whether `text` parses. *out_valid is true/false; when false,
+  /// *out_error_pos (if out_error_pos is non-NULL) is the byte offset into
+  /// `text` nearest the problem, for highlighting in a text field. Used by
+  /// both the blacklist editor's live-typing check and (Phase 4) the search
+  /// query editor's -- the one grammar backs both UIs.
+  bunny_core_result_t bunny_core_tag_query_validate(
+    ffi.Pointer<bunny_core_t> core,
+    bunny_db_site_t site,
+    ffi.Pointer<ffi.Char> text,
+    ffi.Pointer<ffi.Bool> out_valid,
+    ffi.Pointer<ffi.Size> out_error_pos,
+  ) {
+    return bunny_core_result_t.fromValue(
+      _bunny_core_tag_query_validate(
+        core,
+        site.value,
+        text,
+        out_valid,
+        out_error_pos,
+      ),
+    );
+  }
+
+  late final _bunny_core_tag_query_validatePtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.UnsignedInt Function(
+            ffi.Pointer<bunny_core_t>,
+            ffi.UnsignedInt,
+            ffi.Pointer<ffi.Char>,
+            ffi.Pointer<ffi.Bool>,
+            ffi.Pointer<ffi.Size>,
+          )
+        >
+      >('bunny_core_tag_query_validate');
+  late final _bunny_core_tag_query_validate = _bunny_core_tag_query_validatePtr
+      .asFunction<
+        int Function(
+          ffi.Pointer<bunny_core_t>,
+          int,
+          ffi.Pointer<ffi.Char>,
+          ffi.Pointer<ffi.Bool>,
+          ffi.Pointer<ffi.Size>,
+        )
+      >();
 
   /// Fetches a single post live from its site and caches it (upserting into the
   /// local post cache exactly like a sync pass would for one post), without
@@ -1465,6 +1578,33 @@ class BunnyCoreFfiBindings {
               int,
               int,
               ffi.Pointer<ffi.Int64>,
+            )
+          >();
+
+  bunny_core_result_t bunny_core_backfill_inkbunny_details(
+    ffi.Pointer<bunny_core_t> core,
+    ffi.Pointer<bunny_core_backfill_stats_t> out_stats,
+  ) {
+    return bunny_core_result_t.fromValue(
+      _bunny_core_backfill_inkbunny_details(core, out_stats),
+    );
+  }
+
+  late final _bunny_core_backfill_inkbunny_detailsPtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.UnsignedInt Function(
+            ffi.Pointer<bunny_core_t>,
+            ffi.Pointer<bunny_core_backfill_stats_t>,
+          )
+        >
+      >('bunny_core_backfill_inkbunny_details');
+  late final _bunny_core_backfill_inkbunny_details =
+      _bunny_core_backfill_inkbunny_detailsPtr
+          .asFunction<
+            int Function(
+              ffi.Pointer<bunny_core_t>,
+              ffi.Pointer<bunny_core_backfill_stats_t>,
             )
           >();
 
@@ -2175,7 +2315,15 @@ enum bunny_core_result_t {
 
   /// an e621/Inkbunny client call failed (network, auth, ...)
   BUNNY_CORE_ERR_SITE(4),
-  BUNNY_CORE_ERR_UNKNOWN(5);
+
+  /// The site call itself succeeded, but what it returned can't be shown in
+  /// this app (M28) -- e.g. an Inkbunny submission whose primary file is
+  /// Shockwave/Flash (application/x-shockwave-flash), which has no runtime
+  /// here and no preview/thumbnail the API can fall back to. Distinct from
+  /// BUNNY_CORE_ERR_SITE so logs/callers can tell "the network/site call
+  /// failed" apart from "it worked, but this is deliberately unsupported."
+  BUNNY_CORE_ERR_UNSUPPORTED_FORMAT(5),
+  BUNNY_CORE_ERR_UNKNOWN(6);
 
   final int value;
   const bunny_core_result_t(this.value);
@@ -2186,7 +2334,8 @@ enum bunny_core_result_t {
     2 => BUNNY_CORE_ERR_NOT_FOUND,
     3 => BUNNY_CORE_ERR_DB,
     4 => BUNNY_CORE_ERR_SITE,
-    5 => BUNNY_CORE_ERR_UNKNOWN,
+    5 => BUNNY_CORE_ERR_UNSUPPORTED_FORMAT,
+    6 => BUNNY_CORE_ERR_UNKNOWN,
     _ => throw ArgumentError('Unknown value for bunny_core_result_t: $value'),
   };
 }
@@ -2453,6 +2602,43 @@ final class bunny_db_post_tag_t extends ffi.Struct {
 
 final class bunny_db_post_tag_list_t extends ffi.Struct {
   external ffi.Pointer<bunny_db_post_tag_t> items;
+
+  @ffi.Size()
+  external int count;
+}
+
+/// One file on a post (M28) -- read-side counterpart of
+/// bunny_db_post_file_upsert_t (bunny_db/db.h). Feeds a multi-file Inkbunny
+/// submission's (Picture Series/Comic/Portfolio/Music - Album) gallery/track
+/// list in the post detail view; a single-file post still has exactly one of
+/// these (the same file posts.file_url etc. already represent).
+final class bunny_db_post_file_t extends ffi.Struct {
+  external ffi.Pointer<ffi.Char> file_url;
+
+  /// may be NULL
+  external ffi.Pointer<ffi.Char> sample_url;
+
+  /// may be NULL
+  external ffi.Pointer<ffi.Char> preview_url;
+
+  /// may be NULL
+  external ffi.Pointer<ffi.Char> file_ext;
+
+  /// may be NULL
+  external ffi.Pointer<ffi.Char> file_md5;
+
+  @ffi.Int()
+  external int width;
+
+  @ffi.Int()
+  external int height;
+
+  /// may be NULL
+  external ffi.Pointer<ffi.Char> mimetype;
+}
+
+final class bunny_db_post_file_list_t extends ffi.Struct {
+  external ffi.Pointer<bunny_db_post_file_t> items;
 
   @ffi.Size()
   external int count;
@@ -2745,17 +2931,39 @@ final class bunny_core_stats_report_t extends ffi.Struct {
 }
 
 final class bunny_core_blacklist_sync_stats_t extends ffi.Struct {
-  /// new single-tag entries imported
+  /// new rules imported (bare tags and, as of M28/M54, multi-tag/grammar lines alike)
   @ffi.Int()
   external int added;
 
-  /// entries that matched an existing local tag
+  /// entries that matched an existing local rule
   @ffi.Int()
   external int already_present;
 
-  /// e621 "AND" lines (e.g. "rating:e young") -- not yet a local blacklist concept
+  /// lines that failed to parse under e621's grammar (libs/tag_query) -- e.g. unbalanced parens
   @ffi.Int()
-  external int skipped_multi_tag;
+  external int skipped_invalid;
+}
+
+/// M28: a search-synced Inkbunny post only ever gets the partial field
+/// subset search results return (upsert_inkbunny_submission, sync.c) -- no
+/// tags, width/height forced to 0, possibly-stale comment_count. This
+/// periodically catches up to 100 such posts at a time (Inkbunny's own
+/// per-call cap on inkbunny_get_submissions) via one bulk fetch, called
+/// from the server scheduler only (server/src/scheduler.c) -- no FFI/HTTP
+/// exposure; standalone mode keeps relying on PostDetailScreen's existing
+/// per-post lazy refresh instead (M26.5).
+final class bunny_core_backfill_stats_t extends ffi.Struct {
+  /// thin ids looked at this call, capped at 100
+  @ffi.Int()
+  external int attempted;
+
+  /// of those, how many Inkbunny actually returned data for
+  @ffi.Int()
+  external int found;
+
+  /// 0 unless the whole batch call itself failed, in which case == attempted
+  @ffi.Int()
+  external int failed;
 }
 
 /// A pool's own metadata, fetched live (e621 only -- no persistence, no

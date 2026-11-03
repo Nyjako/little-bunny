@@ -2,6 +2,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:chewie/chewie.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:just_audio/just_audio.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:video_player/video_player.dart';
 
@@ -19,6 +20,7 @@ import '../util/mouse_drag_scroll_behavior.dart';
 import '../util/post_navigation.dart';
 import '../util/responsive.dart';
 import '../util/tag_query.dart';
+import '../widgets/audio_player_widget.dart';
 import '../widgets/download_progress_indicator.dart';
 import '../widgets/gif_player.dart';
 import '../widgets/rating_badge.dart';
@@ -41,6 +43,14 @@ enum _TagMenuAction { search, addToSearches, addToBlacklist, showWiki, copy, add
 const _imageExtensions = {'jpg', 'jpeg', 'png', 'gif', 'webp'};
 
 bool _isImage(BunnyPost post) => post.fileExt != null && _imageExtensions.contains(post.fileExt!.toLowerCase());
+
+/// Extensions routed through [GifPlayer] rather than a plain `Image` --
+/// gif and webp are the only formats here that can actually be animated;
+/// jpg/jpeg/png never are. Deliberately separate from `isGifExt`
+/// (util/media_type.dart), which has other callers (grid badges, M28's
+/// rating/media bitmask bucketing) that treat webp as a plain "image" for
+/// unrelated reasons -- this is purely a detail-view rendering decision.
+const _animatedViaGifPlayerExtensions = {'gif', 'webp'};
 
 /// Rebuilds [post] with the given fields adjusted -- used to optimistically
 /// reflect a favorite/vote action (M8.5.14) in the UI immediately, without
@@ -353,6 +363,24 @@ class _PostDetailPageState extends State<_PostDetailPage> {
   Future<BunnyPostRelationships>? _relationshipsFuture;
   Future<List<int>>? _poolIdsFuture;
 
+  /// Resolved contents of a multi-file Inkbunny submission (M28 Phase 3,
+  /// Picture Series/Comic/Portfolio) -- null until the live refresh below
+  /// resolves (search-sync only ever stores a single synthesized file, same
+  /// reason [_tagsFuture]/[_sourcesFuture] are gated the same way) and for
+  /// every e621 post, which never populates `post_files` at all. `_buildMedia`
+  /// treats null (or a single-entry list) identically to today's single-file
+  /// rendering -- the gallery UI only appears once this resolves with >1 entry.
+  List<BunnyPostFile>? _files;
+  int _filePageIndex = 0;
+
+  /// Lazily created on the first track tap (M28 Phase 4, Music - Album)
+  /// rather than one [AudioPlayer] per row -- eagerly creating N players
+  /// for an N-track album would mean preloading every track the moment the
+  /// post opens. This one shared player switches source via `setUrl`
+  /// whenever a different row is tapped.
+  AudioPlayer? _albumPlayer;
+  int? _albumPlayingIndex;
+
   /// Not `late final` like the futures above -- posting a new comment
   /// reassigns this to a fresh fetch so the new comment shows up without a
   /// full screen reload.
@@ -404,6 +432,13 @@ class _PostDetailPageState extends State<_PostDetailPage> {
       _relationshipsFuture = widget.repository.getPostRelationships(widget.post.id);
       _poolIdsFuture = widget.repository.getPostPoolIds(widget.post.id);
       _commentsFuture = widget.repository.getPostComments(widget.post.id);
+    }
+    if (widget.post.site == BunnySite.inkbunny) {
+      refreshedPost.then((_) => widget.repository.getPostFiles(widget.post.id)).then((files) {
+        if (mounted) {
+          setState(() => _files = files);
+        }
+      });
     }
 
     _maybeInitVideo(widget.post);
@@ -471,6 +506,7 @@ class _PostDetailPageState extends State<_PostDetailPage> {
   void dispose() {
     _chewieController?.dispose();
     _videoController?.dispose();
+    _albumPlayer?.dispose();
     _commentController.dispose();
     super.dispose();
   }
@@ -722,7 +758,37 @@ class _PostDetailPageState extends State<_PostDetailPage> {
     );
   }
 
+  /// True only once [_files] has resolved with more than one entry that are
+  /// *all* plain images -- the only shape the paging gallery below knows how
+  /// to render. A video (never observed with more than one file in practice)
+  /// or a bonus audio track alongside the art pages (seen live on a real
+  /// Picture Series submission) falls back to [_buildSingleFileMedia]'s
+  /// existing single-primary-file rendering untouched, same as any other
+  /// post -- no gallery controls, no behavior change.
+  bool get _hasImageGallery {
+    final files = _files;
+    return files != null && files.length > 1 && files.every((f) => _imageExtensions.contains(f.fileExt?.toLowerCase()));
+  }
+
+  /// Counterpart to [_hasImageGallery] for Inkbunny Music - Album
+  /// submissions -- true once [_files] resolves with more than one entry
+  /// that are all audio files.
+  bool get _hasAudioAlbum {
+    final files = _files;
+    return files != null && files.length > 1 && files.every((f) => isAudioExt(f.fileExt));
+  }
+
   Widget _buildMedia(AppLocalizations l10n) {
+    if (_hasImageGallery) {
+      return _buildImageGallery(_files!);
+    }
+    if (_hasAudioAlbum) {
+      return _buildAudioAlbum(_files!);
+    }
+    return _buildSingleFileMedia(l10n);
+  }
+
+  Widget _buildSingleFileMedia(AppLocalizations l10n) {
     final post = _post;
     final ext = post.fileExt?.toLowerCase();
     if (ext == null || post.fileUrl == null) {
@@ -735,29 +801,7 @@ class _PostDetailPageState extends State<_PostDetailPage> {
     final maxHeight = MediaQuery.sizeOf(context).height * 0.6;
     Widget bounded(Widget child) => ConstrainedBox(constraints: BoxConstraints(maxHeight: maxHeight), child: AspectRatio(aspectRatio: aspectRatio, child: child));
     if (_imageExtensions.contains(ext)) {
-      // Image's own loadingBuilder (standard ImageStream/ImageChunkEvent
-      // machinery), not CachedNetworkImage's progressIndicatorBuilder --
-      // the latter switches CachedNetworkImage's internal rendering onto a
-      // different, flutter_cache_manager-streaming-backed path that never
-      // settles under `flutter_test` (confirmed: it hung even the simplest
-      // tests in this screen's own test suite, unrelated to gifs at all).
-      // This uses the exact same CachedNetworkImageProvider plain
-      // CachedNetworkImage already resolves through, which is already
-      // proven compatible with this test suite's existing pumpAndSettle
-      // calls.
-      final content = isGifExt(ext)
-          ? GifPlayer(imageUrl: post.fileUrl!, httpHeaders: imageHeadersFor(post.site))
-          : Image(
-              image: CachedNetworkImageProvider(post.fileUrl!, headers: imageHeadersFor(post.site)),
-              fit: BoxFit.contain,
-              loadingBuilder: (context, child, loadingProgress) {
-                if (loadingProgress == null) {
-                  return child;
-                }
-                final total = loadingProgress.expectedTotalBytes;
-                return DownloadProgressIndicator(progress: total != null ? loadingProgress.cumulativeBytesLoaded / total : null);
-              },
-            );
+      final content = _buildImageContent(post.fileUrl!, ext, post.site);
       return GestureDetector(key: const Key('postDetailImageTapTarget'), onTap: _openFullScreenViewer, child: bounded(content));
     }
     if (isVideoExt(ext)) {
@@ -772,7 +816,133 @@ class _PostDetailPageState extends State<_PostDetailPage> {
         },
       );
     }
+    if (isAudioExt(ext)) {
+      return AudioPlayerWidget(key: ValueKey(post.fileUrl), url: post.fileUrl!, httpHeaders: imageHeadersFor(post.site));
+    }
     return SizedBox(height: 200, child: Center(child: Text(l10n.postDetailUnsupportedFormat(ext))));
+  }
+
+  /// Image's own loadingBuilder (standard ImageStream/ImageChunkEvent
+  /// machinery), not CachedNetworkImage's progressIndicatorBuilder -- the
+  /// latter switches CachedNetworkImage's internal rendering onto a
+  /// different, flutter_cache_manager-streaming-backed path that never
+  /// settles under `flutter_test` (confirmed: it hung even the simplest
+  /// tests in this screen's own test suite, unrelated to gifs at all). This
+  /// uses the exact same CachedNetworkImageProvider plain CachedNetworkImage
+  /// already resolves through, which is already proven compatible with this
+  /// test suite's existing pumpAndSettle calls.
+  Widget _buildImageContent(String fileUrl, String ext, BunnySite site) {
+    return _animatedViaGifPlayerExtensions.contains(ext)
+        ? GifPlayer(imageUrl: fileUrl, httpHeaders: imageHeadersFor(site))
+        : Image(
+            image: CachedNetworkImageProvider(fileUrl, headers: imageHeadersFor(site)),
+            fit: BoxFit.contain,
+            loadingBuilder: (context, child, loadingProgress) {
+              if (loadingProgress == null) {
+                return child;
+              }
+              final total = loadingProgress.expectedTotalBytes;
+              return DownloadProgressIndicator(progress: total != null ? loadingProgress.cumulativeBytesLoaded / total : null);
+            },
+          );
+  }
+
+  /// Explicit prev/next controls rather than a nested `PageView` -- this
+  /// widget already lives inside the outer sibling-posts `PageView`
+  /// (different-posts paging), and a horizontal-swipe `PageView` nested
+  /// inside another horizontal-swipe `PageView` is a well-known Flutter
+  /// gesture-conflict trap. Buttons also make the >1-file case trivial to
+  /// drive from a widget test (tap by key, no drag simulation needed).
+  Widget _buildImageGallery(List<BunnyPostFile> files) {
+    final index = _filePageIndex.clamp(0, files.length - 1);
+    final file = files[index];
+    final aspectRatio = (file.width > 0 && file.height > 0) ? file.width / file.height : 16 / 9;
+    final maxHeight = MediaQuery.sizeOf(context).height * 0.6;
+    Widget bounded(Widget child) => ConstrainedBox(constraints: BoxConstraints(maxHeight: maxHeight), child: AspectRatio(aspectRatio: aspectRatio, child: child));
+    final content = _buildImageContent(file.fileUrl, file.fileExt?.toLowerCase() ?? '', _post.site);
+    return Stack(
+      alignment: Alignment.bottomCenter,
+      children: [
+        GestureDetector(key: const Key('postDetailImageTapTarget'), onTap: _openFullScreenViewer, child: bounded(content)),
+        Padding(
+          padding: const EdgeInsets.only(bottom: 8),
+          child: DecoratedBox(
+            decoration: BoxDecoration(color: Colors.black54, borderRadius: BorderRadius.circular(20)),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                IconButton(
+                  key: const Key('postDetailGalleryPrevButton'),
+                  icon: const Icon(Icons.chevron_left, color: Colors.white),
+                  onPressed: index > 0 ? () => setState(() => _filePageIndex = index - 1) : null,
+                ),
+                Text('${index + 1}/${files.length}', style: const TextStyle(color: Colors.white)),
+                IconButton(
+                  key: const Key('postDetailGalleryNextButton'),
+                  icon: const Icon(Icons.chevron_right, color: Colors.white),
+                  onPressed: index < files.length - 1 ? () => setState(() => _filePageIndex = index + 1) : null,
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// Switches the single shared [_albumPlayer] to [index]'s track if it
+  /// isn't already the active one, otherwise just toggles play/pause on it
+  /// -- see [_albumPlayer]'s own doc comment for why one shared player is
+  /// used instead of one per row.
+  Future<void> _toggleAlbumTrack(int index, String url) async {
+    final player = _albumPlayer ??= AudioPlayer();
+    if (_albumPlayingIndex == index) {
+      if (player.playing) {
+        await player.pause();
+      } else {
+        await player.play();
+      }
+      return;
+    }
+    setState(() => _albumPlayingIndex = index);
+    await player.setUrl(url, headers: imageHeadersFor(_post.site));
+    await player.play();
+  }
+
+  /// A vertical track list rather than [_buildImageGallery]'s horizontal
+  /// paging -- reads more naturally for an album's track order than
+  /// swiping art pages does, and lets every track's label stay visible at
+  /// once instead of one-at-a-time.
+  Widget _buildAudioAlbum(List<BunnyPostFile> files) {
+    return ListView.builder(
+      key: const Key('postDetailAudioAlbumList'),
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      itemCount: files.length,
+      itemBuilder: (context, index) {
+        final file = files[index];
+        final segments = Uri.tryParse(file.fileUrl)?.pathSegments ?? const [];
+        final fileName = segments.isNotEmpty ? segments.last : '';
+        final label = fileName.isNotEmpty ? fileName : AppLocalizations.of(context)!.postDetailAudioTrackLabel(index + 1);
+        final isActiveTrack = _albumPlayingIndex == index;
+        final player = _albumPlayer;
+        return ListTile(
+          key: ValueKey('postDetailAudioTrack$index'),
+          leading: StreamBuilder<PlayerState>(
+            stream: isActiveTrack && player != null ? player.playerStateStream : const Stream.empty(),
+            builder: (context, snapshot) {
+              final playing = isActiveTrack && (snapshot.data?.playing ?? false);
+              return IconButton(
+                key: ValueKey('postDetailAudioTrackPlayButton$index'),
+                icon: Icon(playing ? Icons.pause_circle_filled : Icons.play_circle_fill),
+                onPressed: () => _toggleAlbumTrack(index, file.fileUrl),
+              );
+            },
+          ),
+          title: Text('${index + 1}. $label'),
+        );
+      },
+    );
   }
 
   Widget _metadataRow(String label, String value) => Padding(
