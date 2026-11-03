@@ -26,6 +26,9 @@ extern "C" {
  *     treating its own evaluated result as a single atom at the parent
  *     level. Nesting is capped at 10 levels; an empty group is a syntax
  *     error.
+ *   - At most 40 tags total (e621's own real limit) -- counted across the
+ *     whole query, including tags nested inside groups, not just the
+ *     top-level term list.
  *
  * Inkbunny's grammar (BUNNY_TAG_QUERY_DIALECT_INKBUNNY) is a strict
  * subset, confirmed against Inkbunny's own search help text: space-
