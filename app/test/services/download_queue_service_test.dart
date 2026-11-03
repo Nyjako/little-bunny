@@ -286,6 +286,33 @@ void main() {
     await waitUntilIdle(service);
   });
 
+  test('flush writes the current in-flight state immediately, not just every Nth item (M61)', () async {
+    final itemGate = Completer<void>();
+    final service = buildService(
+      client: MockClient((_) async {
+        await itemGate.future;
+        return http.Response.bytes([1, 2, 3], 200);
+      }),
+    );
+    final post = _post(id: 1);
+    repository.postsById[1] = post;
+
+    service.enqueue(post, repository);
+    // Mid-download, well before this item would ever hit the periodic
+    // _syncEveryNItems sync (there's only one item, so that threshold is
+    // never reached) -- this is exactly the "closed the app mid-batch"
+    // scenario flush() exists for (M61): a desktop exit hook must be able
+    // to capture state right now, not wait for the next batch boundary.
+    await service.flush();
+
+    final persistedFile = File('${(PathProviderPlatform.instance as _RealPathProviderPlatform).supportPath}/pending_downloads.json');
+    expect(await persistedFile.exists(), isTrue);
+    expect(await persistedFile.readAsString(), contains('${post.id}'));
+
+    itemGate.complete();
+    await waitUntilIdle(service);
+  });
+
   test('showStarting fires before the first HTTP request completes (M57 screen-lock fix)', () async {
     final firstItemGate = Completer<void>();
     final service = buildService(
