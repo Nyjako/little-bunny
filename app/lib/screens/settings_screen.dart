@@ -625,7 +625,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 child: TextField(
                   key: const Key('settingsBlacklistAddField'),
                   controller: _blacklistTagController,
-                  decoration: InputDecoration(labelText: l10n.settingsBlacklistAddLabel, errorText: _blacklistQueryError != null ? l10n.settingsBlacklistInvalidSyntax : null),
+                  decoration: InputDecoration(labelText: l10n.settingsBlacklistAddLabel, errorText: _blacklistQueryError != null ? l10n.tagQueryInvalidSyntax : null),
                   onSubmitted: (_) => _addBlacklistTag(),
                 ),
               ),

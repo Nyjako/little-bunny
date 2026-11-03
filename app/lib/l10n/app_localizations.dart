@@ -658,6 +658,12 @@ abstract class AppLocalizations {
   /// **'Query'**
   String get createSearchQueryField;
 
+  /// No description provided for @tagQueryInvalidSyntax.
+  ///
+  /// In en, this message translates to:
+  /// **'Invalid syntax'**
+  String get tagQueryInvalidSyntax;
+
   /// No description provided for @createSearchIntervalLabel.
   ///
   /// In en, this message translates to:
@@ -1701,12 +1707,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Add tag'**
   String get settingsBlacklistAddLabel;
-
-  /// No description provided for @settingsBlacklistInvalidSyntax.
-  ///
-  /// In en, this message translates to:
-  /// **'Invalid syntax'**
-  String get settingsBlacklistInvalidSyntax;
 
   /// No description provided for @settingsBlacklistSyncE621Button.
   ///

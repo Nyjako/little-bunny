@@ -90,4 +90,27 @@ void main() {
     final field = tester.widget<TextField>(find.widgetWithText(TextField, 'Query'));
     expect(field.controller!.text, 'cat -dogsled ');
   });
+
+  testWidgets('an invalid query shows an error and disables the Search button (M28/M54)', (WidgetTester tester) async {
+    final repository = FakeBunnyRepository();
+    repository.validateTagQueryResult = 0;
+
+    await tester.pumpWidget(_wrap(repository));
+    await tester.pumpAndSettle();
+
+    await tester.enterText(find.widgetWithText(TextField, 'Query'), '( unbalanced');
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Invalid syntax'), findsOneWidget);
+    expect(tester.widget<FilledButton>(find.widgetWithText(FilledButton, 'Search')).onPressed, isNull);
+
+    repository.validateTagQueryResult = null;
+    await tester.enterText(find.widgetWithText(TextField, 'Query'), 'fox -snow');
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Invalid syntax'), findsNothing);
+    expect(tester.widget<FilledButton>(find.widgetWithText(FilledButton, 'Search')).onPressed, isNotNull);
+  });
 }

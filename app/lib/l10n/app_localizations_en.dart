@@ -323,6 +323,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get createSearchQueryField => 'Query';
 
   @override
+  String get tagQueryInvalidSyntax => 'Invalid syntax';
+
+  @override
   String get createSearchIntervalLabel => 'Sync interval (hours)';
 
   @override
@@ -886,9 +889,6 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get settingsBlacklistAddLabel => 'Add tag';
-
-  @override
-  String get settingsBlacklistInvalidSyntax => 'Invalid syntax';
 
   @override
   String get settingsBlacklistSyncE621Button => 'Sync from e621';
