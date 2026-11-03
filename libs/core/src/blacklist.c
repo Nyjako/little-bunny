@@ -1,5 +1,6 @@
 #include "bunny_core/core.h"
 
+#include <bunny_tag_query/tag_query.h>
 #include <e621/client.h>
 
 #include <stdbool.h>
@@ -22,7 +23,11 @@ bunny_core_result_t bunny_core_blacklist_list(bunny_core_t *core, bunny_db_site_
 
 bunny_core_result_t bunny_core_blacklist_add(bunny_core_t *core, bunny_db_site_t site, const char *tag)
 {
-    if (!core) {
+    if (!core || !tag) {
+        return BUNNY_CORE_ERR_INVALID_ARG;
+    }
+    bunny_tag_query_dialect_t dialect = site == BUNNY_DB_SITE_INKBUNNY ? BUNNY_TAG_QUERY_DIALECT_INKBUNNY : BUNNY_TAG_QUERY_DIALECT_E621;
+    if (!bunny_tag_query_validate(tag, dialect, NULL)) {
         return BUNNY_CORE_ERR_INVALID_ARG;
     }
     bunny_core_db_lock(core);
@@ -85,8 +90,16 @@ bunny_core_result_t bunny_core_sync_e621_blacklist(bunny_core_t *core, bunny_cor
     }
 
     /* No strtok_r here (not available on MSVC) -- walk the raw buffer
-     * ourselves, splitting on '\n' and null-terminating each line in place. */
-    int added = 0, already_present = 0, skipped_multi_tag = 0;
+     * ourselves, splitting on '\n' and null-terminating each line in place.
+     *
+     * M28/M54: a line used to be skipped outright just for containing a
+     * space (e621's own multi-tag "AND" lines) -- now any line that parses
+     * under e621's grammar is stored verbatim (bunny_db_blacklist_add,
+     * unchanged -- it already accepts arbitrary text; only the ADD-time
+     * validation path, bunny_core_blacklist_add, hard-rejects a malformed
+     * one). Only a line that genuinely fails to parse is skipped and
+     * counted, which is a much narrower set than "has a space in it". */
+    int added = 0, already_present = 0, skipped_invalid = 0;
     char *cursor = raw;
     while (*cursor) {
         char *newline = strchr(cursor, '\n');
@@ -97,8 +110,8 @@ bunny_core_result_t bunny_core_sync_e621_blacklist(bunny_core_t *core, bunny_cor
         char *line = cursor;
         trim_line(&line);
         if (*line) {
-            if (strchr(line, ' ')) {
-                skipped_multi_tag++;
+            if (!bunny_tag_query_validate(line, BUNNY_TAG_QUERY_DIALECT_E621, NULL)) {
+                skipped_invalid++;
             } else {
                 bool already = false;
                 for (size_t i = 0; i < existing.count; i++) {
@@ -130,7 +143,7 @@ bunny_core_result_t bunny_core_sync_e621_blacklist(bunny_core_t *core, bunny_cor
     if (out_stats) {
         out_stats->added = added;
         out_stats->already_present = already_present;
-        out_stats->skipped_multi_tag = skipped_multi_tag;
+        out_stats->skipped_invalid = skipped_invalid;
     }
     return BUNNY_CORE_OK;
 }

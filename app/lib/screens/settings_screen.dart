@@ -280,7 +280,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       }
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(SnackBar(content: Text(l10n.settingsBlacklistSyncE621Result(stats.added, stats.alreadyPresent, stats.skippedMultiTag))));
+      ).showSnackBar(SnackBar(content: Text(l10n.settingsBlacklistSyncE621Result(stats.added, stats.alreadyPresent, stats.skippedInvalid))));
     } catch (_) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(l10n.settingsBlacklistSyncE621Failed)));

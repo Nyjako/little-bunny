@@ -894,9 +894,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String settingsBlacklistSyncE621Result(
     int added,
     int alreadyPresent,
-    int skippedMultiTag,
+    int skippedInvalid,
   ) {
-    return 'Added $added, $alreadyPresent already present, skipped $skippedMultiTag multi-tag rule(s)';
+    return 'Added $added, $alreadyPresent already present, skipped $skippedInvalid invalid rule(s)';
   }
 
   @override

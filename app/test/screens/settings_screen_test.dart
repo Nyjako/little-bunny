@@ -468,7 +468,7 @@ void main() {
 
   testWidgets('"Sync from e621" pulls the blacklist and shows a result snackbar (M27)', (WidgetTester tester) async {
     final repository = FakeBunnyRepository();
-    repository.syncE621BlacklistResult = const BunnyBlacklistSyncStats(added: 2, alreadyPresent: 1, skippedMultiTag: 1);
+    repository.syncE621BlacklistResult = const BunnyBlacklistSyncStats(added: 2, alreadyPresent: 1, skippedInvalid: 1);
     repository.blacklistBySite[BunnySite.e621] = {'brand_new', 'another_new'};
 
     await tester.pumpWidget(
@@ -497,7 +497,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(repository.syncE621BlacklistCallCount, 1);
-    expect(find.text('Added 2, 1 already present, skipped 1 multi-tag rule(s)'), findsOneWidget);
+    expect(find.text('Added 2, 1 already present, skipped 1 invalid rule(s)'), findsOneWidget);
     expect(find.text('brand_new'), findsOneWidget);
     expect(find.text('another_new'), findsOneWidget);
   });

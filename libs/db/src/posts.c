@@ -556,7 +556,7 @@ bunny_db_result_t bunny_db_search_has_result(bunny_db_t *db, int64_t search_id, 
     return (rc == SQLITE_ROW || rc == SQLITE_DONE) ? BUNNY_DB_OK : bunny_db_sqlite_rc_to_result(rc);
 }
 
-bunny_db_result_t bunny_db_search_list_posts(bunny_db_t *db, int64_t search_id, bool unseen_only, bool apply_blacklist, int rating_mask, int media_mask, int page, bunny_db_post_list_t *out_list)
+bunny_db_result_t bunny_db_search_list_posts(bunny_db_t *db, int64_t search_id, bunny_db_site_t site, bool unseen_only, bool apply_blacklist, int rating_mask, int media_mask, int page, bunny_db_post_list_t *out_list)
 {
     if (!db || !out_list || page < 1) {
         return BUNNY_DB_ERR_INVALID_ARG;
@@ -583,8 +583,12 @@ bunny_db_result_t bunny_db_search_list_posts(bunny_db_t *db, int64_t search_id, 
      * post carrying a tag blacklisted for its own site (M13.3) -- skipped
      * for a favorites search (see bunny_core_is_favorites_query), which is
      * meant to show everything favorited, not a filtered subset. Matching
-     * on t.site rather than joining the searches table means this works
-     * without knowing this search's own site.
+     * on t.site rather than joining the searches table means this clause
+     * itself doesn't need `site` at all -- it's only taken as a parameter
+     * for the SEPARATE complex-blacklist-rule pass below, over the page
+     * this query already returned (M28/M54, see
+     * bunny_db_post_is_blacklisted's own doc comment for what "complex"
+     * means and why this is a second C-side pass rather than more SQL).
      *
      * The two mask clauses (M28) are always present in all four variants,
      * unlike unseen_only/apply_blacklist's own all-or-nothing branching --
@@ -651,6 +655,46 @@ bunny_db_result_t bunny_db_search_list_posts(bunny_db_t *db, int64_t search_id, 
         }
         bunny_db_post_array_free(&arr);
         return bunny_db_sqlite_rc_to_result(rc);
+    }
+
+    /* Second pass (M28/M54): only runs when apply_blacklist is true AND
+     * `site` has at least one complex rule -- a site with none (today, for
+     * every existing user) costs nothing beyond the one indexed SELECT
+     * bunny_db_blacklist_fetch_complex_rules itself runs. Re-fetches each
+     * SURVIVING row's own tags (there's no way to push the full grammar
+     * down into the SQL above without itself re-implementing the grammar)
+     * and drops any that match, in place -- see this function's own doc
+     * comment above for why a page can come back shorter than
+     * BUNNY_DB_SEARCH_POSTS_PAGE_SIZE as a result. */
+    if (apply_blacklist && arr.count > 0) {
+        bunny_db_tag_query_node_ptr_array complex_asts;
+        bunny_db_result_t complex_result = bunny_db_blacklist_fetch_complex_rules(db, site, &complex_asts);
+        if (complex_result != BUNNY_DB_OK) {
+            for (size_t i = 0; i < arr.count; i++) {
+                bunny_db_post_free(&arr.items[i]);
+            }
+            bunny_db_post_array_free(&arr);
+            return complex_result;
+        }
+        if (complex_asts.count > 0) {
+            size_t write = 0;
+            for (size_t read = 0; read < arr.count; read++) {
+                bunny_db_string_list_t tag_names;
+                bunny_db_post_get_tag_names(db, arr.items[read].id, &tag_names);
+                bool blacklisted = false;
+                for (size_t i = 0; i < complex_asts.count && !blacklisted; i++) {
+                    blacklisted = bunny_tag_query_matches(complex_asts.items[i], (const char *const *)tag_names.items, tag_names.count);
+                }
+                bunny_db_string_list_free(&tag_names);
+                if (blacklisted) {
+                    bunny_db_post_free(&arr.items[read]);
+                } else {
+                    arr.items[write++] = arr.items[read];
+                }
+            }
+            arr.count = write;
+        }
+        bunny_db_blacklist_free_rule_asts(&complex_asts);
     }
 
     out_list->items = arr.items;
@@ -836,6 +880,51 @@ bunny_db_result_t bunny_db_post_get_tags_by_category(bunny_db_t *db, int64_t pos
             bunny_db_post_tag_free(&arr.items[i]);
         }
         bunny_db_post_tag_array_free(&arr);
+        return bunny_db_sqlite_rc_to_result(rc);
+    }
+
+    out_list->items = arr.items;
+    out_list->count = arr.count;
+    return BUNNY_DB_OK;
+}
+
+bunny_db_result_t bunny_db_post_get_tag_names(bunny_db_t *db, int64_t post_id, bunny_db_string_list_t *out_list)
+{
+    if (!db || !out_list) {
+        return BUNNY_DB_ERR_INVALID_ARG;
+    }
+    memset(out_list, 0, sizeof(*out_list));
+
+    const char *sql = "SELECT t.name FROM post_tags pt JOIN tags t ON t.id = pt.tag_id WHERE pt.post_id = ? ORDER BY t.name ASC;";
+    sqlite3_stmt *stmt = NULL;
+    if (sqlite3_prepare_v2(db->handle, sql, -1, &stmt, NULL) != SQLITE_OK) {
+        return BUNNY_DB_ERR_QUERY_FAILED;
+    }
+    sqlite3_bind_int64(stmt, 1, post_id);
+
+    bunny_db_string_array arr;
+    bunny_db_string_array_init(&arr);
+
+    int rc;
+    while ((rc = sqlite3_step(stmt)) == SQLITE_ROW) {
+        char *name = bunny_db_column_text_dup(stmt, 0);
+        if (!bunny_db_string_array_push(&arr, name)) {
+            sqlite3_finalize(stmt);
+            free(name);
+            for (size_t i = 0; i < arr.count; i++) {
+                free(arr.items[i]);
+            }
+            bunny_db_string_array_free(&arr);
+            return BUNNY_DB_ERR_UNKNOWN;
+        }
+    }
+    sqlite3_finalize(stmt);
+
+    if (rc != SQLITE_DONE) {
+        for (size_t i = 0; i < arr.count; i++) {
+            free(arr.items[i]);
+        }
+        bunny_db_string_array_free(&arr);
         return bunny_db_sqlite_rc_to_result(rc);
     }
 

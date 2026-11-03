@@ -398,9 +398,9 @@
   "settingsBlacklistEmpty": "No blacklisted tags yet.",
   "settingsBlacklistAddLabel": "Add tag",
   "settingsBlacklistSyncE621Button": "Sync from e621",
-  "settingsBlacklistSyncE621Result": "Added {added}, {alreadyPresent} already present, skipped {skippedMultiTag} multi-tag rule(s)",
+  "settingsBlacklistSyncE621Result": "Added {added}, {alreadyPresent} already present, skipped {skippedInvalid} invalid rule(s)",
   "@settingsBlacklistSyncE621Result": {
-    "placeholders": {"added": {"type": "int"}, "alreadyPresent": {"type": "int"}, "skippedMultiTag": {"type": "int"}}
+    "placeholders": {"added": {"type": "int"}, "alreadyPresent": {"type": "int"}, "skippedInvalid": {"type": "int"}}
   },
   "settingsBlacklistSyncE621Failed": "Couldn't sync from e621 -- check that an e621 account is configured",
 

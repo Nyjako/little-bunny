@@ -955,7 +955,7 @@ bunny_core_result_t bunny_core_preview_search(bunny_core_t *core, bunny_db_site_
             bool ok = upsert_e621_post(core->db, &posts.items[i], &post_id) == BUNNY_CORE_OK && bunny_db_post_get_by_id(core->db, post_id, &item) == BUNNY_DB_OK;
             bool blacklisted = false;
             if (ok && !skip_blacklist) {
-                bunny_db_post_is_blacklisted(core->db, post_id, &blacklisted);
+                bunny_db_post_is_blacklisted(core->db, BUNNY_DB_SITE_E621, post_id, &blacklisted);
             }
             if (ok && !blacklisted) {
                 bunny_core_post_array_push(&arr, item);
@@ -1002,7 +1002,7 @@ bunny_core_result_t bunny_core_preview_search(bunny_core_t *core, bunny_db_site_
             bool ok = upsert_inkbunny_submission(core->db, &submissions.items[i], &post_id) == BUNNY_CORE_OK && bunny_db_post_get_by_id(core->db, post_id, &item) == BUNNY_DB_OK;
             bool blacklisted = false;
             if (ok && !skip_blacklist) {
-                bunny_db_post_is_blacklisted(core->db, post_id, &blacklisted);
+                bunny_db_post_is_blacklisted(core->db, BUNNY_DB_SITE_INKBUNNY, post_id, &blacklisted);
             }
             if (ok && !blacklisted) {
                 bunny_core_post_array_push(&arr, item);

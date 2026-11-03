@@ -1361,9 +1361,14 @@ class BunnyCoreFfiBindings {
         )
       >();
 
-  /// --- Tag blacklist (M13.3) -- thin pass-throughs to bunny_db_blacklist_*.
+  /// --- Tag blacklist (M13.3, M28/M54) -- thin pass-throughs to bunny_db_blacklist_*.
   /// See bunny_db/db.h for which post-listing query the blacklist does (and
-  /// deliberately does not) apply to.
+  /// deliberately does not) apply to. bunny_core_blacklist_add validates
+  /// `tag` (now really "the rule's raw text" -- see bunny_db's own blacklist
+  /// doc comment) under `site`'s own e621/Inkbunny grammar dialect (libs/
+  /// tag_query) before writing it, returning BUNNY_CORE_ERR_INVALID_ARG for
+  /// anything that fails to parse -- the one write path where rejecting bad
+  /// input outright, rather than storing-and-never-matching it, is correct.
   bunny_core_result_t bunny_core_blacklist_list(
     ffi.Pointer<bunny_core_t> core,
     bunny_db_site_t site,
@@ -1445,17 +1450,18 @@ class BunnyCoreFfiBindings {
 
   /// Pulls the e621 account's own blacklist (My Account -> Blacklisted Tags on
   /// e621.net, see tools/e621_blacklist_experiment/e621_blacklist.py for the
-  /// API this mirrors) and imports every single-tag line that isn't already
-  /// present locally. Read-only on e621's side -- never writes anything back
-  /// to the site. Requires an e621 account to already be configured
+  /// API this mirrors) and imports every line that isn't already present
+  /// locally. Read-only on e621's side -- never writes anything back to the
+  /// site. Requires an e621 account to already be configured
   /// (bunny_core_account_set), since e621 only returns blacklisted_tags when
   /// authenticated as that same account -- returns BUNNY_CORE_ERR_SITE
-  /// otherwise (same as any other e621 call with no usable client). Lines with
-  /// more than one space-separated tag are e621's "AND" groups (match only
-  /// when every tag on that line matches a post); the local blacklist has no
-  /// such concept yet, so those are skipped and counted separately in
-  /// out_stats rather than silently dropped or misinterpreted as one literal
-  /// (space-containing) tag.
+  /// otherwise (same as any other e621 call with no usable client). A line
+  /// that fails to parse under e621's grammar (libs/tag_query) is skipped and
+  /// counted separately in out_stats rather than silently dropped or stored
+  /// as something that could never usefully match -- M28/M54 changed this
+  /// from "any line with a space is skipped" (e621's own multi-tag AND lines
+  /// used to be entirely unsupported) to "any line that parses is stored
+  /// verbatim," since the local blacklist now understands that same grammar.
   bunny_core_result_t bunny_core_sync_e621_blacklist(
     ffi.Pointer<bunny_core_t> core,
     ffi.Pointer<bunny_core_blacklist_sync_stats_t> out_stats,
@@ -2260,7 +2266,15 @@ enum bunny_core_result_t {
 
   /// an e621/Inkbunny client call failed (network, auth, ...)
   BUNNY_CORE_ERR_SITE(4),
-  BUNNY_CORE_ERR_UNKNOWN(5);
+
+  /// The site call itself succeeded, but what it returned can't be shown in
+  /// this app (M28) -- e.g. an Inkbunny submission whose primary file is
+  /// Shockwave/Flash (application/x-shockwave-flash), which has no runtime
+  /// here and no preview/thumbnail the API can fall back to. Distinct from
+  /// BUNNY_CORE_ERR_SITE so logs/callers can tell "the network/site call
+  /// failed" apart from "it worked, but this is deliberately unsupported."
+  BUNNY_CORE_ERR_UNSUPPORTED_FORMAT(5),
+  BUNNY_CORE_ERR_UNKNOWN(6);
 
   final int value;
   const bunny_core_result_t(this.value);
@@ -2271,7 +2285,8 @@ enum bunny_core_result_t {
     2 => BUNNY_CORE_ERR_NOT_FOUND,
     3 => BUNNY_CORE_ERR_DB,
     4 => BUNNY_CORE_ERR_SITE,
-    5 => BUNNY_CORE_ERR_UNKNOWN,
+    5 => BUNNY_CORE_ERR_UNSUPPORTED_FORMAT,
+    6 => BUNNY_CORE_ERR_UNKNOWN,
     _ => throw ArgumentError('Unknown value for bunny_core_result_t: $value'),
   };
 }
@@ -2867,17 +2882,17 @@ final class bunny_core_stats_report_t extends ffi.Struct {
 }
 
 final class bunny_core_blacklist_sync_stats_t extends ffi.Struct {
-  /// new single-tag entries imported
+  /// new rules imported (bare tags and, as of M28/M54, multi-tag/grammar lines alike)
   @ffi.Int()
   external int added;
 
-  /// entries that matched an existing local tag
+  /// entries that matched an existing local rule
   @ffi.Int()
   external int already_present;
 
-  /// e621 "AND" lines (e.g. "rating:e young") -- not yet a local blacklist concept
+  /// lines that failed to parse under e621's grammar (libs/tag_query) -- e.g. unbalanced parens
   @ffi.Int()
-  external int skipped_multi_tag;
+  external int skipped_invalid;
 }
 
 /// M28: a search-synced Inkbunny post only ever gets the partial field
