@@ -500,6 +500,11 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String postDetailAudioTrackLabel(int position) {
+    return 'Track $position';
+  }
+
+  @override
   String get postDetailTitleLabel => 'Title';
 
   @override

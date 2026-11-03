@@ -976,6 +976,12 @@ abstract class AppLocalizations {
   /// **'This file format ({extension}) isn\'t supported yet'**
   String postDetailUnsupportedFormat(String extension);
 
+  /// No description provided for @postDetailAudioTrackLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Track {position}'**
+  String postDetailAudioTrackLabel(int position);
+
   /// No description provided for @postDetailTitleLabel.
   ///
   /// In en, this message translates to:

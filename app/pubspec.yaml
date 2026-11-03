@@ -64,6 +64,10 @@ dependencies:
   mobile_scanner: ^7.4.2
   wakelock_plus: ^1.8.2
   flutter_cache_manager: ^3.4.5
+  just_audio: ^0.10.6
+  just_audio_media_kit: ^2.1.0
+  media_kit_libs_linux: ^1.2.1
+  media_kit_libs_windows_audio: ^1.0.9
 
 dev_dependencies:
   flutter_test:
@@ -81,6 +85,7 @@ dev_dependencies:
   flutter_launcher_icons: ^0.14.4
   wakelock_plus_platform_interface: ^1.7.0
   file: ^7.0.1
+  just_audio_platform_interface: ^4.6.0
 
 # shared_preferences_android 2.5.0's only change is "Updates internal
 # implementation to use Pigeon JNI" -- a full rewrite of the native bridge,

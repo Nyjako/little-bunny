@@ -7,6 +7,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
+import 'package:just_audio_platform_interface/just_audio_platform_interface.dart';
 import 'package:little_bunny/repository/bunny_models.dart';
 import 'package:little_bunny/screens/create_search_screen.dart';
 import 'package:little_bunny/screens/post_detail_screen.dart';
@@ -16,6 +17,7 @@ import 'package:little_bunny/services/download_manager.dart';
 import 'package:little_bunny/services/download_queue_service.dart';
 import 'package:little_bunny/settings/display_settings_store.dart';
 import 'package:little_bunny/settings/download_settings_store.dart';
+import 'package:little_bunny/widgets/audio_player_widget.dart';
 import 'package:little_bunny/widgets/gif_player.dart';
 import 'package:path_provider_platform_interface/path_provider_platform_interface.dart';
 import 'package:photo_view/photo_view_gallery.dart';
@@ -25,6 +27,7 @@ import 'package:video_player_platform_interface/video_player_platform_interface.
 import 'package:wakelock_plus/wakelock_plus.dart';
 
 import '../fakes/fake_bunny_repository.dart';
+import '../fakes/fake_just_audio_platform.dart';
 import '../fakes/fake_path_provider.dart';
 import '../fakes/fake_video_player_platform.dart';
 import '../fakes/fake_wakelock_plus_platform.dart';
@@ -121,6 +124,7 @@ void main() {
 
   setUpAll(() {
     VideoPlayerPlatform.instance = FakeVideoPlayerPlatform();
+    JustAudioPlatform.instance = FakeJustAudioPlatform();
     wakelockPlusPlatformInstance = wakelockPlatform;
   });
 
@@ -622,6 +626,45 @@ void main() {
       expect(find.byKey(const Key('postDetailGalleryPrevButton')), findsNothing);
       expect(find.byKey(const Key('postDetailGalleryNextButton')), findsNothing);
       expect(_findCachedNetworkImage(), findsOneWidget);
+    });
+  });
+
+  group('audio playback (M28 Phase 4)', () {
+    testWidgets('shows one AudioPlayerWidget for a single mp3 post', (WidgetTester tester) async {
+      final repository = FakeBunnyRepository();
+      final post = _post(fileExt: 'mp3');
+
+      await tester.runAsync(() async {
+        await tester.pumpWidget(wrapWithLocalization(PostDetailScreen(post: post, repository: repository, displaySettingsStore: const DisplaySettingsStore(), downloadSettingsStore: const DownloadSettingsStore(), downloadQueueService: _downloadQueueService())));
+        await Future<void>.delayed(const Duration(milliseconds: 300));
+      });
+      await tester.pump();
+
+      expect(find.byType(AudioPlayerWidget), findsOneWidget);
+      expect(find.byKey(const Key('postDetailAudioAlbumList')), findsNothing);
+    });
+
+    testWidgets('a multi-track Music - Album post shows a track list, not the image gallery', (WidgetTester tester) async {
+      final repository = FakeBunnyRepository();
+      final post = _post(site: BunnySite.inkbunny, fileExt: 'mp3');
+      repository.filesByPostId[1] = const [
+        BunnyPostFile(fileUrl: 'https://example.invalid/track1.mp3', fileExt: 'mp3', width: 0, height: 0),
+        BunnyPostFile(fileUrl: 'https://example.invalid/track2.mp3', fileExt: 'mp3', width: 0, height: 0),
+        BunnyPostFile(fileUrl: 'https://example.invalid/track3.mp3', fileExt: 'mp3', width: 0, height: 0),
+      ];
+
+      await tester.runAsync(() async {
+        await tester.pumpWidget(wrapWithLocalization(PostDetailScreen(post: post, repository: repository, displaySettingsStore: const DisplaySettingsStore(), downloadSettingsStore: const DownloadSettingsStore(), downloadQueueService: _downloadQueueService())));
+        await Future<void>.delayed(const Duration(milliseconds: 300));
+      });
+      await tester.pump();
+
+      expect(find.byKey(const Key('postDetailAudioAlbumList')), findsOneWidget);
+      expect(find.byKey(const Key('postDetailGalleryPrevButton')), findsNothing);
+      expect(find.byKey(const Key('postDetailGalleryNextButton')), findsNothing);
+      expect(find.text('1. track1.mp3'), findsOneWidget);
+      expect(find.text('2. track2.mp3'), findsOneWidget);
+      expect(find.text('3. track3.mp3'), findsOneWidget);
     });
   });
 
