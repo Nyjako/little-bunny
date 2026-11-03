@@ -385,6 +385,16 @@ class _SyncE621BlacklistRequest extends _Request {
   const _SyncE621BlacklistRequest();
 }
 
+/// Syntax-only validation (M28/M54), not blacklist-specific -- also used by
+/// the search query editor (Phase 4). Lives near the blacklist requests
+/// since that's its first/primary caller.
+class _TagQueryValidateRequest extends _Request {
+  final String text;
+  final String site;
+
+  const _TagQueryValidateRequest(this.text, this.site);
+}
+
 class _GetPostPoolIdsRequest extends _Request {
   final int postId;
 
@@ -1017,6 +1027,11 @@ Object? _dispatch(Pointer<bunny_core_t>? core, _Request request, void Function(P
         final outStats = arena<bunny_core_blacklist_sync_stats_t>();
         _check(_bindings.bunny_core_sync_e621_blacklist(c, outStats));
         return _blacklistSyncStatsToMap(outStats.ref);
+      case _TagQueryValidateRequest r:
+        final validPtr = arena<Bool>();
+        final errorPosPtr = arena<Size>();
+        _check(_bindings.bunny_core_tag_query_validate(c, _siteFromWire(r.site), r.text.toNativeUtf8(allocator: arena).cast(), validPtr, errorPosPtr));
+        return validPtr.value ? null : errorPosPtr.value;
       case _GetPostPoolIdsRequest r:
         return _handleGetPostPoolIds(c, r);
       case _FetchAndCachePostRequest r:
@@ -1214,6 +1229,10 @@ class BunnyCoreNative {
   Future<void> blacklistRemove(String site, String tag) => _send<void>(_BlacklistRemoveRequest(site, tag));
 
   Future<Map<String, Object?>> syncE621Blacklist() => _send<Map<String, Object?>>(const _SyncE621BlacklistRequest());
+
+  /// Returns null if `text` is syntactically valid, otherwise the byte
+  /// offset of the problem (M28/M54).
+  Future<int?> tagQueryValidate(String text, String site) => _send<int?>(_TagQueryValidateRequest(text, site));
 
   Future<Map<String, Object?>> getPostRelationships(int postId) => _send<Map<String, Object?>>(_GetPostRelationshipsRequest(postId));
 

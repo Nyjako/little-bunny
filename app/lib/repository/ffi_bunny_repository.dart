@@ -350,6 +350,9 @@ class FfiBunnyRepository implements BunnyRepository {
   Future<BunnyBlacklistSyncStats> syncE621Blacklist() async => _blacklistSyncStatsFromMap(await _wrapped(() => _native.syncE621Blacklist()));
 
   @override
+  Future<int?> validateTagQuery(BunnySite site, String text) => _wrapped(() => _native.tagQueryValidate(text, site.toWireString()));
+
+  @override
   Future<BunnyPoolInfo> fetchPool(int poolId) async {
     final map = await _wrapped(() => _native.fetchPool(poolId));
     return _poolInfoFromMap(map);

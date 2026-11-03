@@ -429,6 +429,17 @@ class FakeBunnyRepository implements BunnyRepository {
     return syncE621BlacklistResult;
   }
 
+  /// Result returned by [validateTagQuery] regardless of `text` -- doesn't
+  /// re-implement the real grammar (libs/tag_query) in Dart just for the
+  /// fake; a test drives a "type invalid, see error, then fix it" flow by
+  /// setting this to the value the real validator would return for each
+  /// piece of text right before triggering that text change. Defaults to
+  /// "always valid," matching the common case most tests don't care about.
+  int? validateTagQueryResult;
+
+  @override
+  Future<int?> validateTagQuery(BunnySite site, String text) async => validateTagQueryResult;
+
   @override
   Future<int> fetchPost(BunnySite site, int externalId) async {
     final key = '${site.toWireString()}:$externalId';
