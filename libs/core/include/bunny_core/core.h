@@ -279,6 +279,16 @@ typedef struct
  * verbatim," since the local blacklist now understands that same grammar. */
 bunny_core_result_t bunny_core_sync_e621_blacklist(bunny_core_t *core, bunny_core_blacklist_sync_stats_t *out_stats);
 
+/* Syntax-only validation (M28/M54) under `site`'s own grammar dialect (full
+ * e621 grammar, or Inkbunny's narrower AND+exclude-only subset -- see libs/
+ * tag_query's own dialect doc comment) -- never touches the DB or any post's
+ * tags, just whether `text` parses. *out_valid is true/false; when false,
+ * *out_error_pos (if out_error_pos is non-NULL) is the byte offset into
+ * `text` nearest the problem, for highlighting in a text field. Used by
+ * both the blacklist editor's live-typing check and (Phase 4) the search
+ * query editor's -- the one grammar backs both UIs. */
+bunny_core_result_t bunny_core_tag_query_validate(bunny_core_t *core, bunny_db_site_t site, const char *text, bool *out_valid, size_t *out_error_pos);
+
 /* Fetches a single post live from its site and caches it (upserting into the
  * local post cache exactly like a sync pass would for one post), without
  * requiring it to already be linked to any saved search. Used when a

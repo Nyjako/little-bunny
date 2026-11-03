@@ -157,8 +157,57 @@ static int blacklist_e621_sync_handler(struct mg_connection *conn, void *cbdata)
     return handle_post_blacklist_e621_sync(conn, ctx);
 }
 
+/* Syntax-only (M28/M54) -- missing `text` is treated as an empty string
+ * (vacuously valid, see bunny_tag_query_validate's own doc comment), not an
+ * error, so a live-typing field's very first keystroke doesn't need
+ * special-casing client-side. */
+static int handle_get_tag_query_validate(struct mg_connection *conn, server_context_t *ctx, const char *query_string)
+{
+    char site_value[16];
+    char text_value[1024];
+    bool has_site = query_string && mg_get_var(query_string, strlen(query_string), "site", site_value, sizeof(site_value)) > 0;
+    bool has_text = query_string && mg_get_var(query_string, strlen(query_string), "text", text_value, sizeof(text_value)) > 0;
+
+    bunny_db_site_t site;
+    if (!has_site || !server_route_parse_site(site_value, &site)) {
+        return server_json_respond_error(conn, BUNNY_CORE_ERR_INVALID_ARG);
+    }
+
+    bool valid = false;
+    size_t error_pos = 0;
+    bunny_core_result_t result = bunny_core_tag_query_validate(ctx->core, site, has_text ? text_value : "", &valid, &error_pos);
+    if (result != BUNNY_CORE_OK) {
+        return server_json_respond_error(conn, result);
+    }
+
+    cJSON *response = cJSON_CreateObject();
+    cJSON_AddBoolToObject(response, "valid", valid);
+    if (!valid) {
+        cJSON_AddNumberToObject(response, "error_pos", (double)error_pos);
+    }
+    int status = server_json_respond(conn, 200, response);
+    cJSON_Delete(response);
+    return status;
+}
+
+static int tag_query_validate_handler(struct mg_connection *conn, void *cbdata)
+{
+    server_context_t *ctx = (server_context_t *)cbdata;
+    if (!server_auth_check_request(ctx->auth, conn)) {
+        return 401;
+    }
+
+    const struct mg_request_info *info = mg_get_request_info(conn);
+    if (strcmp(info->request_method, "GET") != 0) {
+        return server_json_respond_error(conn, BUNNY_CORE_ERR_NOT_FOUND);
+    }
+
+    return handle_get_tag_query_validate(conn, ctx, info->query_string);
+}
+
 void server_routes_register_blacklist(struct mg_context *mg_ctx, server_context_t *ctx)
 {
     mg_set_request_handler(mg_ctx, "/blacklist", blacklist_handler, ctx);
     mg_set_request_handler(mg_ctx, "/blacklist/e621/sync", blacklist_e621_sync_handler, ctx);
+    mg_set_request_handler(mg_ctx, "/tag_query/validate", tag_query_validate_handler, ctx);
 }

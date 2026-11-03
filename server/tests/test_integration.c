@@ -700,6 +700,37 @@ void test_blacklist_add_list_remove(void)
     free(response.data);
 }
 
+void test_tag_query_validate(void)
+{
+    response_buffer_t response = {0};
+
+    long status = do_request("GET", "/tag_query/validate?site=e621&text=cat%20-dog", NULL, &response, true, NULL);
+    TEST_ASSERT_EQUAL(200, status);
+    TEST_ASSERT_NOT_NULL(strstr(response.data, "\"valid\":true"));
+    free(response.data);
+    memset(&response, 0, sizeof(response));
+
+    status = do_request("GET", "/tag_query/validate?site=e621&text=-", NULL, &response, true, NULL);
+    TEST_ASSERT_EQUAL(200, status);
+    TEST_ASSERT_NOT_NULL(strstr(response.data, "\"valid\":false"));
+    TEST_ASSERT_NOT_NULL(strstr(response.data, "\"error_pos\":1"));
+    free(response.data);
+    memset(&response, 0, sizeof(response));
+
+    /* Inkbunny's narrower dialect rejects e621-only syntax. */
+    status = do_request("GET", "/tag_query/validate?site=inkbunny&text=%7Ecat", NULL, &response, true, NULL);
+    TEST_ASSERT_EQUAL(200, status);
+    TEST_ASSERT_NOT_NULL(strstr(response.data, "\"valid\":false"));
+    free(response.data);
+    memset(&response, 0, sizeof(response));
+
+    /* Missing text defaults to an empty (vacuously valid) string. */
+    status = do_request("GET", "/tag_query/validate?site=e621", NULL, &response, true, NULL);
+    TEST_ASSERT_EQUAL(200, status);
+    TEST_ASSERT_NOT_NULL(strstr(response.data, "\"valid\":true"));
+    free(response.data);
+}
+
 void test_blacklist_e621_sync_imports_multi_tag_lines_and_skips_invalid_ones(void)
 {
     response_buffer_t response = {0};
@@ -1387,6 +1418,7 @@ int main(void)
     RUN_TEST(test_full_account_search_sync_favorite_flow);
     RUN_TEST(test_sync_single_search_forces_even_when_not_due);
     RUN_TEST(test_blacklist_add_list_remove);
+    RUN_TEST(test_tag_query_validate);
     RUN_TEST(test_blacklist_e621_sync_imports_multi_tag_lines_and_skips_invalid_ones);
     RUN_TEST(test_search_pin_and_unpin);
     RUN_TEST(test_search_merge_duplicate);

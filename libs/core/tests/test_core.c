@@ -214,6 +214,39 @@ void test_integrity_check_rejects_a_null_core(void)
     TEST_ASSERT_EQUAL(BUNNY_CORE_ERR_INVALID_ARG, bunny_core_integrity_check(NULL, NULL));
 }
 
+void test_tag_query_validate_accepts_valid_syntax(void)
+{
+    bool valid = false;
+    size_t error_pos = 999;
+    TEST_ASSERT_EQUAL(BUNNY_CORE_OK, bunny_core_tag_query_validate(g_core, BUNNY_DB_SITE_E621, "cat ~dog -bird ( ~a ~b )", &valid, &error_pos));
+    TEST_ASSERT_TRUE(valid);
+}
+
+void test_tag_query_validate_rejects_invalid_syntax_with_an_error_position(void)
+{
+    bool valid = true;
+    size_t error_pos = 999;
+    TEST_ASSERT_EQUAL(BUNNY_CORE_OK, bunny_core_tag_query_validate(g_core, BUNNY_DB_SITE_E621, "(  )", &valid, &error_pos));
+    TEST_ASSERT_FALSE(valid);
+    TEST_ASSERT_EQUAL(0, (int)error_pos);
+}
+
+void test_tag_query_validate_uses_inkbunnys_narrower_dialect(void)
+{
+    bool valid = true;
+    TEST_ASSERT_EQUAL(BUNNY_CORE_OK, bunny_core_tag_query_validate(g_core, BUNNY_DB_SITE_INKBUNNY, "~cat", &valid, NULL));
+    TEST_ASSERT_FALSE(valid);
+
+    TEST_ASSERT_EQUAL(BUNNY_CORE_OK, bunny_core_tag_query_validate(g_core, BUNNY_DB_SITE_INKBUNNY, "leopard -snow", &valid, NULL));
+    TEST_ASSERT_TRUE(valid);
+}
+
+void test_tag_query_validate_rejects_a_null_core(void)
+{
+    bool valid = false;
+    TEST_ASSERT_EQUAL(BUNNY_CORE_ERR_INVALID_ARG, bunny_core_tag_query_validate(NULL, BUNNY_DB_SITE_E621, "cat", &valid, NULL));
+}
+
 int main(void)
 {
     UNITY_BEGIN();
@@ -230,5 +263,9 @@ int main(void)
     RUN_TEST(test_table_stats_rejects_a_null_core);
     RUN_TEST(test_integrity_check_passes_through_to_bunny_db);
     RUN_TEST(test_integrity_check_rejects_a_null_core);
+    RUN_TEST(test_tag_query_validate_accepts_valid_syntax);
+    RUN_TEST(test_tag_query_validate_rejects_invalid_syntax_with_an_error_position);
+    RUN_TEST(test_tag_query_validate_uses_inkbunnys_narrower_dialect);
+    RUN_TEST(test_tag_query_validate_rejects_a_null_core);
     return UNITY_END();
 }
