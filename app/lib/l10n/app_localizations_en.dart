@@ -888,6 +888,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get settingsBlacklistAddLabel => 'Add tag';
 
   @override
+  String get settingsBlacklistInvalidSyntax => 'Invalid syntax';
+
+  @override
   String get settingsBlacklistSyncE621Button => 'Sync from e621';
 
   @override

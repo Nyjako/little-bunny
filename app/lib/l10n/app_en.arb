@@ -397,6 +397,7 @@
   "settingsBlacklistSection": "Blacklist",
   "settingsBlacklistEmpty": "No blacklisted tags yet.",
   "settingsBlacklistAddLabel": "Add tag",
+  "settingsBlacklistInvalidSyntax": "Invalid syntax",
   "settingsBlacklistSyncE621Button": "Sync from e621",
   "settingsBlacklistSyncE621Result": "Added {added}, {alreadyPresent} already present, skipped {skippedInvalid} invalid rule(s)",
   "@settingsBlacklistSyncE621Result": {

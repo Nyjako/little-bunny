@@ -1702,6 +1702,12 @@ abstract class AppLocalizations {
   /// **'Add tag'**
   String get settingsBlacklistAddLabel;
 
+  /// No description provided for @settingsBlacklistInvalidSyntax.
+  ///
+  /// In en, this message translates to:
+  /// **'Invalid syntax'**
+  String get settingsBlacklistInvalidSyntax;
+
   /// No description provided for @settingsBlacklistSyncE621Button.
   ///
   /// In en, this message translates to:
