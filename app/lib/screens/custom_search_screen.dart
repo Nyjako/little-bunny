@@ -44,16 +44,25 @@ class _CustomSearchScreenState extends State<CustomSearchScreen> {
   List<BunnyTagStat> _suggestions = [];
   Timer? _debounce;
 
+  /// Byte offset of the first syntax problem in the query field's current
+  /// text (M28/M54), or null if it's valid. See CreateSearchScreen's own
+  /// doc comment for the full pattern this mirrors.
+  int? _queryError;
+  Timer? _queryValidateDebounce;
+
   @override
   void initState() {
     super.initState();
     _queryController.addListener(_onQueryChanged);
+    _queryController.addListener(_onQueryChangedValidate);
   }
 
   @override
   void dispose() {
     _debounce?.cancel();
+    _queryValidateDebounce?.cancel();
     _queryController.removeListener(_onQueryChanged);
+    _queryController.removeListener(_onQueryChangedValidate);
     _queryController.dispose();
     super.dispose();
   }
@@ -80,6 +89,17 @@ class _CustomSearchScreenState extends State<CustomSearchScreen> {
     });
   }
 
+  void _onQueryChangedValidate() {
+    _queryValidateDebounce?.cancel();
+    final text = _queryController.text;
+    _queryValidateDebounce = Timer(const Duration(milliseconds: 300), () async {
+      final errorPos = await widget.repository.validateTagQuery(_site, text);
+      if (mounted) {
+        setState(() => _queryError = errorPos);
+      }
+    });
+  }
+
   void _applySuggestion(String tag) {
     final (newText, newCursor) = applyTagSuggestion(_queryController.text, _cursorOffset, tag);
     _queryController.value = TextEditingValue(text: newText, selection: TextSelection.collapsed(offset: newCursor));
@@ -88,7 +108,7 @@ class _CustomSearchScreenState extends State<CustomSearchScreen> {
 
   void _search() {
     final query = _queryController.text.trim();
-    if (query.isEmpty) {
+    if (query.isEmpty || _queryError != null) {
       return;
     }
     Navigator.push(
@@ -118,16 +138,23 @@ class _CustomSearchScreenState extends State<CustomSearchScreen> {
             SegmentedButton<BunnySite>(
               segments: const [ButtonSegment(value: BunnySite.e621, label: Text('e621')), ButtonSegment(value: BunnySite.inkbunny, label: Text('Inkbunny'))],
               selected: {_site},
-              onSelectionChanged: (selection) => setState(() => _site = selection.first),
+              onSelectionChanged: (selection) {
+                setState(() => _site = selection.first);
+                _onQueryChangedValidate();
+              },
             ),
             const SizedBox(height: 16),
-            TextField(controller: _queryController, decoration: InputDecoration(labelText: l10n.createSearchQueryField), onSubmitted: (_) => _search()),
+            TextField(
+              controller: _queryController,
+              decoration: InputDecoration(labelText: l10n.createSearchQueryField, errorText: _queryError != null ? l10n.tagQueryInvalidSyntax : null),
+              onSubmitted: (_) => _search(),
+            ),
             if (_suggestions.isNotEmpty)
               Wrap(spacing: 8, children: _suggestions.map((stat) => ActionChip(label: Text('${stat.name} (${stat.count})'), onPressed: () => _applySuggestion(stat.name))).toList()),
             const SizedBox(height: 16),
             ValueListenableBuilder<TextEditingValue>(
               valueListenable: _queryController,
-              builder: (context, value, child) => FilledButton(onPressed: value.text.trim().isNotEmpty ? _search : null, child: Text(l10n.customSearchSubmit)),
+              builder: (context, value, child) => FilledButton(onPressed: value.text.trim().isNotEmpty && _queryError == null ? _search : null, child: Text(l10n.customSearchSubmit)),
             ),
           ],
         ),

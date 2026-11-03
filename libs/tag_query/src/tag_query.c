@@ -8,6 +8,14 @@
 
 #define BUNNY_TAG_QUERY_MAX_DEPTH 10
 
+/* e621's own real limit ("max 40 tags/search") -- a hard hint, enforced
+ * here (e621 dialect only; Inkbunny has no documented cap) so the local
+ * validator catches it before a real search attempt would fail remotely,
+ * same reasoning as the depth-10 cap. Counts every tag anywhere in the
+ * query, including nested inside groups -- it's a total, not a per-level
+ * count. */
+#define BUNNY_TAG_QUERY_MAX_TAGS 40
+
 typedef enum
 {
     BUNNY_TAG_QUERY_MODE_REQUIRED,
@@ -102,8 +110,11 @@ static bool is_delim(char c)
  * Stops at end-of-string, or (when in_group) at a ')' that properly closes
  * this level -- in that case *pos is left pointing AT the ')' (not
  * consumed), so the caller (the '(' handling branch below) can consume it
- * itself after also checking the child list isn't empty. */
-static bool parse_term_list(const char *text, size_t *pos, bunny_tag_query_dialect_t dialect, size_t depth, bool in_group, bunny_tag_query_node_t *group_node, size_t *out_error_pos)
+ * itself after also checking the child list isn't empty. `total_tags` is
+ * shared across the entire recursion (not reset per level) -- it's how
+ * BUNNY_TAG_QUERY_MAX_TAGS counts every tag in the query as one total,
+ * including ones nested inside groups. */
+static bool parse_term_list(const char *text, size_t *pos, bunny_tag_query_dialect_t dialect, size_t depth, bool in_group, bunny_tag_query_node_t *group_node, size_t *total_tags, size_t *out_error_pos)
 {
     bool first = true;
     for (;;) {
@@ -187,7 +198,7 @@ static bool parse_term_list(const char *text, size_t *pos, bunny_tag_query_diale
                 }
                 return false;
             }
-            if (!parse_term_list(text, pos, dialect, depth + 1, true, child, out_error_pos)) {
+            if (!parse_term_list(text, pos, dialect, depth + 1, true, child, total_tags, out_error_pos)) {
                 bunny_tag_query_free(child);
                 return false;
             }
@@ -242,6 +253,13 @@ static bool parse_term_list(const char *text, size_t *pos, bunny_tag_query_diale
                 }
                 return false;
             }
+            (*total_tags)++;
+            if (dialect == BUNNY_TAG_QUERY_DIALECT_E621 && *total_tags > BUNNY_TAG_QUERY_MAX_TAGS) {
+                if (out_error_pos) {
+                    *out_error_pos = tag_start;
+                }
+                return false; /* e621's own "max 40 tags/search" limit */
+            }
         }
         first = false;
     }
@@ -268,7 +286,8 @@ bool bunny_tag_query_parse(const char *text, bunny_tag_query_dialect_t dialect, 
     }
 
     size_t pos = 0;
-    if (!parse_term_list(text, &pos, dialect, 0, false, root, out_error_pos)) {
+    size_t total_tags = 0;
+    if (!parse_term_list(text, &pos, dialect, 0, false, root, &total_tags, out_error_pos)) {
         bunny_tag_query_free(root);
         return false;
     }

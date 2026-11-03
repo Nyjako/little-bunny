@@ -572,6 +572,16 @@ class HttpBunnyRepository implements BunnyRepository {
   }
 
   @override
+  Future<int?> validateTagQuery(BunnySite site, String text) async {
+    final response = await _client.get(_uri('/tag_query/validate', {'site': site.toWireString(), 'text': text}), headers: _headers);
+    if (response.statusCode != 200) {
+      _throwError(response);
+    }
+    final json = _decodeObject(response);
+    return json['valid'] == true ? null : (json['error_pos'] as num).toInt();
+  }
+
+  @override
   Future<BunnyPoolInfo> fetchPool(int poolId) async {
     final response = await _client.get(_uri('/pools/$poolId'), headers: _headers);
     if (response.statusCode != 200) {

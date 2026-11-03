@@ -658,6 +658,12 @@ abstract class AppLocalizations {
   /// **'Query'**
   String get createSearchQueryField;
 
+  /// No description provided for @tagQueryInvalidSyntax.
+  ///
+  /// In en, this message translates to:
+  /// **'Invalid syntax'**
+  String get tagQueryInvalidSyntax;
+
   /// No description provided for @createSearchIntervalLabel.
   ///
   /// In en, this message translates to:

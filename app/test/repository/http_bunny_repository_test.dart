@@ -545,6 +545,27 @@ void main() {
       expect(files[1].mimetype, 'audio/mpeg');
     });
 
+    test('validateTagQuery sends GET with site/text and returns null when valid (M28/M54)', () async {
+      respond = (_) => http.Response(jsonEncode({'valid': true}), 200);
+
+      final result = await buildRepository().validateTagQuery(BunnySite.e621, 'cat -dog');
+
+      expect(capturedMethod, 'GET');
+      expect(capturedUri.path, '/tag_query/validate');
+      expect(capturedUri.queryParameters['site'], 'e621');
+      expect(capturedUri.queryParameters['text'], 'cat -dog');
+      expect(result, isNull);
+    });
+
+    test('validateTagQuery returns the error position when invalid (M28/M54)', () async {
+      respond = (_) => http.Response(jsonEncode({'valid': false, 'error_pos': 4}), 200);
+
+      final result = await buildRepository().validateTagQuery(BunnySite.inkbunny, 'cat ~dog');
+
+      expect(capturedUri.queryParameters['site'], 'inkbunny');
+      expect(result, 4);
+    });
+
     test('getBlacklist sends GET with the site query param and returns a list of strings (M13.3)', () async {
       respond = (_) => http.Response(jsonEncode(['gore', 'young']), 200);
 

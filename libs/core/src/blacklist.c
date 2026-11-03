@@ -21,19 +21,42 @@ bunny_core_result_t bunny_core_blacklist_list(bunny_core_t *core, bunny_db_site_
     return bunny_core_map_db_result(result);
 }
 
+/* e621's full grammar vs. Inkbunny's AND+exclude-only subset -- see libs/
+ * tag_query's own dialect doc comment. Shared by blacklist-add validation
+ * below and bunny_core_tag_query_validate (used for both the blacklist
+ * editor and, M54 Phase 4, the search query editor). */
+static bunny_tag_query_dialect_t dialect_for_site(bunny_db_site_t site)
+{
+    return site == BUNNY_DB_SITE_INKBUNNY ? BUNNY_TAG_QUERY_DIALECT_INKBUNNY : BUNNY_TAG_QUERY_DIALECT_E621;
+}
+
 bunny_core_result_t bunny_core_blacklist_add(bunny_core_t *core, bunny_db_site_t site, const char *tag)
 {
     if (!core || !tag) {
         return BUNNY_CORE_ERR_INVALID_ARG;
     }
-    bunny_tag_query_dialect_t dialect = site == BUNNY_DB_SITE_INKBUNNY ? BUNNY_TAG_QUERY_DIALECT_INKBUNNY : BUNNY_TAG_QUERY_DIALECT_E621;
-    if (!bunny_tag_query_validate(tag, dialect, NULL)) {
+    if (!bunny_tag_query_validate(tag, dialect_for_site(site), NULL)) {
         return BUNNY_CORE_ERR_INVALID_ARG;
     }
     bunny_core_db_lock(core);
     bunny_db_result_t result = bunny_db_blacklist_add(core->db, site, tag);
     bunny_core_db_unlock(core);
     return bunny_core_map_db_result(result);
+}
+
+/* Syntax-only validation (M28/M54) -- never touches the DB, so no lock is
+ * taken; `core` is only required for consistency with every other
+ * bunny_core_* entry point (the FFI dispatch plumbing routes every request
+ * through a core handle). Used by both the blacklist editor and the
+ * search query editor (Phase 4) -- not blacklist-specific despite living
+ * in this file, which is just where dialect_for_site already lived. */
+bunny_core_result_t bunny_core_tag_query_validate(bunny_core_t *core, bunny_db_site_t site, const char *text, bool *out_valid, size_t *out_error_pos)
+{
+    if (!core || !text || !out_valid) {
+        return BUNNY_CORE_ERR_INVALID_ARG;
+    }
+    *out_valid = bunny_tag_query_validate(text, dialect_for_site(site), out_error_pos);
+    return BUNNY_CORE_OK;
 }
 
 bunny_core_result_t bunny_core_blacklist_remove(bunny_core_t *core, bunny_db_site_t site, const char *tag)

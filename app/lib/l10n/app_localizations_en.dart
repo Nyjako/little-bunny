@@ -323,6 +323,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get createSearchQueryField => 'Query';
 
   @override
+  String get tagQueryInvalidSyntax => 'Invalid syntax';
+
+  @override
   String get createSearchIntervalLabel => 'Sync interval (hours)';
 
   @override

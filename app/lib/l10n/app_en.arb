@@ -153,6 +153,7 @@
   "createSearchScreenTitle": "New search",
   "createSearchLabelField": "Label",
   "createSearchQueryField": "Query",
+  "tagQueryInvalidSyntax": "Invalid syntax",
   "createSearchIntervalLabel": "Sync interval (hours)",
   "createSearchUsesDefaultIntervalLabel": "Use default interval",
   "createSearchGroupLabel": "Group",

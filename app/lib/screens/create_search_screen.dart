@@ -50,6 +50,12 @@ class _CreateSearchScreenState extends State<CreateSearchScreen> {
   List<BunnyTagStat> _suggestions = [];
   Timer? _debounce;
   Timer? _poolNameDebounce;
+
+  /// Byte offset of the first syntax problem in the query field's current
+  /// text (M28/M54), or null if it's valid. Mirrors settings_screen.dart's
+  /// blacklist-field validation exactly -- see its own doc comment.
+  int? _queryError;
+  Timer? _queryValidateDebounce;
   bool _submitting = false;
   bool _labelManuallyEdited = false;
   bool _mirroringLabel = false;
@@ -66,6 +72,7 @@ class _CreateSearchScreenState extends State<CreateSearchScreen> {
       _site = widget.initialSite!;
     }
     _queryController.addListener(_onQueryChanged);
+    _queryController.addListener(_onQueryChangedValidate);
     _queryController.addListener(_mirrorQueryIntoLabel);
     _labelController.addListener(_onLabelChanged);
     _loadDefaultInterval();
@@ -97,7 +104,9 @@ class _CreateSearchScreenState extends State<CreateSearchScreen> {
   void dispose() {
     _debounce?.cancel();
     _poolNameDebounce?.cancel();
+    _queryValidateDebounce?.cancel();
     _queryController.removeListener(_onQueryChanged);
+    _queryController.removeListener(_onQueryChangedValidate);
     _queryController.removeListener(_mirrorQueryIntoLabel);
     _labelController.removeListener(_onLabelChanged);
     _labelController.dispose();
@@ -182,6 +191,17 @@ class _CreateSearchScreenState extends State<CreateSearchScreen> {
     });
   }
 
+  void _onQueryChangedValidate() {
+    _queryValidateDebounce?.cancel();
+    final text = _queryController.text;
+    _queryValidateDebounce = Timer(const Duration(milliseconds: 300), () async {
+      final errorPos = await widget.repository.validateTagQuery(_site, text);
+      if (mounted) {
+        setState(() => _queryError = errorPos);
+      }
+    });
+  }
+
   void _applySuggestion(String tag) {
     final (newText, newCursor) = applyTagSuggestion(_queryController.text, _cursorOffset, tag);
     _queryController.value = TextEditingValue(text: newText, selection: TextSelection.collapsed(offset: newCursor));
@@ -189,7 +209,7 @@ class _CreateSearchScreenState extends State<CreateSearchScreen> {
   }
 
   Future<void> _submit() async {
-    if (!_formKey.currentState!.validate()) {
+    if (!_formKey.currentState!.validate() || _queryError != null) {
       return;
     }
     setState(() => _submitting = true);
@@ -227,11 +247,21 @@ class _CreateSearchScreenState extends State<CreateSearchScreen> {
               SegmentedButton<BunnySite>(
                 segments: const [ButtonSegment(value: BunnySite.e621, label: Text('e621')), ButtonSegment(value: BunnySite.inkbunny, label: Text('Inkbunny'))],
                 selected: {_site},
-                onSelectionChanged: _submitting ? null : (selection) => setState(() => _site = selection.first),
+                onSelectionChanged: _submitting
+                    ? null
+                    : (selection) {
+                        setState(() => _site = selection.first);
+                        _onQueryChangedValidate();
+                      },
               ),
               const SizedBox(height: 16),
               TextFormField(controller: _labelController, enabled: !_submitting, decoration: InputDecoration(labelText: l10n.createSearchLabelField), validator: (value) => (value == null || value.trim().isEmpty) ? l10n.commonRequired : null),
-              TextFormField(controller: _queryController, enabled: !_submitting, decoration: InputDecoration(labelText: l10n.createSearchQueryField), validator: (value) => (value == null || value.trim().isEmpty) ? l10n.commonRequired : null),
+              TextFormField(
+                controller: _queryController,
+                enabled: !_submitting,
+                decoration: InputDecoration(labelText: l10n.createSearchQueryField, errorText: _queryError != null ? l10n.tagQueryInvalidSyntax : null),
+                validator: (value) => (value == null || value.trim().isEmpty) ? l10n.commonRequired : null,
+              ),
               if (_suggestions.isNotEmpty)
                 Wrap(spacing: 8, children: _suggestions.map((stat) => ActionChip(label: Text('${stat.name} (${stat.count})'), onPressed: () => _applySuggestion(stat.name))).toList()),
               TextFormField(
@@ -272,7 +302,7 @@ class _CreateSearchScreenState extends State<CreateSearchScreen> {
                 ),
               const SizedBox(height: 16),
               FilledButton(
-                onPressed: _submitting ? null : _submit,
+                onPressed: _submitting || _queryError != null ? null : _submit,
                 child: _submitting ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)) : Text(l10n.createSearchSubmit),
               ),
             ],

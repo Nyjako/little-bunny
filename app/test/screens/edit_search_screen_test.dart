@@ -132,4 +132,35 @@ void main() {
 
     expect(repository.searches.single.usesDefaultInterval, isTrue);
   });
+
+  testWidgets('an invalid query shows an error and blocks saving (M28/M54)', (WidgetTester tester) async {
+    final repository = FakeBunnyRepository();
+    final search = await _seedSearch(repository);
+
+    await tester.pumpWidget(wrapWithLocalization(EditSearchScreen(repository: repository, search: search)));
+    await tester.pumpAndSettle();
+
+    repository.validateTagQueryResult = 0;
+    await tester.enterText(find.widgetWithText(TextFormField, 'Query'), '( unbalanced');
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Invalid syntax'), findsOneWidget);
+    expect(tester.widget<FilledButton>(find.widgetWithText(FilledButton, 'Save')).onPressed, isNull);
+
+    await _tapSave(tester);
+    await tester.pumpAndSettle();
+    expect(repository.searches.single.query, 'fox');
+
+    repository.validateTagQueryResult = null;
+    await tester.enterText(find.widgetWithText(TextFormField, 'Query'), 'wolf -snow');
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Invalid syntax'), findsNothing);
+    await _tapSave(tester);
+    await tester.pumpAndSettle();
+
+    expect(repository.searches.single.query, 'wolf -snow');
+  });
 }

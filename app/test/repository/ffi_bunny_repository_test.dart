@@ -78,6 +78,16 @@ void main() {
     expect(await repository.getBlacklist(BunnySite.e621), isEmpty);
   });
 
+  test('validateTagQuery accepts valid syntax and rejects invalid syntax with an error position (M28/M54)', () async {
+    expect(await repository.validateTagQuery(BunnySite.e621, 'cat ~dog -bird ( ~a ~b )'), isNull);
+    expect(await repository.validateTagQuery(BunnySite.e621, '(  )'), 0);
+  });
+
+  test('validateTagQuery uses Inkbunny\'s narrower dialect (M28/M54)', () async {
+    expect(await repository.validateTagQuery(BunnySite.inkbunny, 'leopard -snow'), isNull);
+    expect(await repository.validateTagQuery(BunnySite.inkbunny, '~cat'), isNotNull);
+  });
+
   test('getPostRelationships returns all-empty/false for a nonexistent post', () async {
     final relationships = await repository.getPostRelationships(1);
     expect(relationships.hasParent, isFalse);

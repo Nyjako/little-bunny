@@ -1981,12 +1981,16 @@ this file is the single source of truth for "what's done" across sessions.
     thin. A submission id requested but absent from a successful batch response (deleted/
     inaccessible since the original search sync) is marked backfilled anyway, so it's
     never retried forever.
-  - [ ] **Blacklist "AND" groups.** M27's e621 blacklist sync only imports single-tag
+  - [x] **Blacklist "AND" groups.** M27's e621 blacklist sync only imported single-tag
     lines; multi-tag space-separated lines (e621's "AND" semantics -- a post is
-    blacklisted only when *every* tag on that line matches) are skipped and merely
-    counted. Extending the local blacklist's matching logic (currently a flat
-    `List<String>` of exact-match tags, see `post_detail_screen.dart`'s
-    `tags.where(blacklist.contains)`) to support these is a separate, larger change.
+    blacklisted only when *every* tag on that line matches) were skipped and merely
+    counted. Fixed by the new `libs/tag_query` grammar parser/matcher shared with M54
+    (see that entry for the full writeup) -- `bunny_core_sync_e621_blacklist` now
+    stores any line that parses instead of skipping every multi-tag one, and
+    `bunny_db_post_is_blacklisted`/`bunny_db_search_list_posts` both gained a
+    second, matcher-driven pass that only runs when a site's blacklist actually
+    contains a "complex" (non-exact-match) rule -- zero added queries for every
+    existing user with only simple rules.
   - [x] **Confirm Inkbunny private-submission access.** Reported as broken (submission
     726100, a private/friends-only post, 404s under a guest-session test). Investigation
     found the single-post fetch path (`bunny_core_fetch_and_cache_post` ->
@@ -2733,9 +2737,30 @@ this file is the single source of truth for "what's done" across sessions.
     browse (`queryIsPoolSentinel`'s own doc comment explains why: a bare tag token
     appended to `pool:<id>` breaks this app's exact-match pool-id parsing); "Remove"
     specifically is also hidden whenever the tag isn't actually present in the query.
-  - **Still pending**: the full e621 grammar above (OR/wildcards/groups/aliases/
-    implications), position-aware autocomplete beyond the existing simple prefix
-    stripping, and the same syntax/autocomplete support in the blacklist editor.
+  - **Full grammar + live syntax validation landed** (new `libs/tag_query` C
+    library, zero deps beyond GOBLIN, shared between the networked server and
+    standalone/FFI builds): a recursive-descent parser/matcher covering the whole
+    e621 grammar above (AND, `~OR`, `-NOT`, `*wildcard`, `(groups)` nested up to 10
+    levels, and e621's own 40-tag/search cap, enforced as a hard limit counted
+    across the whole query including tags nested in groups) plus a strict-subset
+    `BUNNY_TAG_QUERY_DIALECT_INKBUNNY` (AND + `-exclude` only, confirmed against
+    Inkbunny's own search help text -- `~`/`*`/`(` are syntax errors there, not
+    silently literal text). The matcher is wired into real blacklist filtering
+    (`bunny_db_post_is_blacklisted`/`bunny_db_search_list_posts`'s second pass,
+    see M28's "Blacklist AND groups" above) and a separate, syntax-only
+    `bunny_tag_query_validate` is exposed through FFI/HTTP (`GET
+    /tag_query/validate`) for live-typing validation with no AST ever crossing
+    that boundary. `SettingsScreen`'s blacklist editor and all three search-query
+    entry points (`CreateSearchScreen`, `EditSearchScreen`, `CustomSearchScreen`)
+    now debounce-validate their query field against the right dialect for the
+    site in scope, show an inline "Invalid syntax" error, and block
+    submit/save/search while invalid; `CreateSearchScreen`/`CustomSearchScreen`
+    also re-validate when their site switcher changes dialect underneath
+    already-typed text.
+  - **Still pending**: aliases/implications, and position-aware autocomplete
+    beyond the existing simple prefix stripping (e.g. suggesting inside a group
+    or around an OR/wildcard token) -- `tag_query.dart`'s autocomplete is
+    unchanged from before this grammar work.
 
 - [x] **M55 — Build the tag-stats report in the background instead of on the request thread**
   Discovered right after deploying M46: on the user's real database (1.39GB,

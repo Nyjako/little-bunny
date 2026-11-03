@@ -1489,6 +1489,55 @@ class BunnyCoreFfiBindings {
             )
           >();
 
+  /// Syntax-only validation (M28/M54) under `site`'s own grammar dialect (full
+  /// e621 grammar, or Inkbunny's narrower AND+exclude-only subset -- see libs/
+  /// tag_query's own dialect doc comment) -- never touches the DB or any post's
+  /// tags, just whether `text` parses. *out_valid is true/false; when false,
+  /// *out_error_pos (if out_error_pos is non-NULL) is the byte offset into
+  /// `text` nearest the problem, for highlighting in a text field. Used by
+  /// both the blacklist editor's live-typing check and (Phase 4) the search
+  /// query editor's -- the one grammar backs both UIs.
+  bunny_core_result_t bunny_core_tag_query_validate(
+    ffi.Pointer<bunny_core_t> core,
+    bunny_db_site_t site,
+    ffi.Pointer<ffi.Char> text,
+    ffi.Pointer<ffi.Bool> out_valid,
+    ffi.Pointer<ffi.Size> out_error_pos,
+  ) {
+    return bunny_core_result_t.fromValue(
+      _bunny_core_tag_query_validate(
+        core,
+        site.value,
+        text,
+        out_valid,
+        out_error_pos,
+      ),
+    );
+  }
+
+  late final _bunny_core_tag_query_validatePtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.UnsignedInt Function(
+            ffi.Pointer<bunny_core_t>,
+            ffi.UnsignedInt,
+            ffi.Pointer<ffi.Char>,
+            ffi.Pointer<ffi.Bool>,
+            ffi.Pointer<ffi.Size>,
+          )
+        >
+      >('bunny_core_tag_query_validate');
+  late final _bunny_core_tag_query_validate = _bunny_core_tag_query_validatePtr
+      .asFunction<
+        int Function(
+          ffi.Pointer<bunny_core_t>,
+          int,
+          ffi.Pointer<ffi.Char>,
+          ffi.Pointer<ffi.Bool>,
+          ffi.Pointer<ffi.Size>,
+        )
+      >();
+
   /// Fetches a single post live from its site and caches it (upserting into the
   /// local post cache exactly like a sync pass would for one post), without
   /// requiring it to already be linked to any saved search. Used when a
