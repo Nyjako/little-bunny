@@ -2712,7 +2712,7 @@ this file is the single source of truth for "what's done" across sessions.
     needs a live network call to succeed (`fetchPool`/`getPostComments`/
     `previewSearch`) -- the FFI test harness has no fake network transport to inject.
 
-- [ ] **M54 — Advanced/custom tag search syntax, with live autocomplete, in both search creation and the blacklist editor**
+- [x] **M54 — Advanced/custom tag search syntax, with live autocomplete, in both search creation and the blacklist editor**
   Full e621 search grammar, not just a flat space-separated tag list -- the user
   pasted e621's own cheatsheet verbatim as the spec, recorded here so it isn't lost:
   - Space-separated tags are AND'd together (max 40 tags/search); words within one tag
@@ -2778,10 +2778,50 @@ this file is the single source of truth for "what's done" across sessions.
     submit/save/search while invalid; `CreateSearchScreen`/`CustomSearchScreen`
     also re-validate when their site switcher changes dialect underneath
     already-typed text.
-  - **Still pending**: aliases/implications, and position-aware autocomplete
-    beyond the existing simple prefix stripping (e.g. suggesting inside a group
-    or around an OR/wildcard token) -- `tag_query.dart`'s autocomplete is
-    unchanged from before this grammar work.
+  - **Position-aware autocomplete confirmed already working, no code change
+    needed**: verified directly (`tagTokenRangeAt`/`splitTagPrefix` traced
+    against a cursor positioned on a token inside a group, e.g. `cat ( ~a
+    ~b| ) dog`) that the existing whitespace-based tokenizer already isolates
+    the right token and strips its `-`/`~` prefix correctly in every
+    position, since the grammar itself requires whitespace around every
+    term including inside groups -- there was never a real gap here, just an
+    unverified assumption.
+  - **Tag alias hints landed** (e621 only -- Inkbunny has no alias concept):
+    turned out `e621_search_tag_aliases`/`e621_search_tag_implications`
+    (`libs/e621`) were already fully plumbed end-to-end -- core, FFI, HTTP
+    route, and `BunnyRepository.searchTagAliases`/`searchTagImplications`
+    on every implementation including `FakeBunnyRepository` -- with zero UI
+    call sites anywhere. `CreateSearchScreen`/`EditSearchScreen`/
+    `CustomSearchScreen` now debounce-check the tag token under the cursor
+    against `searchTagAliases`, and show a small non-blocking hint (`"cat"
+    is aliased to "domestic_cat"`) when it exactly matches a currently
+    `active` alias's antecedent -- deliberately never rewrites the field
+    itself, just informs, matching the user's explicit choice of "warn,
+    don't auto-correct."
+  - **Tag implication chains landed** (e621 only, same non-blocking "just
+    informs" treatment as the alias hint, same user-confirmed scope):
+    typing a tag with an active implication shows the full transitive
+    chain, e.g. `hyper_breasts → huge_breasts → big_breasts → breasts`.
+    New `resolveTagImplicationChain` (`tag_query.dart`, the one function in
+    that file that isn't pure -- it needs a `BunnyRepository`) walks the
+    chain one hop at a time via `searchTagImplications`, since that API
+    only answers "what does this one tag imply," not "give me the whole
+    graph" -- `chain length` sequential round trips, fine for a debounced,
+    one-tag-at-a-time hint. A tag with more than one distinct active
+    implication stops the walk there and lists every direct consequent
+    rather than guessing or rendering a branching tree, per the user's own
+    explicit call that a flat "A -> B -> C" display is all that's wanted
+    here. Capped at 10 hops as a cycle guard. Wired into the same three
+    screens as the alias hint, same debounce, same e621-only/clears-on-
+    Inkbunny-switch treatment.
+  - **Blacklist editor autocomplete landed**, closing M54's own title
+    promise ("...in both search creation and the blacklist editor"):
+    `SettingsScreen`'s blacklist add field now runs the exact same
+    debounced `tagAutocomplete` pattern as the three search-query screens
+    -- autocompleting whichever token the cursor is in (not just the
+    trailing one), since a blacklist "line" is a full tag-query
+    expression (M28), not just a single bare tag. Re-checks on blacklist-
+    site switch, same as the existing syntax validation already did.
 
 - [x] **M55 — Build the tag-stats report in the background instead of on the request thread**
   Discovered right after deploying M46: on the user's real database (1.39GB,

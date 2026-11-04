@@ -154,6 +154,10 @@
   "createSearchLabelField": "Label",
   "createSearchQueryField": "Query",
   "tagQueryInvalidSyntax": "Invalid syntax",
+  "tagAliasHint": "\"{tag}\" is aliased to \"{canonical}\"",
+  "@tagAliasHint": {
+    "placeholders": {"tag": {"type": "String"}, "canonical": {"type": "String"}}
+  },
   "createSearchIntervalLabel": "Sync interval (hours)",
   "createSearchUsesDefaultIntervalLabel": "Use default interval",
   "createSearchGroupLabel": "Group",

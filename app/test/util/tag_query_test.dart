@@ -1,5 +1,11 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:little_bunny/repository/bunny_models.dart';
 import 'package:little_bunny/util/tag_query.dart';
+
+import '../fakes/fake_bunny_repository.dart';
+
+BunnyTagImplication _implication(String antecedent, String consequent, {String status = 'active'}) =>
+    BunnyTagImplication(id: 0, antecedentName: antecedent, consequentName: consequent, status: status);
 
 void main() {
   group('tagTokenRangeAt', () {
@@ -180,6 +186,62 @@ void main() {
 
     test('a non-numeric pool id is not', () {
       expect(queryIsPoolSentinel('pool:abc'), isFalse);
+    });
+  });
+
+  group('resolveTagImplicationChain', () {
+    test('walks a multi-hop chain in order, including the starting tag', () async {
+      final repository = FakeBunnyRepository();
+      repository.tagImplicationsByNameMatches['hyper_breasts'] = [_implication('hyper_breasts', 'huge_breasts')];
+      repository.tagImplicationsByNameMatches['huge_breasts'] = [_implication('huge_breasts', 'big_breasts')];
+      repository.tagImplicationsByNameMatches['big_breasts'] = [_implication('big_breasts', 'breasts')];
+
+      final chain = await resolveTagImplicationChain(repository, 'hyper_breasts');
+
+      expect(chain, ['hyper_breasts', 'huge_breasts', 'big_breasts', 'breasts']);
+    });
+
+    test('returns an empty list for a tag with no active implication', () async {
+      final repository = FakeBunnyRepository();
+
+      expect(await resolveTagImplicationChain(repository, 'cat'), isEmpty);
+    });
+
+    test('ignores a pending (not-yet-active) implication', () async {
+      final repository = FakeBunnyRepository();
+      repository.tagImplicationsByNameMatches['cat'] = [_implication('cat', 'felid', status: 'pending')];
+
+      expect(await resolveTagImplicationChain(repository, 'cat'), isEmpty);
+    });
+
+    test('stops and lists every consequent when a tag has more than one active implication', () async {
+      final repository = FakeBunnyRepository();
+      repository.tagImplicationsByNameMatches['chimera'] = [_implication('chimera', 'multiple_heads'), _implication('chimera', 'hybrid')];
+
+      final chain = await resolveTagImplicationChain(repository, 'chimera');
+
+      expect(chain, ['chimera', 'multiple_heads', 'hybrid']);
+    });
+
+    test('stops at a cycle instead of looping forever', () async {
+      final repository = FakeBunnyRepository();
+      repository.tagImplicationsByNameMatches['a'] = [_implication('a', 'b')];
+      repository.tagImplicationsByNameMatches['b'] = [_implication('b', 'a')];
+
+      final chain = await resolveTagImplicationChain(repository, 'a');
+
+      expect(chain, ['a', 'b']);
+    });
+
+    test('caps at maxHops for a pathologically long chain', () async {
+      final repository = FakeBunnyRepository();
+      for (var i = 0; i < 20; i++) {
+        repository.tagImplicationsByNameMatches['tag$i'] = [_implication('tag$i', 'tag${i + 1}')];
+      }
+
+      final chain = await resolveTagImplicationChain(repository, 'tag0', maxHops: 5);
+
+      expect(chain, hasLength(6)); // starting tag + 5 hops
     });
   });
 }
