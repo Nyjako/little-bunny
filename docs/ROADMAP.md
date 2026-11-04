@@ -2778,10 +2778,33 @@ this file is the single source of truth for "what's done" across sessions.
     submit/save/search while invalid; `CreateSearchScreen`/`CustomSearchScreen`
     also re-validate when their site switcher changes dialect underneath
     already-typed text.
-  - **Still pending**: aliases/implications, and position-aware autocomplete
-    beyond the existing simple prefix stripping (e.g. suggesting inside a group
-    or around an OR/wildcard token) -- `tag_query.dart`'s autocomplete is
-    unchanged from before this grammar work.
+  - **Position-aware autocomplete confirmed already working, no code change
+    needed**: verified directly (`tagTokenRangeAt`/`splitTagPrefix` traced
+    against a cursor positioned on a token inside a group, e.g. `cat ( ~a
+    ~b| ) dog`) that the existing whitespace-based tokenizer already isolates
+    the right token and strips its `-`/`~` prefix correctly in every
+    position, since the grammar itself requires whitespace around every
+    term including inside groups -- there was never a real gap here, just an
+    unverified assumption.
+  - **Tag alias hints landed** (e621 only -- Inkbunny has no alias concept):
+    turned out `e621_search_tag_aliases`/`e621_search_tag_implications`
+    (`libs/e621`) were already fully plumbed end-to-end -- core, FFI, HTTP
+    route, and `BunnyRepository.searchTagAliases`/`searchTagImplications`
+    on every implementation including `FakeBunnyRepository` -- with zero UI
+    call sites anywhere. `CreateSearchScreen`/`EditSearchScreen`/
+    `CustomSearchScreen` now debounce-check the tag token under the cursor
+    against `searchTagAliases`, and show a small non-blocking hint (`"cat"
+    is aliased to "domestic_cat"`) when it exactly matches a currently
+    `active` alias's antecedent -- deliberately never rewrites the field
+    itself, just informs, matching the user's explicit choice of "warn,
+    don't auto-correct." Only aliases are surfaced this way; implications
+    (a tag can imply several broader tags transitively, which doesn't map
+    as cleanly to a single hint) are left for a future pass if wanted.
+  - **Still pending**: tag implications (see above), and the blacklist
+    editor still has no autocomplete at all (M54's own title promises it
+    there too) -- `SettingsScreen`'s blacklist add field only has syntax
+    validation (Phase 3), never wired to `tagAutocomplete` the way the
+    three search-query screens are.
 
 - [x] **M55 — Build the tag-stats report in the background instead of on the request thread**
   Discovered right after deploying M46: on the user's real database (1.39GB,

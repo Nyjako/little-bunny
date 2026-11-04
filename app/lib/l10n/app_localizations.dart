@@ -664,6 +664,12 @@ abstract class AppLocalizations {
   /// **'Invalid syntax'**
   String get tagQueryInvalidSyntax;
 
+  /// No description provided for @tagAliasHint.
+  ///
+  /// In en, this message translates to:
+  /// **'\"{tag}\" is aliased to \"{canonical}\"'**
+  String tagAliasHint(String tag, String canonical);
+
   /// No description provided for @createSearchIntervalLabel.
   ///
   /// In en, this message translates to:

@@ -326,6 +326,11 @@ class AppLocalizationsEn extends AppLocalizations {
   String get tagQueryInvalidSyntax => 'Invalid syntax';
 
   @override
+  String tagAliasHint(String tag, String canonical) {
+    return '\"$tag\" is aliased to \"$canonical\"';
+  }
+
+  @override
   String get createSearchIntervalLabel => 'Sync interval (hours)';
 
   @override

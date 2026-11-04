@@ -163,4 +163,32 @@ void main() {
 
     expect(repository.searches.single.query, 'wolf -snow');
   });
+
+  testWidgets('typing an aliased tag shows a non-blocking hint with its canonical name (M54)', (WidgetTester tester) async {
+    final repository = FakeBunnyRepository();
+    final search = await _seedSearch(repository);
+    repository.tagAliasesByNameMatches['cat'] = const [BunnyTagAlias(id: 1, antecedentName: 'cat', consequentName: 'domestic_cat', status: 'active', postCount: 0)];
+
+    await tester.pumpWidget(wrapWithLocalization(EditSearchScreen(repository: repository, search: search)));
+    await tester.pumpAndSettle();
+
+    await tester.enterText(find.widgetWithText(TextFormField, 'Query'), 'cat');
+    await tester.pump(const Duration(seconds: 3, milliseconds: 50));
+
+    expect(find.text('"cat" is aliased to "domestic_cat"'), findsOneWidget);
+  });
+
+  testWidgets('no alias hint for an Inkbunny search, which has no alias concept (M54)', (WidgetTester tester) async {
+    final repository = FakeBunnyRepository();
+    final search = await _seedSearch(repository, site: BunnySite.inkbunny);
+    repository.tagAliasesByNameMatches['cat'] = const [BunnyTagAlias(id: 1, antecedentName: 'cat', consequentName: 'domestic_cat', status: 'active', postCount: 0)];
+
+    await tester.pumpWidget(wrapWithLocalization(EditSearchScreen(repository: repository, search: search)));
+    await tester.pumpAndSettle();
+
+    await tester.enterText(find.widgetWithText(TextFormField, 'Query'), 'cat');
+    await tester.pump(const Duration(seconds: 3, milliseconds: 50));
+
+    expect(find.textContaining('is aliased to'), findsNothing);
+  });
 }

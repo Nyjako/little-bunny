@@ -50,19 +50,26 @@ class _CustomSearchScreenState extends State<CustomSearchScreen> {
   int? _queryError;
   Timer? _queryValidateDebounce;
 
+  /// See CreateSearchScreen's own doc comment (M54).
+  (String tag, String canonical)? _aliasHint;
+  Timer? _aliasCheckDebounce;
+
   @override
   void initState() {
     super.initState();
     _queryController.addListener(_onQueryChanged);
     _queryController.addListener(_onQueryChangedValidate);
+    _queryController.addListener(_onQueryChangedCheckAlias);
   }
 
   @override
   void dispose() {
     _debounce?.cancel();
     _queryValidateDebounce?.cancel();
+    _aliasCheckDebounce?.cancel();
     _queryController.removeListener(_onQueryChanged);
     _queryController.removeListener(_onQueryChangedValidate);
+    _queryController.removeListener(_onQueryChangedCheckAlias);
     _queryController.dispose();
     super.dispose();
   }
@@ -96,6 +103,28 @@ class _CustomSearchScreenState extends State<CustomSearchScreen> {
       final errorPos = await widget.repository.validateTagQuery(_site, text);
       if (mounted) {
         setState(() => _queryError = errorPos);
+      }
+    });
+  }
+
+  void _onQueryChangedCheckAlias() {
+    _aliasCheckDebounce?.cancel();
+    if (_site != BunnySite.e621) {
+      setState(() => _aliasHint = null);
+      return;
+    }
+    final text = _queryController.text;
+    final (start, end) = tagTokenRangeAt(text, _cursorOffset);
+    final (_, tag) = splitTagPrefix(text.substring(start, end));
+    if (tag.length < 2 || tagHasWildcard(tag)) {
+      setState(() => _aliasHint = null);
+      return;
+    }
+    _aliasCheckDebounce = Timer(const Duration(seconds: 3), () async {
+      final aliases = await widget.repository.searchTagAliases(tag);
+      final match = aliases.where((alias) => alias.status == 'active' && alias.antecedentName == tag && alias.consequentName != null).firstOrNull;
+      if (mounted) {
+        setState(() => _aliasHint = match != null ? (tag, match.consequentName!) : null);
       }
     });
   }
@@ -141,6 +170,7 @@ class _CustomSearchScreenState extends State<CustomSearchScreen> {
               onSelectionChanged: (selection) {
                 setState(() => _site = selection.first);
                 _onQueryChangedValidate();
+                _onQueryChangedCheckAlias();
               },
             ),
             const SizedBox(height: 16),
@@ -149,6 +179,7 @@ class _CustomSearchScreenState extends State<CustomSearchScreen> {
               decoration: InputDecoration(labelText: l10n.createSearchQueryField, errorText: _queryError != null ? l10n.tagQueryInvalidSyntax : null),
               onSubmitted: (_) => _search(),
             ),
+            if (_aliasHint != null) Padding(padding: const EdgeInsets.only(top: 4), child: Text(l10n.tagAliasHint(_aliasHint!.$1, _aliasHint!.$2), style: Theme.of(context).textTheme.bodySmall)),
             if (_suggestions.isNotEmpty)
               Wrap(spacing: 8, children: _suggestions.map((stat) => ActionChip(label: Text('${stat.name} (${stat.count})'), onPressed: () => _applySuggestion(stat.name))).toList()),
             const SizedBox(height: 16),
