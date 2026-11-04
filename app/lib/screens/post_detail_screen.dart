@@ -630,14 +630,27 @@ class _PostDetailPageState extends State<_PostDetailPage> {
 
   Widget _downloadButton(AppLocalizations l10n) {
     final canDownload = _post.fileUrl != null;
-    return FutureBuilder<bool>(
-      future: _isDownloadedFuture,
-      builder: (context, snapshot) {
-        final alreadyDownloaded = snapshot.data ?? false;
-        return IconButton(
-          icon: Icon(alreadyDownloaded ? Icons.download_done : Icons.download),
-          tooltip: l10n.postDetailDownloadTooltip,
-          onPressed: canDownload ? () => _queueDownload(l10n) : null,
+    // AnimatedBuilder on the queue service (same pattern as
+    // DownloadQueueScreen) so tapping download flips this icon to
+    // Icons.downloading right away, rather than waiting for this screen to
+    // be reopened -- unlike _isDownloadedFuture below, queued/downloading
+    // status is cheap to read live since it's just _items, no disk I/O.
+    return AnimatedBuilder(
+      animation: widget.downloadQueueService,
+      builder: (context, child) {
+        final isQueued = widget.downloadQueueService.items.any(
+          (item) => item.post.id == _post.id && (item.status == DownloadQueueItemStatus.queued || item.status == DownloadQueueItemStatus.downloading),
+        );
+        return FutureBuilder<bool>(
+          future: _isDownloadedFuture,
+          builder: (context, snapshot) {
+            final alreadyDownloaded = snapshot.data ?? false;
+            return IconButton(
+              icon: Icon(isQueued ? Icons.downloading : (alreadyDownloaded ? Icons.download_done : Icons.download)),
+              tooltip: l10n.postDetailDownloadTooltip,
+              onPressed: canDownload && !isQueued ? () => _queueDownload(l10n) : null,
+            );
+          },
         );
       },
     );
