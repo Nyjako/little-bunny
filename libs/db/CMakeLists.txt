@@ -12,6 +12,7 @@ add_library(bunny_db STATIC
     src/blacklist.c
     src/stats.c
     src/action_queue.c
+    src/download_queue.c
 )
 
 target_include_directories(bunny_db

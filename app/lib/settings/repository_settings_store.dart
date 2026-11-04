@@ -18,6 +18,11 @@ class RepositorySettingsStore {
   static const _secretKeyBearerToken = 'repository_bearer_token';
   static const _secretKeyCertFingerprint = 'repository_cert_fingerprint';
   static const _standaloneDbFileName = 'bunny.db';
+  /// Networked mode's own small local db, used only for the download queue
+  /// (M62 follow-up) -- everything else in networked mode goes through the
+  /// server's REST API, with no local cache of its own to share a database
+  /// file with.
+  static const _downloadQueueDbFileName = 'downloads.db';
   /// e621's own API etiquette wants an app name/version plus a contact
   /// identifier (e.g. "LittleBunny/1.0.0 (by someuser on e621)") -- this is
   /// only the bare app name/version half; `bunny_core_build_e621_client`
@@ -48,7 +53,13 @@ class RepositorySettingsStore {
       if (serverUrl == null || bearerToken == null || certFingerprint == null) {
         return null;
       }
-      return NetworkedConfig(serverBaseUrl: Uri.parse(serverUrl), bearerToken: bearerToken, certificateSha256Fingerprint: certFingerprint);
+      return NetworkedConfig(
+        serverBaseUrl: Uri.parse(serverUrl),
+        bearerToken: bearerToken,
+        certificateSha256Fingerprint: certFingerprint,
+        downloadQueueDbPath: await _downloadQueueDbPath(),
+        downloadQueueUserAgent: _standaloneUserAgent,
+      );
     }
 
     return null;
@@ -70,5 +81,10 @@ class RepositorySettingsStore {
   Future<String> _standaloneDbPath() async {
     final dir = await getApplicationSupportDirectory();
     return p.join(dir.path, _standaloneDbFileName);
+  }
+
+  Future<String> _downloadQueueDbPath() async {
+    final dir = await getApplicationSupportDirectory();
+    return p.join(dir.path, _downloadQueueDbFileName);
   }
 }

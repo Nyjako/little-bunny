@@ -13,7 +13,16 @@ import '../repository/http_bunny_repository.dart';
 /// isn't meaningful for standalone/FFI mode, so it doesn't belong on the
 /// shared abstract interface.
 Future<String?> checkServerConnection({required Uri baseUrl, required String bearerToken, required String certificateSha256Fingerprint}) async {
-  final repository = HttpBunnyRepository(baseUrl: baseUrl, bearerToken: bearerToken, certificateSha256Fingerprint: certificateSha256Fingerprint);
+  // This instance never touches the download queue and is closed right
+  // after the one check below -- :memory: avoids opening a real file on
+  // disk for a connectivity probe that's thrown away immediately.
+  final repository = HttpBunnyRepository(
+    baseUrl: baseUrl,
+    bearerToken: bearerToken,
+    certificateSha256Fingerprint: certificateSha256Fingerprint,
+    downloadQueueDbPath: ':memory:',
+    downloadQueueUserAgent: 'bunny-connection-check/1.0',
+  );
   try {
     await repository.listSearches();
     return null;

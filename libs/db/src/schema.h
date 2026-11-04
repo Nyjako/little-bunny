@@ -206,8 +206,21 @@ static const char *const BUNNY_DB_SCHEMA_SQL = "PRAGMA foreign_keys = ON;"
                                                "    computed_at TEXT NOT NULL,"
                                                "    report_json TEXT NOT NULL"
                                                ");"
+                                               /* No REFERENCES posts(id) here, unlike action_queue above -- a
+                                                * networked-mode client keeps its download queue in its own small
+                                                * dedicated local db (M62 follow-up), which never has a populated
+                                                * posts table to reference. A post_id that no longer resolves via
+                                                * bunny_core_post_get is already tolerated by every caller. */
+                                               "CREATE TABLE IF NOT EXISTS download_queue ("
+                                               "    id INTEGER PRIMARY KEY,"
+                                               "    post_id INTEGER NOT NULL,"
+                                               "    status TEXT NOT NULL DEFAULT 'queued' CHECK (status IN ('queued', 'downloading', 'succeeded', 'checksum_mismatch', 'failed')),"
+                                               "    failure_reason TEXT,"
+                                               "    created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))"
+                                               ");"
                                                "CREATE INDEX IF NOT EXISTS idx_post_tags_tag_id ON post_tags(tag_id);"
                                                "CREATE INDEX IF NOT EXISTS idx_search_results_search_id ON search_results(search_id);"
-                                               "CREATE INDEX IF NOT EXISTS idx_action_queue_status ON action_queue(status);";
+                                               "CREATE INDEX IF NOT EXISTS idx_action_queue_status ON action_queue(status);"
+                                               "CREATE INDEX IF NOT EXISTS idx_download_queue_status ON download_queue(status);";
 
 #endif /* BUNNY_DB_SCHEMA_H */

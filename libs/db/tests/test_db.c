@@ -1519,6 +1519,80 @@ void test_action_queue_mark_failed_records_error(void)
     bunny_db_action_list_free(&pending);
 }
 
+void test_download_queue_add_and_list(void)
+{
+    int64_t id = 0;
+    bunny_db_result_t result = bunny_db_download_queue_add(g_db, 42, &id);
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, result);
+    TEST_ASSERT_TRUE(id > 0);
+
+    bunny_db_download_queue_list_t list;
+    result = bunny_db_download_queue_list(g_db, &list);
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, result);
+    TEST_ASSERT_EQUAL(1, (int)list.count);
+    TEST_ASSERT_EQUAL(id, list.items[0].id);
+    TEST_ASSERT_EQUAL(42, list.items[0].post_id);
+    TEST_ASSERT_EQUAL(BUNNY_DB_DOWNLOAD_QUEUE_QUEUED, list.items[0].status);
+    TEST_ASSERT_NULL(list.items[0].failure_reason);
+    bunny_db_download_queue_list_free(&list);
+}
+
+void test_download_queue_set_status_updates_status_and_failure_reason(void)
+{
+    int64_t id = 0;
+    bunny_db_download_queue_add(g_db, 43, &id);
+
+    bunny_db_result_t result = bunny_db_download_queue_set_status(g_db, id, BUNNY_DB_DOWNLOAD_QUEUE_FAILED, "HTTP 500");
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, result);
+
+    bunny_db_download_queue_list_t list;
+    bunny_db_download_queue_list(g_db, &list);
+    TEST_ASSERT_EQUAL(1, (int)list.count);
+    TEST_ASSERT_EQUAL(BUNNY_DB_DOWNLOAD_QUEUE_FAILED, list.items[0].status);
+    TEST_ASSERT_EQUAL_STRING("HTTP 500", list.items[0].failure_reason);
+    bunny_db_download_queue_list_free(&list);
+}
+
+void test_download_queue_set_status_clears_a_previous_failure_reason(void)
+{
+    int64_t id = 0;
+    bunny_db_download_queue_add(g_db, 44, &id);
+    bunny_db_download_queue_set_status(g_db, id, BUNNY_DB_DOWNLOAD_QUEUE_FAILED, "HTTP 500");
+
+    bunny_db_result_t result = bunny_db_download_queue_set_status(g_db, id, BUNNY_DB_DOWNLOAD_QUEUE_QUEUED, NULL);
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, result);
+
+    bunny_db_download_queue_list_t list;
+    bunny_db_download_queue_list(g_db, &list);
+    TEST_ASSERT_EQUAL(BUNNY_DB_DOWNLOAD_QUEUE_QUEUED, list.items[0].status);
+    TEST_ASSERT_NULL(list.items[0].failure_reason);
+    bunny_db_download_queue_list_free(&list);
+}
+
+void test_download_queue_clear_finished_drops_terminal_rows_only(void)
+{
+    int64_t queued_id = 0, downloading_id = 0, succeeded_id = 0, mismatched_id = 0, failed_id = 0;
+    bunny_db_download_queue_add(g_db, 1, &queued_id);
+    bunny_db_download_queue_add(g_db, 2, &downloading_id);
+    bunny_db_download_queue_set_status(g_db, downloading_id, BUNNY_DB_DOWNLOAD_QUEUE_DOWNLOADING, NULL);
+    bunny_db_download_queue_add(g_db, 3, &succeeded_id);
+    bunny_db_download_queue_set_status(g_db, succeeded_id, BUNNY_DB_DOWNLOAD_QUEUE_SUCCEEDED, NULL);
+    bunny_db_download_queue_add(g_db, 4, &mismatched_id);
+    bunny_db_download_queue_set_status(g_db, mismatched_id, BUNNY_DB_DOWNLOAD_QUEUE_CHECKSUM_MISMATCH, NULL);
+    bunny_db_download_queue_add(g_db, 5, &failed_id);
+    bunny_db_download_queue_set_status(g_db, failed_id, BUNNY_DB_DOWNLOAD_QUEUE_FAILED, "oops");
+
+    bunny_db_result_t result = bunny_db_download_queue_clear_finished(g_db);
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, result);
+
+    bunny_db_download_queue_list_t list;
+    bunny_db_download_queue_list(g_db, &list);
+    TEST_ASSERT_EQUAL(2, (int)list.count);
+    TEST_ASSERT_EQUAL(queued_id, list.items[0].id);
+    TEST_ASSERT_EQUAL(downloading_id, list.items[1].id);
+    bunny_db_download_queue_list_free(&list);
+}
+
 void test_top_favorited_tags(void)
 {
     const char *tags1[] = {"wolf", "forest"};
@@ -2754,6 +2828,10 @@ int main(void)
     RUN_TEST(test_action_queue_add_and_list_pending);
     RUN_TEST(test_action_queue_mark_done_removes_from_pending);
     RUN_TEST(test_action_queue_mark_failed_records_error);
+    RUN_TEST(test_download_queue_add_and_list);
+    RUN_TEST(test_download_queue_set_status_updates_status_and_failure_reason);
+    RUN_TEST(test_download_queue_set_status_clears_a_previous_failure_reason);
+    RUN_TEST(test_download_queue_clear_finished_drops_terminal_rows_only);
     RUN_TEST(test_top_favorited_tags);
     RUN_TEST(test_top_favorited_tags_is_scoped_per_site);
     RUN_TEST(test_top_used_tags_counts_non_favorited_posts);

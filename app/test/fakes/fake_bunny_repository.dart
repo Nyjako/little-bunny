@@ -658,6 +658,45 @@ class FakeBunnyRepository implements BunnyRepository {
     return processQueueResult;
   }
 
+  /// Stateful, keyed by the id [downloadQueueAdd] hands back -- a test
+  /// drives the real [DownloadQueueService] against this fake and then
+  /// inspects [downloadQueueList] directly, same as reading the real
+  /// SQLite-backed table back.
+  final Map<int, DownloadQueueRecord> _downloadQueueRows = {};
+  int _nextDownloadQueueId = 1;
+
+  /// Seeds a row as if it had been persisted by a previous run -- for tests
+  /// of [DownloadQueueService.restore], which never goes through
+  /// [downloadQueueAdd] itself.
+  void seedDownloadQueueRow({required int postId, required String status, String? failureReason}) {
+    final id = _nextDownloadQueueId++;
+    _downloadQueueRows[id] = DownloadQueueRecord(id: id, postId: postId, status: status, failureReason: failureReason, createdAt: '2026-01-01T00:00:00Z');
+  }
+
+  @override
+  Future<int> downloadQueueAdd(int postId) async {
+    final id = _nextDownloadQueueId++;
+    _downloadQueueRows[id] = DownloadQueueRecord(id: id, postId: postId, status: 'queued', createdAt: '2026-01-01T00:00:00Z');
+    return id;
+  }
+
+  @override
+  Future<void> downloadQueueSetStatus(int id, String status, {String? failureReason}) async {
+    final existing = _downloadQueueRows[id];
+    if (existing == null) {
+      return;
+    }
+    _downloadQueueRows[id] = DownloadQueueRecord(id: existing.id, postId: existing.postId, status: status, failureReason: failureReason, createdAt: existing.createdAt);
+  }
+
+  @override
+  Future<List<DownloadQueueRecord>> downloadQueueList() async => _downloadQueueRows.values.toList(growable: false);
+
+  @override
+  Future<void> downloadQueueClearFinished() async {
+    _downloadQueueRows.removeWhere((_, row) => row.status == 'succeeded' || row.status == 'checksum_mismatch' || row.status == 'failed');
+  }
+
   @override
   Future<void> touchSearchViewed(int searchId) async {
     final index = searches.indexWhere((search) => search.id == searchId);
