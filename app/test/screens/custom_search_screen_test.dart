@@ -143,4 +143,34 @@ void main() {
 
     expect(find.textContaining('is aliased to'), findsNothing);
   });
+
+  testWidgets('typing a tag with implications shows the full chain (M54)', (WidgetTester tester) async {
+    final repository = FakeBunnyRepository();
+    repository.tagImplicationsByNameMatches['hyper_breasts'] = const [BunnyTagImplication(id: 1, antecedentName: 'hyper_breasts', consequentName: 'breasts', status: 'active')];
+
+    await tester.pumpWidget(_wrap(repository));
+    await tester.pumpAndSettle();
+
+    await tester.enterText(find.widgetWithText(TextField, 'Query'), 'hyper_breasts');
+    await tester.pump(const Duration(seconds: 3, milliseconds: 50));
+
+    expect(find.text('hyper_breasts → breasts'), findsOneWidget);
+  });
+
+  testWidgets('switching to Inkbunny clears an e621 implication chain (M54)', (WidgetTester tester) async {
+    final repository = FakeBunnyRepository();
+    repository.tagImplicationsByNameMatches['hyper_breasts'] = const [BunnyTagImplication(id: 1, antecedentName: 'hyper_breasts', consequentName: 'breasts', status: 'active')];
+
+    await tester.pumpWidget(_wrap(repository));
+    await tester.pumpAndSettle();
+
+    await tester.enterText(find.widgetWithText(TextField, 'Query'), 'hyper_breasts');
+    await tester.pump(const Duration(seconds: 3, milliseconds: 50));
+    expect(find.textContaining('→'), findsOneWidget);
+
+    await tester.tap(find.text('Inkbunny'));
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('→'), findsNothing);
+  });
 }

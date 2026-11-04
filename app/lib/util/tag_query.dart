@@ -1,3 +1,5 @@
+import '../repository/bunny_repository.dart';
+
 /// Below this many characters, the server rejects an autocomplete request
 /// outright (M39) -- a shorter prefix matches far too many tags for its
 /// index to narrow usefully, which is what hung the server on a single
@@ -99,3 +101,48 @@ String removeTagFromQuery(String query, String tag) => _withoutTag(query, tag);
 /// `int.tryParse` -- silently breaking the pool header/ascending-sort logic
 /// built on that exact-match assumption.
 bool queryIsPoolSentinel(String query) => query.startsWith('pool:') && int.tryParse(query.substring(5)) != null;
+
+/// Walks e621's tag-implication chain starting from [tag] (M54) -- e.g.
+/// `hyper_breasts` -> `huge_breasts` -> `big_breasts` -> `breasts` -- by
+/// repeatedly calling [BunnyRepository.searchTagImplications] for the
+/// current tag and following its single active implication, if any.
+/// Returns every tag in the chain including [tag] itself as the first
+/// element, or an empty list if [tag] has no active implication at all
+/// (the "nothing to show" case callers should treat as "no hint").
+///
+/// Unlike every other function in this file, this one is not pure -- the
+/// implication-search API only answers "what does this one tag imply,"
+/// not "give me the whole graph," so walking a chain is inherently
+/// `chain length` sequential network round trips. Acceptable for a
+/// debounced, one-tag-at-a-time UI hint; not something to call in a loop
+/// over many tags at once.
+///
+/// If a tag has more than one *distinct* active implication, the walk
+/// stops there and lists every direct consequent rather than picking one
+/// arbitrarily or rendering a branching tree -- deliberately simple,
+/// matching the plain "A -> B -> C" display this is for. [maxHops] guards
+/// against a cycle in the data (shouldn't happen for genuinely active
+/// e621 implications, but nothing here should trust that blindly).
+Future<List<String>> resolveTagImplicationChain(BunnyRepository repository, String tag, {int maxHops = 10}) async {
+  final chain = <String>[tag];
+  final seen = <String>{tag};
+  var current = tag;
+  for (var hop = 0; hop < maxHops; hop++) {
+    final implications = await repository.searchTagImplications(current);
+    final active = implications.where((imp) => imp.status == 'active' && imp.antecedentName == current && imp.consequentName != null).toList();
+    if (active.isEmpty) {
+      break;
+    }
+    if (active.length > 1) {
+      chain.addAll(active.map((imp) => imp.consequentName!));
+      break;
+    }
+    final next = active.single.consequentName!;
+    if (!seen.add(next)) {
+      break;
+    }
+    chain.add(next);
+    current = next;
+  }
+  return chain.length > 1 ? chain : const [];
+}

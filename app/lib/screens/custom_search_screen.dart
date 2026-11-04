@@ -54,12 +54,17 @@ class _CustomSearchScreenState extends State<CustomSearchScreen> {
   (String tag, String canonical)? _aliasHint;
   Timer? _aliasCheckDebounce;
 
+  /// See CreateSearchScreen's own doc comment (M54).
+  List<String> _implicationChain = const [];
+  Timer? _implicationCheckDebounce;
+
   @override
   void initState() {
     super.initState();
     _queryController.addListener(_onQueryChanged);
     _queryController.addListener(_onQueryChangedValidate);
     _queryController.addListener(_onQueryChangedCheckAlias);
+    _queryController.addListener(_onQueryChangedCheckImplication);
   }
 
   @override
@@ -67,9 +72,11 @@ class _CustomSearchScreenState extends State<CustomSearchScreen> {
     _debounce?.cancel();
     _queryValidateDebounce?.cancel();
     _aliasCheckDebounce?.cancel();
+    _implicationCheckDebounce?.cancel();
     _queryController.removeListener(_onQueryChanged);
     _queryController.removeListener(_onQueryChangedValidate);
     _queryController.removeListener(_onQueryChangedCheckAlias);
+    _queryController.removeListener(_onQueryChangedCheckImplication);
     _queryController.dispose();
     super.dispose();
   }
@@ -129,6 +136,27 @@ class _CustomSearchScreenState extends State<CustomSearchScreen> {
     });
   }
 
+  void _onQueryChangedCheckImplication() {
+    _implicationCheckDebounce?.cancel();
+    if (_site != BunnySite.e621) {
+      setState(() => _implicationChain = const []);
+      return;
+    }
+    final text = _queryController.text;
+    final (start, end) = tagTokenRangeAt(text, _cursorOffset);
+    final (_, tag) = splitTagPrefix(text.substring(start, end));
+    if (tag.length < 2 || tagHasWildcard(tag)) {
+      setState(() => _implicationChain = const []);
+      return;
+    }
+    _implicationCheckDebounce = Timer(const Duration(seconds: 3), () async {
+      final chain = await resolveTagImplicationChain(widget.repository, tag);
+      if (mounted) {
+        setState(() => _implicationChain = chain);
+      }
+    });
+  }
+
   void _applySuggestion(String tag) {
     final (newText, newCursor) = applyTagSuggestion(_queryController.text, _cursorOffset, tag);
     _queryController.value = TextEditingValue(text: newText, selection: TextSelection.collapsed(offset: newCursor));
@@ -171,6 +199,7 @@ class _CustomSearchScreenState extends State<CustomSearchScreen> {
                 setState(() => _site = selection.first);
                 _onQueryChangedValidate();
                 _onQueryChangedCheckAlias();
+                _onQueryChangedCheckImplication();
               },
             ),
             const SizedBox(height: 16),
@@ -180,6 +209,7 @@ class _CustomSearchScreenState extends State<CustomSearchScreen> {
               onSubmitted: (_) => _search(),
             ),
             if (_aliasHint != null) Padding(padding: const EdgeInsets.only(top: 4), child: Text(l10n.tagAliasHint(_aliasHint!.$1, _aliasHint!.$2), style: Theme.of(context).textTheme.bodySmall)),
+            if (_implicationChain.isNotEmpty) Padding(padding: const EdgeInsets.only(top: 4), child: Text(_implicationChain.join(' → '), style: Theme.of(context).textTheme.bodySmall)),
             if (_suggestions.isNotEmpty)
               Wrap(spacing: 8, children: _suggestions.map((stat) => ActionChip(label: Text('${stat.name} (${stat.count})'), onPressed: () => _applySuggestion(stat.name))).toList()),
             const SizedBox(height: 16),

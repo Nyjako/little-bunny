@@ -2797,14 +2797,27 @@ this file is the single source of truth for "what's done" across sessions.
     is aliased to "domestic_cat"`) when it exactly matches a currently
     `active` alias's antecedent -- deliberately never rewrites the field
     itself, just informs, matching the user's explicit choice of "warn,
-    don't auto-correct." Only aliases are surfaced this way; implications
-    (a tag can imply several broader tags transitively, which doesn't map
-    as cleanly to a single hint) are left for a future pass if wanted.
-  - **Still pending**: tag implications (see above), and the blacklist
-    editor still has no autocomplete at all (M54's own title promises it
-    there too) -- `SettingsScreen`'s blacklist add field only has syntax
-    validation (Phase 3), never wired to `tagAutocomplete` the way the
-    three search-query screens are.
+    don't auto-correct."
+  - **Tag implication chains landed** (e621 only, same non-blocking "just
+    informs" treatment as the alias hint, same user-confirmed scope):
+    typing a tag with an active implication shows the full transitive
+    chain, e.g. `hyper_breasts → huge_breasts → big_breasts → breasts`.
+    New `resolveTagImplicationChain` (`tag_query.dart`, the one function in
+    that file that isn't pure -- it needs a `BunnyRepository`) walks the
+    chain one hop at a time via `searchTagImplications`, since that API
+    only answers "what does this one tag imply," not "give me the whole
+    graph" -- `chain length` sequential round trips, fine for a debounced,
+    one-tag-at-a-time hint. A tag with more than one distinct active
+    implication stops the walk there and lists every direct consequent
+    rather than guessing or rendering a branching tree, per the user's own
+    explicit call that a flat "A -> B -> C" display is all that's wanted
+    here. Capped at 10 hops as a cycle guard. Wired into the same three
+    screens as the alias hint, same debounce, same e621-only/clears-on-
+    Inkbunny-switch treatment.
+  - **Still pending**: the blacklist editor still has no autocomplete at
+    all (M54's own title promises it there too) -- `SettingsScreen`'s
+    blacklist add field only has syntax validation (Phase 3), never wired
+    to `tagAutocomplete` the way the three search-query screens are.
 
 - [x] **M55 — Build the tag-stats report in the background instead of on the request thread**
   Discovered right after deploying M46: on the user's real database (1.39GB,

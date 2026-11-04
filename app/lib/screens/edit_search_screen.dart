@@ -44,6 +44,10 @@ class _EditSearchScreenState extends State<EditSearchScreen> {
   /// changes so there's no re-check-on-site-switch case to handle.
   (String tag, String canonical)? _aliasHint;
   Timer? _aliasCheckDebounce;
+
+  /// See CreateSearchScreen's own doc comment (M54).
+  List<String> _implicationChain = const [];
+  Timer? _implicationCheckDebounce;
   bool _submitting = false;
   late bool _autoFavorite = widget.search.autoFavorite;
   late bool _autoUpvote = widget.search.autoUpvote;
@@ -58,6 +62,7 @@ class _EditSearchScreenState extends State<EditSearchScreen> {
     _queryController.addListener(_onQueryChanged);
     _queryController.addListener(_onQueryChangedValidate);
     _queryController.addListener(_onQueryChangedCheckAlias);
+    _queryController.addListener(_onQueryChangedCheckImplication);
     _loadGroups();
   }
 
@@ -73,9 +78,11 @@ class _EditSearchScreenState extends State<EditSearchScreen> {
     _debounce?.cancel();
     _queryValidateDebounce?.cancel();
     _aliasCheckDebounce?.cancel();
+    _implicationCheckDebounce?.cancel();
     _queryController.removeListener(_onQueryChanged);
     _queryController.removeListener(_onQueryChangedValidate);
     _queryController.removeListener(_onQueryChangedCheckAlias);
+    _queryController.removeListener(_onQueryChangedCheckImplication);
     _labelController.dispose();
     _queryController.dispose();
     _intervalController.dispose();
@@ -132,6 +139,26 @@ class _EditSearchScreenState extends State<EditSearchScreen> {
       final match = aliases.where((alias) => alias.status == 'active' && alias.antecedentName == tag && alias.consequentName != null).firstOrNull;
       if (mounted) {
         setState(() => _aliasHint = match != null ? (tag, match.consequentName!) : null);
+      }
+    });
+  }
+
+  void _onQueryChangedCheckImplication() {
+    _implicationCheckDebounce?.cancel();
+    if (widget.search.site != BunnySite.e621) {
+      return;
+    }
+    final text = _queryController.text;
+    final (start, end) = tagTokenRangeAt(text, _cursorOffset);
+    final (_, tag) = splitTagPrefix(text.substring(start, end));
+    if (tag.length < 2 || tagHasWildcard(tag)) {
+      setState(() => _implicationChain = const []);
+      return;
+    }
+    _implicationCheckDebounce = Timer(const Duration(seconds: 3), () async {
+      final chain = await resolveTagImplicationChain(widget.repository, tag);
+      if (mounted) {
+        setState(() => _implicationChain = chain);
       }
     });
   }
@@ -216,6 +243,7 @@ class _EditSearchScreenState extends State<EditSearchScreen> {
                 validator: (value) => (value == null || value.trim().isEmpty) ? l10n.commonRequired : null,
               ),
               if (_aliasHint != null) Padding(padding: const EdgeInsets.only(top: 4), child: Text(l10n.tagAliasHint(_aliasHint!.$1, _aliasHint!.$2), style: Theme.of(context).textTheme.bodySmall)),
+              if (_implicationChain.isNotEmpty) Padding(padding: const EdgeInsets.only(top: 4), child: Text(_implicationChain.join(' → '), style: Theme.of(context).textTheme.bodySmall)),
               if (_suggestions.isNotEmpty)
                 Wrap(spacing: 8, children: _suggestions.map((stat) => ActionChip(label: Text('${stat.name} (${stat.count})'), onPressed: () => _applySuggestion(stat.name))).toList()),
               TextFormField(
