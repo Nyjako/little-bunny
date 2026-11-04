@@ -2712,7 +2712,7 @@ this file is the single source of truth for "what's done" across sessions.
     needs a live network call to succeed (`fetchPool`/`getPostComments`/
     `previewSearch`) -- the FFI test harness has no fake network transport to inject.
 
-- [ ] **M54 — Advanced/custom tag search syntax, with live autocomplete, in both search creation and the blacklist editor**
+- [x] **M54 — Advanced/custom tag search syntax, with live autocomplete, in both search creation and the blacklist editor**
   Full e621 search grammar, not just a flat space-separated tag list -- the user
   pasted e621's own cheatsheet verbatim as the spec, recorded here so it isn't lost:
   - Space-separated tags are AND'd together (max 40 tags/search); words within one tag
@@ -2814,10 +2814,14 @@ this file is the single source of truth for "what's done" across sessions.
     here. Capped at 10 hops as a cycle guard. Wired into the same three
     screens as the alias hint, same debounce, same e621-only/clears-on-
     Inkbunny-switch treatment.
-  - **Still pending**: the blacklist editor still has no autocomplete at
-    all (M54's own title promises it there too) -- `SettingsScreen`'s
-    blacklist add field only has syntax validation (Phase 3), never wired
-    to `tagAutocomplete` the way the three search-query screens are.
+  - **Blacklist editor autocomplete landed**, closing M54's own title
+    promise ("...in both search creation and the blacklist editor"):
+    `SettingsScreen`'s blacklist add field now runs the exact same
+    debounced `tagAutocomplete` pattern as the three search-query screens
+    -- autocompleting whichever token the cursor is in (not just the
+    trailing one), since a blacklist "line" is a full tag-query
+    expression (M28), not just a single bare tag. Re-checks on blacklist-
+    site switch, same as the existing syntax validation already did.
 
 - [x] **M55 — Build the tag-stats report in the background instead of on the request thread**
   Discovered right after deploying M46: on the user's real database (1.39GB,

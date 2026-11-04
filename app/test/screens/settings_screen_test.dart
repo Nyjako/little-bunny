@@ -513,6 +513,46 @@ void main() {
     expect(find.text('rating:e young'), findsOneWidget);
   });
 
+  testWidgets('typing a query word shows debounced tag suggestions for the token under the cursor (M54)', (WidgetTester tester) async {
+    final repository = FakeBunnyRepository();
+    repository.tagStats.addAll(const [BunnyTagStat(name: 'foxtail', count: 10), BunnyTagStat(name: 'wolfpack', count: 5)]);
+
+    await tester.pumpWidget(
+      wrapWithLocalization(
+        SettingsScreen(
+          repository: repository,
+          themeSettingsStore: const ThemeSettingsStore(),
+          lockService: AppLockService(FakeSecretStore()),
+          downloadSettingsStore: const DownloadSettingsStore(),
+          displaySettingsStore: const DisplaySettingsStore(),
+          settingsStore: settingsStore(),
+          onThemeModeChanged: (_) {},
+          onThemeColorChanged: (_) {},
+          onAmoledChanged: (_) {},
+          onLanguageCodeChanged: (_) {},
+          onRepositoryConfigured: (_) {},
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.dragUntilVisible(find.text('Add tag'), find.byType(ListView), const Offset(0, -200));
+    await tester.pumpAndSettle();
+
+    await tester.enterText(find.byKey(const Key('settingsBlacklistAddField')), 'rating:e foxta');
+    await tester.pump(const Duration(seconds: 3, milliseconds: 50));
+    await tester.pumpAndSettle();
+
+    expect(find.text('foxtail (10)'), findsOneWidget);
+    expect(find.text('wolfpack (5)'), findsNothing);
+
+    await tester.tap(find.text('foxtail (10)'));
+    await tester.pump();
+
+    final field = tester.widget<TextField>(find.byKey(const Key('settingsBlacklistAddField')));
+    expect(field.controller!.text, 'rating:e foxtail ');
+  });
+
   testWidgets('"Sync from e621" pulls the blacklist and shows a result snackbar (M27)', (WidgetTester tester) async {
     final repository = FakeBunnyRepository();
     repository.syncE621BlacklistResult = const BunnyBlacklistSyncStats(added: 2, alreadyPresent: 1, skippedInvalid: 1);
