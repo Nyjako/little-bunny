@@ -364,6 +364,17 @@ class DownloadQueueService extends ChangeNotifier {
     return File('${dir.path}/pending_downloads.json');
   }
 
+  /// Public, awaitable wrapper around [_persist] -- every other call site
+  /// uses `unawaited(_persist())` since none of them have a reason to block
+  /// on the write finishing, but `main.dart`'s desktop exit hook (M61) does:
+  /// without an explicit flush awaited *before* the app is allowed to
+  /// actually exit, a normal window close on Linux/Windows/macOS can tear
+  /// the process down mid-write (or before the next periodic sync even
+  /// fires), silently losing whatever changed since the last successful
+  /// persist -- unlike a mobile "swipe to kill," which the OS doesn't ask
+  /// this app's permission for at all.
+  Future<void> flush() => _persist();
+
   /// Rewritten on every change to [_items] -- always the whole list, never
   /// appended to. Best-effort: a write failure here doesn't stop the queue
   /// itself from processing, it just means a crash right after would lose
