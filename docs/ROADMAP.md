@@ -3011,33 +3011,33 @@ this file is the single source of truth for "what's done" across sessions.
 
 - [ ] **M62 — Download queue: per-file byte progress, and an architecture decision on
   parallelism**
-  Two related asks from the user, worth scoping together since they interact:
-  1. The queue screen's single `LinearProgressIndicator` (`download_queue_screen.dart`)
-     only ever shows batch progress (`done / total` items) -- the user wants a second
-     bar for the file actively downloading right now. No byte-level progress exists
-     anywhere today: `DownloadManager.downloadPost` uses a single buffered
-     `http.Client.get()` call (confirmed, `download_manager.dart`), not a streamed
-     request, so there's no "bytes received so far" to report mid-download. Needs
-     switching to `http.Client.send()` + reading `response.stream` with a running byte
-     count against `response.contentLength`, threaded up through
-     `DownloadQueueService` as new current-item-progress state the queue screen (and,
-     "if possible," the notification) can read.
-  2. The user also wants downloads to run in parallel (plus moving checksum validation
-     to its own thread), since files come from a CDN that can serve several requests at
-     once. `_processQueue` today is strictly sequential (`while (true) { item =
-     queuedItems.firstOrNull; ... }`, one item at a time by design, matching this
-     codebase's other mass-action code) and checksum hashing (`md5.convert(bytes)`) runs
-     synchronously on the main isolate right after the full body is buffered -- moving
-     it off-thread means `compute()` (a worker isolate), not a true shared-memory
-     thread, since Dart isolates don't share memory.
-  These two asks are in tension: a single "current file" progress bar assumes one file
-  downloading at a time, which parallel downloads breaks (N files in flight at once
-  need either N progress bars or a different UI concept entirely, e.g. an aggregate
-  byte-progress bar across all in-flight files). Needs a decision on the target UX
-  before implementation -- stay sequential (one file, two bars: batch + that file's own
-  bytes) or go parallel (and redesign the per-item progress display to match) -- plus a
-  concurrency cap if parallel, so a multi-thousand-item mass-download doesn't open an
-  unbounded number of simultaneous CDN connections.
+  Two related asks from the user, scoped together since they interact:
+  1. **Landed**: the queue screen's single `LinearProgressIndicator`
+     (`download_queue_screen.dart`) used to only show batch progress (`done / total`
+     items). `DownloadManager.downloadPost` now streams via `http.Client.send()` +
+     `response.stream` (not a single buffered `http.Client.get()`), reporting a
+     running byte count against `response.contentLength` through a new `onProgress`
+     callback. `DownloadQueueService` surfaces this as
+     `currentBytesReceived`/`currentBytesTotal`, reset per item and on queue drain; the
+     queue screen now shows a second progress bar (plus a formatted byte count, new
+     `byte_format.dart`) for the one file actively downloading, alongside the existing
+     batch bar. The notification's own progress bar is deliberately untouched (still
+     batch-level) -- wiring byte progress into it needs throttling across a platform
+     channel that wasn't verified without a real device.
+  2. **Still open**: the user also wants downloads to run in parallel (plus moving
+     checksum validation to its own thread), since files come from a CDN that can
+     serve several requests at once. `_processQueue` today is strictly sequential
+     (`while (true) { item = queuedItems.firstOrNull; ... }`, one item at a time by
+     design, matching this codebase's other mass-action code) and checksum hashing
+     (`md5.convert(bytes)`) runs synchronously on the main isolate right after the
+     full body is buffered -- moving it off-thread means `compute()` (a worker
+     isolate), not a true shared-memory thread, since Dart isolates don't share
+     memory. This is in tension with the just-landed single "current file" progress
+     bar, which assumes one file downloading at a time -- parallel downloads would
+     need either N progress bars or a different UI concept (e.g. an aggregate
+     byte-progress bar across all in-flight files), plus a concurrency cap so a
+     multi-thousand-item mass-download doesn't open an unbounded number of
+     simultaneous CDN connections.
 
 - [ ] **M63 — Linux download notification: no progress bar, and a new bubble per file**
   The user's report: on Linux, the download notification shows no progress bar at all,
