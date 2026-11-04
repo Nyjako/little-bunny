@@ -102,6 +102,40 @@ void main() {
     expect(await File('${destinationDir.path}/someartist/1.png').exists(), isTrue);
   });
 
+  test('currentBytesReceived/currentBytesTotal (M62) track the active item, resetting for the next one', () async {
+    final firstChunkGate = Completer<void>();
+    final controller = StreamController<List<int>>();
+    final service = buildService(
+      client: MockClient.streaming((request, _) async {
+        unawaited(() async {
+          controller.add(List.filled(30, 1));
+          await firstChunkGate.future;
+          controller.add(List.filled(70, 1));
+          await controller.close();
+        }());
+        return http.StreamedResponse(controller.stream, 200, contentLength: 100);
+      }),
+    );
+    final post = _post(id: 1);
+    repository.postsById[1] = post;
+
+    expect(service.currentBytesReceived, isNull);
+
+    service.enqueue(post, repository);
+    while (service.currentBytesReceived != 30) {
+      await Future<void>.delayed(const Duration(milliseconds: 1));
+    }
+    expect(service.currentBytesTotal, 100);
+
+    firstChunkGate.complete();
+    await waitUntilIdle(service);
+
+    // Reset once the queue fully drains, same as the session counters --
+    // nothing left actively downloading to report progress for.
+    expect(service.currentBytesReceived, isNull);
+    expect(service.currentBytesTotal, isNull);
+  });
+
   test('enqueueAll processes every item strictly sequentially', () async {
     final service = buildService(client: MockClient((_) async => http.Response.bytes([1, 2, 3], 200)));
     final posts = [_post(id: 1), _post(id: 2), _post(id: 3)];

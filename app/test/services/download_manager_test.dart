@@ -72,6 +72,23 @@ void main() {
     expect(await File(result.filePath!).readAsBytes(), bytes);
   });
 
+  test('onProgress (M62) reports bytes received against the response\'s own content length', () async {
+    final bytes = List.generate(1000, (i) => i % 256);
+    final manager = DownloadManager(client: MockClient((_) async => http.Response.bytes(bytes, 200)));
+    final repository = FakeBunnyRepository();
+    final calls = <(int, int?)>[];
+
+    await manager.downloadPost(_post(), repository, tempDir.path, onProgress: (received, total) => calls.add((received, total)));
+
+    expect(calls, isNotEmpty);
+    // MockClient delivers the whole body as a single stream chunk, so the
+    // only call seen here already reports the full byte count -- a real
+    // CDN response arrives in several chunks instead, each call reporting
+    // a running total up to this same final value.
+    expect(calls.last.$1, bytes.length);
+    expect(calls.last.$2, bytes.length);
+  });
+
   test('falls back to "unknown" for a null artist', () async {
     final manager = DownloadManager(client: MockClient((_) async => http.Response.bytes([1], 200)));
     final repository = FakeBunnyRepository();
