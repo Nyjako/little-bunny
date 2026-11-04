@@ -251,3 +251,44 @@ void bunny_db_action_list_free(bunny_db_action_list_t *list)
     list->items = NULL;
     list->count = 0;
 }
+
+const char *bunny_db_download_queue_status_to_string(bunny_db_download_queue_status_t status)
+{
+    switch (status) {
+        case BUNNY_DB_DOWNLOAD_QUEUE_QUEUED:
+            return "queued";
+        case BUNNY_DB_DOWNLOAD_QUEUE_DOWNLOADING:
+            return "downloading";
+        case BUNNY_DB_DOWNLOAD_QUEUE_SUCCEEDED:
+            return "succeeded";
+        case BUNNY_DB_DOWNLOAD_QUEUE_CHECKSUM_MISMATCH:
+            return "checksum_mismatch";
+        case BUNNY_DB_DOWNLOAD_QUEUE_FAILED:
+            return "failed";
+        default:
+            return "queued";
+    }
+}
+
+void bunny_db_download_queue_item_free(bunny_db_download_queue_item_t *item)
+{
+    if (!item) {
+        return;
+    }
+    free(item->failure_reason);
+    free(item->created_at);
+    memset(item, 0, sizeof(*item));
+}
+
+void bunny_db_download_queue_list_free(bunny_db_download_queue_list_t *list)
+{
+    if (!list) {
+        return;
+    }
+    for (size_t i = 0; i < list->count; i++) {
+        bunny_db_download_queue_item_free(&list->items[i]);
+    }
+    free(list->items);
+    list->items = NULL;
+    list->count = 0;
+}

@@ -39,6 +39,26 @@ bunny_db_site_t _siteFromWire(String site) => switch (site) {
   _ => throw ArgumentError.value(site, 'site', 'unknown site'),
 };
 
+/// Same wire strings schema.h's own CHECK constraint uses for
+/// download_queue.status -- kept in sync with app/lib/repository/
+/// bunny_repository.dart's DownloadQueueRecord doc comment.
+String _downloadQueueStatusWire(bunny_db_download_queue_status_t status) => switch (status) {
+  bunny_db_download_queue_status_t.BUNNY_DB_DOWNLOAD_QUEUE_QUEUED => 'queued',
+  bunny_db_download_queue_status_t.BUNNY_DB_DOWNLOAD_QUEUE_DOWNLOADING => 'downloading',
+  bunny_db_download_queue_status_t.BUNNY_DB_DOWNLOAD_QUEUE_SUCCEEDED => 'succeeded',
+  bunny_db_download_queue_status_t.BUNNY_DB_DOWNLOAD_QUEUE_CHECKSUM_MISMATCH => 'checksum_mismatch',
+  bunny_db_download_queue_status_t.BUNNY_DB_DOWNLOAD_QUEUE_FAILED => 'failed',
+};
+
+bunny_db_download_queue_status_t _downloadQueueStatusFromWire(String status) => switch (status) {
+  'queued' => bunny_db_download_queue_status_t.BUNNY_DB_DOWNLOAD_QUEUE_QUEUED,
+  'downloading' => bunny_db_download_queue_status_t.BUNNY_DB_DOWNLOAD_QUEUE_DOWNLOADING,
+  'succeeded' => bunny_db_download_queue_status_t.BUNNY_DB_DOWNLOAD_QUEUE_SUCCEEDED,
+  'checksum_mismatch' => bunny_db_download_queue_status_t.BUNNY_DB_DOWNLOAD_QUEUE_CHECKSUM_MISMATCH,
+  'failed' => bunny_db_download_queue_status_t.BUNNY_DB_DOWNLOAD_QUEUE_FAILED,
+  _ => throw ArgumentError.value(status, 'status', 'unknown download queue status'),
+};
+
 Map<String, Object?> _accountToMap(bunny_db_account_t account) => {
   'id': account.id,
   // secret is deliberately never surfaced -- see BunnyAccount's doc comment
@@ -495,6 +515,28 @@ class _ProcessQueueRequest extends _Request {
   const _ProcessQueueRequest();
 }
 
+class _DownloadQueueAddRequest extends _Request {
+  final int postId;
+
+  const _DownloadQueueAddRequest(this.postId);
+}
+
+class _DownloadQueueSetStatusRequest extends _Request {
+  final int id;
+  final String status;
+  final String? failureReason;
+
+  const _DownloadQueueSetStatusRequest(this.id, this.status, this.failureReason);
+}
+
+class _DownloadQueueListRequest extends _Request {
+  const _DownloadQueueListRequest();
+}
+
+class _DownloadQueueClearFinishedRequest extends _Request {
+  const _DownloadQueueClearFinishedRequest();
+}
+
 class _Envelope {
   final int id;
   final _Request request;
@@ -901,6 +943,20 @@ List<Map<String, Object?>> _handleListSearchPosts(Pointer<bunny_core_t> core, _L
   });
 }
 
+List<Map<String, Object?>> _handleDownloadQueueList(Pointer<bunny_core_t> core) {
+  return using((arena) {
+    final out = arena<bunny_db_download_queue_list_t>();
+    _check(_bindings.bunny_core_download_queue_list(core, out));
+    final items = <Map<String, Object?>>[];
+    for (var i = 0; i < out.ref.count; i++) {
+      final item = out.ref.items[i];
+      items.add({'id': item.id, 'postId': item.post_id, 'status': _downloadQueueStatusWire(item.status), 'failureReason': _readNullableString(item.failure_reason), 'createdAt': _readNullableString(item.created_at)});
+    }
+    _bindings.bunny_db_download_queue_list_free(out);
+    return items;
+  });
+}
+
 Object? _dispatch(Pointer<bunny_core_t>? core, _Request request, void Function(Pointer<bunny_core_t>?) setCore) {
   if (request is _OpenRequest) {
     final opened = _handleOpen(request);
@@ -1074,6 +1130,19 @@ Object? _dispatch(Pointer<bunny_core_t>? core, _Request request, void Function(P
         return outHours.value;
       case _SetDefaultSyncIntervalHoursRequest r:
         _check(_bindings.bunny_core_set_default_sync_interval_hours(c, r.hours));
+        return null;
+      case _DownloadQueueAddRequest r:
+        final outId = arena<Int64>();
+        _check(_bindings.bunny_core_download_queue_add(c, r.postId, outId));
+        return outId.value;
+      case _DownloadQueueSetStatusRequest r:
+        final failureReason = r.failureReason == null ? nullptr : r.failureReason!.toNativeUtf8(allocator: arena).cast<Char>();
+        _check(_bindings.bunny_core_download_queue_set_status(c, r.id, _downloadQueueStatusFromWire(r.status), failureReason));
+        return null;
+      case _DownloadQueueListRequest():
+        return _handleDownloadQueueList(c);
+      case _DownloadQueueClearFinishedRequest():
+        _check(_bindings.bunny_core_download_queue_clear_finished(c));
         return null;
     }
   });
@@ -1266,4 +1335,12 @@ class BunnyCoreNative {
   Future<void> queueComment(int postId, String body, bool anonymous) => _send<void>(_QueueCommentRequest(postId, body, anonymous));
 
   Future<Map<String, Object?>> processQueue() => _send<Map<String, Object?>>(const _ProcessQueueRequest());
+
+  Future<int> downloadQueueAdd(int postId) => _send<int>(_DownloadQueueAddRequest(postId));
+
+  Future<void> downloadQueueSetStatus(int id, String status, {String? failureReason}) => _send<void>(_DownloadQueueSetStatusRequest(id, status, failureReason));
+
+  Future<List<Map<String, Object?>>> downloadQueueList() => _send<List<Map<String, Object?>>>(const _DownloadQueueListRequest());
+
+  Future<void> downloadQueueClearFinished() => _send<void>(const _DownloadQueueClearFinishedRequest());
 }

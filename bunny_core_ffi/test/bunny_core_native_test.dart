@@ -116,6 +116,29 @@ void main() {
     expect(stats['actionsFailed'], 0);
   });
 
+  test('downloadQueueAdd/downloadQueueList/downloadQueueSetStatus/downloadQueueClearFinished round-trip', () async {
+    // No posts(id) foreign key on this table (unlike queueFavoriteAdd below)
+    // -- a networked-mode client's own dedicated local db never has a
+    // populated posts table, so an arbitrary post id must be accepted here.
+    final id = await native.downloadQueueAdd(42);
+    expect(id, greaterThan(0));
+
+    var items = await native.downloadQueueList();
+    expect(items, hasLength(1));
+    expect(items[0]['id'], id);
+    expect(items[0]['postId'], 42);
+    expect(items[0]['status'], 'queued');
+    expect(items[0]['failureReason'], isNull);
+
+    await native.downloadQueueSetStatus(id, 'failed', failureReason: 'HTTP 500');
+    items = await native.downloadQueueList();
+    expect(items[0]['status'], 'failed');
+    expect(items[0]['failureReason'], 'HTTP 500');
+
+    await native.downloadQueueClearFinished();
+    expect(await native.downloadQueueList(), isEmpty);
+  });
+
   test('tagAutocomplete returns an empty list when nothing is cached', () async {
     expect(await native.tagAutocomplete('e621', 'any', 10), isEmpty);
   });
