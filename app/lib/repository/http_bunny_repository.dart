@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:bunny_core_ffi/bunny_core_ffi.dart';
 import 'package:crypto/crypto.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/io_client.dart';
@@ -181,6 +182,16 @@ class HttpBunnyRepository implements BunnyRepository {
   final String _bearerToken;
   final http.Client _client;
 
+  /// Networked mode has no local cache of posts/searches/etc. to share a
+  /// database with (everything else goes through the REST calls below) --
+  /// the download queue (M62 follow-up) is the one piece of state this
+  /// implementation still needs to persist on-device, so it gets its own
+  /// small dedicated local `bunny_core`-backed db, opened lazily on first
+  /// use via [_ensureDownloadQueueNative].
+  final String _downloadQueueDbPath;
+  final String _downloadQueueUserAgent;
+  BunnyCoreNative? _downloadQueueNative;
+
   /// [certificateSha256Fingerprint] pins the server's self-signed
   /// certificate (hex, colons optional, case-insensitive) -- the server has
   /// no CA (see `docs/architecture.md`'s TLS section), so normal
@@ -189,27 +200,46 @@ class HttpBunnyRepository implements BunnyRepository {
   // The fields are private but the constructor's parameter names are the
   // deliberate public API, so `this._baseUrl`-style initializing formals
   // (which would require a leading-underscore parameter name) don't apply.
-  HttpBunnyRepository({required Uri baseUrl, required String bearerToken, required String certificateSha256Fingerprint})
+  HttpBunnyRepository({required Uri baseUrl, required String bearerToken, required String certificateSha256Fingerprint, required String downloadQueueDbPath, required String downloadQueueUserAgent})
     : _baseUrl = baseUrl, // ignore: prefer_initializing_formals
       _bearerToken = bearerToken, // ignore: prefer_initializing_formals
-      _client = IOClient(HttpClient()..badCertificateCallback = _pinnedCertificateCallback(certificateSha256Fingerprint));
+      _client = IOClient(HttpClient()..badCertificateCallback = _pinnedCertificateCallback(certificateSha256Fingerprint)),
+      _downloadQueueDbPath = downloadQueueDbPath, // ignore: prefer_initializing_formals
+      _downloadQueueUserAgent = downloadQueueUserAgent; // ignore: prefer_initializing_formals
 
   /// Injects a fake transport for tests -- fakes the transport, not the
   /// business logic, same approach as every C library's own tests. Skips
   /// certificate pinning entirely since a fake [http.Client] never performs
-  /// a real TLS handshake.
+  /// a real TLS handshake. The download queue still goes through a real
+  /// (in-memory) `bunny_core` db -- that part has nothing to do with HTTP.
   @visibleForTesting
-  HttpBunnyRepository.withClient({required Uri baseUrl, required String bearerToken, required http.Client client})
+  HttpBunnyRepository.withClient({required Uri baseUrl, required String bearerToken, required http.Client client, String downloadQueueDbPath = ':memory:', String downloadQueueUserAgent = 'bunny-tests/1.0 (unit tests)'})
     : _baseUrl = baseUrl, // ignore: prefer_initializing_formals
       _bearerToken = bearerToken, // ignore: prefer_initializing_formals
-      _client = client; // ignore: prefer_initializing_formals
+      _client = client, // ignore: prefer_initializing_formals
+      _downloadQueueDbPath = downloadQueueDbPath, // ignore: prefer_initializing_formals
+      _downloadQueueUserAgent = downloadQueueUserAgent; // ignore: prefer_initializing_formals
 
   static bool Function(X509Certificate cert, String host, int port) _pinnedCertificateCallback(String expectedFingerprint) {
     return (cert, host, port) => matchesPinnedFingerprint(cert.der, expectedFingerprint);
   }
 
+  Future<BunnyCoreNative> _ensureDownloadQueueNative() async {
+    final existing = _downloadQueueNative;
+    if (existing != null) {
+      return existing;
+    }
+    final native = BunnyCoreNative();
+    await native.open(_downloadQueueDbPath, _downloadQueueUserAgent);
+    _downloadQueueNative = native;
+    return native;
+  }
+
   @override
-  Future<void> close() async => _client.close();
+  Future<void> close() async {
+    _client.close();
+    await _downloadQueueNative?.close();
+  }
 
   Uri _uri(String path, [Map<String, String>? query]) => _baseUrl.replace(path: path, queryParameters: query);
 
@@ -764,6 +794,51 @@ class HttpBunnyRepository implements BunnyRepository {
       _throwError(response);
     }
     return _queueStatsFromJson(_decodeObject(response));
+  }
+
+  @override
+  Future<int> downloadQueueAdd(int postId) async {
+    final native = await _ensureDownloadQueueNative();
+    try {
+      return await native.downloadQueueAdd(postId);
+    } on BunnyCoreNativeException catch (e) {
+      throw BunnyRepositoryException(e.message);
+    }
+  }
+
+  @override
+  Future<void> downloadQueueSetStatus(int id, String status, {String? failureReason}) async {
+    final native = await _ensureDownloadQueueNative();
+    try {
+      await native.downloadQueueSetStatus(id, status, failureReason: failureReason);
+    } on BunnyCoreNativeException catch (e) {
+      throw BunnyRepositoryException(e.message);
+    }
+  }
+
+  @override
+  Future<List<DownloadQueueRecord>> downloadQueueList() async {
+    final native = await _ensureDownloadQueueNative();
+    try {
+      final list = await native.downloadQueueList();
+      return list
+          .map(
+            (m) => DownloadQueueRecord(id: m['id'] as int, postId: m['postId'] as int, status: m['status'] as String, failureReason: m['failureReason'] as String?, createdAt: m['createdAt'] as String),
+          )
+          .toList(growable: false);
+    } on BunnyCoreNativeException catch (e) {
+      throw BunnyRepositoryException(e.message);
+    }
+  }
+
+  @override
+  Future<void> downloadQueueClearFinished() async {
+    final native = await _ensureDownloadQueueNative();
+    try {
+      await native.downloadQueueClearFinished();
+    } on BunnyCoreNativeException catch (e) {
+      throw BunnyRepositoryException(e.message);
+    }
   }
 
   /// Recent server log lines (oldest-first), for diagnosing a stuck/slow

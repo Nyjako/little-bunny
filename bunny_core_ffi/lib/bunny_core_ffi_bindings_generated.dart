@@ -62,6 +62,20 @@ class BunnyCoreFfiBindings {
       _bunny_db_action_type_to_stringPtr
           .asFunction<ffi.Pointer<ffi.Char> Function(int)>();
 
+  ffi.Pointer<ffi.Char> bunny_db_download_queue_status_to_string(
+    bunny_db_download_queue_status_t status,
+  ) {
+    return _bunny_db_download_queue_status_to_string(status.value);
+  }
+
+  late final _bunny_db_download_queue_status_to_stringPtr =
+      _lookup<
+        ffi.NativeFunction<ffi.Pointer<ffi.Char> Function(ffi.UnsignedInt)>
+      >('bunny_db_download_queue_status_to_string');
+  late final _bunny_db_download_queue_status_to_string =
+      _bunny_db_download_queue_status_to_stringPtr
+          .asFunction<ffi.Pointer<ffi.Char> Function(int)>();
+
   void bunny_db_account_free(ffi.Pointer<bunny_db_account_t> account) {
     return _bunny_db_account_free(account);
   }
@@ -284,6 +298,42 @@ class BunnyCoreFfiBindings {
       >('bunny_db_action_list_free');
   late final _bunny_db_action_list_free = _bunny_db_action_list_freePtr
       .asFunction<void Function(ffi.Pointer<bunny_db_action_list_t>)>();
+
+  void bunny_db_download_queue_item_free(
+    ffi.Pointer<bunny_db_download_queue_item_t> item,
+  ) {
+    return _bunny_db_download_queue_item_free(item);
+  }
+
+  late final _bunny_db_download_queue_item_freePtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.Void Function(ffi.Pointer<bunny_db_download_queue_item_t>)
+        >
+      >('bunny_db_download_queue_item_free');
+  late final _bunny_db_download_queue_item_free =
+      _bunny_db_download_queue_item_freePtr
+          .asFunction<
+            void Function(ffi.Pointer<bunny_db_download_queue_item_t>)
+          >();
+
+  void bunny_db_download_queue_list_free(
+    ffi.Pointer<bunny_db_download_queue_list_t> list,
+  ) {
+    return _bunny_db_download_queue_list_free(list);
+  }
+
+  late final _bunny_db_download_queue_list_freePtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.Void Function(ffi.Pointer<bunny_db_download_queue_list_t>)
+        >
+      >('bunny_db_download_queue_list_free');
+  late final _bunny_db_download_queue_list_free =
+      _bunny_db_download_queue_list_freePtr
+          .asFunction<
+            void Function(ffi.Pointer<bunny_db_download_queue_list_t>)
+          >();
 
   /// Opens (creating if needed) the underlying bunny_db database and applies its
   /// schema.
@@ -2063,6 +2113,119 @@ class BunnyCoreFfiBindings {
         )
       >();
 
+  /// --- Download queue --------------------------------------------------------------
+  /// Tracks DownloadManager's own file fetches (the Flutter app's, not anything
+  /// this library fetches itself) through to completion, so a killed/restarted
+  /// process doesn't lose track of what was queued/downloading/failed -- thin
+  /// lock/unlock pass-throughs to bunny_db_download_queue_*, same shape as the
+  /// action queue above but with no site/network logic of its own: the actual
+  /// fetch, file write, and checksum check all happen on the Dart side.
+  bunny_core_result_t bunny_core_download_queue_add(
+    ffi.Pointer<bunny_core_t> core,
+    int post_id,
+    ffi.Pointer<ffi.Int64> out_id,
+  ) {
+    return bunny_core_result_t.fromValue(
+      _bunny_core_download_queue_add(core, post_id, out_id),
+    );
+  }
+
+  late final _bunny_core_download_queue_addPtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.UnsignedInt Function(
+            ffi.Pointer<bunny_core_t>,
+            ffi.Int64,
+            ffi.Pointer<ffi.Int64>,
+          )
+        >
+      >('bunny_core_download_queue_add');
+  late final _bunny_core_download_queue_add = _bunny_core_download_queue_addPtr
+      .asFunction<
+        int Function(ffi.Pointer<bunny_core_t>, int, ffi.Pointer<ffi.Int64>)
+      >();
+
+  bunny_core_result_t bunny_core_download_queue_set_status(
+    ffi.Pointer<bunny_core_t> core,
+    int id,
+    bunny_db_download_queue_status_t status,
+    ffi.Pointer<ffi.Char> failure_reason,
+  ) {
+    return bunny_core_result_t.fromValue(
+      _bunny_core_download_queue_set_status(
+        core,
+        id,
+        status.value,
+        failure_reason,
+      ),
+    );
+  }
+
+  late final _bunny_core_download_queue_set_statusPtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.UnsignedInt Function(
+            ffi.Pointer<bunny_core_t>,
+            ffi.Int64,
+            ffi.UnsignedInt,
+            ffi.Pointer<ffi.Char>,
+          )
+        >
+      >('bunny_core_download_queue_set_status');
+  late final _bunny_core_download_queue_set_status =
+      _bunny_core_download_queue_set_statusPtr
+          .asFunction<
+            int Function(
+              ffi.Pointer<bunny_core_t>,
+              int,
+              int,
+              ffi.Pointer<ffi.Char>,
+            )
+          >();
+
+  bunny_core_result_t bunny_core_download_queue_list(
+    ffi.Pointer<bunny_core_t> core,
+    ffi.Pointer<bunny_db_download_queue_list_t> out_list,
+  ) {
+    return bunny_core_result_t.fromValue(
+      _bunny_core_download_queue_list(core, out_list),
+    );
+  }
+
+  late final _bunny_core_download_queue_listPtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.UnsignedInt Function(
+            ffi.Pointer<bunny_core_t>,
+            ffi.Pointer<bunny_db_download_queue_list_t>,
+          )
+        >
+      >('bunny_core_download_queue_list');
+  late final _bunny_core_download_queue_list =
+      _bunny_core_download_queue_listPtr
+          .asFunction<
+            int Function(
+              ffi.Pointer<bunny_core_t>,
+              ffi.Pointer<bunny_db_download_queue_list_t>,
+            )
+          >();
+
+  bunny_core_result_t bunny_core_download_queue_clear_finished(
+    ffi.Pointer<bunny_core_t> core,
+  ) {
+    return bunny_core_result_t.fromValue(
+      _bunny_core_download_queue_clear_finished(core),
+    );
+  }
+
+  late final _bunny_core_download_queue_clear_finishedPtr =
+      _lookup<
+        ffi.NativeFunction<ffi.UnsignedInt Function(ffi.Pointer<bunny_core_t>)>
+      >('bunny_core_download_queue_clear_finished');
+  late final _bunny_core_download_queue_clear_finished =
+      _bunny_core_download_queue_clear_finishedPtr
+          .asFunction<int Function(ffi.Pointer<bunny_core_t>)>();
+
   /// --- Diagnostics ----------------------------------------------------------
   /// Backs `bunny_server --db-stats`/`--health` (server/src/main.c) -- thin
   /// read-locked pass-throughs to bunny_db_table_stats/bunny_db_integrity_check,
@@ -2755,6 +2918,60 @@ final class bunny_db_action_t extends ffi.Struct {
 
 final class bunny_db_action_list_t extends ffi.Struct {
   external ffi.Pointer<bunny_db_action_t> items;
+
+  @ffi.Size()
+  external int count;
+}
+
+/// A single file download's own trip through the queue (M62 follow-up) --
+/// persisted so a killed/restarted process doesn't lose track of what was
+/// queued/downloading/failed, same durability goal as action_queue above but
+/// for DownloadManager's file fetches rather than favorite/vote/comment
+/// proxying.
+enum bunny_db_download_queue_status_t {
+  BUNNY_DB_DOWNLOAD_QUEUE_QUEUED(0),
+  BUNNY_DB_DOWNLOAD_QUEUE_DOWNLOADING(1),
+  BUNNY_DB_DOWNLOAD_QUEUE_SUCCEEDED(2),
+  BUNNY_DB_DOWNLOAD_QUEUE_CHECKSUM_MISMATCH(3),
+  BUNNY_DB_DOWNLOAD_QUEUE_FAILED(4);
+
+  final int value;
+  const bunny_db_download_queue_status_t(this.value);
+
+  static bunny_db_download_queue_status_t fromValue(int value) =>
+      switch (value) {
+        0 => BUNNY_DB_DOWNLOAD_QUEUE_QUEUED,
+        1 => BUNNY_DB_DOWNLOAD_QUEUE_DOWNLOADING,
+        2 => BUNNY_DB_DOWNLOAD_QUEUE_SUCCEEDED,
+        3 => BUNNY_DB_DOWNLOAD_QUEUE_CHECKSUM_MISMATCH,
+        4 => BUNNY_DB_DOWNLOAD_QUEUE_FAILED,
+        _ => throw ArgumentError(
+          'Unknown value for bunny_db_download_queue_status_t: $value',
+        ),
+      };
+}
+
+final class bunny_db_download_queue_item_t extends ffi.Struct {
+  @ffi.Int64()
+  external int id;
+
+  @ffi.Int64()
+  external int post_id;
+
+  @ffi.UnsignedInt()
+  external int statusAsInt;
+
+  bunny_db_download_queue_status_t get status =>
+      bunny_db_download_queue_status_t.fromValue(statusAsInt);
+
+  /// may be NULL
+  external ffi.Pointer<ffi.Char> failure_reason;
+
+  external ffi.Pointer<ffi.Char> created_at;
+}
+
+final class bunny_db_download_queue_list_t extends ffi.Struct {
+  external ffi.Pointer<bunny_db_download_queue_item_t> items;
 
   @ffi.Size()
   external int count;

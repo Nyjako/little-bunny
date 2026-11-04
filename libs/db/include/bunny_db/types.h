@@ -259,6 +259,37 @@ typedef struct
     size_t count;
 } bunny_db_action_list_t;
 
+/* A single file download's own trip through the queue (M62 follow-up) --
+ * persisted so a killed/restarted process doesn't lose track of what was
+ * queued/downloading/failed, same durability goal as action_queue above but
+ * for DownloadManager's file fetches rather than favorite/vote/comment
+ * proxying. */
+typedef enum
+{
+    BUNNY_DB_DOWNLOAD_QUEUE_QUEUED,
+    BUNNY_DB_DOWNLOAD_QUEUE_DOWNLOADING,
+    BUNNY_DB_DOWNLOAD_QUEUE_SUCCEEDED,
+    BUNNY_DB_DOWNLOAD_QUEUE_CHECKSUM_MISMATCH,
+    BUNNY_DB_DOWNLOAD_QUEUE_FAILED,
+} bunny_db_download_queue_status_t;
+
+const char *bunny_db_download_queue_status_to_string(bunny_db_download_queue_status_t status);
+
+typedef struct
+{
+    int64_t id;
+    int64_t post_id;
+    bunny_db_download_queue_status_t status;
+    char *failure_reason; /* may be NULL */
+    char *created_at;
+} bunny_db_download_queue_item_t;
+
+typedef struct
+{
+    bunny_db_download_queue_item_t *items;
+    size_t count;
+} bunny_db_download_queue_list_t;
+
 void bunny_db_account_free(bunny_db_account_t *account);
 void bunny_db_search_free(bunny_db_search_t *search);
 void bunny_db_search_list_free(bunny_db_search_list_t *list);
@@ -277,6 +308,8 @@ void bunny_db_int64_list_free(bunny_db_int64_list_t *list);
 void bunny_db_post_relationships_free(bunny_db_post_relationships_t *relationships);
 void bunny_db_action_free(bunny_db_action_t *action);
 void bunny_db_action_list_free(bunny_db_action_list_t *list);
+void bunny_db_download_queue_item_free(bunny_db_download_queue_item_t *item);
+void bunny_db_download_queue_list_free(bunny_db_download_queue_list_t *list);
 
 #ifdef __cplusplus
 }

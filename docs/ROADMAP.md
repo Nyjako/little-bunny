@@ -3099,3 +3099,30 @@ this file is the single source of truth for "what's done" across sessions.
   ignores `replaces_id`, a timing/caching issue in the plugin, or something else) needs
   live testing against the user's real desktop environment/notification daemon, which
   this pass had no way to reproduce.
+
+- [x] **M64 — Persist the download queue in SQLite, not a Dart-owned JSON file**
+  Reported by the user: downloads still weren't resuming reliably on Android/Linux
+  after a kill, especially M43's `pending_downloads.json` (`getApplicationSupportDirectory()`)
+  -- its writes were `unawaited()` and batched (every 10 items plus a final flush), so a
+  kill between writes lost everything since the last successful one, and Android in
+  particular can tear down the whole Dart engine on a task-swipe without ever running
+  that flush. Fix: a new `download_queue` table in the same SQLite database
+  `bunny_core`/`bunny_db` already use for everything else (`libs/db/src/schema.h`), with
+  matching CRUD in `libs/db/src/download_queue.c` and a thin `libs/core/src/
+  download_queue.c` wrapper, both exposed over FFI the same way every other
+  `bunny_core_*` call is (`bunny_core_ffi/lib/src/bunny_core_isolate.dart`). Every status
+  transition (`DownloadQueueService._persistStatus`) is now a direct, synchronously
+  awaited SQL statement instead of a periodic full-list rewrite -- durable the instant it
+  happens, regardless of how the process later dies; only the "claimed -> downloading"
+  transition stays fire-and-forget, since `restore` already resets a still-"downloading"
+  row back to `queued` unconditionally either way. `BunnyRepository` gained
+  `downloadQueueAdd`/`downloadQueueSetStatus`/`downloadQueueList`/
+  `downloadQueueClearFinished`; `FfiBunnyRepository` delegates to the same `bunny_core_t`
+  handle standalone mode already has open, which is what makes this "the same database
+  standalone mode already uses." Networked mode (`HttpBunnyRepository`) has no local
+  cache of posts/searches to share a database with at all -- it opens its own small
+  dedicated local db (`downloads.db`, sibling to standalone's `bunny.db`) through the
+  exact same FFI machinery, lazily on first use, used only for this one table. All of
+  M43's Dart-side JSON persistence code (`_persist`/`_persistenceFile`/`flush`, and the
+  `main.dart` desktop exit-hook that only existed to wait for that write to land) is
+  deleted outright, not kept as a fallback.

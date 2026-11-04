@@ -57,6 +57,9 @@ void main() {
     expect(networked.serverBaseUrl, Uri.parse('https://bunny.example:9443'));
     expect(networked.bearerToken, 'sometoken');
     expect(networked.certificateSha256Fingerprint, 'abc123');
+    // Its own small local db for the download queue (M62 follow-up) -- a
+    // sibling file next to standalone's bunny.db, not a server call.
+    expect(networked.downloadQueueDbPath, '/fake/app/support/downloads.db');
   });
 
   test('load returns null for networked mode with a missing secret (cleared/corrupted storage)', () async {

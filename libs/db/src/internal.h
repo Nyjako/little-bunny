@@ -95,6 +95,23 @@ static inline bunny_db_action_status_t bunny_db_action_status_from_text(const ch
     return BUNNY_DB_ACTION_STATUS_PENDING;
 }
 
+static inline bunny_db_download_queue_status_t bunny_db_download_queue_status_from_text(const char *text)
+{
+    if (text && strcmp(text, "downloading") == 0) {
+        return BUNNY_DB_DOWNLOAD_QUEUE_DOWNLOADING;
+    }
+    if (text && strcmp(text, "succeeded") == 0) {
+        return BUNNY_DB_DOWNLOAD_QUEUE_SUCCEEDED;
+    }
+    if (text && strcmp(text, "checksum_mismatch") == 0) {
+        return BUNNY_DB_DOWNLOAD_QUEUE_CHECKSUM_MISMATCH;
+    }
+    if (text && strcmp(text, "failed") == 0) {
+        return BUNNY_DB_DOWNLOAD_QUEUE_FAILED;
+    }
+    return BUNNY_DB_DOWNLOAD_QUEUE_QUEUED;
+}
+
 static inline void bunny_db_bind_text_or_null(sqlite3_stmt *stmt, int idx, const char *value)
 {
     if (value) {

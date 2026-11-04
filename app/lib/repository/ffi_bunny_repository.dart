@@ -134,6 +134,14 @@ BunnyQueueStats _queueStatsFromMap(Map<String, Object?> m) => BunnyQueueStats(
   actionsFailed: m['actionsFailed'] as int,
 );
 
+DownloadQueueRecord _downloadQueueRecordFromMap(Map<String, Object?> m) => DownloadQueueRecord(
+  id: m['id'] as int,
+  postId: m['postId'] as int,
+  status: m['status'] as String,
+  failureReason: m['failureReason'] as String?,
+  createdAt: m['createdAt'] as String,
+);
+
 BunnyBlacklistSyncStats _blacklistSyncStatsFromMap(Map<String, Object?> m) => BunnyBlacklistSyncStats(
   added: m['added'] as int,
   alreadyPresent: m['alreadyPresent'] as int,
@@ -459,4 +467,19 @@ class FfiBunnyRepository implements BunnyRepository {
     final map = await _wrapped(() => _native.processQueue());
     return _queueStatsFromMap(map);
   }
+
+  @override
+  Future<int> downloadQueueAdd(int postId) => _wrapped(() => _native.downloadQueueAdd(postId));
+
+  @override
+  Future<void> downloadQueueSetStatus(int id, String status, {String? failureReason}) => _wrapped(() => _native.downloadQueueSetStatus(id, status, failureReason: failureReason));
+
+  @override
+  Future<List<DownloadQueueRecord>> downloadQueueList() async {
+    final list = await _wrapped(() => _native.downloadQueueList());
+    return list.map(_downloadQueueRecordFromMap).toList(growable: false);
+  }
+
+  @override
+  Future<void> downloadQueueClearFinished() => _wrapped(() => _native.downloadQueueClearFinished());
 }

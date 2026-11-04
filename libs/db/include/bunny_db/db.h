@@ -449,6 +449,17 @@ bunny_db_result_t bunny_db_action_queue_list_pending(bunny_db_t *db, bunny_db_ac
 bunny_db_result_t bunny_db_action_queue_mark_done(bunny_db_t *db, int64_t action_id);
 bunny_db_result_t bunny_db_action_queue_mark_failed(bunny_db_t *db, int64_t action_id, const char *error_message);
 
+/* --- Download queue -------------------------------------------------------------
+ * Tracks DownloadManager's own file fetches through to completion (M62
+ * follow-up) so a killed/restarted process doesn't lose track of what was
+ * queued/downloading/failed -- bunny_db itself never touches a file or the
+ * network, same arm's-length relationship it has with action_queue above. */
+
+bunny_db_result_t bunny_db_download_queue_add(bunny_db_t *db, int64_t post_id, int64_t *out_id);
+bunny_db_result_t bunny_db_download_queue_set_status(bunny_db_t *db, int64_t id, bunny_db_download_queue_status_t status, const char *failure_reason);
+bunny_db_result_t bunny_db_download_queue_list(bunny_db_t *db, bunny_db_download_queue_list_t *out_list);
+bunny_db_result_t bunny_db_download_queue_clear_finished(bunny_db_t *db);
+
 #ifdef __cplusplus
 }
 #endif
