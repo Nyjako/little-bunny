@@ -319,6 +319,31 @@ abstract interface class BunnyRepository {
   /// schedule as [syncDueSearches].
   Future<BunnyQueueStats> processQueue();
 
+  /// Persists a new [DownloadQueueRecord] for [postId], status `'queued'` --
+  /// backs [DownloadQueueService]'s own in-memory queue (M62 follow-up) so a
+  /// killed/restarted process doesn't lose track of what was queued. Returns
+  /// the new row's id, needed by [downloadQueueSetStatus] later. Standalone
+  /// mode stores this in the same database as everything else;
+  /// [HttpBunnyRepository] keeps its own small dedicated local db for this
+  /// one table, since networked mode has no local cache of posts/searches to
+  /// share a database with.
+  Future<int> downloadQueueAdd(int postId);
+
+  /// Updates [id]'s status in place -- [status] is one of `'queued'`,
+  /// `'downloading'`, `'succeeded'`, `'checksum_mismatch'`, or `'failed'`,
+  /// matching the database's own CHECK constraint. [failureReason] is
+  /// cleared (set to null) when omitted, same as a fresh retry.
+  Future<void> downloadQueueSetStatus(int id, String status, {String? failureReason});
+
+  /// Every persisted download-queue row, in insertion order -- read once on
+  /// startup by [DownloadQueueService.restore].
+  Future<List<DownloadQueueRecord>> downloadQueueList();
+
+  /// Drops every row in a terminal status (`succeeded`/`checksum_mismatch`/
+  /// `failed`) -- the persisted counterpart to
+  /// [DownloadQueueService.clearFinished].
+  Future<void> downloadQueueClearFinished();
+
   /// Releases whatever this implementation holds open -- the FFI isolate
   /// (and the native `bunny_core_t` handle/sqlite connection it owns) or the
   /// HTTP client's connection pool. Previously never called since a

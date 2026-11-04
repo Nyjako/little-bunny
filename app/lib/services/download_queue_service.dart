@@ -1,9 +1,6 @@
 import 'dart:async';
-import 'dart:convert';
-import 'dart:io';
 
 import 'package:flutter/foundation.dart';
-import 'package:path_provider/path_provider.dart';
 
 import '../repository/bunny_models.dart';
 import '../repository/bunny_repository.dart';
@@ -19,20 +16,38 @@ import 'download_queue_notifier.dart';
 /// progress counter (M43 follow-up).
 enum DownloadQueueItemStatus { queued, downloading, succeeded, checksumMismatch, failed }
 
+/// The same wire strings `download_queue.status`'s CHECK constraint uses
+/// (see `libs/db/src/schema.h`) -- kept here rather than on the enum itself
+/// so this persistence detail doesn't leak into every other place the enum
+/// is already used for UI/business logic.
+String _statusWire(DownloadQueueItemStatus status) => switch (status) {
+  DownloadQueueItemStatus.queued => 'queued',
+  DownloadQueueItemStatus.downloading => 'downloading',
+  DownloadQueueItemStatus.succeeded => 'succeeded',
+  DownloadQueueItemStatus.checksumMismatch => 'checksum_mismatch',
+  DownloadQueueItemStatus.failed => 'failed',
+};
+
 /// One post's trip through the queue. [repository] is kept in-memory only
-/// (never persisted -- it isn't JSON-serializable, and is re-resolved via
-/// `repository.getPost(id)` on [DownloadQueueService.restore], same as
-/// before this class existed) -- there's exactly one live [BunnyRepository]
-/// instance app-wide at any moment, confirmed via every
-/// enqueue/enqueueAll/restore call site. [status]/[failureReason] are
-/// mutated in place as the item moves through the queue rather than this
-/// object being replaced, so a `ListenableBuilder` watching
-/// [DownloadQueueService] can just re-read the same item references.
+/// -- there's exactly one live [BunnyRepository] instance app-wide at any
+/// moment, confirmed via every enqueue/enqueueAll/restore call site.
+/// [status]/[failureReason] are mutated in place as the item moves through
+/// the queue rather than this object being replaced, so a `ListenableBuilder`
+/// watching [DownloadQueueService] can just re-read the same item references.
+///
+/// [queueRowIdFuture] is the id of this item's own persisted row (M62
+/// follow-up) -- a live [BunnyRepository.downloadQueueAdd] call for a
+/// freshly enqueued item, or an already-resolved [Future.value] wrapping an
+/// existing row's id when reconstructed by [DownloadQueueService.restore].
+/// Every status-persisting call awaits this *first*, rather than assuming
+/// the insert has already landed by the time it's needed -- correctness
+/// here can't depend on how quickly that Future happens to resolve.
 class DownloadQueueItem {
   final BunnyPost post;
   final BunnyRepository repository;
   DownloadQueueItemStatus status;
   String? failureReason;
+  final Future<int> queueRowIdFuture;
 
   /// This item's own byte progress (M62) -- unlike [DownloadQueueService]'s
   /// whole-batch item counts, these live on the item itself (not a single
@@ -40,11 +55,12 @@ class DownloadQueueItem {
   /// _maxConcurrentDownloads] items can be [DownloadQueueItemStatus.downloading]
   /// at once. Reset to null the instant this item starts downloading;
   /// [bytesTotal] stays null if the response had no `Content-Length` to
-  /// report one.
+  /// report one. Never persisted -- only status/failureReason survive a
+  /// restart.
   int? bytesReceived;
   int? bytesTotal;
 
-  DownloadQueueItem({required this.post, required this.repository, required this.status, this.failureReason});
+  DownloadQueueItem({required this.post, required this.repository, required this.status, this.failureReason, required this.queueRowIdFuture});
 }
 
 /// Lets the user tap download (single or mass, M43) and immediately
@@ -60,15 +76,18 @@ class DownloadQueueItem {
 ///
 /// A locked Android screen no longer kills a download mid-flight (M57 +
 /// its own follow-up fix) -- what this class *also* handles is the process
-/// being killed and relaunched for any other reason: every item (not just
-/// still-pending ones) is persisted to a small JSON file and picked back up
-/// via [restore] on the next launch. A still-queued/downloading item is
-/// re-attempted from scratch (not a byte-level resume -- the HTTP fetch
-/// itself was already a single in-memory read with no partial-write risk to
-/// begin with); a previously-failed item is restored into view but *not*
-/// auto-retried -- [retryFailed]/[retryAllFailed] are explicit, manual
-/// actions, matching "restart failed downloads" rather than silently
-/// hammering a site that just 403'd.
+/// being killed and relaunched for any other reason: every item's status is
+/// persisted through [BunnyRepository]'s `downloadQueue*` methods (a real
+/// SQLite table, M62 follow-up -- previously a Dart-owned JSON file, which
+/// wasn't surviving a restart reliably since its writes were batched and
+/// fire-and-forget) and picked back up via [restore] on the next launch. A
+/// still-queued/downloading item is re-attempted from scratch (not a
+/// byte-level resume -- the HTTP fetch itself was already a single
+/// in-memory read with no partial-write risk to begin with); a
+/// previously-failed item is restored into view but *not* auto-retried --
+/// [retryFailed]/[retryAllFailed] are explicit, manual actions, matching
+/// "restart failed downloads" rather than silently hammering a site that
+/// just 403'd.
 ///
 /// Up to [_maxConcurrentDownloads] items download in parallel (M62 --
 /// previously strictly one at a time) via a small fixed-size worker pool:
@@ -92,19 +111,18 @@ class DownloadQueueService extends ChangeNotifier {
   /// connections to a site's CDN.
   static const _maxConcurrentDownloads = 3;
 
-  /// Persisting (re-serializes the whole [_items] list) and draining the
-  /// favorite/upvote action queue (a blocking network/FFI round trip) both
-  /// used to happen after *every single item* -- fine for a handful of
-  /// items, but for a multi-thousand-item batch that's O(n) work repeated n
-  /// times, and it put a full network round trip on the critical path of
-  /// every single download. Throttling to once every N items divides the
-  /// total cost by a constant factor (it doesn't change the shape -- pair
-  /// with occasional [clearFinished] if multi-thousand-item batches become
-  /// routine), and gets the favorite/upvote drain off the per-item path
-  /// entirely except for this periodic catch-up plus the unconditional final
-  /// flush below. Shared across every concurrent worker (M62) -- the
-  /// increment-then-maybe-reset below never has an `await` in between, so
-  /// this stays race-free the same way claiming an item does.
+  /// Draining the favorite/upvote action queue (a blocking network/FFI
+  /// round trip) used to happen after *every single item* -- fine for a
+  /// handful of items, but for a multi-thousand-item batch that's a full
+  /// network round trip on the critical path of every single download.
+  /// Throttling to once every N items divides the total cost by a constant
+  /// factor (it doesn't change the shape -- pair with occasional
+  /// [clearFinished] if multi-thousand-item batches become routine), and
+  /// gets the drain off the per-item path entirely except for this periodic
+  /// catch-up plus the unconditional final flush below. Shared across every
+  /// concurrent worker (M62) -- the increment-then-maybe-reset below never
+  /// has an `await` in between, so this stays race-free the same way
+  /// claiming an item does.
   static const _syncEveryNItems = 10;
 
   /// Every item the queue currently knows about, regardless of status --
@@ -188,9 +206,10 @@ class DownloadQueueService extends ChangeNotifier {
     if (newPosts.isEmpty) {
       return;
     }
-    _items.addAll(newPosts.map((post) => DownloadQueueItem(post: post, repository: repository, status: DownloadQueueItemStatus.queued)));
+    _items.addAll(
+      newPosts.map((post) => DownloadQueueItem(post: post, repository: repository, status: DownloadQueueItemStatus.queued, queueRowIdFuture: repository.downloadQueueAdd(post.id))),
+    );
     _sessionTotal += newPosts.length;
-    unawaited(_persist());
     notifyListeners();
     if (!_processing) {
       unawaited(_processQueue());
@@ -208,7 +227,7 @@ class DownloadQueueService extends ChangeNotifier {
     item.status = DownloadQueueItemStatus.queued;
     item.failureReason = null;
     _sessionTotal += 1;
-    unawaited(_persist());
+    unawaited(_persistStatus(item));
     notifyListeners();
     if (!_processing) {
       unawaited(_processQueue());
@@ -225,9 +244,9 @@ class DownloadQueueService extends ChangeNotifier {
     for (final item in toRetry) {
       item.status = DownloadQueueItemStatus.queued;
       item.failureReason = null;
+      unawaited(_persistStatus(item));
     }
     _sessionTotal += toRetry.length;
-    unawaited(_persist());
     notifyListeners();
     if (!_processing) {
       unawaited(_processQueue());
@@ -240,13 +259,20 @@ class DownloadQueueService extends ChangeNotifier {
   /// an auto-resetting counter.
   void clearFinished() {
     final before = _items.length;
+    // Grabbed before removing anything -- any item's repository is equally
+    // valid (there's exactly one live BunnyRepository instance app-wide at
+    // any moment), and this needs one even when every single item here is
+    // about to be removed.
+    final repository = _items.isEmpty ? null : _items.first.repository;
     _items.removeWhere(
       (item) => item.status == DownloadQueueItemStatus.succeeded || item.status == DownloadQueueItemStatus.checksumMismatch || item.status == DownloadQueueItemStatus.failed,
     );
     if (_items.length == before) {
       return;
     }
-    unawaited(_persist());
+    if (repository != null) {
+      unawaited(repository.downloadQueueClearFinished());
+    }
     notifyListeners();
   }
 
@@ -294,6 +320,11 @@ class DownloadQueueService extends ChangeNotifier {
         item.status = DownloadQueueItemStatus.downloading;
         item.bytesReceived = null;
         item.bytesTotal = null;
+        // Fire-and-forget -- restore() already resets a still-"downloading"
+        // row back to "queued" unconditionally, so losing this specific
+        // write to a kill lands exactly where restore() would've put it
+        // anyway. Nothing here is worth blocking the actual fetch on.
+        unawaited(_persistStatus(item));
         notifyListeners();
         try {
           await _processItem(item);
@@ -304,6 +335,7 @@ class DownloadQueueService extends ChangeNotifier {
           item.status = DownloadQueueItemStatus.failed;
           item.failureReason ??= 'Unexpected error';
           _failed++;
+          await _persistStatus(item);
         }
         _sessionDone++;
         itemsSinceSync++;
@@ -315,19 +347,16 @@ class DownloadQueueService extends ChangeNotifier {
         if (shouldSync) {
           itemsSinceSync = 0;
         }
-        if (shouldSync) {
-          await _persist();
-          if (_actionsQueuedSinceSync) {
-            await _drainActionQueue(item.repository);
-            _actionsQueuedSinceSync = false;
-          }
+        if (shouldSync && _actionsQueuedSinceSync) {
+          await _drainActionQueue(item.repository);
+          _actionsQueuedSinceSync = false;
         }
         // A broken notifier (any implementation, not just the real one, which
         // already swallows its own exceptions -- this is the queue's own
         // backstop) must never stop subsequent items from being processed.
-        // Unlike persist/drain above, this keeps firing every item -- it's
-        // neither an expensive disk write nor a network round trip, so there's
-        // no reason to reduce how often the UI/notification sees progress.
+        // This keeps firing every item -- it's neither an expensive disk
+        // write nor a network round trip, so there's no reason to reduce
+        // how often the UI/notification sees progress.
         // _sessionDone > 1 (not > 0): on the very first completed item
         // there's only one data point, not a rate yet -- eta stays null for
         // that call, non-null from the second call onward.
@@ -347,7 +376,7 @@ class DownloadQueueService extends ChangeNotifier {
 
     try {
       await Future.wait(List.generate(_maxConcurrentDownloads, (_) => worker()));
-      // Unconditional final flush -- covers both a batch smaller than the
+      // Unconditional final drain -- covers both a batch smaller than the
       // threshold above (today's common case: a single download, or a small
       // mass-selection, which never reaches _syncEveryNItems) and the tail of
       // a large batch that didn't land exactly on a multiple of it. Any
@@ -356,12 +385,9 @@ class DownloadQueueService extends ChangeNotifier {
       // doc comment), and _items is guaranteed non-empty here (everything
       // that was ever enqueued this run is still sitting in it, just no
       // longer queued/downloading).
-      if (_sessionDone > 0) {
-        await _persist();
-        if (_actionsQueuedSinceSync) {
-          await _drainActionQueue(_items.first.repository);
-          _actionsQueuedSinceSync = false;
-        }
+      if (_sessionDone > 0 && _actionsQueuedSinceSync) {
+        await _drainActionQueue(_items.first.repository);
+        _actionsQueuedSinceSync = false;
       }
       try {
         await notifier.showSummary(succeeded: _succeeded, mismatched: _mismatched, failed: _failed);
@@ -386,6 +412,7 @@ class DownloadQueueService extends ChangeNotifier {
       _failed++;
       item.status = DownloadQueueItemStatus.failed;
       item.failureReason = 'No download folder configured';
+      await _persistStatus(item);
       return;
     }
     final autoFavorite = await downloadSettingsStore.loadAutoFavoriteOnDownload();
@@ -424,6 +451,27 @@ class DownloadQueueService extends ChangeNotifier {
         item.status = DownloadQueueItemStatus.failed;
         item.failureReason = result.errorMessage;
     }
+    // Awaited, unlike the "claimed -> downloading" transition above -- this
+    // is the actual outcome, the one piece of information a restart must
+    // not lose, so it's durable before this method (and the worker loop
+    // awaiting it) moves on to the next item.
+    await _persistStatus(item);
+  }
+
+  /// Persists [item]'s current [DownloadQueueItem.status]/
+  /// [DownloadQueueItem.failureReason] -- awaits [DownloadQueueItem.
+  /// queueRowIdFuture] first rather than assuming the row already exists,
+  /// since [enqueueAll] fires that insert off without waiting for it either.
+  Future<void> _persistStatus(DownloadQueueItem item) async {
+    try {
+      final id = await item.queueRowIdFuture;
+      await item.repository.downloadQueueSetStatus(id, _statusWire(item.status), failureReason: item.failureReason);
+    } catch (_) {
+      // Best-effort, same as every other persistence call in this class --
+      // a write failure here doesn't stop the queue itself from processing,
+      // it just means a crash right after would show this one item's
+      // previous status on the next launch instead of its latest.
+    }
   }
 
   /// Best-effort drain of the action queue for whichever [BunnyRepository]
@@ -447,125 +495,68 @@ class DownloadQueueService extends ChangeNotifier {
     }
   }
 
-  Future<File> _persistenceFile() async {
-    final dir = await getApplicationSupportDirectory();
-    return File('${dir.path}/pending_downloads.json');
-  }
-
-  /// Public, awaitable wrapper around [_persist] -- every other call site
-  /// uses `unawaited(_persist())` since none of them have a reason to block
-  /// on the write finishing, but `main.dart`'s desktop exit hook (M61) does:
-  /// without an explicit flush awaited *before* the app is allowed to
-  /// actually exit, a normal window close on Linux/Windows/macOS can tear
-  /// the process down mid-write (or before the next periodic sync even
-  /// fires), silently losing whatever changed since the last successful
-  /// persist -- unlike a mobile "swipe to kill," which the OS doesn't ask
-  /// this app's permission for at all.
-  Future<void> flush() => _persist();
-
-  /// Rewritten on every change to [_items] -- always the whole list, never
-  /// appended to. Best-effort: a write failure here doesn't stop the queue
-  /// itself from processing, it just means a crash right after would lose
-  /// the resume/history information for whatever changed since the last
-  /// successful write.
-  ///
-  /// Written to a temp file first, then renamed into place (same pattern as
-  /// [DownloadManager.downloadPost]'s own atomic write) -- a kill mid-write
-  /// must never leave `pending_downloads.json` truncated/corrupt, since
-  /// [restore]'s `jsonDecode` would then silently fail and nothing would
-  /// resume on next launch. The temp filename is unique per call (not a
-  /// fixed name) because this method can be called from several places
-  /// without any of them awaiting each other (`unawaited()` from
-  /// `enqueueAll`/`retryFailed`/`retryAllFailed`/`clearFinished`, plus from
-  /// inside `_processQueue`'s own loop) -- two calls' temp-file lifecycles
-  /// can overlap, and a fixed name would let them race on the same path.
-  Future<void> _persist() async {
-    try {
-      final file = await _persistenceFile();
-      final json = _items
-          .map(
-            (item) => {'id': item.post.id, 'status': item.status.name, if (item.failureReason != null) 'failureReason': item.failureReason},
-          )
-          .toList();
-      final tempDir = await getTemporaryDirectory();
-      final tempFile = File('${tempDir.path}/pending_downloads_${DateTime.now().microsecondsSinceEpoch}.json.tmp');
-      await tempFile.writeAsString(jsonEncode(json));
-      try {
-        await tempFile.rename(file.path);
-      } catch (_) {
-        await tempFile.copy(file.path);
-        await tempFile.delete();
-      }
-    } catch (_) {
-      // Best-effort.
-    }
-  }
-
   /// Re-populates the queue from a previous run (M43, extended to cover
   /// every status, not just pending, as part of the queue-visibility
-  /// follow-up) -- call once from `main()`, after [repository] is available.
-  /// A `queued`/`downloading` entry re-enqueues from scratch (nothing is
-  /// actually still in flight after a process restart); a `failed`/
-  /// `checksumMismatch` entry is restored into view with its reason intact
-  /// but is *not* auto-retried. A post that's no longer resolvable (e.g.
-  /// somehow uncached) is skipped rather than failing the whole restore.
+  /// follow-up; moved off a Dart-owned JSON file onto [BunnyRepository]'s
+  /// `downloadQueue*` methods -- a real SQLite table -- as part of the M62
+  /// follow-up, since the JSON file's batched, fire-and-forget writes
+  /// weren't surviving a restart reliably) -- call once from `main()`,
+  /// after [repository] is available. A `queued`/`downloading`/`succeeded`
+  /// row re-enqueues from scratch (nothing is actually still in flight
+  /// after a process restart, and re-running a `succeeded` one is cheap --
+  /// [DownloadManager.downloadPost]'s own checksum-skip resolves it near
+  /// instantly without a real fetch); a `failed`/`checksum_mismatch` row is
+  /// restored into view with its reason intact but is *not* auto-retried.
+  /// A post that's no longer resolvable (e.g. somehow uncached) is skipped
+  /// rather than failing the whole restore. Reuses each row's own existing
+  /// id (never [enqueueAll], which would insert a *new* row) -- this is
+  /// resuming the same persisted attempt, not starting a fresh one.
   Future<void> restore(BunnyRepository repository) async {
     try {
-      final file = await _persistenceFile();
-      if (!await file.exists()) {
+      final rows = await repository.downloadQueueList();
+      if (rows.isEmpty) {
         return;
       }
-      final decoded = jsonDecode(await file.readAsString());
-      if (decoded is! List) {
-        return;
-      }
-      final toEnqueue = <BunnyPost>[];
       final restoredTerminal = <DownloadQueueItem>[];
-      if (decoded.isNotEmpty && decoded.first is Map) {
-        for (final raw in decoded) {
-          final entry = raw as Map<String, dynamic>;
-          try {
-            final post = await repository.getPost(entry['id'] as int);
-            final statusName = entry['status'] as String?;
-            if (statusName == DownloadQueueItemStatus.failed.name || statusName == DownloadQueueItemStatus.checksumMismatch.name) {
-              restoredTerminal.add(
-                DownloadQueueItem(
-                  post: post,
-                  repository: repository,
-                  status: statusName == DownloadQueueItemStatus.failed.name ? DownloadQueueItemStatus.failed : DownloadQueueItemStatus.checksumMismatch,
-                  failureReason: entry['failureReason'] as String?,
-                ),
-              );
-            } else {
-              toEnqueue.add(post);
+      final toReprocess = <DownloadQueueItem>[];
+      for (final row in rows) {
+        try {
+          final post = await repository.getPost(row.postId);
+          if (row.status == 'failed' || row.status == 'checksum_mismatch') {
+            restoredTerminal.add(
+              DownloadQueueItem(
+                post: post,
+                repository: repository,
+                status: row.status == 'failed' ? DownloadQueueItemStatus.failed : DownloadQueueItemStatus.checksumMismatch,
+                failureReason: row.failureReason,
+                queueRowIdFuture: Future.value(row.id),
+              ),
+            );
+          } else {
+            if (row.status != 'queued') {
+              unawaited(repository.downloadQueueSetStatus(row.id, 'queued'));
             }
-          } catch (_) {
-            // No longer resolvable -- skip it.
+            toReprocess.add(DownloadQueueItem(post: post, repository: repository, status: DownloadQueueItemStatus.queued, queueRowIdFuture: Future.value(row.id)));
           }
-        }
-      } else {
-        // Backward-compat with the pre-queue-visibility format (a flat
-        // array of bare post ids, all implicitly "pending") -- temporary
-        // migration support, safe to remove once no realistic install base
-        // predates this richer format.
-        for (final id in decoded) {
-          try {
-            toEnqueue.add(await repository.getPost(id as int));
-          } catch (_) {
-            // No longer resolvable -- skip it.
-          }
+        } catch (_) {
+          // No longer resolvable -- skip it.
         }
       }
       if (restoredTerminal.isNotEmpty) {
         _items.addAll(restoredTerminal);
         notifyListeners();
       }
-      if (toEnqueue.isNotEmpty) {
-        enqueueAll(toEnqueue, repository);
+      if (toReprocess.isNotEmpty) {
+        _items.addAll(toReprocess);
+        _sessionTotal += toReprocess.length;
+        notifyListeners();
+        if (!_processing) {
+          unawaited(_processQueue());
+        }
       }
     } catch (e) {
-      // Best-effort, but not silent -- a parse failure here means nothing
-      // resumes on this launch at all, worth a trace during development.
+      // Best-effort, but not silent -- a failure here means nothing resumes
+      // on this launch at all, worth a trace during development.
       debugPrint('DownloadQueueService.restore failed: $e');
     }
   }

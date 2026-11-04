@@ -986,5 +986,33 @@ void main() {
 
       await expectLater(buildRepository().setAccount(BunnySite.e621, 'u', 's'), throwsA(isA<BunnyRepositoryException>().having((e) => e.message, 'message', 'HTTP 500')));
     });
+
+    group('download queue (M62 follow-up)', () {
+      // Never touches HTTP -- these go through HttpBunnyRepository's own
+      // small dedicated local db (see its class doc comment), opened
+      // lazily via downloadQueueDbPath/downloadQueueUserAgent (:memory: by
+      // default on the .withClient test constructor).
+      test('downloadQueueAdd/downloadQueueList/downloadQueueSetStatus/downloadQueueClearFinished round-trip', () async {
+        final repository = buildRepository();
+
+        final id = await repository.downloadQueueAdd(42);
+        expect(id, greaterThan(0));
+
+        var items = await repository.downloadQueueList();
+        expect(items, hasLength(1));
+        expect(items[0].id, id);
+        expect(items[0].postId, 42);
+        expect(items[0].status, 'queued');
+        expect(items[0].failureReason, isNull);
+
+        await repository.downloadQueueSetStatus(id, 'failed', failureReason: 'HTTP 500');
+        items = await repository.downloadQueueList();
+        expect(items[0].status, 'failed');
+        expect(items[0].failureReason, 'HTTP 500');
+
+        await repository.downloadQueueClearFinished();
+        expect(await repository.downloadQueueList(), isEmpty);
+      });
+    });
   });
 }

@@ -185,4 +185,27 @@ void main() {
   test('queueFavoriteAdd against a nonexistent post throws BunnyRepositoryException', () async {
     await expectLater(repository.queueFavoriteAdd(1), throwsA(isA<BunnyRepositoryException>()));
   });
+
+  test('downloadQueueAdd/downloadQueueList/downloadQueueSetStatus/downloadQueueClearFinished round-trip (M62 follow-up)', () async {
+    // No posts(id) foreign key on this table -- an arbitrary post id (one
+    // that was never synced/cached) must be accepted here, unlike
+    // queueFavoriteAdd above.
+    final id = await repository.downloadQueueAdd(42);
+    expect(id, greaterThan(0));
+
+    var records = await repository.downloadQueueList();
+    expect(records, hasLength(1));
+    expect(records.single.id, id);
+    expect(records.single.postId, 42);
+    expect(records.single.status, 'queued');
+    expect(records.single.failureReason, isNull);
+
+    await repository.downloadQueueSetStatus(id, 'failed', failureReason: 'HTTP 500');
+    records = await repository.downloadQueueList();
+    expect(records.single.status, 'failed');
+    expect(records.single.failureReason, 'HTTP 500');
+
+    await repository.downloadQueueClearFinished();
+    expect(await repository.downloadQueueList(), isEmpty);
+  });
 }

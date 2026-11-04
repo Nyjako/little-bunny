@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -18,26 +17,6 @@ import '../fakes/fake_bunny_repository.dart';
 import '../fakes/fake_download_queue_notifier.dart';
 import '../fakes/fake_path_provider.dart';
 import '../fakes/fake_wakelock_plus_platform.dart';
-
-/// Same shape as `fake_path_provider.dart`'s own `FakePathProviderPlatform`,
-/// but with a *real* (not a bare placeholder string) directory for
-/// `getApplicationSupportPath`, computed once so repeated calls (and a
-/// second `DownloadQueueService` instance simulating a fresh app launch)
-/// see the same path -- `DownloadQueueService`'s persistence (M43) does
-/// real file I/O against it, unlike every other current user of the shared
-/// fake. `getDownloadsPath` returns null (instead of the shared fake's
-/// `/fake/downloads`) so `DownloadSettingsStore.loadDestinationFolder`
-/// genuinely falls through to null when a test doesn't save a folder,
-/// rather than silently resolving to a fake path.
-class _RealPathProviderPlatform extends FakePathProviderPlatform {
-  final String supportPath = Directory.systemTemp.createTempSync('bunny_queue_support_').path;
-
-  @override
-  Future<String?> getApplicationSupportPath() async => supportPath;
-
-  @override
-  Future<String?> getDownloadsPath() async => null;
-}
 
 BunnyPost _post({required int id, String? fileUrl = 'https://static1.e621.net/data/1.png', String? fileMd5}) => BunnyPost(
   id: id,
@@ -64,7 +43,7 @@ void main() {
   late FakeWakelockPlusPlatform wakelockPlatform;
 
   setUp(() async {
-    PathProviderPlatform.instance = _RealPathProviderPlatform();
+    PathProviderPlatform.instance = FakePathProviderPlatform();
     destinationDir = await Directory.systemTemp.createTemp('download_queue_test');
     SharedPreferences.setMockInitialValues({'download_destination_folder': destinationDir.path});
     repository = FakeBunnyRepository();
@@ -400,75 +379,86 @@ void main() {
 
     service.enqueue(_post(id: 2), repository);
     expect(service.totalCount, 1);
-    // Without this, the background _processQueue() for post 2 is still
-    // in flight when this test returns -- it later calls _persist(), which
-    // re-reads PathProviderPlatform.instance at call-time. By then the next
-    // test's setUp() has already swapped in its own fake instance, so this
-    // dangling write lands in (and corrupts) the *next* test's persistence
-    // file instead of this test's own.
     await waitUntilIdle(service);
   });
 
-  test('restore re-enqueues whatever was still pending from a previous run', () async {
-    final firstItemGate = Completer<void>();
-    final service = buildService(
-      client: MockClient((_) async {
-        await firstItemGate.future;
-        return http.Response.bytes([1, 2, 3], 200);
-      }),
-    );
-    final post = _post(id: 1);
-    repository.postsById[1] = post;
+  group('persistence (M62 follow-up -- SQLite via BunnyRepository, not a Dart-owned JSON file)', () {
+    test('enqueueAll persists each new item as a queued row', () async {
+      final service = buildService(client: MockClient((_) async => http.Response.bytes([1, 2, 3], 200)));
+      final posts = [_post(id: 1), _post(id: 2)];
 
-    service.enqueue(post, repository);
-    // enqueue's own _persist() write to pending_downloads.json is real,
-    // fire-and-forget file I/O -- a single fixed 1ms wait before reading it
-    // back below was flaky under CI load (observed directly: passed in the
-    // PR's own check run, then failed on push to `dev` moments later with
-    // restored.totalCount reading 0 instead of 1, meaning the write hadn't
-    // landed yet). Poll for the real file's content instead of guessing a
-    // delay is long enough.
-    final persistedFile = File('${(PathProviderPlatform.instance as _RealPathProviderPlatform).supportPath}/pending_downloads.json');
-    while (!await persistedFile.exists() || !(await persistedFile.readAsString()).contains('${post.id}')) {
-      await Future<void>.delayed(const Duration(milliseconds: 1));
-    }
+      service.enqueueAll(posts, repository);
+      // Each item's own insert is fire-and-forget (enqueueAll never blocks
+      // its caller) -- wait for them before reading the persisted state back.
+      await Future.wait(service.items.map((item) => item.queueRowIdFuture));
 
-    // Simulate a fresh process: a brand new service instance, pointed at
-    // the same (real) persistence directory via the same PathProviderPlatform
-    // instance, with nothing enqueued yet.
-    final restored = buildService(client: MockClient((_) async => http.Response.bytes([1, 2, 3], 200)));
-    await restored.restore(repository);
+      final rows = await repository.downloadQueueList();
+      expect(rows.map((r) => r.postId).toSet(), {1, 2});
+      expect(rows.every((r) => r.status == 'queued'), isTrue);
 
-    expect(restored.totalCount, 1);
-    firstItemGate.complete();
-    await waitUntilIdle(service);
-  });
+      await waitUntilIdle(service);
+    });
 
-  test('flush writes the current in-flight state immediately, not just every Nth item (M61)', () async {
-    final itemGate = Completer<void>();
-    final service = buildService(
-      client: MockClient((_) async {
-        await itemGate.future;
-        return http.Response.bytes([1, 2, 3], 200);
-      }),
-    );
-    final post = _post(id: 1);
-    repository.postsById[1] = post;
+    test('a completed download persists its terminal status', () async {
+      final service = buildService(client: MockClient((_) async => http.Response('', 500)));
 
-    service.enqueue(post, repository);
-    // Mid-download, well before this item would ever hit the periodic
-    // _syncEveryNItems sync (there's only one item, so that threshold is
-    // never reached) -- this is exactly the "closed the app mid-batch"
-    // scenario flush() exists for (M61): a desktop exit hook must be able
-    // to capture state right now, not wait for the next batch boundary.
-    await service.flush();
+      service.enqueue(_post(id: 1), repository);
+      await waitUntilIdle(service);
 
-    final persistedFile = File('${(PathProviderPlatform.instance as _RealPathProviderPlatform).supportPath}/pending_downloads.json');
-    expect(await persistedFile.exists(), isTrue);
-    expect(await persistedFile.readAsString(), contains('${post.id}'));
+      final rows = await repository.downloadQueueList();
+      expect(rows, hasLength(1));
+      expect(rows.single.status, 'failed');
+      expect(rows.single.failureReason, 'HTTP 500');
+    });
 
-    itemGate.complete();
-    await waitUntilIdle(service);
+    test('clearFinished also drops the persisted rows', () async {
+      final service = buildService(client: MockClient((_) async => http.Response('', 500)));
+      service.enqueue(_post(id: 1), repository);
+      await waitUntilIdle(service);
+      expect(await repository.downloadQueueList(), isNotEmpty);
+
+      service.clearFinished();
+
+      expect(await repository.downloadQueueList(), isEmpty);
+    });
+
+    test('restore re-enqueues a row still queued from a previous run', () async {
+      final post = _post(id: 1);
+      repository.postsById[1] = post;
+      repository.seedDownloadQueueRow(postId: 1, status: 'queued');
+
+      final restored = buildService(client: MockClient((_) async => http.Response.bytes([1, 2, 3], 200)));
+      await restored.restore(repository);
+
+      expect(restored.totalCount, 1);
+      await waitUntilIdle(restored);
+      expect(await File('${destinationDir.path}/someartist/1.png').exists(), isTrue);
+    });
+
+    test('restore resets a still-downloading row back to queued and reprocesses it', () async {
+      final post = _post(id: 1);
+      repository.postsById[1] = post;
+      repository.seedDownloadQueueRow(postId: 1, status: 'downloading');
+
+      final restored = buildService(client: MockClient((_) async => http.Response.bytes([1, 2, 3], 200)));
+      await restored.restore(repository);
+
+      expect(restored.totalCount, 1);
+      await waitUntilIdle(restored);
+      expect(restored.succeededCount, 1);
+    });
+
+    test('restore skips a row whose post no longer resolves, without failing the rest', () async {
+      repository.postsById[2] = _post(id: 2);
+      repository.seedDownloadQueueRow(postId: 1, status: 'queued'); // never resolvable
+      repository.seedDownloadQueueRow(postId: 2, status: 'queued');
+
+      final restored = buildService(client: MockClient((_) async => http.Response.bytes([1, 2, 3], 200)));
+      await restored.restore(repository);
+
+      expect(restored.totalCount, 1);
+      expect(restored.items.single.post.id, 2);
+    });
   });
 
   test('showStarting fires before the first HTTP request completes (M57 screen-lock fix)', () async {
@@ -620,18 +610,9 @@ void main() {
     });
 
     test('restore brings back a failed item\'s status/reason without auto-retrying it', () async {
-      final service = buildService(client: MockClient((_) async => http.Response('', 500)));
       final post = _post(id: 1);
       repository.postsById[1] = post;
-
-      service.enqueue(post, repository);
-      await waitUntilIdle(service);
-      expect(service.failedItems, hasLength(1));
-
-      final persistedFile = File('${(PathProviderPlatform.instance as _RealPathProviderPlatform).supportPath}/pending_downloads.json');
-      while (!(await persistedFile.readAsString()).contains('failed')) {
-        await Future<void>.delayed(const Duration(milliseconds: 1));
-      }
+      repository.seedDownloadQueueRow(postId: 1, status: 'failed', failureReason: 'HTTP 500');
 
       var requestCount = 0;
       final restored = buildService(
@@ -645,19 +626,6 @@ void main() {
       expect(restored.failedItems, hasLength(1));
       expect(restored.failedItems.single.failureReason, 'HTTP 500');
       expect(requestCount, 0);
-    });
-
-    test('restore falls back to the pre-queue-visibility flat-id-array format', () async {
-      final file = File('${(PathProviderPlatform.instance as _RealPathProviderPlatform).supportPath}/pending_downloads.json');
-      await file.writeAsString(jsonEncode([1]));
-      repository.postsById[1] = _post(id: 1);
-
-      final service = buildService(client: MockClient((_) async => http.Response.bytes([1, 2, 3], 200)));
-      await service.restore(repository);
-
-      expect(service.totalCount, 1);
-      await waitUntilIdle(service);
-      expect(await File('${destinationDir.path}/someartist/1.png').exists(), isTrue);
     });
   });
 }

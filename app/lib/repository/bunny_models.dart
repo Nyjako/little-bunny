@@ -510,6 +510,27 @@ class BunnyQueueStats {
   });
 }
 
+/// Mirrors `bunny_db_download_queue_item_t` -- one file download's persisted
+/// row (M62 follow-up), read back by [DownloadQueueService.restore] on
+/// startup. [status] is the same wire string the database's own CHECK
+/// constraint uses: `'queued'`, `'downloading'`, `'succeeded'`,
+/// `'checksum_mismatch'`, or `'failed'`.
+class DownloadQueueRecord {
+  final int id;
+  final int postId;
+  final String status;
+  final String? failureReason;
+  final String createdAt;
+
+  const DownloadQueueRecord({
+    required this.id,
+    required this.postId,
+    required this.status,
+    this.failureReason,
+    required this.createdAt,
+  });
+}
+
 /// Mirrors `bunny_core_blacklist_sync_stats_t` -- the result of pulling the
 /// configured e621 account's own blacklist and importing new entries (M27;
 /// M28/M54 extended this to multi-tag/grammar lines too, not just bare
