@@ -1956,12 +1956,33 @@ this file is the single source of truth for "what's done" across sessions.
     of which rating chips are toggled, via a permanently-set "unknown" bit the UI never
     exposes a control for.
   - [ ] **Inkbunny submission-type coverage.** `inkbunny_submission_t.submission_type_id`/
-    `.type_name` are already parsed by the Inkbunny client but discarded before reaching
-    the database -- same shape of gap M27's `file_ext` fix addressed. Needs auditing
-    against the user's own 14 example submission ids (one per Inkbunny submission type)
-    to confirm what actually renders correctly today. Flash submissions (Shockwave/Flash
-    - Animation, Shockwave/Flash - Interactive) are to be **permanently dropped/filtered
-    out**, not supported, once this is scoped.
+    `.type_name` are still parsed by the Inkbunny client but discarded before reaching the
+    database (confirmed again this pass: `upsert_inkbunny_submission`, `libs/core/src/
+    sync.c`, never copies either field into `bunny_db_post_upsert_t`) -- same shape of gap
+    M27's `file_ext` fix addressed. Code-level audit of all 14 real submission types
+    (`docs/API - Inkbunny.pdf`, gitignored) against this app's actual file-extension-
+    driven dispatch (deliberately not type-id-driven -- `is_unsupported_inkbunny_file`'s
+    own comment explains why: a "Shockwave/Flash - Animation" submission can legitimately
+    BE a plain renderable .gif). 13 of the 14 types are provably covered already, no code
+    change needed: Picture/Pinup, Sketch, Character Sheet, and Photography/Fursuit/
+    Sculpture/Jewelry/etc (ids 1, 2, 13, 14) are single images, handled by the ordinary
+    image viewer; Picture Series/Comic/Portfolio (3/4/5) are multi-file submissions,
+    handled by the multi-file image gallery (M28); Video - Feature Length/Animation-3D-CGI
+    (8/9) play through Chewie; Music - Single Track/Album (10/11) play through
+    `AudioPlayerWidget`/the multi-track album UI (M28 Phase 4); Shockwave/Flash -
+    Animation/Interactive (6/7) are permanently filtered out by design (confirmed live:
+    type 6 can legitimately be a real, non-Flash file underneath, so it's filtered by
+    actual mimetype/extension, not this id; type 7 was confirmed always a genuine
+    unplayable .swf). The one real gap is **Writing - Document** (id 12): no dedicated
+    renderer exists, so it falls back to the same generic "this file format isn't
+    supported yet" message (`postDetailUnsupportedFormat`) any unknown extension already
+    gets -- no crash, but no inline viewing either. Whether that fallback is acceptable
+    as-is or needs an actual in-app viewer/download-link affordance is a product decision
+    still open. This whole audit is code-level only, not live-verified against real
+    submissions (no account/submission ids available in this pass) -- same caveat as
+    M8.5.2's "requires the user present" treatment, so this stays unchecked until either
+    confirmed live against a real post of each type, or the Writing-Document decision
+    above is made and (if needed) implemented.
   - [x] **Bulk Inkbunny submission detail fetch (background job).** The user pointed out
     `api_submissions.php` (see `docs/API - Inkbunny.pdf`, gitignored -- Inkbunny's
     official docs, kept locally): takes up to 100 comma-separated submission ids per
@@ -2969,3 +2990,72 @@ this file is the single source of truth for "what's done" across sessions.
   "Try fingerprint again" retry button already shows) regardless of which typed
   fallback is configured, exactly the relationship wanted: fingerprint first, PIN or
   password if that fails/isn't available.
+
+- [ ] **M61 — Download queue doesn't resume after the app is killed and relaunched**
+  Reported by the user: killing or closing the app mid-download loses the remaining
+  queue, and it doesn't pick back up on the next launch. Investigated this pass, not yet
+  reproduced: `DownloadQueueService`'s own persistence (`_persist()`/`restore()`,
+  `pending_downloads.json` under `getApplicationSupportDirectory()`, written atomically
+  via temp-file-then-rename) is real, not mocked, and has passing tests against the
+  actual filesystem (`download_queue_service_test.dart`'s `restore re-enqueues whatever
+  was still pending from a previous run` and the failed-item equivalent) -- and `main.dart`
+  does call `restore(repository)` from both cold-start paths (`_loadPersistedConfig`/
+  `_onConfigured`). So the Dart-level mechanism this app already has for exactly this
+  scenario looks intact on inspection; a live repro is needed to find where it actually
+  breaks for the user, which platform (Android swipe-kill vs. Linux desktop window
+  close behave very differently at the OS level), and whether the queue really never
+  reappears vs. reappearing but failing immediately (e.g. a download-folder permission
+  that isn't re-grantable without the user's explicit action, especially Android SAF
+  scoped storage, failing silently into `DownloadQueueItemStatus.failed` rather than
+  resuming cleanly).
+
+- [ ] **M62 — Download queue: per-file byte progress, and an architecture decision on
+  parallelism**
+  Two related asks from the user, worth scoping together since they interact:
+  1. The queue screen's single `LinearProgressIndicator` (`download_queue_screen.dart`)
+     only ever shows batch progress (`done / total` items) -- the user wants a second
+     bar for the file actively downloading right now. No byte-level progress exists
+     anywhere today: `DownloadManager.downloadPost` uses a single buffered
+     `http.Client.get()` call (confirmed, `download_manager.dart`), not a streamed
+     request, so there's no "bytes received so far" to report mid-download. Needs
+     switching to `http.Client.send()` + reading `response.stream` with a running byte
+     count against `response.contentLength`, threaded up through
+     `DownloadQueueService` as new current-item-progress state the queue screen (and,
+     "if possible," the notification) can read.
+  2. The user also wants downloads to run in parallel (plus moving checksum validation
+     to its own thread), since files come from a CDN that can serve several requests at
+     once. `_processQueue` today is strictly sequential (`while (true) { item =
+     queuedItems.firstOrNull; ... }`, one item at a time by design, matching this
+     codebase's other mass-action code) and checksum hashing (`md5.convert(bytes)`) runs
+     synchronously on the main isolate right after the full body is buffered -- moving
+     it off-thread means `compute()` (a worker isolate), not a true shared-memory
+     thread, since Dart isolates don't share memory.
+  These two asks are in tension: a single "current file" progress bar assumes one file
+  downloading at a time, which parallel downloads breaks (N files in flight at once
+  need either N progress bars or a different UI concept entirely, e.g. an aggregate
+  byte-progress bar across all in-flight files). Needs a decision on the target UX
+  before implementation -- stay sequential (one file, two bars: batch + that file's own
+  bytes) or go parallel (and redesign the per-item progress display to match) -- plus a
+  concurrency cap if parallel, so a multi-thousand-item mass-download doesn't open an
+  unbounded number of simultaneous CDN connections.
+
+- [ ] **M63 — Linux download notification: no progress bar, and a new bubble per file**
+  The user's report: on Linux, the download notification shows no progress bar at all,
+  and a new notification bubble appears for every file instead of the Android behavior
+  (one notification, updated in place). Investigated this pass: `_details()`
+  (`flutter_local_notifications_queue_notifier.dart`) only ever builds an
+  `AndroidNotificationDetails` (with `showProgress`/`maxProgress`/`progress`) -- no
+  `linux: LinuxNotificationDetails(...)` is passed at all, so Linux gets the plugin's
+  defaults with no progress hint of any kind; `LinuxNotificationDetails` itself has no
+  dedicated progress field, though its `customHints` could carry the Desktop
+  Notification Spec's own `value` int32 hint (0-100), which some desktop environments
+  render as a progress affordance and others simply ignore (not a universal feature the
+  way Android's notification-channel progress bar is). Separately, the "new bubble every
+  time" symptom is less clear: the same fixed `_notificationId` is reused on every call
+  already (needed for Android's in-place update too), and the Linux plugin
+  (`flutter_local_notifications_linux`) does track a previous call's system-assigned id
+  and pass it back as `replaces_id` on the next `Notify` D-Bus call -- which should
+  already replace in place. Whether that mechanism is actually failing (a daemon that
+  ignores `replaces_id`, a timing/caching issue in the plugin, or something else) needs
+  live testing against the user's real desktop environment/notification daemon, which
+  this pass had no way to reproduce.
