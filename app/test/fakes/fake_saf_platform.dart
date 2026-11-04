@@ -20,8 +20,12 @@ class FakeSafUtilPlatform extends SafUtilPlatform {
 
   /// Child paths (as `treeUri/joined-names`) that [child] should resolve to
   /// an existing file for -- everything else returns null, matching
-  /// [DownloadManager.isDownloaded]'s "not found" case for a SAF tree.
-  final Set<String> existingChildPaths = {};
+  /// [DownloadManager.isDownloaded]'s "not found" case for a SAF tree. Maps
+  /// to the bytes [FakeSafStreamPlatform.readFileBytes] should hand back for
+  /// that same path (M62's "already downloaded, verify its checksum"
+  /// path) -- empty bytes for a test that only cares about existence, not
+  /// content.
+  final Map<String, Uint8List> existingChildPaths = {};
 
   @override
   Future<SafDocumentFile> mkdirp(String uri, List<String> names) async {
@@ -32,7 +36,7 @@ class FakeSafUtilPlatform extends SafUtilPlatform {
   @override
   Future<SafDocumentFile?> child(String uri, List<String> names) async {
     final path = '$uri/${names.join('/')}';
-    if (!existingChildPaths.contains(path)) {
+    if (!existingChildPaths.containsKey(path)) {
       return null;
     }
     return SafDocumentFile(uri: path, name: names.last, isDir: false, length: 0, lastModified: 0);
@@ -45,9 +49,20 @@ class FakeSafStreamPlatform extends SafStreamPlatform {
   /// their content, only that a write happened with the right destination).
   final List<(String, String, String)> writeFileBytesCalls = [];
 
+  /// Backing store [readFileBytes] reads from -- a test sets
+  /// [FakeSafUtilPlatform.existingChildPaths] (keyed the same way, by the
+  /// resolved `uri`) and this hands those same bytes back, matching
+  /// [DownloadManager]'s own "resolve the child, then read it" two-step.
+  final FakeSafUtilPlatform safUtil;
+
+  FakeSafStreamPlatform(this.safUtil);
+
   @override
   Future<SafNewFile> writeFileBytes(String treeUri, String fileName, String mime, Uint8List data, {bool? overwrite, bool? append}) async {
     writeFileBytesCalls.add((treeUri, fileName, mime));
     return SafNewFile(Uri.parse('$treeUri/$fileName'), fileName);
   }
+
+  @override
+  Future<Uint8List> readFileBytes(String uri, {int? start, int? count}) async => safUtil.existingChildPaths[uri] ?? Uint8List(0);
 }
