@@ -72,8 +72,8 @@ void main() {
     expect(find.text('Nothing here right now.'), findsOneWidget);
   });
 
-  testWidgets('shows downloading/queued/failed sections with the right items', (WidgetTester tester) async {
-    final secondItemGate = Completer<void>();
+  testWidgets('shows a row per concurrently-downloading item, alongside queued/failed counts (M62)', (WidgetTester tester) async {
+    final gates = {2: Completer<void>(), 3: Completer<void>(), 4: Completer<void>()};
     final service = DownloadQueueService(
       downloadManager: DownloadManager(
         client: MockClient((request) async {
@@ -81,8 +81,10 @@ void main() {
           if (url.endsWith('/1.png')) {
             return http.Response('', 500);
           }
-          if (url.endsWith('/2.png')) {
-            await secondItemGate.future;
+          for (final entry in gates.entries) {
+            if (url.endsWith('/${entry.key}.png')) {
+              await entry.value.future;
+            }
           }
           return http.Response.bytes([1, 2, 3], 200);
         }),
@@ -96,10 +98,17 @@ void main() {
     // pattern already established in post_detail_screen_test.dart's own
     // download-button tests.
     await tester.runAsync(() async {
-      service.enqueueAll([_post(id: 1, title: 'First'), _post(id: 2, title: 'Second'), _post(id: 3, title: 'Third')], repository);
-      // Wait for item 1 to fail and item 2 to become the one actively
-      // downloading, leaving item 3 behind it still queued.
-      while (service.currentItem?.post.id != 2) {
+      service.enqueueAll([
+        _post(id: 1, title: 'First'),
+        _post(id: 2, title: 'Second'),
+        _post(id: 3, title: 'Third'),
+        _post(id: 4, title: 'Fourth'),
+        _post(id: 5, title: 'Fifth'),
+      ], repository);
+      // Item 1 fails immediately, freeing its concurrency slot for item 4
+      // -- once items 2/3/4 all occupy the 3 slots (all gated), item 5 has
+      // nowhere to go and stays queued.
+      while (service.downloadingItems.length != 3 || service.pendingCount != 1) {
         await Future<void>.delayed(const Duration(milliseconds: 1));
       }
     });
@@ -109,16 +118,20 @@ void main() {
 
     expect(find.text('Downloading'), findsOneWidget);
     expect(find.text('Second'), findsOneWidget);
-    // Queued is a count, not a per-item list -- "Third" never renders by
-    // name, item 3 is just folded into the "1 queued" count.
+    expect(find.text('Third'), findsOneWidget);
+    expect(find.text('Fourth'), findsOneWidget);
+    // Queued is a count, not a per-item list -- "Fifth" never renders by
+    // name, item 5 is just folded into the "1 queued" count.
     expect(find.text('1 queued'), findsOneWidget);
-    expect(find.text('Third'), findsNothing);
+    expect(find.text('Fifth'), findsNothing);
     expect(find.text('Failed'), findsOneWidget);
     expect(find.text('First'), findsOneWidget);
     expect(find.text('HTTP 500'), findsOneWidget);
 
     await tester.runAsync(() async {
-      secondItemGate.complete();
+      for (final gate in gates.values) {
+        gate.complete();
+      }
       while (service.isActive) {
         await Future<void>.delayed(const Duration(milliseconds: 1));
       }
@@ -241,7 +254,7 @@ void main() {
 
     await tester.runAsync(() async {
       service.enqueueAll([_post(id: 1, title: 'First'), _post(id: 2, title: 'Second', previewUrl: 'https://example.com/2_preview.jpg')], repository);
-      while (service.currentItem?.post.id != 2) {
+      while (service.downloadingItems.length != 1 || service.downloadingItems.single.post.id != 2) {
         await Future<void>.delayed(const Duration(milliseconds: 1));
       }
     });
@@ -282,7 +295,7 @@ void main() {
 
     await tester.runAsync(() async {
       service.enqueue(_post(id: 1, title: 'First'), repository);
-      while (service.currentBytesReceived != 40) {
+      while (service.downloadingItems.isEmpty || service.downloadingItems.single.bytesReceived != 40) {
         await Future<void>.delayed(const Duration(milliseconds: 1));
       }
     });
@@ -290,7 +303,7 @@ void main() {
     await tester.pumpWidget(wrap(service));
     await tester.pump();
 
-    final fileProgressBar = tester.widget<LinearProgressIndicator>(find.byKey(const Key('downloadQueueCurrentFileProgressBar')));
+    final fileProgressBar = tester.widget<LinearProgressIndicator>(find.byKey(const ValueKey('downloadQueueFileProgressBar_1')));
     expect(fileProgressBar.value, 0.4);
     expect(find.text('40 B / 100 B'), findsOneWidget);
 
@@ -302,24 +315,20 @@ void main() {
     });
   });
 
-  testWidgets('a batch of queued items renders as a single count, not one row each', (WidgetTester tester) async {
+  testWidgets('queued/done render as counts, not one row each -- only downloading items get real rows (M62)', (WidgetTester tester) async {
     // A small item count here, not literally hundreds/thousands -- the
     // screen's rendering has no count-dependent branch (the count-row path
-    // is taken identically whether pending is 5 or 5000). Item 1 resolves
-    // immediately and item 2 is the one left gated/"currently downloading"
-    // -- same shape as the "shows downloading/queued/failed sections" test
-    // above, deliberately not leaving the *very first* item's request
-    // perpetually pending across a `runAsync` boundary (confirmed directly:
-    // doing that reliably deadlocks this test harness's second `runAsync`
-    // call waiting on `service.isActive`, regardless of item count -- a
-    // harness quirk unrelated to the service logic itself, which drains
-    // hundreds of items in milliseconds in a plain, non-widget `test()`).
-    final secondItemGate = Completer<void>();
+    // is taken identically whether pending is 1 or 5000). Item 1 resolves
+    // immediately ("1 done"); items 2-4 occupy all 3 concurrency slots (all
+    // gated, 3 downloading rows); item 5 has nowhere to go ("1 queued").
+    final gates = {2: Completer<void>(), 3: Completer<void>(), 4: Completer<void>()};
     final service = DownloadQueueService(
       downloadManager: DownloadManager(
         client: MockClient((request) async {
-          if (request.url.toString().endsWith('/2.png')) {
-            await secondItemGate.future;
+          for (final entry in gates.entries) {
+            if (request.url.toString().endsWith('/${entry.key}.png')) {
+              await entry.value.future;
+            }
           }
           return http.Response.bytes([1, 2, 3], 200);
         }),
@@ -329,7 +338,7 @@ void main() {
 
     await tester.runAsync(() async {
       service.enqueueAll(List.generate(5, (i) => _post(id: i + 1)), repository);
-      while (service.currentItem?.post.id != 2) {
+      while (service.downloadingItems.length != 3 || service.pendingCount != 1) {
         await Future<void>.delayed(const Duration(milliseconds: 1));
       }
     });
@@ -337,16 +346,16 @@ void main() {
     await tester.pumpWidget(wrap(service));
     await tester.pump();
 
-    // 3 still queued (items 3-5) -- item 1 already succeeded, item 2 is the
-    // one actively downloading.
-    expect(find.text('3 queued'), findsOneWidget);
+    expect(find.text('1 queued'), findsOneWidget);
     expect(find.text('1 done'), findsOneWidget);
-    // 3 ListTiles total (currently-downloading row + "3 queued" row + "1
-    // done" row) -- no per-item rows were built for the 3 queued posts.
-    expect(find.byType(ListTile), findsNWidgets(3));
+    // 5 ListTiles total: 3 currently-downloading rows + "1 queued" row +
+    // "1 done" row -- no per-item rows were built for the queued/done posts.
+    expect(find.byType(ListTile), findsNWidgets(5));
 
     await tester.runAsync(() async {
-      secondItemGate.complete();
+      for (final gate in gates.values) {
+        gate.complete();
+      }
       while (service.isActive) {
         await Future<void>.delayed(const Duration(milliseconds: 1));
       }

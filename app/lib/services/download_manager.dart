@@ -2,6 +2,7 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:crypto/crypto.dart';
+import 'package:flutter/foundation.dart' show compute;
 import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
 import 'package:saf_stream/saf_stream.dart';
@@ -10,6 +11,14 @@ import 'package:saf_util/saf_util.dart';
 import '../repository/bunny_models.dart';
 import '../repository/bunny_repository.dart';
 import '../util/image_headers.dart';
+
+/// Top-level (not a method) because [compute] requires that -- it spawns a
+/// real worker isolate to run this on, so a multi-megabyte checksum hash
+/// (M62: now potentially several of these running at once, one per
+/// concurrently-downloading file) never blocks the main isolate's event
+/// loop, which is also where every other in-flight download's own HTTP
+/// stream and UI updates are being processed.
+String _computeMd5(Uint8List bytes) => md5.convert(bytes).toString();
 
 /// Best-effort extension-to-MIME-type mapping, only needed for the SAF write
 /// path below (`saf_stream`'s `writeFileBytes` requires one; `dart:io`'s
@@ -164,9 +173,13 @@ class DownloadManager {
         // sitting at the user-visible destination path -- `rename` is atomic
         // within the same filesystem; the copy+delete fallback only matters
         // if the OS temp dir and destination folder happen to be on
-        // different filesystems/volumes.
+        // different filesystems/volumes. The suffix (M62) makes this unique
+        // per call, not just per post -- parallel downloads mean the exact
+        // same post could theoretically be in flight twice at once (nothing
+        // dedupes the queue against itself), which would otherwise let two
+        // calls race on the identical temp path.
         final tempDir = await getTemporaryDirectory();
-        final tempFile = File('${tempDir.path}/${post.site.toWireString()}_${post.externalId}.$ext.tmp');
+        final tempFile = File('${tempDir.path}/${post.site.toWireString()}_${post.externalId}.$ext.${DateTime.now().microsecondsSinceEpoch}.tmp');
         await tempFile.writeAsBytes(bytes);
         try {
           await tempFile.rename(filePath);
@@ -176,7 +189,7 @@ class DownloadManager {
         }
       }
 
-      final checksum = md5.convert(bytes).toString();
+      final checksum = await compute(_computeMd5, bytes);
       final expected = post.fileMd5;
       final verified = expected == null || expected.toLowerCase() == checksum;
 
