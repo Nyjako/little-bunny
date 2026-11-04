@@ -166,12 +166,30 @@ class DownloadQueueService extends ChangeNotifier {
 
   /// Same as [enqueue], for a whole mass-download selection at once. Up to
   /// [_maxConcurrentDownloads] items download in parallel underneath (M62).
+  ///
+  /// Silently drops any post already [DownloadQueueItemStatus.queued] or
+  /// [DownloadQueueItemStatus.downloading] -- a double-tap on a download
+  /// button (or the same post appearing in two overlapping mass-download
+  /// selections) must not queue it twice, which would otherwise race two
+  /// workers against the identical destination file. A post that's already
+  /// in a *terminal* state (succeeded/failed/checksumMismatch) is still
+  /// re-queueable, same as [retryFailed] already allows -- this only guards
+  /// against genuinely duplicating in-flight work, not against a
+  /// deliberate re-download later.
   void enqueueAll(List<BunnyPost> posts, BunnyRepository repository) {
     if (posts.isEmpty) {
       return;
     }
-    _items.addAll(posts.map((post) => DownloadQueueItem(post: post, repository: repository, status: DownloadQueueItemStatus.queued)));
-    _sessionTotal += posts.length;
+    final activeIds = _items.where((item) => item.status == DownloadQueueItemStatus.queued || item.status == DownloadQueueItemStatus.downloading).map((item) => item.post.id).toSet();
+    // activeIds.add returns false for anything already present -- this
+    // dedupes both against what's already active in the queue and against
+    // [posts] repeating the same post more than once in this very call.
+    final newPosts = posts.where((post) => activeIds.add(post.id)).toList(growable: false);
+    if (newPosts.isEmpty) {
+      return;
+    }
+    _items.addAll(newPosts.map((post) => DownloadQueueItem(post: post, repository: repository, status: DownloadQueueItemStatus.queued)));
+    _sessionTotal += newPosts.length;
     unawaited(_persist());
     notifyListeners();
     if (!_processing) {

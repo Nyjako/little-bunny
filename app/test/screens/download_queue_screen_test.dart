@@ -74,6 +74,16 @@ void main() {
 
   testWidgets('shows a row per concurrently-downloading item, alongside queued/failed counts (M62)', (WidgetTester tester) async {
     final gates = {2: Completer<void>(), 3: Completer<void>(), 4: Completer<void>()};
+    // Tracks which gated requests have actually reached their `await
+    // entry.value.future` below, as opposed to merely being claimed by a
+    // worker (DownloadQueueItemStatus.downloading) -- a worker can sit claimed
+    // for a while before its HTTP call actually fires (it does a real,
+    // unordered file-existence check first). The first runAsync block below
+    // must wait for this, not just the downloading count: a Future that's
+    // still working its way to its first real await when runAsync returns
+    // never gets properly woken up again by a later runAsync call, which
+    // otherwise deadlocks this test permanently on exactly that item.
+    final gatingStarted = <int>{};
     final service = DownloadQueueService(
       downloadManager: DownloadManager(
         client: MockClient((request) async {
@@ -83,6 +93,7 @@ void main() {
           }
           for (final entry in gates.entries) {
             if (url.endsWith('/${entry.key}.png')) {
+              gatingStarted.add(entry.key);
               await entry.value.future;
             }
           }
@@ -108,7 +119,7 @@ void main() {
       // Item 1 fails immediately, freeing its concurrency slot for item 4
       // -- once items 2/3/4 all occupy the 3 slots (all gated), item 5 has
       // nowhere to go and stays queued.
-      while (service.downloadingItems.length != 3 || service.pendingCount != 1) {
+      while (service.downloadingItems.length != 3 || service.pendingCount != 1 || gatingStarted.length != 3) {
         await Future<void>.delayed(const Duration(milliseconds: 1));
       }
     });

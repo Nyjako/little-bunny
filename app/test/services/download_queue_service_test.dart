@@ -198,6 +198,82 @@ void main() {
     expect(service.succeededCount, 4);
   });
 
+  group('enqueue dedup -- a post already active in the queue is not added twice', () {
+    test('a post still queued is ignored by a second enqueue call', () async {
+      final gate = Completer<void>();
+      final service = buildService(client: MockClient((_) async => gate.future.then((_) => http.Response.bytes([1, 2, 3], 200))));
+      final post = _post(id: 1);
+
+      service.enqueue(post, repository);
+      service.enqueue(post, repository);
+
+      expect(service.items, hasLength(1));
+      expect(service.totalCount, 1);
+
+      gate.complete();
+      await waitUntilIdle(service);
+    });
+
+    test('a post currently downloading is ignored by a second enqueue call', () async {
+      final gate = Completer<void>();
+      final service = buildService(client: MockClient((_) async => gate.future.then((_) => http.Response.bytes([1, 2, 3], 200))));
+      final post = _post(id: 1);
+
+      service.enqueue(post, repository);
+      while (service.downloadingItems.isEmpty) {
+        await Future<void>.delayed(const Duration(milliseconds: 1));
+      }
+
+      service.enqueue(post, repository);
+
+      expect(service.items, hasLength(1));
+      expect(service.totalCount, 1);
+
+      gate.complete();
+      await waitUntilIdle(service);
+    });
+
+    test('enqueueAll dedupes the same post repeated within one call', () async {
+      final service = buildService(client: MockClient((_) async => http.Response.bytes([1, 2, 3], 200)));
+      final post = _post(id: 1);
+
+      service.enqueueAll([post, post, post], repository);
+      await waitUntilIdle(service);
+
+      expect(service.succeededCount, 1);
+    });
+
+    test('a post that already finished can be legitimately re-queued', () async {
+      final service = buildService(client: MockClient((_) async => http.Response.bytes([1, 2, 3], 200)));
+      final post = _post(id: 1);
+
+      service.enqueue(post, repository);
+      await waitUntilIdle(service);
+      expect(service.succeededCount, 1);
+
+      // Not a duplicate-in-flight situation -- the first run already
+      // finished, so a deliberate second download must still go through.
+      service.enqueue(post, repository);
+      await waitUntilIdle(service);
+
+      expect(service.items, hasLength(2));
+      expect(service.succeededCount, 2);
+    });
+
+    test('enqueueAll only drops the duplicates, not the genuinely new posts in the same batch', () async {
+      final service = buildService(client: MockClient((_) async => http.Response.bytes([1, 2, 3], 200)));
+      final gate = Completer<void>();
+      service.enqueue(_post(id: 1, fileUrl: 'https://static1.e621.net/data/1.png'), repository);
+      // Re-enqueue id 1 (should be dropped) alongside a genuinely new id 2
+      // (should go through) in the same call.
+      service.enqueueAll([_post(id: 1, fileUrl: 'https://static1.e621.net/data/1.png'), _post(id: 2, fileUrl: 'https://static1.e621.net/data/2.png')], repository);
+      gate.complete();
+      await waitUntilIdle(service);
+
+      expect(service.items.map((item) => item.post.id).toSet(), {1, 2});
+    });
+  });
+
   test('auto-favorite drains the action queue once via the final flush, for a batch under the sync threshold', () async {
     SharedPreferences.setMockInitialValues({'download_destination_folder': destinationDir.path, 'auto_favorite_on_download': true});
     final service = buildService(client: MockClient((_) async => http.Response.bytes([1, 2, 3], 200)));

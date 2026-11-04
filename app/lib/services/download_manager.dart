@@ -101,6 +101,26 @@ class DownloadManager {
     return File('$destinationFolder/$artistFolder/$filename').exists();
   }
 
+  /// Reads back whatever already sits at [downloadPost]'s own deterministic
+  /// path for [post], if anything does -- same SAF-vs-plain-path branch as
+  /// [isDownloaded], just returning the bytes (for a checksum check) and the
+  /// resolved path/uri instead of a bare bool. Null if nothing is there yet.
+  Future<(Uint8List bytes, String path)?> _readExistingFile(BunnyPost post, String destinationFolder, String artistFolder, String ext) async {
+    final filename = '${post.externalId}.$ext';
+    if (destinationFolder.startsWith('content://')) {
+      final child = await SafUtil().child(destinationFolder, [artistFolder, filename]);
+      if (child == null) {
+        return null;
+      }
+      return (await SafStream().readFileBytes(child.uri), child.uri);
+    }
+    final file = File('$destinationFolder/$artistFolder/$filename');
+    if (!await file.exists()) {
+      return null;
+    }
+    return (await file.readAsBytes(), file.path);
+  }
+
   /// [autoFavorite] (M10.1) queues a favorite-add for [post] once the file is
   /// actually written to disk (a [DownloadOutcome.verified] or
   /// [DownloadOutcome.checksumMismatch] result -- never [noFileUrl]/[failed],
@@ -120,6 +140,14 @@ class DownloadManager {
   /// `httpClient.get` is what makes any progress reporting possible at all
   /// here -- `get` only ever resolves once the entire body has already
   /// been buffered, with nothing to report partway through.
+  ///
+  /// Skips the network fetch entirely when a file already sits at the
+  /// deterministic path *and* its checksum still matches what was
+  /// published (M62 follow-up) -- common when re-running a mass download
+  /// over a batch that's mostly already on disk (e.g. after clearing a
+  /// finished queue and tapping "download all" again). A checksum mismatch
+  /// against the existing file (or no file there yet) falls through to a
+  /// real fetch/overwrite below, same as before this existed.
   Future<DownloadResult> downloadPost(
     BunnyPost post,
     BunnyRepository repository,
@@ -133,6 +161,24 @@ class DownloadManager {
       return const DownloadResult(DownloadOutcome.noFileUrl);
     }
     try {
+      final artistFolder = _sanitizeArtist(post.artist);
+      final ext = post.fileExt ?? 'bin';
+      final existing = await _readExistingFile(post, destinationFolder, artistFolder, ext);
+      if (existing != null) {
+        final (existingBytes, existingPath) = existing;
+        final expected = post.fileMd5;
+        final alreadyVerified = expected == null || expected.toLowerCase() == await compute(_computeMd5, existingBytes);
+        if (alreadyVerified) {
+          if (autoFavorite) {
+            await repository.queueFavoriteAdd(post.id);
+          }
+          if (autoUpvote && post.site == BunnySite.e621) {
+            await repository.queueVote(post.id, 1);
+          }
+          return DownloadResult(DownloadOutcome.verified, filePath: existingPath);
+        }
+      }
+
       final httpClient = client ?? http.Client();
       final request = http.Request('GET', Uri.parse(url))..headers.addAll(imageHeadersFor(post.site) ?? const {});
       final streamedResponse = await httpClient.send(request);
@@ -149,8 +195,6 @@ class DownloadManager {
       }
       final bytes = builder.takeBytes();
 
-      final artistFolder = _sanitizeArtist(post.artist);
-      final ext = post.fileExt ?? 'bin';
       final String filePath;
       if (destinationFolder.startsWith('content://')) {
         // A `content://` destination means the user picked a folder via
