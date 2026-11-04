@@ -40,4 +40,24 @@ void main() {
       expect(isGifExt(null), isFalse);
     });
   });
+
+  group('isTextDocumentExt', () {
+    test('matches txt and md', () {
+      expect(isTextDocumentExt('txt'), isTrue);
+      expect(isTextDocumentExt('md'), isTrue);
+    });
+
+    test('is case-insensitive', () {
+      expect(isTextDocumentExt('TXT'), isTrue);
+    });
+
+    test('rejects a binary document extension', () {
+      expect(isTextDocumentExt('pdf'), isFalse);
+      expect(isTextDocumentExt('doc'), isFalse);
+    });
+
+    test('rejects null', () {
+      expect(isTextDocumentExt(null), isFalse);
+    });
+  });
 }

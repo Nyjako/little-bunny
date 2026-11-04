@@ -241,6 +241,7 @@
   "@postDetailUnsupportedFormat": {
     "placeholders": {"extension": {"type": "String"}}
   },
+  "postDetailOpenExternally": "Open externally",
   "postDetailAudioTrackLabel": "Track {position}",
   "@postDetailAudioTrackLabel": {
     "placeholders": {"position": {"type": "int"}}

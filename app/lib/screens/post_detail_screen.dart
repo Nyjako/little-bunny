@@ -25,6 +25,7 @@ import '../widgets/download_progress_indicator.dart';
 import '../widgets/gif_player.dart';
 import '../widgets/rating_badge.dart';
 import '../widgets/rich_markup_text.dart';
+import '../widgets/text_document_viewer.dart';
 import 'create_search_screen.dart';
 import 'full_screen_post_viewer_screen.dart';
 import 'tag_browse_screen.dart';
@@ -819,7 +820,20 @@ class _PostDetailPageState extends State<_PostDetailPage> {
     if (isAudioExt(ext)) {
       return AudioPlayerWidget(key: ValueKey(post.fileUrl), url: post.fileUrl!, httpHeaders: imageHeadersFor(post.site));
     }
-    return SizedBox(height: 200, child: Center(child: Text(l10n.postDetailUnsupportedFormat(ext))));
+    if (isTextDocumentExt(ext)) {
+      return TextDocumentViewer(key: ValueKey(post.fileUrl), url: post.fileUrl!, httpHeaders: imageHeadersFor(post.site));
+    }
+    return Padding(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(l10n.postDetailUnsupportedFormat(ext)),
+          const SizedBox(height: 8),
+          OutlinedButton.icon(onPressed: () => _launchSource(post.fileUrl!), icon: const Icon(Icons.open_in_new), label: Text(l10n.postDetailOpenExternally)),
+        ],
+      ),
+    );
   }
 
   /// Image's own loadingBuilder (standard ImageStream/ImageChunkEvent

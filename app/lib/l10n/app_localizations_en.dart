@@ -500,6 +500,9 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String get postDetailOpenExternally => 'Open externally';
+
+  @override
   String postDetailAudioTrackLabel(int position) {
     return 'Track $position';
   }
