@@ -107,6 +107,17 @@ class DownloadQueueService extends ChangeNotifier {
   /// round trip every [_syncEveryNItems] items for nothing.
   bool _actionsQueuedSinceSync = false;
 
+  /// Byte-level progress for [currentItem] specifically (M62) -- unlike
+  /// [completedCount]/[totalCount] (whole-batch item counts), this is reset
+  /// to null the instant a new item starts downloading, and updated live as
+  /// [DownloadManager.downloadPost]'s own `onProgress` callback reports
+  /// chunks arriving. [currentBytesTotal] is null whenever the response had
+  /// no `Content-Length` to report one.
+  int? get currentBytesReceived => _currentBytesReceived;
+  int? get currentBytesTotal => _currentBytesTotal;
+  int? _currentBytesReceived;
+  int? _currentBytesTotal;
+
   int get pendingCount => queuedItems.length;
 
   /// Count of items that finished cleanly -- checksum-mismatch items are
@@ -225,9 +236,11 @@ class DownloadQueueService extends ChangeNotifier {
     } catch (_) {
       // Best-effort.
     }
-    // Started after showStarting, not before -- an item-level average (no
-    // byte-level progress exists anywhere in DownloadManager), used below to
-    // estimate an ETA once at least one item has actually finished.
+    // Started after showStarting, not before -- an item-level average (the
+    // per-item ETA below is intentionally batch-granularity, not derived
+    // from the current item's own byte progress, since a single slow or
+    // unusually large file shouldn't skew the whole batch's estimate), used
+    // to estimate an ETA once at least one item has actually finished.
     final sessionStopwatch = Stopwatch()..start();
     var itemsSinceSync = 0;
     DownloadQueueItem? lastItem;
@@ -238,6 +251,8 @@ class DownloadQueueService extends ChangeNotifier {
           break;
         }
         item.status = DownloadQueueItemStatus.downloading;
+        _currentBytesReceived = null;
+        _currentBytesTotal = null;
         notifyListeners();
         try {
           await _processItem(item);
@@ -304,6 +319,8 @@ class DownloadQueueService extends ChangeNotifier {
     _succeeded = 0;
     _mismatched = 0;
     _failed = 0;
+    _currentBytesReceived = null;
+    _currentBytesTotal = null;
     _processing = false;
     notifyListeners();
   }
@@ -318,7 +335,18 @@ class DownloadQueueService extends ChangeNotifier {
     }
     final autoFavorite = await downloadSettingsStore.loadAutoFavoriteOnDownload();
     final autoUpvote = await downloadSettingsStore.loadAutoUpvoteOnDownload();
-    final result = await downloadManager.downloadPost(item.post, item.repository, folder, autoFavorite: autoFavorite, autoUpvote: autoUpvote);
+    final result = await downloadManager.downloadPost(
+      item.post,
+      item.repository,
+      folder,
+      autoFavorite: autoFavorite,
+      autoUpvote: autoUpvote,
+      onProgress: (received, total) {
+        _currentBytesReceived = received;
+        _currentBytesTotal = total;
+        notifyListeners();
+      },
+    );
     switch (result.outcome) {
       case DownloadOutcome.verified:
         _succeeded++;

@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:crypto/crypto.dart';
 import 'package:http/http.dart' as http;
@@ -101,18 +102,43 @@ class DownloadManager {
   /// left to the caller, which already decides that for its own batching
   /// needs (an immediate drain for a single download, one drain after a
   /// whole mass-download loop).
-  Future<DownloadResult> downloadPost(BunnyPost post, BunnyRepository repository, String destinationFolder, {bool autoFavorite = false, bool autoUpvote = false}) async {
+  ///
+  /// [onProgress] (M62), if given, is called as bytes arrive -- `total` is
+  /// `null` whenever the server's response has no `Content-Length` (rare in
+  /// practice for these two sites' CDNs, but not guaranteed), in which case
+  /// a caller can still show `received` as a raw byte count but not a
+  /// percentage. Streaming via `httpClient.send` rather than the simpler
+  /// `httpClient.get` is what makes any progress reporting possible at all
+  /// here -- `get` only ever resolves once the entire body has already
+  /// been buffered, with nothing to report partway through.
+  Future<DownloadResult> downloadPost(
+    BunnyPost post,
+    BunnyRepository repository,
+    String destinationFolder, {
+    bool autoFavorite = false,
+    bool autoUpvote = false,
+    void Function(int received, int? total)? onProgress,
+  }) async {
     final url = post.fileUrl;
     if (url == null) {
       return const DownloadResult(DownloadOutcome.noFileUrl);
     }
     try {
       final httpClient = client ?? http.Client();
-      final response = await httpClient.get(Uri.parse(url), headers: imageHeadersFor(post.site) ?? const {});
-      if (response.statusCode != 200) {
-        return DownloadResult(DownloadOutcome.failed, errorMessage: 'HTTP ${response.statusCode}');
+      final request = http.Request('GET', Uri.parse(url))..headers.addAll(imageHeadersFor(post.site) ?? const {});
+      final streamedResponse = await httpClient.send(request);
+      if (streamedResponse.statusCode != 200) {
+        return DownloadResult(DownloadOutcome.failed, errorMessage: 'HTTP ${streamedResponse.statusCode}');
       }
-      final bytes = response.bodyBytes;
+      final total = streamedResponse.contentLength;
+      final builder = BytesBuilder(copy: false);
+      var received = 0;
+      await for (final chunk in streamedResponse.stream) {
+        builder.add(chunk);
+        received += chunk.length;
+        onProgress?.call(received, total);
+      }
+      final bytes = builder.takeBytes();
 
       final artistFolder = _sanitizeArtist(post.artist);
       final ext = post.fileExt ?? 'bin';

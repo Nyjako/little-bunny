@@ -249,13 +249,53 @@ void main() {
     await tester.pumpWidget(wrap(service));
     await tester.pump();
 
-    final progressBar = tester.widget<LinearProgressIndicator>(find.byType(LinearProgressIndicator));
+    final progressBar = tester.widget<LinearProgressIndicator>(find.byKey(const Key('downloadQueueBatchProgressBar')));
     // Item 1 of 2 already done, item 2 (this row) actively downloading.
     expect(progressBar.value, 0.5);
     expect(find.byType(CachedNetworkImage), findsOneWidget);
 
     await tester.runAsync(() async {
       secondItemGate.complete();
+      while (service.isActive) {
+        await Future<void>.delayed(const Duration(milliseconds: 1));
+      }
+    });
+  });
+
+  testWidgets('shows the current file\'s own byte progress separately from the batch bar (M62)', (WidgetTester tester) async {
+    final chunkGate = Completer<void>();
+    final chunkController = StreamController<List<int>>();
+    final service = DownloadQueueService(
+      downloadManager: DownloadManager(
+        client: MockClient.streaming((request, _) async {
+          unawaited(() async {
+            chunkController.add(List.filled(40, 1));
+            await chunkGate.future;
+            chunkController.add(List.filled(60, 1));
+            await chunkController.close();
+          }());
+          return http.StreamedResponse(chunkController.stream, 200, contentLength: 100);
+        }),
+      ),
+      downloadSettingsStore: const DownloadSettingsStore(),
+    );
+
+    await tester.runAsync(() async {
+      service.enqueue(_post(id: 1, title: 'First'), repository);
+      while (service.currentBytesReceived != 40) {
+        await Future<void>.delayed(const Duration(milliseconds: 1));
+      }
+    });
+
+    await tester.pumpWidget(wrap(service));
+    await tester.pump();
+
+    final fileProgressBar = tester.widget<LinearProgressIndicator>(find.byKey(const Key('downloadQueueCurrentFileProgressBar')));
+    expect(fileProgressBar.value, 0.4);
+    expect(find.text('40 B / 100 B'), findsOneWidget);
+
+    await tester.runAsync(() async {
+      chunkGate.complete();
       while (service.isActive) {
         await Future<void>.delayed(const Duration(milliseconds: 1));
       }

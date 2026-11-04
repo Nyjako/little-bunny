@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import '../l10n/app_localizations.dart';
 import '../repository/bunny_models.dart';
 import '../services/download_queue_service.dart';
+import '../util/byte_format.dart';
 import '../util/image_headers.dart';
 
 /// Shows the client-side download queue (M43) as a real, viewable list
@@ -42,6 +43,8 @@ class DownloadQueueScreen extends StatelessWidget {
   Widget _downloadingSection(BuildContext context, AppLocalizations l10n, DownloadQueueItem current) {
     final total = downloadQueueService.totalCount;
     final done = downloadQueueService.completedCount;
+    final bytesReceived = downloadQueueService.currentBytesReceived;
+    final bytesTotal = downloadQueueService.currentBytesTotal;
     final previewUrl = current.post.previewUrl;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -59,10 +62,29 @@ class DownloadQueueScreen extends StatelessWidget {
                 : const Icon(Icons.image_outlined),
           ),
           title: Text(_postLabel(current.post)),
-          // Batch-level progress (done/total of the whole run), not this
-          // one file's byte progress -- DownloadManager awaits the full HTTP
-          // response in one go, so no per-file progress exists to show.
-          subtitle: LinearProgressIndicator(value: total > 0 ? done / total : null),
+          subtitle: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Batch-level progress (done/total of the whole run).
+              LinearProgressIndicator(key: const Key('downloadQueueBatchProgressBar'), value: total > 0 ? done / total : null),
+              const SizedBox(height: 6),
+              // This one file's own byte progress (M62) -- indeterminate
+              // until the first chunk arrives, or whenever the response had
+              // no Content-Length to compute a fraction from.
+              LinearProgressIndicator(
+                key: const Key('downloadQueueCurrentFileProgressBar'),
+                value: (bytesReceived != null && bytesTotal != null && bytesTotal > 0) ? bytesReceived / bytesTotal : null,
+              ),
+              if (bytesReceived != null) ...[
+                const SizedBox(height: 2),
+                Text(
+                  bytesTotal != null ? '${formatBytesCompact(bytesReceived)} / ${formatBytesCompact(bytesTotal)}' : formatBytesCompact(bytesReceived),
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+              ],
+            ],
+          ),
         ),
       ],
     );
