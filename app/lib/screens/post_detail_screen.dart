@@ -25,6 +25,7 @@ import '../widgets/download_progress_indicator.dart';
 import '../widgets/gif_player.dart';
 import '../widgets/rating_badge.dart';
 import '../widgets/rich_markup_text.dart';
+import '../widgets/text_document_viewer.dart';
 import 'create_search_screen.dart';
 import 'full_screen_post_viewer_screen.dart';
 import 'tag_browse_screen.dart';
@@ -629,14 +630,27 @@ class _PostDetailPageState extends State<_PostDetailPage> {
 
   Widget _downloadButton(AppLocalizations l10n) {
     final canDownload = _post.fileUrl != null;
-    return FutureBuilder<bool>(
-      future: _isDownloadedFuture,
-      builder: (context, snapshot) {
-        final alreadyDownloaded = snapshot.data ?? false;
-        return IconButton(
-          icon: Icon(alreadyDownloaded ? Icons.download_done : Icons.download),
-          tooltip: l10n.postDetailDownloadTooltip,
-          onPressed: canDownload ? () => _queueDownload(l10n) : null,
+    // AnimatedBuilder on the queue service (same pattern as
+    // DownloadQueueScreen) so tapping download flips this icon to
+    // Icons.downloading right away, rather than waiting for this screen to
+    // be reopened -- unlike _isDownloadedFuture below, queued/downloading
+    // status is cheap to read live since it's just _items, no disk I/O.
+    return AnimatedBuilder(
+      animation: widget.downloadQueueService,
+      builder: (context, child) {
+        final isQueued = widget.downloadQueueService.items.any(
+          (item) => item.post.id == _post.id && (item.status == DownloadQueueItemStatus.queued || item.status == DownloadQueueItemStatus.downloading),
+        );
+        return FutureBuilder<bool>(
+          future: _isDownloadedFuture,
+          builder: (context, snapshot) {
+            final alreadyDownloaded = snapshot.data ?? false;
+            return IconButton(
+              icon: Icon(isQueued ? Icons.downloading : (alreadyDownloaded ? Icons.download_done : Icons.download)),
+              tooltip: l10n.postDetailDownloadTooltip,
+              onPressed: canDownload && !isQueued ? () => _queueDownload(l10n) : null,
+            );
+          },
         );
       },
     );
@@ -819,7 +833,20 @@ class _PostDetailPageState extends State<_PostDetailPage> {
     if (isAudioExt(ext)) {
       return AudioPlayerWidget(key: ValueKey(post.fileUrl), url: post.fileUrl!, httpHeaders: imageHeadersFor(post.site));
     }
-    return SizedBox(height: 200, child: Center(child: Text(l10n.postDetailUnsupportedFormat(ext))));
+    if (isTextDocumentExt(ext)) {
+      return TextDocumentViewer(key: ValueKey(post.fileUrl), url: post.fileUrl!, httpHeaders: imageHeadersFor(post.site));
+    }
+    return Padding(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(l10n.postDetailUnsupportedFormat(ext)),
+          const SizedBox(height: 8),
+          OutlinedButton.icon(onPressed: () => _launchSource(post.fileUrl!), icon: const Icon(Icons.open_in_new), label: Text(l10n.postDetailOpenExternally)),
+        ],
+      ),
+    );
   }
 
   /// Image's own loadingBuilder (standard ImageStream/ImageChunkEvent

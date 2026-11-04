@@ -56,6 +56,25 @@ class _CreateSearchScreenState extends State<CreateSearchScreen> {
   /// blacklist-field validation exactly -- see its own doc comment.
   int? _queryError;
   Timer? _queryValidateDebounce;
+
+  /// Non-null once the tag token under the cursor exactly matches a known,
+  /// currently-active e621 tag alias's antecedent (M54) -- e.g. typing
+  /// `cat` sets this to `('cat', 'domestic_cat')`, shown as a plain
+  /// informational hint below the query field. Deliberately non-blocking:
+  /// this never rewrites the field itself, it just tells the user their
+  /// tag resolves to a different canonical name server-side, same as
+  /// e621's own search UI does. e621-only -- Inkbunny has no alias concept.
+  (String tag, String canonical)? _aliasHint;
+  Timer? _aliasCheckDebounce;
+
+  /// Non-empty once the tag token under the cursor has at least one active
+  /// e621 tag implication (M54) -- e.g. typing `hyper_breasts` sets this to
+  /// `[hyper_breasts, huge_breasts, big_breasts, breasts]`, shown joined by
+  /// " -> " below the query field. Same non-blocking, e621-only treatment
+  /// as [_aliasHint] -- see [resolveTagImplicationChain]'s own doc comment
+  /// for how a tag with more than one direct implication is handled.
+  List<String> _implicationChain = const [];
+  Timer? _implicationCheckDebounce;
   bool _submitting = false;
   bool _labelManuallyEdited = false;
   bool _mirroringLabel = false;
@@ -73,6 +92,8 @@ class _CreateSearchScreenState extends State<CreateSearchScreen> {
     }
     _queryController.addListener(_onQueryChanged);
     _queryController.addListener(_onQueryChangedValidate);
+    _queryController.addListener(_onQueryChangedCheckAlias);
+    _queryController.addListener(_onQueryChangedCheckImplication);
     _queryController.addListener(_mirrorQueryIntoLabel);
     _labelController.addListener(_onLabelChanged);
     _loadDefaultInterval();
@@ -105,8 +126,12 @@ class _CreateSearchScreenState extends State<CreateSearchScreen> {
     _debounce?.cancel();
     _poolNameDebounce?.cancel();
     _queryValidateDebounce?.cancel();
+    _aliasCheckDebounce?.cancel();
+    _implicationCheckDebounce?.cancel();
     _queryController.removeListener(_onQueryChanged);
     _queryController.removeListener(_onQueryChangedValidate);
+    _queryController.removeListener(_onQueryChangedCheckAlias);
+    _queryController.removeListener(_onQueryChangedCheckImplication);
     _queryController.removeListener(_mirrorQueryIntoLabel);
     _labelController.removeListener(_onLabelChanged);
     _labelController.dispose();
@@ -202,6 +227,49 @@ class _CreateSearchScreenState extends State<CreateSearchScreen> {
     });
   }
 
+  void _onQueryChangedCheckAlias() {
+    _aliasCheckDebounce?.cancel();
+    if (_site != BunnySite.e621) {
+      setState(() => _aliasHint = null);
+      return;
+    }
+    final text = _queryController.text;
+    final (start, end) = tagTokenRangeAt(text, _cursorOffset);
+    final (_, tag) = splitTagPrefix(text.substring(start, end));
+    if (tag.length < 2 || tagHasWildcard(tag)) {
+      setState(() => _aliasHint = null);
+      return;
+    }
+    _aliasCheckDebounce = Timer(const Duration(seconds: 3), () async {
+      final aliases = await widget.repository.searchTagAliases(tag);
+      final match = aliases.where((alias) => alias.status == 'active' && alias.antecedentName == tag && alias.consequentName != null).firstOrNull;
+      if (mounted) {
+        setState(() => _aliasHint = match != null ? (tag, match.consequentName!) : null);
+      }
+    });
+  }
+
+  void _onQueryChangedCheckImplication() {
+    _implicationCheckDebounce?.cancel();
+    if (_site != BunnySite.e621) {
+      setState(() => _implicationChain = const []);
+      return;
+    }
+    final text = _queryController.text;
+    final (start, end) = tagTokenRangeAt(text, _cursorOffset);
+    final (_, tag) = splitTagPrefix(text.substring(start, end));
+    if (tag.length < 2 || tagHasWildcard(tag)) {
+      setState(() => _implicationChain = const []);
+      return;
+    }
+    _implicationCheckDebounce = Timer(const Duration(seconds: 3), () async {
+      final chain = await resolveTagImplicationChain(widget.repository, tag);
+      if (mounted) {
+        setState(() => _implicationChain = chain);
+      }
+    });
+  }
+
   void _applySuggestion(String tag) {
     final (newText, newCursor) = applyTagSuggestion(_queryController.text, _cursorOffset, tag);
     _queryController.value = TextEditingValue(text: newText, selection: TextSelection.collapsed(offset: newCursor));
@@ -252,6 +320,8 @@ class _CreateSearchScreenState extends State<CreateSearchScreen> {
                     : (selection) {
                         setState(() => _site = selection.first);
                         _onQueryChangedValidate();
+                        _onQueryChangedCheckAlias();
+                        _onQueryChangedCheckImplication();
                       },
               ),
               const SizedBox(height: 16),
@@ -262,6 +332,8 @@ class _CreateSearchScreenState extends State<CreateSearchScreen> {
                 decoration: InputDecoration(labelText: l10n.createSearchQueryField, errorText: _queryError != null ? l10n.tagQueryInvalidSyntax : null),
                 validator: (value) => (value == null || value.trim().isEmpty) ? l10n.commonRequired : null,
               ),
+              if (_aliasHint != null) Padding(padding: const EdgeInsets.only(top: 4), child: Text(l10n.tagAliasHint(_aliasHint!.$1, _aliasHint!.$2), style: Theme.of(context).textTheme.bodySmall)),
+              if (_implicationChain.isNotEmpty) Padding(padding: const EdgeInsets.only(top: 4), child: Text(_implicationChain.join(' → '), style: Theme.of(context).textTheme.bodySmall)),
               if (_suggestions.isNotEmpty)
                 Wrap(spacing: 8, children: _suggestions.map((stat) => ActionChip(label: Text('${stat.name} (${stat.count})'), onPressed: () => _applySuggestion(stat.name))).toList()),
               TextFormField(

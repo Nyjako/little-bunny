@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import '../l10n/app_localizations.dart';
 import '../repository/bunny_models.dart';
 import '../services/download_queue_service.dart';
+import '../util/byte_format.dart';
 import '../util/image_headers.dart';
 
 /// Shows the client-side download queue (M43) as a real, viewable list
@@ -16,16 +17,16 @@ import '../util/image_headers.dart';
 /// Queued/done are shown as a single count each, not a per-item list --
 /// [DownloadQueueService.pendingCount]/[succeededCount] are already O(n)
 /// counts, not lists, so this never has to materialize thousands of rows for
-/// them. Only "currently downloading" (always at most one item) and
-/// "failed" (usually a small, bounded set needing an actual retry action)
-/// render real rows; failed rows go through a lazy [SliverList] rather than
-/// a plain `ListView(children: ...)` so even a pathological "everything
-/// failed" batch only builds what's actually scrolled into view. Before this
-/// (M43-follow-up), the queued/failed sections were built as eager
-/// `.map().toList()` lists fed straight into a non-lazy `ListView`, which,
-/// combined with this screen rebuilding on every single item's progress
-/// tick while a batch is active, made opening this screen with a few
-/// thousand pending items effectively unusable.
+/// them. "Currently downloading" (up to [DownloadQueueService._maxConcurrentDownloads]
+/// items at once, M62) and "failed" (usually a small, bounded set needing an
+/// actual retry action) render real rows; failed rows go through a lazy
+/// [SliverList] rather than a plain `ListView(children: ...)` so even a
+/// pathological "everything failed" batch only builds what's actually
+/// scrolled into view. Before this (M43-follow-up), the queued/failed
+/// sections were built as eager `.map().toList()` lists fed straight into a
+/// non-lazy `ListView`, which, combined with this screen rebuilding on every
+/// single item's progress tick while a batch is active, made opening this
+/// screen with a few thousand pending items effectively unusable.
 class DownloadQueueScreen extends StatelessWidget {
   final DownloadQueueService downloadQueueService;
 
@@ -39,32 +40,64 @@ class DownloadQueueScreen extends StatelessWidget {
   Widget _sectionHeader(BuildContext context, String title) =>
       Padding(padding: const EdgeInsets.fromLTRB(16, 16, 16, 4), child: Text(title, style: Theme.of(context).textTheme.titleMedium));
 
-  Widget _downloadingSection(BuildContext context, AppLocalizations l10n, DownloadQueueItem current) {
+  /// A handful of rows (at most [DownloadQueueService._maxConcurrentDownloads],
+  /// M62), each with its own byte-progress bar -- unlike the single bar this
+  /// used to be, up to that many files can be [DownloadQueueItemStatus.downloading]
+  /// at once now, so there's no single "the current file" to show.
+  Widget _downloadingSection(BuildContext context, AppLocalizations l10n, List<DownloadQueueItem> downloading) {
     final total = downloadQueueService.totalCount;
     final done = downloadQueueService.completedCount;
-    final previewUrl = current.post.previewUrl;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         _sectionHeader(context, l10n.downloadQueueDownloadingLabel),
-        ListTile(
-          leading: SizedBox(
-            width: 40,
-            height: 40,
-            child: previewUrl != null
-                ? ClipRRect(
-                    borderRadius: BorderRadius.circular(4),
-                    child: CachedNetworkImage(imageUrl: previewUrl, httpHeaders: imageHeadersFor(current.post.site), fit: BoxFit.cover),
-                  )
-                : const Icon(Icons.image_outlined),
-          ),
-          title: Text(_postLabel(current.post)),
-          // Batch-level progress (done/total of the whole run), not this
-          // one file's byte progress -- DownloadManager awaits the full HTTP
-          // response in one go, so no per-file progress exists to show.
-          subtitle: LinearProgressIndicator(value: total > 0 ? done / total : null),
+        // Batch-level progress (done/total of the whole run) -- shown once
+        // here, above the per-file rows below, since it covers the whole
+        // batch rather than any one file.
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: LinearProgressIndicator(key: const Key('downloadQueueBatchProgressBar'), value: total > 0 ? done / total : null),
         ),
+        const SizedBox(height: 4),
+        ...downloading.map((item) => _downloadingItemRow(context, item)),
       ],
+    );
+  }
+
+  Widget _downloadingItemRow(BuildContext context, DownloadQueueItem item) {
+    final bytesReceived = item.bytesReceived;
+    final bytesTotal = item.bytesTotal;
+    final previewUrl = item.post.previewUrl;
+    return ListTile(
+      leading: SizedBox(
+        width: 40,
+        height: 40,
+        child: previewUrl != null
+            ? ClipRRect(borderRadius: BorderRadius.circular(4), child: CachedNetworkImage(imageUrl: previewUrl, httpHeaders: imageHeadersFor(item.post.site), fit: BoxFit.cover))
+            : const Icon(Icons.image_outlined),
+      ),
+      title: Text(_postLabel(item.post)),
+      subtitle: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // This one file's own byte progress (M62) -- indeterminate until
+          // the first chunk arrives, or whenever the response had no
+          // Content-Length to compute a fraction from. Keyed per post (not
+          // a single static key) since several of these can coexist now.
+          LinearProgressIndicator(
+            key: ValueKey('downloadQueueFileProgressBar_${item.post.id}'),
+            value: (bytesReceived != null && bytesTotal != null && bytesTotal > 0) ? bytesReceived / bytesTotal : null,
+          ),
+          if (bytesReceived != null) ...[
+            const SizedBox(height: 2),
+            Text(
+              bytesTotal != null ? '${formatBytesCompact(bytesReceived)} / ${formatBytesCompact(bytesTotal)}' : formatBytesCompact(bytesReceived),
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+          ],
+        ],
+      ),
     );
   }
 
@@ -101,16 +134,16 @@ class DownloadQueueScreen extends StatelessWidget {
       body: AnimatedBuilder(
         animation: downloadQueueService,
         builder: (context, child) {
-          final current = downloadQueueService.currentItem;
+          final downloading = downloadQueueService.downloadingItems;
           final pending = downloadQueueService.pendingCount;
           final done = downloadQueueService.succeededCount;
           final failed = downloadQueueService.failedItems;
-          if (current == null && pending == 0 && done == 0 && failed.isEmpty) {
+          if (downloading.isEmpty && pending == 0 && done == 0 && failed.isEmpty) {
             return Center(child: Text(l10n.downloadQueueEmptyState));
           }
           return CustomScrollView(
             slivers: [
-              if (current != null) SliverToBoxAdapter(child: _downloadingSection(context, l10n, current)),
+              if (downloading.isNotEmpty) SliverToBoxAdapter(child: _downloadingSection(context, l10n, downloading)),
               if (pending > 0) SliverToBoxAdapter(child: _countRow(Icons.schedule, l10n.downloadQueueQueuedCount(pending))),
               if (done > 0) SliverToBoxAdapter(child: _countRow(Icons.check_circle_outline, l10n.downloadQueueDoneCount(done))),
               if (failed.isNotEmpty) ...[

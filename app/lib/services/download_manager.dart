@@ -1,6 +1,8 @@
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:crypto/crypto.dart';
+import 'package:flutter/foundation.dart' show compute;
 import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
 import 'package:saf_stream/saf_stream.dart';
@@ -9,6 +11,14 @@ import 'package:saf_util/saf_util.dart';
 import '../repository/bunny_models.dart';
 import '../repository/bunny_repository.dart';
 import '../util/image_headers.dart';
+
+/// Top-level (not a method) because [compute] requires that -- it spawns a
+/// real worker isolate to run this on, so a multi-megabyte checksum hash
+/// (M62: now potentially several of these running at once, one per
+/// concurrently-downloading file) never blocks the main isolate's event
+/// loop, which is also where every other in-flight download's own HTTP
+/// stream and UI updates are being processed.
+String _computeMd5(Uint8List bytes) => md5.convert(bytes).toString();
 
 /// Best-effort extension-to-MIME-type mapping, only needed for the SAF write
 /// path below (`saf_stream`'s `writeFileBytes` requires one; `dart:io`'s
@@ -91,6 +101,26 @@ class DownloadManager {
     return File('$destinationFolder/$artistFolder/$filename').exists();
   }
 
+  /// Reads back whatever already sits at [downloadPost]'s own deterministic
+  /// path for [post], if anything does -- same SAF-vs-plain-path branch as
+  /// [isDownloaded], just returning the bytes (for a checksum check) and the
+  /// resolved path/uri instead of a bare bool. Null if nothing is there yet.
+  Future<(Uint8List bytes, String path)?> _readExistingFile(BunnyPost post, String destinationFolder, String artistFolder, String ext) async {
+    final filename = '${post.externalId}.$ext';
+    if (destinationFolder.startsWith('content://')) {
+      final child = await SafUtil().child(destinationFolder, [artistFolder, filename]);
+      if (child == null) {
+        return null;
+      }
+      return (await SafStream().readFileBytes(child.uri), child.uri);
+    }
+    final file = File('$destinationFolder/$artistFolder/$filename');
+    if (!await file.exists()) {
+      return null;
+    }
+    return (await file.readAsBytes(), file.path);
+  }
+
   /// [autoFavorite] (M10.1) queues a favorite-add for [post] once the file is
   /// actually written to disk (a [DownloadOutcome.verified] or
   /// [DownloadOutcome.checksumMismatch] result -- never [noFileUrl]/[failed],
@@ -101,21 +131,70 @@ class DownloadManager {
   /// left to the caller, which already decides that for its own batching
   /// needs (an immediate drain for a single download, one drain after a
   /// whole mass-download loop).
-  Future<DownloadResult> downloadPost(BunnyPost post, BunnyRepository repository, String destinationFolder, {bool autoFavorite = false, bool autoUpvote = false}) async {
+  ///
+  /// [onProgress] (M62), if given, is called as bytes arrive -- `total` is
+  /// `null` whenever the server's response has no `Content-Length` (rare in
+  /// practice for these two sites' CDNs, but not guaranteed), in which case
+  /// a caller can still show `received` as a raw byte count but not a
+  /// percentage. Streaming via `httpClient.send` rather than the simpler
+  /// `httpClient.get` is what makes any progress reporting possible at all
+  /// here -- `get` only ever resolves once the entire body has already
+  /// been buffered, with nothing to report partway through.
+  ///
+  /// Skips the network fetch entirely when a file already sits at the
+  /// deterministic path *and* its checksum still matches what was
+  /// published (M62 follow-up) -- common when re-running a mass download
+  /// over a batch that's mostly already on disk (e.g. after clearing a
+  /// finished queue and tapping "download all" again). A checksum mismatch
+  /// against the existing file (or no file there yet) falls through to a
+  /// real fetch/overwrite below, same as before this existed.
+  Future<DownloadResult> downloadPost(
+    BunnyPost post,
+    BunnyRepository repository,
+    String destinationFolder, {
+    bool autoFavorite = false,
+    bool autoUpvote = false,
+    void Function(int received, int? total)? onProgress,
+  }) async {
     final url = post.fileUrl;
     if (url == null) {
       return const DownloadResult(DownloadOutcome.noFileUrl);
     }
     try {
-      final httpClient = client ?? http.Client();
-      final response = await httpClient.get(Uri.parse(url), headers: imageHeadersFor(post.site) ?? const {});
-      if (response.statusCode != 200) {
-        return DownloadResult(DownloadOutcome.failed, errorMessage: 'HTTP ${response.statusCode}');
-      }
-      final bytes = response.bodyBytes;
-
       final artistFolder = _sanitizeArtist(post.artist);
       final ext = post.fileExt ?? 'bin';
+      final existing = await _readExistingFile(post, destinationFolder, artistFolder, ext);
+      if (existing != null) {
+        final (existingBytes, existingPath) = existing;
+        final expected = post.fileMd5;
+        final alreadyVerified = expected == null || expected.toLowerCase() == await compute(_computeMd5, existingBytes);
+        if (alreadyVerified) {
+          if (autoFavorite) {
+            await repository.queueFavoriteAdd(post.id);
+          }
+          if (autoUpvote && post.site == BunnySite.e621) {
+            await repository.queueVote(post.id, 1);
+          }
+          return DownloadResult(DownloadOutcome.verified, filePath: existingPath);
+        }
+      }
+
+      final httpClient = client ?? http.Client();
+      final request = http.Request('GET', Uri.parse(url))..headers.addAll(imageHeadersFor(post.site) ?? const {});
+      final streamedResponse = await httpClient.send(request);
+      if (streamedResponse.statusCode != 200) {
+        return DownloadResult(DownloadOutcome.failed, errorMessage: 'HTTP ${streamedResponse.statusCode}');
+      }
+      final total = streamedResponse.contentLength;
+      final builder = BytesBuilder(copy: false);
+      var received = 0;
+      await for (final chunk in streamedResponse.stream) {
+        builder.add(chunk);
+        received += chunk.length;
+        onProgress?.call(received, total);
+      }
+      final bytes = builder.takeBytes();
+
       final String filePath;
       if (destinationFolder.startsWith('content://')) {
         // A `content://` destination means the user picked a folder via
@@ -138,9 +217,13 @@ class DownloadManager {
         // sitting at the user-visible destination path -- `rename` is atomic
         // within the same filesystem; the copy+delete fallback only matters
         // if the OS temp dir and destination folder happen to be on
-        // different filesystems/volumes.
+        // different filesystems/volumes. The suffix (M62) makes this unique
+        // per call, not just per post -- parallel downloads mean the exact
+        // same post could theoretically be in flight twice at once (nothing
+        // dedupes the queue against itself), which would otherwise let two
+        // calls race on the identical temp path.
         final tempDir = await getTemporaryDirectory();
-        final tempFile = File('${tempDir.path}/${post.site.toWireString()}_${post.externalId}.$ext.tmp');
+        final tempFile = File('${tempDir.path}/${post.site.toWireString()}_${post.externalId}.$ext.${DateTime.now().microsecondsSinceEpoch}.tmp');
         await tempFile.writeAsBytes(bytes);
         try {
           await tempFile.rename(filePath);
@@ -150,7 +233,7 @@ class DownloadManager {
         }
       }
 
-      final checksum = md5.convert(bytes).toString();
+      final checksum = await compute(_computeMd5, bytes);
       final expected = post.fileMd5;
       final verified = expected == null || expected.toLowerCase() == checksum;
 

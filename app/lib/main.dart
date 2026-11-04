@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io' show Platform;
+import 'dart:ui' show AppExitResponse;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
@@ -101,11 +102,34 @@ class _LittleBunnyAppState extends State<LittleBunnyApp> {
   bool _amoled = false;
   String? _languageCode;
 
+  /// Desktop (Linux/Windows/macOS) only ever asks the app's permission
+  /// before exiting if something registers for it -- with no listener at
+  /// all, a normal window close tears the process down immediately,
+  /// racing (and often losing) [DownloadQueueService]'s own fire-and-forget
+  /// persistence writes (M61: reported as "closed the app normally mid-
+  /// download, nothing resumed on relaunch"). Flushing here, and only
+  /// confirming the exit once that flush actually lands, closes that race;
+  /// mobile has no equivalent "exit request" the OS will wait on, so this
+  /// is a desktop-only gap, not something App/task-switcher kills hit.
+  late final AppLifecycleListener _lifecycleListener;
+
   @override
   void initState() {
     super.initState();
+    _lifecycleListener = AppLifecycleListener(
+      onExitRequested: () async {
+        await widget.downloadQueueService.flush();
+        return AppExitResponse.exit;
+      },
+    );
     _loadPersistedConfig();
     _loadThemeSettings();
+  }
+
+  @override
+  void dispose() {
+    _lifecycleListener.dispose();
+    super.dispose();
   }
 
   Future<void> _loadPersistedConfig() async {

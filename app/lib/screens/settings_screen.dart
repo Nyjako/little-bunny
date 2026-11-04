@@ -18,6 +18,7 @@ import '../settings/display_settings_store.dart';
 import '../settings/download_settings_store.dart';
 import '../settings/repository_settings_store.dart';
 import '../settings/theme_settings_store.dart';
+import '../util/tag_query.dart';
 import 'about_screen.dart';
 import 'connection_qr_screen.dart';
 import 'lock_setup_screen.dart';
@@ -96,12 +97,22 @@ class _SettingsScreenState extends State<SettingsScreen> {
   int? _blacklistQueryError;
   Timer? _blacklistValidateDebounce;
 
+  /// Suggestions for the tag token under the cursor in the add field (M54)
+  /// -- same debounced `tagAutocomplete` pattern as `CreateSearchScreen`'s
+  /// query field, since a blacklist "line" is really a full tag-query
+  /// expression (M28), not just a single bare tag, so autocompleting
+  /// whichever token the cursor is currently in (not just the trailing
+  /// one) matters here too.
+  List<BunnyTagStat> _blacklistSuggestions = [];
+  Timer? _blacklistAutocompleteDebounce;
+
   @override
   void initState() {
     super.initState();
     _load();
     _loadBlacklist();
     _blacklistTagController.addListener(_onBlacklistTagChanged);
+    _blacklistTagController.addListener(_onBlacklistTagChangedAutocomplete);
   }
 
   @override
@@ -110,6 +121,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
     _gridColumnsController.dispose();
     _preloadCountController.dispose();
     _blacklistValidateDebounce?.cancel();
+    _blacklistAutocompleteDebounce?.cancel();
+    _blacklistTagController.removeListener(_onBlacklistTagChanged);
+    _blacklistTagController.removeListener(_onBlacklistTagChangedAutocomplete);
     _blacklistTagController.dispose();
     super.dispose();
   }
@@ -123,6 +137,34 @@ class _SettingsScreenState extends State<SettingsScreen> {
         setState(() => _blacklistQueryError = errorPos);
       }
     });
+  }
+
+  int get _blacklistCursorOffset {
+    final selectionOffset = _blacklistTagController.selection.baseOffset;
+    return selectionOffset >= 0 ? selectionOffset : _blacklistTagController.text.length;
+  }
+
+  void _onBlacklistTagChangedAutocomplete() {
+    _blacklistAutocompleteDebounce?.cancel();
+    final text = _blacklistTagController.text;
+    final (start, end) = tagTokenRangeAt(text, _blacklistCursorOffset);
+    final (_, tag) = splitTagPrefix(text.substring(start, end));
+    if (tag.length < tagAutocompleteMinPrefixLength || tagHasWildcard(tag)) {
+      setState(() => _blacklistSuggestions = []);
+      return;
+    }
+    _blacklistAutocompleteDebounce = Timer(const Duration(seconds: 3), () async {
+      final suggestions = await widget.repository.tagAutocomplete(_blacklistSite, tag);
+      if (mounted) {
+        setState(() => _blacklistSuggestions = suggestions);
+      }
+    });
+  }
+
+  void _applyBlacklistSuggestion(String tag) {
+    final (newText, newCursor) = applyTagSuggestion(_blacklistTagController.text, _blacklistCursorOffset, tag);
+    _blacklistTagController.value = TextEditingValue(text: newText, selection: TextSelection.collapsed(offset: newCursor));
+    setState(() => _blacklistSuggestions = []);
   }
 
   Future<void> _load() async {
@@ -279,6 +321,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     // M54) -- whatever's currently typed needs re-checking under the new
     // site's dialect, not just left showing the previous site's verdict.
     _onBlacklistTagChanged();
+    _onBlacklistTagChangedAutocomplete();
   }
 
   Future<void> _addBlacklistTag() async {
@@ -632,6 +675,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
               IconButton(icon: const Icon(Icons.add), onPressed: _blacklistQueryError != null ? null : _addBlacklistTag),
             ],
           ),
+          if (_blacklistSuggestions.isNotEmpty)
+            Wrap(
+              spacing: 8,
+              children: _blacklistSuggestions.map((stat) => ActionChip(label: Text('${stat.name} (${stat.count})'), onPressed: () => _applyBlacklistSuggestion(stat.name))).toList(),
+            ),
           const SizedBox(height: 24),
           Text(l10n.settingsAppLockSection, style: Theme.of(context).textTheme.titleMedium),
           ListTile(

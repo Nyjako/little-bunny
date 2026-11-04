@@ -19,6 +19,7 @@ import 'package:little_bunny/settings/display_settings_store.dart';
 import 'package:little_bunny/settings/download_settings_store.dart';
 import 'package:little_bunny/widgets/audio_player_widget.dart';
 import 'package:little_bunny/widgets/gif_player.dart';
+import 'package:little_bunny/widgets/text_document_viewer.dart';
 import 'package:path_provider_platform_interface/path_provider_platform_interface.dart';
 import 'package:photo_view/photo_view_gallery.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -665,6 +666,31 @@ void main() {
       expect(find.text('1. track1.mp3'), findsOneWidget);
       expect(find.text('2. track2.mp3'), findsOneWidget);
       expect(find.text('3. track3.mp3'), findsOneWidget);
+    });
+  });
+
+  group('Inkbunny Writing - Document submissions (M28 coverage follow-up)', () {
+    testWidgets('a .txt post renders inline via TextDocumentViewer, not the generic fallback', (WidgetTester tester) async {
+      final repository = FakeBunnyRepository();
+      final post = _post(site: BunnySite.inkbunny, fileExt: 'txt');
+
+      await tester.pumpWidget(wrapWithLocalization(PostDetailScreen(post: post, repository: repository, displaySettingsStore: const DisplaySettingsStore(), downloadSettingsStore: const DownloadSettingsStore(), downloadQueueService: _downloadQueueService())));
+      await tester.pump();
+
+      expect(find.byType(TextDocumentViewer), findsOneWidget);
+      expect(find.text('Open externally'), findsNothing);
+    });
+
+    testWidgets('a still-unsupported binary format (e.g. pdf) keeps the fallback, now with an open-externally link', (WidgetTester tester) async {
+      final repository = FakeBunnyRepository();
+      final post = _post(site: BunnySite.inkbunny, fileExt: 'pdf');
+
+      await tester.pumpWidget(wrapWithLocalization(PostDetailScreen(post: post, repository: repository, displaySettingsStore: const DisplaySettingsStore(), downloadSettingsStore: const DownloadSettingsStore(), downloadQueueService: _downloadQueueService())));
+      await tester.pump();
+
+      expect(find.byType(TextDocumentViewer), findsNothing);
+      expect(find.textContaining('pdf'), findsOneWidget);
+      expect(find.widgetWithText(OutlinedButton, 'Open externally'), findsOneWidget);
     });
   });
 

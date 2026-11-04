@@ -664,6 +664,12 @@ abstract class AppLocalizations {
   /// **'Invalid syntax'**
   String get tagQueryInvalidSyntax;
 
+  /// No description provided for @tagAliasHint.
+  ///
+  /// In en, this message translates to:
+  /// **'\"{tag}\" is aliased to \"{canonical}\"'**
+  String tagAliasHint(String tag, String canonical);
+
   /// No description provided for @createSearchIntervalLabel.
   ///
   /// In en, this message translates to:
@@ -975,6 +981,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'This file format ({extension}) isn\'t supported yet'**
   String postDetailUnsupportedFormat(String extension);
+
+  /// No description provided for @postDetailOpenExternally.
+  ///
+  /// In en, this message translates to:
+  /// **'Open externally'**
+  String get postDetailOpenExternally;
 
   /// No description provided for @postDetailAudioTrackLabel.
   ///

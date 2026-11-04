@@ -326,6 +326,11 @@ class AppLocalizationsEn extends AppLocalizations {
   String get tagQueryInvalidSyntax => 'Invalid syntax';
 
   @override
+  String tagAliasHint(String tag, String canonical) {
+    return '\"$tag\" is aliased to \"$canonical\"';
+  }
+
+  @override
   String get createSearchIntervalLabel => 'Sync interval (hours)';
 
   @override
@@ -498,6 +503,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String postDetailUnsupportedFormat(String extension) {
     return 'This file format ($extension) isn\'t supported yet';
   }
+
+  @override
+  String get postDetailOpenExternally => 'Open externally';
 
   @override
   String postDetailAudioTrackLabel(int position) {

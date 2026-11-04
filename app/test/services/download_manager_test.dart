@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:crypto/crypto.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -72,6 +73,23 @@ void main() {
     expect(await File(result.filePath!).readAsBytes(), bytes);
   });
 
+  test('onProgress (M62) reports bytes received against the response\'s own content length', () async {
+    final bytes = List.generate(1000, (i) => i % 256);
+    final manager = DownloadManager(client: MockClient((_) async => http.Response.bytes(bytes, 200)));
+    final repository = FakeBunnyRepository();
+    final calls = <(int, int?)>[];
+
+    await manager.downloadPost(_post(), repository, tempDir.path, onProgress: (received, total) => calls.add((received, total)));
+
+    expect(calls, isNotEmpty);
+    // MockClient delivers the whole body as a single stream chunk, so the
+    // only call seen here already reports the full byte count -- a real
+    // CDN response arrives in several chunks instead, each call reporting
+    // a running total up to this same final value.
+    expect(calls.last.$1, bytes.length);
+    expect(calls.last.$2, bytes.length);
+  });
+
   test('falls back to "unknown" for a null artist', () async {
     final manager = DownloadManager(client: MockClient((_) async => http.Response.bytes([1], 200)));
     final repository = FakeBunnyRepository();
@@ -97,6 +115,79 @@ void main() {
     final result = await manager.downloadPost(_post(fileMd5: null), repository, tempDir.path);
 
     expect(result.outcome, DownloadOutcome.verified);
+  });
+
+  group('skips the fetch when a valid file already sits at the deterministic path (M62)', () {
+    test('matching checksum: no network call at all, existing file left untouched', () async {
+      final bytes = [1, 2, 3, 4];
+      final expectedMd5 = md5.convert(bytes).toString();
+      await Directory('${tempDir.path}/someartist').create(recursive: true);
+      await File('${tempDir.path}/someartist/42.png').writeAsBytes(bytes);
+      final manager = DownloadManager(client: MockClient((_) async => fail('should not have made a network request')));
+      final repository = FakeBunnyRepository();
+
+      final result = await manager.downloadPost(_post(artist: 'someartist', fileMd5: expectedMd5), repository, tempDir.path);
+
+      expect(result.outcome, DownloadOutcome.verified);
+      expect(result.filePath, '${tempDir.path}/someartist/42.png');
+      expect(await File(result.filePath!).readAsBytes(), bytes);
+    });
+
+    test('no published checksum: an existing file is trusted as-is, same as a fresh download would be', () async {
+      await Directory('${tempDir.path}/someartist').create(recursive: true);
+      await File('${tempDir.path}/someartist/42.png').writeAsBytes([9, 9, 9]);
+      final manager = DownloadManager(client: MockClient((_) async => fail('should not have made a network request')));
+      final repository = FakeBunnyRepository();
+
+      final result = await manager.downloadPost(_post(artist: 'someartist', fileMd5: null), repository, tempDir.path);
+
+      expect(result.outcome, DownloadOutcome.verified);
+    });
+
+    test('mismatched checksum: falls through to a real fetch, overwriting the stale local file', () async {
+      final correctBytes = [1, 2, 3, 4];
+      final correctMd5 = md5.convert(correctBytes).toString();
+      await Directory('${tempDir.path}/someartist').create(recursive: true);
+      await File('${tempDir.path}/someartist/42.png').writeAsBytes([9, 9, 9]); // stale/corrupt
+      final manager = DownloadManager(client: MockClient((_) async => http.Response.bytes(correctBytes, 200)));
+      final repository = FakeBunnyRepository();
+
+      final result = await manager.downloadPost(_post(artist: 'someartist', fileMd5: correctMd5), repository, tempDir.path);
+
+      expect(result.outcome, DownloadOutcome.verified);
+      expect(await File(result.filePath!).readAsBytes(), correctBytes);
+    });
+
+    test('autoFavorite/autoUpvote still queue even when the fetch itself was skipped', () async {
+      final bytes = [1, 2, 3, 4];
+      await Directory('${tempDir.path}/someartist').create(recursive: true);
+      await File('${tempDir.path}/someartist/42.png').writeAsBytes(bytes);
+      final manager = DownloadManager(client: MockClient((_) async => fail('should not have made a network request')));
+      final repository = FakeBunnyRepository();
+
+      await manager.downloadPost(_post(artist: 'someartist', fileMd5: md5.convert(bytes).toString()), repository, tempDir.path, autoFavorite: true, autoUpvote: true);
+
+      expect(repository.favoriteAddCalls, [1]);
+      expect(repository.voteCalls, [(1, 1)]);
+    });
+
+    test('SAF (content:// destination): skips the fetch when the existing child\'s checksum matches', () async {
+      final bytes = [1, 2, 3, 4];
+      final expectedMd5 = md5.convert(bytes).toString();
+      final fakeSafUtil = FakeSafUtilPlatform();
+      final fakeSafStream = FakeSafStreamPlatform(fakeSafUtil);
+      SafUtilPlatform.instance = fakeSafUtil;
+      SafStreamPlatform.instance = fakeSafStream;
+      const treeUri = 'content://com.android.externalstorage.documents/tree/primary%3ADownload';
+      fakeSafUtil.existingChildPaths['$treeUri/someartist/42.png'] = Uint8List.fromList(bytes);
+      final manager = DownloadManager(client: MockClient((_) async => fail('should not have made a network request')));
+      final repository = FakeBunnyRepository();
+
+      final result = await manager.downloadPost(_post(artist: 'someartist', fileMd5: expectedMd5), repository, treeUri);
+
+      expect(result.outcome, DownloadOutcome.verified);
+      expect(fakeSafStream.writeFileBytesCalls, isEmpty);
+    });
   });
 
   test('reports failed on a non-200 response, with the status code as the error message', () async {
@@ -160,7 +251,7 @@ void main() {
 
     setUp(() {
       fakeSafUtil = FakeSafUtilPlatform();
-      fakeSafStream = FakeSafStreamPlatform();
+      fakeSafStream = FakeSafStreamPlatform(fakeSafUtil);
       SafUtilPlatform.instance = fakeSafUtil;
       SafStreamPlatform.instance = fakeSafStream;
     });
@@ -183,7 +274,7 @@ void main() {
 
       expect(await manager.isDownloaded(_post(artist: 'wolf'), treeUri), isFalse);
 
-      fakeSafUtil.existingChildPaths.add('$treeUri/wolf/42.png');
+      fakeSafUtil.existingChildPaths['$treeUri/wolf/42.png'] = Uint8List(0);
 
       expect(await manager.isDownloaded(_post(artist: 'wolf'), treeUri), isTrue);
     });

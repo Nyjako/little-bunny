@@ -102,7 +102,42 @@ void main() {
     expect(await File('${destinationDir.path}/someartist/1.png').exists(), isTrue);
   });
 
-  test('enqueueAll processes every item strictly sequentially', () async {
+  test('a DownloadQueueItem\'s bytesReceived/bytesTotal (M62) track its own progress, resetting after', () async {
+    final firstChunkGate = Completer<void>();
+    final controller = StreamController<List<int>>();
+    final service = buildService(
+      client: MockClient.streaming((request, _) async {
+        unawaited(() async {
+          controller.add(List.filled(30, 1));
+          await firstChunkGate.future;
+          controller.add(List.filled(70, 1));
+          await controller.close();
+        }());
+        return http.StreamedResponse(controller.stream, 200, contentLength: 100);
+      }),
+    );
+    final post = _post(id: 1);
+    repository.postsById[1] = post;
+
+    service.enqueue(post, repository);
+    while (service.downloadingItems.isEmpty || service.downloadingItems.single.bytesReceived != 30) {
+      await Future<void>.delayed(const Duration(milliseconds: 1));
+    }
+    final item = service.downloadingItems.single;
+    expect(item.bytesTotal, 100);
+
+    firstChunkGate.complete();
+    await waitUntilIdle(service);
+
+    // The same DownloadQueueItem object survives into its terminal state
+    // (succeeded) once the queue drains -- but a fresh item starting later
+    // would get its own null-initialized fields, confirmed by the next item
+    // test in this suite via downloadingItems never showing stale bytes
+    // from a previous item.
+    expect(item.status, DownloadQueueItemStatus.succeeded);
+  });
+
+  test('enqueueAll processes every item, reporting progress through to completion (M62: concurrently, order not guaranteed)', () async {
     final service = buildService(client: MockClient((_) async => http.Response.bytes([1, 2, 3], 200)));
     final posts = [_post(id: 1), _post(id: 2), _post(id: 3)];
 
@@ -110,12 +145,133 @@ void main() {
     await waitUntilIdle(service);
 
     expect(notifier.startingCalls, [3]);
-    expect(notifier.progressCalls.map((call) => (call.$1, call.$2, call.$3)), [(1, 3, 0), (2, 3, 0), (3, 3, 0)]);
-    // eta is null until there's at least one completed item to estimate a rate from.
-    expect(notifier.progressCalls[0].$4, isNull);
-    expect(notifier.progressCalls[1].$4, isNotNull);
-    expect(notifier.progressCalls[2].$4, isNotNull);
+    // Exactly one progress call per completed item, each reporting against
+    // the whole batch's total/failed -- but which item's completion lands
+    // "first" (done: 1) is no longer guaranteed now that up to 3 download
+    // concurrently (M62), so this only checks the set of done values, not
+    // their order.
+    expect(notifier.progressCalls.map((call) => call.$1).toSet(), {1, 2, 3});
+    expect(notifier.progressCalls.every((call) => call.$2 == 3 && call.$3 == 0), isTrue);
+    // eta is null only for the call reporting the very first completed item
+    // (done: 1) -- not enough data yet for a rate -- and non-null for every
+    // other call.
+    expect(notifier.progressCalls.singleWhere((call) => call.$1 == 1).$4, isNull);
+    expect(notifier.progressCalls.where((call) => call.$1 != 1).every((call) => call.$4 != null), isTrue);
     expect(notifier.summaryCalls, [(3, 0, 0)]);
+  });
+
+  test('up to 3 items download concurrently, a 4th stays queued until one finishes (M62)', () async {
+    final gates = List.generate(3, (_) => Completer<void>());
+    var requestCount = 0;
+    final service = buildService(
+      client: MockClient((_) async {
+        final index = requestCount;
+        requestCount++;
+        if (index < gates.length) {
+          await gates[index].future;
+        }
+        return http.Response.bytes([1, 2, 3], 200);
+      }),
+    );
+
+    service.enqueueAll([_post(id: 1), _post(id: 2), _post(id: 3), _post(id: 4)], repository);
+    while (service.downloadingItems.length < 3) {
+      await Future<void>.delayed(const Duration(milliseconds: 1));
+    }
+
+    // All 3 concurrency slots are taken by items 1-3; item 4 has nowhere to go yet.
+    expect(service.downloadingItems.map((item) => item.post.id).toSet(), {1, 2, 3});
+    expect(service.pendingCount, 1);
+
+    // item 4's own request has no gate (requestCount is already past
+    // gates.length by the time it's claimed), so it resolves almost
+    // immediately -- waiting for pendingCount to drop (rather than trying
+    // to catch item 4 mid-"downloading") is what's actually reliable here.
+    gates[0].complete();
+    while (service.pendingCount > 0) {
+      await Future<void>.delayed(const Duration(milliseconds: 1));
+    }
+
+    gates[1].complete();
+    gates[2].complete();
+    await waitUntilIdle(service);
+    expect(service.succeededCount, 4);
+  });
+
+  group('enqueue dedup -- a post already active in the queue is not added twice', () {
+    test('a post still queued is ignored by a second enqueue call', () async {
+      final gate = Completer<void>();
+      final service = buildService(client: MockClient((_) async => gate.future.then((_) => http.Response.bytes([1, 2, 3], 200))));
+      final post = _post(id: 1);
+
+      service.enqueue(post, repository);
+      service.enqueue(post, repository);
+
+      expect(service.items, hasLength(1));
+      expect(service.totalCount, 1);
+
+      gate.complete();
+      await waitUntilIdle(service);
+    });
+
+    test('a post currently downloading is ignored by a second enqueue call', () async {
+      final gate = Completer<void>();
+      final service = buildService(client: MockClient((_) async => gate.future.then((_) => http.Response.bytes([1, 2, 3], 200))));
+      final post = _post(id: 1);
+
+      service.enqueue(post, repository);
+      while (service.downloadingItems.isEmpty) {
+        await Future<void>.delayed(const Duration(milliseconds: 1));
+      }
+
+      service.enqueue(post, repository);
+
+      expect(service.items, hasLength(1));
+      expect(service.totalCount, 1);
+
+      gate.complete();
+      await waitUntilIdle(service);
+    });
+
+    test('enqueueAll dedupes the same post repeated within one call', () async {
+      final service = buildService(client: MockClient((_) async => http.Response.bytes([1, 2, 3], 200)));
+      final post = _post(id: 1);
+
+      service.enqueueAll([post, post, post], repository);
+      await waitUntilIdle(service);
+
+      expect(service.succeededCount, 1);
+    });
+
+    test('a post that already finished can be legitimately re-queued', () async {
+      final service = buildService(client: MockClient((_) async => http.Response.bytes([1, 2, 3], 200)));
+      final post = _post(id: 1);
+
+      service.enqueue(post, repository);
+      await waitUntilIdle(service);
+      expect(service.succeededCount, 1);
+
+      // Not a duplicate-in-flight situation -- the first run already
+      // finished, so a deliberate second download must still go through.
+      service.enqueue(post, repository);
+      await waitUntilIdle(service);
+
+      expect(service.items, hasLength(2));
+      expect(service.succeededCount, 2);
+    });
+
+    test('enqueueAll only drops the duplicates, not the genuinely new posts in the same batch', () async {
+      final service = buildService(client: MockClient((_) async => http.Response.bytes([1, 2, 3], 200)));
+      final gate = Completer<void>();
+      service.enqueue(_post(id: 1, fileUrl: 'https://static1.e621.net/data/1.png'), repository);
+      // Re-enqueue id 1 (should be dropped) alongside a genuinely new id 2
+      // (should go through) in the same call.
+      service.enqueueAll([_post(id: 1, fileUrl: 'https://static1.e621.net/data/1.png'), _post(id: 2, fileUrl: 'https://static1.e621.net/data/2.png')], repository);
+      gate.complete();
+      await waitUntilIdle(service);
+
+      expect(service.items.map((item) => item.post.id).toSet(), {1, 2});
+    });
   });
 
   test('auto-favorite drains the action queue once via the final flush, for a batch under the sync threshold', () async {
@@ -128,7 +284,9 @@ void main() {
     service.enqueueAll(posts, repository);
     await waitUntilIdle(service);
 
-    expect(repository.favoriteAddCalls, posts.map((p) => p.id).toList());
+    // Set, not list, equality -- which item finishes first is no longer
+    // guaranteed now that up to 3 download concurrently (M62).
+    expect(repository.favoriteAddCalls.toSet(), posts.map((p) => p.id).toSet());
     expect(repository.processQueueCallCount, 1);
   });
 
@@ -286,6 +444,33 @@ void main() {
     await waitUntilIdle(service);
   });
 
+  test('flush writes the current in-flight state immediately, not just every Nth item (M61)', () async {
+    final itemGate = Completer<void>();
+    final service = buildService(
+      client: MockClient((_) async {
+        await itemGate.future;
+        return http.Response.bytes([1, 2, 3], 200);
+      }),
+    );
+    final post = _post(id: 1);
+    repository.postsById[1] = post;
+
+    service.enqueue(post, repository);
+    // Mid-download, well before this item would ever hit the periodic
+    // _syncEveryNItems sync (there's only one item, so that threshold is
+    // never reached) -- this is exactly the "closed the app mid-batch"
+    // scenario flush() exists for (M61): a desktop exit hook must be able
+    // to capture state right now, not wait for the next batch boundary.
+    await service.flush();
+
+    final persistedFile = File('${(PathProviderPlatform.instance as _RealPathProviderPlatform).supportPath}/pending_downloads.json');
+    expect(await persistedFile.exists(), isTrue);
+    expect(await persistedFile.readAsString(), contains('${post.id}'));
+
+    itemGate.complete();
+    await waitUntilIdle(service);
+  });
+
   test('showStarting fires before the first HTTP request completes (M57 screen-lock fix)', () async {
     final firstItemGate = Completer<void>();
     final service = buildService(
@@ -416,9 +601,11 @@ void main() {
         _post(id: 3, fileUrl: 'https://static1.e621.net/data/3.png'),
       ], repository);
 
-      // Items 1 (fails) and 2 (succeeds) resolve immediately; item 3 is
-      // gated, so it sits as "downloading" while we clear.
-      while (service.currentItem?.post.id != 3) {
+      // All 3 are claimed as "downloading" at once (M62: up to 3 concurrent
+      // slots). Items 1 (fails) and 2 (succeeds) resolve immediately; item 3
+      // is gated, so it's the only one still sitting as "downloading" by
+      // the time we poll for it.
+      while (!(service.downloadingItems.length == 1 && service.downloadingItems.single.post.id == 3)) {
         await Future<void>.delayed(const Duration(milliseconds: 1));
       }
       expect(service.items, hasLength(3));
@@ -426,7 +613,7 @@ void main() {
       service.clearFinished();
 
       expect(service.items, hasLength(1));
-      expect(service.currentItem?.post.id, 3);
+      expect(service.downloadingItems.single.post.id, 3);
 
       thirdItemGate.complete();
       await waitUntilIdle(service);
