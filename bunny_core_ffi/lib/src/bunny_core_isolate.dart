@@ -517,8 +517,11 @@ class _ProcessQueueRequest extends _Request {
 
 class _DownloadQueueAddRequest extends _Request {
   final int postId;
+  final int poolId;
+  final String? poolName;
+  final int poolPage;
 
-  const _DownloadQueueAddRequest(this.postId);
+  const _DownloadQueueAddRequest(this.postId, this.poolId, this.poolName, this.poolPage);
 }
 
 class _DownloadQueueSetStatusRequest extends _Request {
@@ -950,7 +953,16 @@ List<Map<String, Object?>> _handleDownloadQueueList(Pointer<bunny_core_t> core) 
     final items = <Map<String, Object?>>[];
     for (var i = 0; i < out.ref.count; i++) {
       final item = out.ref.items[i];
-      items.add({'id': item.id, 'postId': item.post_id, 'status': _downloadQueueStatusWire(item.status), 'failureReason': _readNullableString(item.failure_reason), 'createdAt': _readNullableString(item.created_at)});
+      items.add({
+        'id': item.id,
+        'postId': item.post_id,
+        'status': _downloadQueueStatusWire(item.status),
+        'failureReason': _readNullableString(item.failure_reason),
+        'createdAt': _readNullableString(item.created_at),
+        'poolId': item.pool_id,
+        'poolName': _readNullableString(item.pool_name),
+        'poolPage': item.pool_page,
+      });
     }
     _bindings.bunny_db_download_queue_list_free(out);
     return items;
@@ -1133,7 +1145,8 @@ Object? _dispatch(Pointer<bunny_core_t>? core, _Request request, void Function(P
         return null;
       case _DownloadQueueAddRequest r:
         final outId = arena<Int64>();
-        _check(_bindings.bunny_core_download_queue_add(c, r.postId, outId));
+        final poolName = r.poolName == null ? nullptr : r.poolName!.toNativeUtf8(allocator: arena).cast<Char>();
+        _check(_bindings.bunny_core_download_queue_add(c, r.postId, r.poolId, poolName, r.poolPage, outId));
         return outId.value;
       case _DownloadQueueSetStatusRequest r:
         final failureReason = r.failureReason == null ? nullptr : r.failureReason!.toNativeUtf8(allocator: arena).cast<Char>();
@@ -1336,7 +1349,7 @@ class BunnyCoreNative {
 
   Future<Map<String, Object?>> processQueue() => _send<Map<String, Object?>>(const _ProcessQueueRequest());
 
-  Future<int> downloadQueueAdd(int postId) => _send<int>(_DownloadQueueAddRequest(postId));
+  Future<int> downloadQueueAdd(int postId, {int poolId = 0, String? poolName, int poolPage = 0}) => _send<int>(_DownloadQueueAddRequest(postId, poolId, poolName, poolPage));
 
   Future<void> downloadQueueSetStatus(int id, String status, {String? failureReason}) => _send<void>(_DownloadQueueSetStatusRequest(id, status, failureReason));
 
