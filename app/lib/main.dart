@@ -45,8 +45,28 @@ Future<void> main() async {
   // native foreground service's own notification reuses.
   final flnNotifier = FlutterLocalNotificationsQueueNotifier();
   await flnNotifier.initialize();
-  final notifier = Platform.isAndroid ? AndroidForegroundServiceQueueNotifier() : flnNotifier;
+  final androidNotifier = Platform.isAndroid ? AndroidForegroundServiceQueueNotifier() : null;
+  final notifier = androidNotifier ?? flnNotifier;
   final downloadQueueService = DownloadQueueService(downloadManager: const DownloadManager(), downloadSettingsStore: const DownloadSettingsStore(), notifier: notifier);
+  // Reads _activeRepository live (not a snapshot taken here) -- by the time
+  // this actually fires (a real notification tap, well after this closure
+  // is created), _LittleBunnyAppState may have replaced it via a mode
+  // switch, or it may still be null if nothing's configured yet.
+  void onResumeRequested() {
+    final repository = _activeRepository;
+    if (repository != null) {
+      downloadQueueService.resume(repository);
+    }
+  }
+
+  flnNotifier.onResumeRequested = onResumeRequested;
+  if (androidNotifier != null) {
+    androidNotifier.onResumeRequested = onResumeRequested;
+    // Covers a "Resume" tap that launched a fresh engine -- MainActivity.kt
+    // only stores that case rather than pushing it immediately, since this
+    // handler couldn't have been registered yet at that point.
+    unawaited(androidNotifier.checkPendingResumeRequest());
+  }
   runApp(
     LittleBunnyApp(
       settingsStore: RepositorySettingsStore(secretStore),
@@ -58,6 +78,14 @@ Future<void> main() async {
     ),
   );
 }
+
+/// The currently-active repository, if any -- kept outside the widget tree
+/// (unlike `_LittleBunnyAppState._repository`, which this mirrors) so
+/// [FlutterLocalNotificationsQueueNotifier.onResumeRequested]'s closure
+/// (set up in [main], before any widget exists) has something to read when
+/// a notification action fires (M65). `_LittleBunnyAppState` updates this
+/// alongside every `_repository = ...` assignment of its own.
+BunnyRepository? _activeRepository;
 
 /// Root widget: on boot, tries to load a persisted [BunnyRepositoryConfig]
 /// (M7.2); if none exists yet (first launch), shows [SetupScreen] until one
@@ -126,6 +154,7 @@ class _LittleBunnyAppState extends State<LittleBunnyApp> {
       _locked = locked;
       _loading = false;
     });
+    _activeRepository = repository;
     unawaited(widget.downloadQueueService.restore(repository));
   }
 
@@ -160,6 +189,7 @@ class _LittleBunnyAppState extends State<LittleBunnyApp> {
       _repository = repository;
       _locked = locked;
     });
+    _activeRepository = repository;
     unawaited(widget.downloadQueueService.restore(repository));
   }
 
