@@ -135,13 +135,11 @@ void test_parse_submission_synthesizes_a_file_from_top_level_fields_when_files_a
      * file_url/file_ext/sample_url ended up NULL in the DB until a later
      * live per-submission refetch patched them up -- the detail view
      * showed nothing until that extra round trip finished. */
-    cJSON *obj = cJSON_Parse(
-        "{\"submission_id\": \"42\", \"file_name\": \"42_artist_pic.jpg\", "
-        "\"file_url_full\": \"https://example.com/full/42.jpg\", "
-        "\"file_url_screen\": \"https://example.com/screen/42.jpg\", "
-        "\"file_url_preview\": \"https://example.com/preview/42.jpg\", "
-        "\"mimetype\": \"image/jpeg\"}"
-    );
+    cJSON *obj = cJSON_Parse("{\"submission_id\": \"42\", \"file_name\": \"42_artist_pic.jpg\", "
+                             "\"file_url_full\": \"https://example.com/full/42.jpg\", "
+                             "\"file_url_screen\": \"https://example.com/screen/42.jpg\", "
+                             "\"file_url_preview\": \"https://example.com/preview/42.jpg\", "
+                             "\"mimetype\": \"image/jpeg\"}");
     TEST_ASSERT_NOT_NULL(obj);
 
     inkbunny_submission_t submission;

@@ -52,14 +52,14 @@ typedef struct
     char *query;
     int interval_hours;
     char *created_at;
-    char *last_run_at;       /* NULL if this search has never run */
-    int unseen_count;        /* posts linked to this search with no seen_posts row */
-    int total_count;         /* posts linked to this search, seen or not */
-    bool auto_favorite;      /* queue a favorite for every post this search finds during sync */
-    int auto_favorite_stars; /* Inkbunny favorite level (1-3); ignored by e621 */
-    bool auto_upvote;        /* e621 only -- queue an upvote for every post this search finds during sync */
-    bool pinned;             /* shown first in SearchesScreen, ahead of the normal sort order */
-    char *last_viewed_at;    /* NULL if this search/pool has never been opened */
+    char *last_run_at;                  /* NULL if this search has never run */
+    int unseen_count;                   /* posts linked to this search with no seen_posts row */
+    int total_count;                    /* posts linked to this search, seen or not */
+    bool auto_favorite;                 /* queue a favorite for every post this search finds during sync */
+    int auto_favorite_stars;            /* Inkbunny favorite level (1-3); ignored by e621 */
+    bool auto_upvote;                   /* e621 only -- queue an upvote for every post this search finds during sync */
+    bool pinned;                        /* shown first in SearchesScreen, ahead of the normal sort order */
+    char *last_viewed_at;               /* NULL if this search/pool has never been opened */
     bool initial_sync_done;             /* has the (capped) first full scan completed -- see sync.c */
     int64_t highest_synced_external_id; /* highest post id seen by any sync so far; 0 = none yet */
     bool uses_default_interval;         /* see bunny_db_search_options_t above */
@@ -131,8 +131,8 @@ typedef struct
     char *cached_at;       /* when we last upserted this row */
     bool is_seen;
     bool is_favorited;
-    char *sample_url; /* medium-quality variant (e621's "sample", Inkbunny's "screen"); may be NULL */
-    int user_vote;    /* -1, 0 (no vote), or 1 -- always 0 for Inkbunny (M9.7.1) */
+    char *sample_url;   /* medium-quality variant (e621's "sample", Inkbunny's "screen"); may be NULL */
+    int user_vote;      /* -1, 0 (no vote), or 1 -- always 0 for Inkbunny (M9.7.1) */
     int favorite_stars; /* Inkbunny's 1-3 favorite rating; 0 if not favorited or e621's plain favorite */
 } bunny_db_post_t;
 

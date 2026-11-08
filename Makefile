@@ -16,6 +16,12 @@ FFI_BUILD_DIR ?= bunny_core_ffi/build
 PORTABLE_IMAGE ?= ubuntu:22.04
 HOST_UID := $(shell id -u)
 HOST_GID := $(shell id -g)
+# Every hand-written C/C++ file this project owns -- libs/, server/, tools/,
+# and bunny_core_ffi/src (its one hand-written glue file, not the generated
+# bindings or the Dart/platform side). Was never actually defined before
+# (format/format-check ran clang-format with zero file arguments, a silent
+# no-op -- discovered 2026-11-08 while adding new C under libs/common/).
+SOURCES := $(shell find libs server tools bunny_core_ffi/src -name '*.c' -o -name '*.h')
 
 .PHONY: build test test-c test-flutter release release-portable clean dockcross windows tools format format-check app-linux app-android
 
