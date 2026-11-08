@@ -10,6 +10,7 @@ import 'package:meta/meta.dart';
 
 import 'bunny_models.dart';
 import 'bunny_repository.dart';
+import 'download_file_native.dart';
 
 BunnyAccount _accountFromJson(Map<String, Object?> j) => BunnyAccount(
   id: (j['id'] as num).toInt(),
@@ -797,10 +798,10 @@ class HttpBunnyRepository implements BunnyRepository {
   }
 
   @override
-  Future<int> downloadQueueAdd(int postId) async {
+  Future<int> downloadQueueAdd(int postId, {int poolId = 0, String? poolName, int poolPage = 0}) async {
     final native = await _ensureDownloadQueueNative();
     try {
-      return await native.downloadQueueAdd(postId);
+      return await native.downloadQueueAdd(postId, poolId: poolId, poolName: poolName, poolPage: poolPage);
     } on BunnyCoreNativeException catch (e) {
       throw BunnyRepositoryException(e.message);
     }
@@ -823,7 +824,16 @@ class HttpBunnyRepository implements BunnyRepository {
       final list = await native.downloadQueueList();
       return list
           .map(
-            (m) => DownloadQueueRecord(id: m['id'] as int, postId: m['postId'] as int, status: m['status'] as String, failureReason: m['failureReason'] as String?, createdAt: m['createdAt'] as String),
+            (m) => DownloadQueueRecord(
+              id: m['id'] as int,
+              postId: m['postId'] as int,
+              status: m['status'] as String,
+              failureReason: m['failureReason'] as String?,
+              createdAt: m['createdAt'] as String,
+              poolId: m['poolId'] as int,
+              poolName: m['poolName'] as String?,
+              poolPage: m['poolPage'] as int,
+            ),
           )
           .toList(growable: false);
     } on BunnyCoreNativeException catch (e) {
@@ -839,6 +849,12 @@ class HttpBunnyRepository implements BunnyRepository {
     } on BunnyCoreNativeException catch (e) {
       throw BunnyRepositoryException(e.message);
     }
+  }
+
+  @override
+  Future<DownloadFetchResult> downloadFile(String fileUrl, Map<String, String> extraHeaders, String destDir, String filename, String? expectedMd5, void Function(int received, int? total) onProgress) async {
+    final native = await _ensureDownloadQueueNative();
+    return downloadFileViaNative(native, fileUrl, extraHeaders, destDir, filename, expectedMd5, onProgress);
   }
 
   /// Recent server log lines (oldest-first), for diagnosing a stuck/slow

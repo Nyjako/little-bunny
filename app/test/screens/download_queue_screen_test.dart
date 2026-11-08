@@ -5,7 +5,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
-import 'package:http/testing.dart';
+import 'package:little_bunny/bunny_repository_scope.dart';
 import 'package:little_bunny/repository/bunny_models.dart';
 import 'package:little_bunny/screens/download_queue_screen.dart';
 import 'package:little_bunny/services/download_manager.dart';
@@ -61,7 +61,7 @@ void main() {
     }
   });
 
-  Widget wrap(DownloadQueueService service) => wrapWithLocalization(DownloadQueueScreen(downloadQueueService: service));
+  Widget wrap(DownloadQueueService service) => wrapWithLocalization(BunnyRepositoryScope(repository: repository, child: DownloadQueueScreen(downloadQueueService: service)));
 
   testWidgets('shows the empty state when nothing is queued', (WidgetTester tester) async {
     final service = DownloadQueueService(downloadManager: const DownloadManager(), downloadSettingsStore: const DownloadSettingsStore());
@@ -70,6 +70,30 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Nothing here right now.'), findsOneWidget);
+  });
+
+  testWidgets('tapping the resume button re-checks the persisted queue (M65)', (WidgetTester tester) async {
+    repository.downloadFileFetchImpl = (_) async => http.Response.bytes([1, 2, 3], 200);
+    final service = DownloadQueueService(downloadManager: const DownloadManager(), downloadSettingsStore: const DownloadSettingsStore());
+    repository.postsById[1] = _post(id: 1, title: 'Resumed');
+    repository.seedDownloadQueueRow(postId: 1, status: 'queued');
+
+    await tester.pumpWidget(wrap(service));
+    await tester.pumpAndSettle();
+    expect(find.text('Nothing here right now.'), findsOneWidget);
+
+    await tester.runAsync(() async {
+      await tester.tap(find.byTooltip('Check for pending downloads'));
+      while (service.totalCount == 0) {
+        await Future<void>.delayed(const Duration(milliseconds: 1));
+      }
+      while (service.isActive) {
+        await Future<void>.delayed(const Duration(milliseconds: 1));
+      }
+    });
+    await tester.pump();
+
+    expect(service.succeededCount, 1);
   });
 
   testWidgets('shows a row per concurrently-downloading item, alongside queued/failed counts (M62)', (WidgetTester tester) async {
@@ -84,24 +108,19 @@ void main() {
     // never gets properly woken up again by a later runAsync call, which
     // otherwise deadlocks this test permanently on exactly that item.
     final gatingStarted = <int>{};
-    final service = DownloadQueueService(
-      downloadManager: DownloadManager(
-        client: MockClient((request) async {
-          final url = request.url.toString();
-          if (url.endsWith('/1.png')) {
-            return http.Response('', 500);
-          }
-          for (final entry in gates.entries) {
-            if (url.endsWith('/${entry.key}.png')) {
-              gatingStarted.add(entry.key);
-              await entry.value.future;
-            }
-          }
-          return http.Response.bytes([1, 2, 3], 200);
-        }),
-      ),
-      downloadSettingsStore: const DownloadSettingsStore(),
-    );
+    repository.downloadFileFetchImpl = (url) async {
+      if (url.endsWith('/1.png')) {
+        return http.Response('', 500);
+      }
+      for (final entry in gates.entries) {
+        if (url.endsWith('/${entry.key}.png')) {
+          gatingStarted.add(entry.key);
+          await entry.value.future;
+        }
+      }
+      return http.Response.bytes([1, 2, 3], 200);
+    };
+    final service = DownloadQueueService(downloadManager: const DownloadManager(), downloadSettingsStore: const DownloadSettingsStore());
 
     // runAsync escapes testWidgets's fake-async clock, which never advances
     // on its own -- needed so these real Future.delayed-based polls (and
@@ -151,16 +170,11 @@ void main() {
 
   testWidgets('tapping a failed row\'s retry icon retries just that item', (WidgetTester tester) async {
     final attempts = <String, int>{};
-    final service = DownloadQueueService(
-      downloadManager: DownloadManager(
-        client: MockClient((request) async {
-          final url = request.url.toString();
-          attempts[url] = (attempts[url] ?? 0) + 1;
-          return attempts[url] == 1 ? http.Response('', 500) : http.Response.bytes([1, 2, 3], 200);
-        }),
-      ),
-      downloadSettingsStore: const DownloadSettingsStore(),
-    );
+    repository.downloadFileFetchImpl = (url) async {
+      attempts[url] = (attempts[url] ?? 0) + 1;
+      return attempts[url] == 1 ? http.Response('', 500) : http.Response.bytes([1, 2, 3], 200);
+    };
+    final service = DownloadQueueService(downloadManager: const DownloadManager(), downloadSettingsStore: const DownloadSettingsStore());
 
     await tester.runAsync(() async {
       service.enqueue(_post(id: 1, title: 'First'), repository);
@@ -188,16 +202,11 @@ void main() {
 
   testWidgets('"Retry all" retries every failed item', (WidgetTester tester) async {
     final attempts = <String, int>{};
-    final service = DownloadQueueService(
-      downloadManager: DownloadManager(
-        client: MockClient((request) async {
-          final url = request.url.toString();
-          attempts[url] = (attempts[url] ?? 0) + 1;
-          return attempts[url] == 1 ? http.Response('', 500) : http.Response.bytes([1, 2, 3], 200);
-        }),
-      ),
-      downloadSettingsStore: const DownloadSettingsStore(),
-    );
+    repository.downloadFileFetchImpl = (url) async {
+      attempts[url] = (attempts[url] ?? 0) + 1;
+      return attempts[url] == 1 ? http.Response('', 500) : http.Response.bytes([1, 2, 3], 200);
+    };
+    final service = DownloadQueueService(downloadManager: const DownloadManager(), downloadSettingsStore: const DownloadSettingsStore());
 
     await tester.runAsync(() async {
       service.enqueueAll([_post(id: 1, title: 'First'), _post(id: 2, title: 'Second')], repository);
@@ -225,10 +234,8 @@ void main() {
   });
 
   testWidgets('"Clear finished" removes terminal items from view', (WidgetTester tester) async {
-    final service = DownloadQueueService(
-      downloadManager: DownloadManager(client: MockClient((_) async => http.Response.bytes([1, 2, 3], 200))),
-      downloadSettingsStore: const DownloadSettingsStore(),
-    );
+    repository.downloadFileFetchImpl = (_) async => http.Response.bytes([1, 2, 3], 200);
+    final service = DownloadQueueService(downloadManager: const DownloadManager(), downloadSettingsStore: const DownloadSettingsStore());
 
     await tester.runAsync(() async {
       service.enqueue(_post(id: 1, title: 'First'), repository);
@@ -251,21 +258,23 @@ void main() {
 
   testWidgets('the currently-downloading row shows a thumbnail and a determinate batch-progress bar', (WidgetTester tester) async {
     final secondItemGate = Completer<void>();
-    final service = DownloadQueueService(
-      downloadManager: DownloadManager(
-        client: MockClient((request) async {
-          if (request.url.toString().endsWith('/2.png')) {
-            await secondItemGate.future;
-          }
-          return http.Response.bytes([1, 2, 3], 200);
-        }),
-      ),
-      downloadSettingsStore: const DownloadSettingsStore(),
-    );
+    // See "shows a row per concurrently-downloading item"'s own doc comment
+    // for why the poll loop below must wait for this, not just item 2's
+    // status flipping to "downloading" -- a worker can sit claimed for a
+    // while before its fetch call actually reaches the gated await.
+    var secondItemGatingStarted = false;
+    repository.downloadFileFetchImpl = (url) async {
+      if (url.endsWith('/2.png')) {
+        secondItemGatingStarted = true;
+        await secondItemGate.future;
+      }
+      return http.Response.bytes([1, 2, 3], 200);
+    };
+    final service = DownloadQueueService(downloadManager: const DownloadManager(), downloadSettingsStore: const DownloadSettingsStore());
 
     await tester.runAsync(() async {
       service.enqueueAll([_post(id: 1, title: 'First'), _post(id: 2, title: 'Second', previewUrl: 'https://example.com/2_preview.jpg')], repository);
-      while (service.downloadingItems.length != 1 || service.downloadingItems.single.post.id != 2) {
+      while (service.downloadingItems.length != 1 || service.downloadingItems.single.post.id != 2 || !secondItemGatingStarted) {
         await Future<void>.delayed(const Duration(milliseconds: 1));
       }
     });
@@ -288,21 +297,18 @@ void main() {
 
   testWidgets('shows the current file\'s own byte progress separately from the batch bar (M62)', (WidgetTester tester) async {
     final chunkGate = Completer<void>();
-    final chunkController = StreamController<List<int>>();
-    final service = DownloadQueueService(
-      downloadManager: DownloadManager(
-        client: MockClient.streaming((request, _) async {
-          unawaited(() async {
-            chunkController.add(List.filled(40, 1));
-            await chunkGate.future;
-            chunkController.add(List.filled(60, 1));
-            await chunkController.close();
-          }());
-          return http.StreamedResponse(chunkController.stream, 200, contentLength: 100);
-        }),
-      ),
-      downloadSettingsStore: const DownloadSettingsStore(),
-    );
+    // Drives onProgress directly (M66 -- see download_queue_service_test.dart's
+    // own equivalent fix for why this needs the full downloadFileImpl
+    // override rather than a streamed MockClient response).
+    repository.downloadFileImpl = (fileUrl, destDir, filename, expectedMd5, onProgress) async {
+      onProgress(40, 100);
+      await chunkGate.future;
+      onProgress(100, 100);
+      await Directory(destDir).create(recursive: true);
+      await File('$destDir/$filename').writeAsBytes(List.filled(100, 1));
+      return const DownloadFetchResult(outcome: 'verified');
+    };
+    final service = DownloadQueueService(downloadManager: const DownloadManager(), downloadSettingsStore: const DownloadSettingsStore());
 
     await tester.runAsync(() async {
       service.enqueue(_post(id: 1, title: 'First'), repository);
@@ -333,23 +339,32 @@ void main() {
     // immediately ("1 done"); items 2-4 occupy all 3 concurrency slots (all
     // gated, 3 downloading rows); item 5 has nowhere to go ("1 queued").
     final gates = {2: Completer<void>(), 3: Completer<void>(), 4: Completer<void>()};
-    final service = DownloadQueueService(
-      downloadManager: DownloadManager(
-        client: MockClient((request) async {
-          for (final entry in gates.entries) {
-            if (request.url.toString().endsWith('/${entry.key}.png')) {
-              await entry.value.future;
-            }
-          }
-          return http.Response.bytes([1, 2, 3], 200);
-        }),
-      ),
-      downloadSettingsStore: const DownloadSettingsStore(),
-    );
+    // Tracks which gated requests have actually reached their `await
+    // entry.value.future` below, as opposed to merely being claimed by a
+    // worker (DownloadQueueItemStatus.downloading) -- see the earlier test
+    // in this file ("shows a row per concurrently-downloading item")'s own
+    // doc comment for why the first runAsync block must wait for this, not
+    // just the downloading count: a Future that's still working its way to
+    // its first real await when runAsync returns never gets properly woken
+    // up again by a later runAsync call, which otherwise deadlocks this
+    // test permanently on exactly that item (reproduced locally: item 4's
+    // own fetch call hadn't even started yet by the time the status flip to
+    // "downloading" satisfied a status-only wait condition).
+    final gatingStarted = <int>{};
+    repository.downloadFileFetchImpl = (url) async {
+      for (final entry in gates.entries) {
+        if (url.endsWith('/${entry.key}.png')) {
+          gatingStarted.add(entry.key);
+          await entry.value.future;
+        }
+      }
+      return http.Response.bytes([1, 2, 3], 200);
+    };
+    final service = DownloadQueueService(downloadManager: const DownloadManager(), downloadSettingsStore: const DownloadSettingsStore());
 
     await tester.runAsync(() async {
       service.enqueueAll(List.generate(5, (i) => _post(id: i + 1)), repository);
-      while (service.downloadingItems.length != 3 || service.pendingCount != 1) {
+      while (service.downloadingItems.length != 3 || service.pendingCount != 1 || gatingStarted.length != 3) {
         await Future<void>.delayed(const Duration(milliseconds: 1));
       }
     });
@@ -374,10 +389,8 @@ void main() {
   });
 
   testWidgets('"Done" counts succeeded items only, unaffected by a checksum-mismatch item', (WidgetTester tester) async {
-    final service = DownloadQueueService(
-      downloadManager: DownloadManager(client: MockClient((_) async => http.Response.bytes([1, 2, 3], 200))),
-      downloadSettingsStore: const DownloadSettingsStore(),
-    );
+    repository.downloadFileFetchImpl = (_) async => http.Response.bytes([1, 2, 3], 200);
+    final service = DownloadQueueService(downloadManager: const DownloadManager(), downloadSettingsStore: const DownloadSettingsStore());
 
     await tester.runAsync(() async {
       // Post 1 has no published checksum -- downloads verified. Post 2

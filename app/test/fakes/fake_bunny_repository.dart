@@ -1,5 +1,8 @@
 import 'dart:async';
+import 'dart:io';
 
+import 'package:crypto/crypto.dart';
+import 'package:http/http.dart' as http;
 import 'package:little_bunny/repository/bunny_models.dart';
 import 'package:little_bunny/repository/bunny_repository.dart';
 import 'package:little_bunny/util/media_type.dart';
@@ -37,6 +40,12 @@ class FakeBunnyRepository implements BunnyRepository {
   /// was only ever fetched standalone via [fetchPost], never synced into a
   /// saved search's results).
   final Map<int, BunnyPost> postsById = {};
+
+  /// Number of times [getPost] should throw for a given post id before
+  /// resolving normally -- simulates a transient failure (e.g. the network
+  /// not being up yet), for exercising [DownloadQueueService]'s retry logic.
+  /// Decrements on each call; once it reaches 0, [getPost] resolves as usual.
+  final Map<int, int> getPostFailuresRemaining = {};
 
   /// Keyed by `'${site.toWireString()}:$query:$page'` -- the posts
   /// [previewSearch] returns for that (site, query, page) triple (M9.6.2
@@ -464,6 +473,11 @@ class FakeBunnyRepository implements BunnyRepository {
 
   @override
   Future<BunnyPost> getPost(int postId) async {
+    final remaining = getPostFailuresRemaining[postId];
+    if (remaining != null && remaining > 0) {
+      getPostFailuresRemaining[postId] = remaining - 1;
+      throw BunnyRepositoryException('simulated transient getPost failure for $postId');
+    }
     final direct = postsById[postId];
     if (direct != null) {
       return direct;
@@ -668,15 +682,15 @@ class FakeBunnyRepository implements BunnyRepository {
   /// Seeds a row as if it had been persisted by a previous run -- for tests
   /// of [DownloadQueueService.restore], which never goes through
   /// [downloadQueueAdd] itself.
-  void seedDownloadQueueRow({required int postId, required String status, String? failureReason}) {
+  void seedDownloadQueueRow({required int postId, required String status, String? failureReason, int poolId = 0, String? poolName, int poolPage = 0}) {
     final id = _nextDownloadQueueId++;
-    _downloadQueueRows[id] = DownloadQueueRecord(id: id, postId: postId, status: status, failureReason: failureReason, createdAt: '2026-01-01T00:00:00Z');
+    _downloadQueueRows[id] = DownloadQueueRecord(id: id, postId: postId, status: status, failureReason: failureReason, createdAt: '2026-01-01T00:00:00Z', poolId: poolId, poolName: poolName, poolPage: poolPage);
   }
 
   @override
-  Future<int> downloadQueueAdd(int postId) async {
+  Future<int> downloadQueueAdd(int postId, {int poolId = 0, String? poolName, int poolPage = 0}) async {
     final id = _nextDownloadQueueId++;
-    _downloadQueueRows[id] = DownloadQueueRecord(id: id, postId: postId, status: 'queued', createdAt: '2026-01-01T00:00:00Z');
+    _downloadQueueRows[id] = DownloadQueueRecord(id: id, postId: postId, status: 'queued', createdAt: '2026-01-01T00:00:00Z', poolId: poolId, poolName: poolName, poolPage: poolPage);
     return id;
   }
 
@@ -686,7 +700,16 @@ class FakeBunnyRepository implements BunnyRepository {
     if (existing == null) {
       return;
     }
-    _downloadQueueRows[id] = DownloadQueueRecord(id: existing.id, postId: existing.postId, status: status, failureReason: failureReason, createdAt: existing.createdAt);
+    _downloadQueueRows[id] = DownloadQueueRecord(
+      id: existing.id,
+      postId: existing.postId,
+      status: status,
+      failureReason: failureReason,
+      createdAt: existing.createdAt,
+      poolId: existing.poolId,
+      poolName: existing.poolName,
+      poolPage: existing.poolPage,
+    );
   }
 
   @override
@@ -695,6 +718,54 @@ class FakeBunnyRepository implements BunnyRepository {
   @override
   Future<void> downloadQueueClearFinished() async {
     _downloadQueueRows.removeWhere((_, row) => row.status == 'succeeded' || row.status == 'checksum_mismatch' || row.status == 'failed');
+  }
+
+  /// Overrides [downloadFile]'s simulated fetch (M66) -- the real native
+  /// implementation this replaces hands tests nothing to inject a fake
+  /// transport into (it's curl-specific), so this fake instead mirrors the
+  /// old fake-[http.Client]-based tests as closely as possible: supply a
+  /// function (given the requested URL, same as a `MockClient` handler
+  /// would see it, for tests that branch per-URL) returning an
+  /// [http.Response], and this writes whatever bytes it returns to
+  /// `destDir/filename` for real, then verifies/reports the outcome
+  /// exactly like the real implementation does (including the
+  /// skip-fetch-if-already-verified fast path below). Defaults to a
+  /// successful empty-body fetch.
+  Future<http.Response> Function(String fileUrl)? downloadFileFetchImpl;
+
+  /// Full override of [downloadFile] itself, for a test that needs to drive
+  /// `onProgress` on its own timeline (e.g. simulating bytes arriving in
+  /// separate chunks over time) rather than the one-shot-response shape
+  /// [downloadFileFetchImpl] covers -- takes priority over it when set.
+  Future<DownloadFetchResult> Function(String fileUrl, String destDir, String filename, String? expectedMd5, void Function(int received, int? total) onProgress)? downloadFileImpl;
+
+  @override
+  Future<DownloadFetchResult> downloadFile(String fileUrl, Map<String, String> extraHeaders, String destDir, String filename, String? expectedMd5, void Function(int received, int? total) onProgress) async {
+    if (downloadFileImpl != null) {
+      return downloadFileImpl!(fileUrl, destDir, filename, expectedMd5, onProgress);
+    }
+    final file = File('$destDir/$filename');
+    if (await file.exists()) {
+      final existingBytes = await file.readAsBytes();
+      final matchesAlready = expectedMd5 == null || expectedMd5.isEmpty || expectedMd5.toLowerCase() == md5.convert(existingBytes).toString();
+      if (matchesAlready) {
+        return const DownloadFetchResult(outcome: 'verified');
+      }
+    }
+
+    final response = downloadFileFetchImpl != null ? await downloadFileFetchImpl!(fileUrl) : http.Response.bytes(const [], 200);
+    if (response.statusCode != 200) {
+      return DownloadFetchResult(outcome: 'failed', errorMessage: 'HTTP ${response.statusCode}');
+    }
+
+    final bytes = response.bodyBytes;
+    onProgress(bytes.length, bytes.length);
+    await Directory(destDir).create(recursive: true);
+    await file.writeAsBytes(bytes);
+
+    final checksum = md5.convert(bytes).toString();
+    final verified = expectedMd5 == null || expectedMd5.isEmpty || expectedMd5.toLowerCase() == checksum;
+    return DownloadFetchResult(outcome: verified ? 'verified' : 'checksumMismatch');
   }
 
   @override

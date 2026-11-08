@@ -102,7 +102,7 @@ void test_pure_db_call_does_not_block_on_concurrent_slow_sync(void)
 
     /* Give the sync thread a moment to actually be inside the slow network
      * call before racing the fast call against it. */
-    usleep(50000); /* 50ms */
+    usleep(50000);                                /* 50ms */
     TEST_ASSERT_FALSE(atomic_load(&g_sync_done)); /* sanity: sync is still in flight (300ms sleep > 50ms headstart) */
 
     bunny_db_search_list_t fast_result;

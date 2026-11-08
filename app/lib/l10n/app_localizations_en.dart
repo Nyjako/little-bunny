@@ -198,6 +198,26 @@ class AppLocalizationsEn extends AppLocalizations {
   String get searchesCheckForUpdatesTooltip => 'Check for updates';
 
   @override
+  String get searchesSelectForDownloadTooltip => 'Select searches to download';
+
+  @override
+  String searchesSelectedCount(int count) {
+    return '$count selected';
+  }
+
+  @override
+  String get searchesDownloadSelectedTooltip => 'Download selected';
+
+  @override
+  String searchesMassDownloadQueued(int count) {
+    return '$count queued for download';
+  }
+
+  @override
+  String get searchesMassDownloadError =>
+      'Couldn\'t load all the posts for one or more selected searches. Try again.';
+
+  @override
   String get searchesDownloadQueueTooltip => 'Downloads';
 
   @override
@@ -990,6 +1010,9 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get downloadQueueClearFinishedTooltip => 'Clear finished';
+
+  @override
+  String get downloadQueueResumeTooltip => 'Check for pending downloads';
 
   @override
   String get downloadQueueChecksumMismatchReason =>

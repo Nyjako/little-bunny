@@ -7,6 +7,7 @@ add_library(bunny_core STATIC
     src/sync.c
     src/queue.c
     src/download_queue.c
+    src/download.c
     src/verify.c
     src/blacklist.c
     src/backup.c

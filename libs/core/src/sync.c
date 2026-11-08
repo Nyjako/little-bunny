@@ -498,8 +498,7 @@ static bunny_core_result_t sync_e621_search(bunny_core_t *core, const bunny_db_s
         int64_t cursor = 0;
         for (;;) {
             e621_post_list_t posts;
-            e621_result_t search_result = first_request ? e621_search_posts(client, search->query, 1, BUNNY_CORE_SYNC_E621_PAGE_LIMIT, &posts)
-                                                          : e621_search_posts_before(client, search->query, cursor, BUNNY_CORE_SYNC_E621_PAGE_LIMIT, &posts);
+            e621_result_t search_result = first_request ? e621_search_posts(client, search->query, 1, BUNNY_CORE_SYNC_E621_PAGE_LIMIT, &posts) : e621_search_posts_before(client, search->query, cursor, BUNNY_CORE_SYNC_E621_PAGE_LIMIT, &posts);
             first_request = false;
             if (search_result != E621_OK) {
                 bunny_core_log(core, "ERROR", "Scan of \"%s\" failed (e621 request error)", search->label);

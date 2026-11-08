@@ -58,8 +58,18 @@ void main() {
     }
   });
 
-  DownloadQueueService buildService({http.Client? client}) =>
-      DownloadQueueService(downloadManager: DownloadManager(client: client), downloadSettingsStore: const DownloadSettingsStore(), notifier: notifier);
+  // M66: DownloadManager's plain-path branch no longer touches an
+  // http.Client at all (that part is now BunnyRepository.downloadFile,
+  // delegating to native code with no fake-transport seam of its own) --
+  // every existing MockClient handler here still works unchanged by
+  // feeding it through FakeBunnyRepository.downloadFileFetchImpl instead,
+  // preserving each test's own per-URL branching logic.
+  DownloadQueueService buildService({http.Client? client}) {
+    if (client != null) {
+      repository.downloadFileFetchImpl = (url) => client.send(http.Request('GET', Uri.parse(url))).then(http.Response.fromStream);
+    }
+    return DownloadQueueService(downloadManager: const DownloadManager(), downloadSettingsStore: const DownloadSettingsStore(), notifier: notifier);
+  }
 
   Future<void> waitUntilIdle(DownloadQueueService service) async {
     while (service.isActive) {
@@ -83,18 +93,19 @@ void main() {
 
   test('a DownloadQueueItem\'s bytesReceived/bytesTotal (M62) track its own progress, resetting after', () async {
     final firstChunkGate = Completer<void>();
-    final controller = StreamController<List<int>>();
-    final service = buildService(
-      client: MockClient.streaming((request, _) async {
-        unawaited(() async {
-          controller.add(List.filled(30, 1));
-          await firstChunkGate.future;
-          controller.add(List.filled(70, 1));
-          await controller.close();
-        }());
-        return http.StreamedResponse(controller.stream, 200, contentLength: 100);
-      }),
-    );
+    // Drives onProgress on its own timeline (M66 -- the native fetch
+    // reports progress via polling, not an injectable HTTP stream, so this
+    // simulates the same "partial progress, then more arrives" shape
+    // directly through FakeBunnyRepository.downloadFileImpl instead).
+    repository.downloadFileImpl = (fileUrl, destDir, filename, expectedMd5, onProgress) async {
+      onProgress(30, 100);
+      await firstChunkGate.future;
+      onProgress(100, 100);
+      await Directory(destDir).create(recursive: true);
+      await File('$destDir/$filename').writeAsBytes(List.filled(100, 1));
+      return const DownloadFetchResult(outcome: 'verified');
+    };
+    final service = buildService();
     final post = _post(id: 1);
     repository.postsById[1] = post;
 
@@ -357,8 +368,9 @@ void main() {
   });
 
   test('a notifier that throws on every call never stops the queue from processing', () async {
+    repository.downloadFileFetchImpl = (_) async => http.Response.bytes([1, 2, 3], 200);
     final service = DownloadQueueService(
-      downloadManager: DownloadManager(client: MockClient((_) async => http.Response.bytes([1, 2, 3], 200))),
+      downloadManager: const DownloadManager(),
       downloadSettingsStore: const DownloadSettingsStore(),
       notifier: _ThrowingDownloadQueueNotifier(),
     );
@@ -458,6 +470,58 @@ void main() {
 
       expect(restored.totalCount, 1);
       expect(restored.items.single.post.id, 2);
+    });
+
+    test('restore retries a transient getPost failure (M65) and still succeeds once it recovers', () async {
+      final post = _post(id: 1);
+      repository.postsById[1] = post;
+      // Fails on the first 2 attempts (e.g. network not up yet at cold
+      // boot), succeeds on the 3rd -- within _getPostRetries' budget.
+      repository.getPostFailuresRemaining[1] = 2;
+      repository.seedDownloadQueueRow(postId: 1, status: 'queued');
+
+      final restored = buildService(client: MockClient((_) async => http.Response.bytes([1, 2, 3], 200)));
+      await restored.restore(repository);
+
+      expect(restored.totalCount, 1);
+      await waitUntilIdle(restored);
+      expect(restored.succeededCount, 1);
+    });
+
+    test('resume (M65) re-checks a row that failed to resolve on the earlier restore() call and picks it up', () async {
+      final post = _post(id: 1);
+      repository.postsById[1] = post;
+      // Exhausts restore()'s retry budget entirely -- the row is left out of
+      // the queue after the first restore() call.
+      repository.getPostFailuresRemaining[1] = 10;
+      repository.seedDownloadQueueRow(postId: 1, status: 'queued');
+
+      final service = buildService(client: MockClient((_) async => http.Response.bytes([1, 2, 3], 200)));
+      await service.restore(repository);
+      expect(service.totalCount, 0);
+
+      // The network has "recovered" by the time resume() is called.
+      repository.getPostFailuresRemaining[1] = 0;
+      await service.resume(repository);
+
+      expect(service.totalCount, 1);
+      await waitUntilIdle(service);
+      expect(service.succeededCount, 1);
+    });
+
+    test('resume (M65) does not duplicate a row already pulled in by a previous restore()', () async {
+      final post = _post(id: 1);
+      repository.postsById[1] = post;
+      repository.seedDownloadQueueRow(postId: 1, status: 'queued');
+
+      final service = buildService(client: MockClient((_) async => http.Response.bytes([1, 2, 3], 200)));
+      await service.restore(repository);
+      await waitUntilIdle(service);
+      expect(service.items, hasLength(1));
+
+      await service.resume(repository);
+
+      expect(service.items, hasLength(1));
     });
   });
 

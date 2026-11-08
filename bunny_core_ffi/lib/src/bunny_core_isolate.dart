@@ -517,8 +517,11 @@ class _ProcessQueueRequest extends _Request {
 
 class _DownloadQueueAddRequest extends _Request {
   final int postId;
+  final int poolId;
+  final String? poolName;
+  final int poolPage;
 
-  const _DownloadQueueAddRequest(this.postId);
+  const _DownloadQueueAddRequest(this.postId, this.poolId, this.poolName, this.poolPage);
 }
 
 class _DownloadQueueSetStatusRequest extends _Request {
@@ -535,6 +538,36 @@ class _DownloadQueueListRequest extends _Request {
 
 class _DownloadQueueClearFinishedRequest extends _Request {
   const _DownloadQueueClearFinishedRequest();
+}
+
+/// M66 -- the actual fetch/checksum/write, formerly 100% Dart
+/// (DownloadManager.downloadPost). Individually fast (spawns its own
+/// background thread C-side and returns almost immediately, see
+/// bunny_core_download_start's own doc comment in core.h), so -- unlike a
+/// genuinely long-running call -- this is safe to route through the same
+/// single serialized dispatch pipe as everything else here; several
+/// concurrent downloads just means several outstanding handles, each
+/// polled independently.
+class _DownloadStartRequest extends _Request {
+  final String fileUrl;
+  final Map<String, String> extraHeaders;
+  final String destDir;
+  final String filename;
+  final String? expectedMd5;
+
+  const _DownloadStartRequest(this.fileUrl, this.extraHeaders, this.destDir, this.filename, this.expectedMd5);
+}
+
+class _DownloadPollRequest extends _Request {
+  final int handle;
+
+  const _DownloadPollRequest(this.handle);
+}
+
+class _DownloadReleaseRequest extends _Request {
+  final int handle;
+
+  const _DownloadReleaseRequest(this.handle);
 }
 
 class _Envelope {
@@ -950,10 +983,78 @@ List<Map<String, Object?>> _handleDownloadQueueList(Pointer<bunny_core_t> core) 
     final items = <Map<String, Object?>>[];
     for (var i = 0; i < out.ref.count; i++) {
       final item = out.ref.items[i];
-      items.add({'id': item.id, 'postId': item.post_id, 'status': _downloadQueueStatusWire(item.status), 'failureReason': _readNullableString(item.failure_reason), 'createdAt': _readNullableString(item.created_at)});
+      items.add({
+        'id': item.id,
+        'postId': item.post_id,
+        'status': _downloadQueueStatusWire(item.status),
+        'failureReason': _readNullableString(item.failure_reason),
+        'createdAt': _readNullableString(item.created_at),
+        'poolId': item.pool_id,
+        'poolName': _readNullableString(item.pool_name),
+        'poolPage': item.pool_page,
+      });
     }
     _bindings.bunny_db_download_queue_list_free(out);
     return items;
+  });
+}
+
+String _downloadOutcomeWire(bunny_core_download_outcome_t outcome) => switch (outcome) {
+  bunny_core_download_outcome_t.BUNNY_CORE_DOWNLOAD_VERIFIED => 'verified',
+  bunny_core_download_outcome_t.BUNNY_CORE_DOWNLOAD_CHECKSUM_MISMATCH => 'checksumMismatch',
+  bunny_core_download_outcome_t.BUNNY_CORE_DOWNLOAD_FAILED => 'failed',
+};
+
+int _handleDownloadStart(_DownloadStartRequest r) {
+  return using((arena) {
+    final Pointer<bunny_http_header_t> headersPtr;
+    if (r.extraHeaders.isEmpty) {
+      headersPtr = nullptr;
+    } else {
+      headersPtr = arena<bunny_http_header_t>(r.extraHeaders.length);
+      var i = 0;
+      for (final entry in r.extraHeaders.entries) {
+        final header = (headersPtr + i).ref;
+        header.name = entry.key.toNativeUtf8(allocator: arena).cast();
+        header.value = entry.value.toNativeUtf8(allocator: arena).cast();
+        i++;
+      }
+    }
+
+    final outHandle = arena<Int64>();
+    _check(
+      _bindings.bunny_core_download_start(
+        r.fileUrl.toNativeUtf8(allocator: arena).cast(),
+        headersPtr,
+        r.extraHeaders.length,
+        r.destDir.toNativeUtf8(allocator: arena).cast(),
+        r.filename.toNativeUtf8(allocator: arena).cast(),
+        r.expectedMd5 == null ? nullptr : r.expectedMd5!.toNativeUtf8(allocator: arena).cast(),
+        outHandle,
+      ),
+    );
+    return outHandle.value;
+  });
+}
+
+Map<String, Object?> _handleDownloadPoll(_DownloadPollRequest r) {
+  return using((arena) {
+    final outReceived = arena<Int64>();
+    final outTotal = arena<Int64>();
+    final outDone = arena<Bool>();
+    final outOutcome = arena<UnsignedInt>();
+    const errorCap = 256;
+    final outError = arena<Char>(errorCap);
+    _check(_bindings.bunny_core_download_poll(r.handle, outReceived, outTotal, outDone, outOutcome, outError, errorCap));
+    final done = outDone.value;
+    final errorMessage = done ? outError.cast<Utf8>().toDartString() : '';
+    return {
+      'received': outReceived.value,
+      'total': outTotal.value,
+      'done': done,
+      'outcome': done ? _downloadOutcomeWire(bunny_core_download_outcome_t.fromValue(outOutcome.value)) : null,
+      'errorMessage': errorMessage.isEmpty ? null : errorMessage,
+    };
   });
 }
 
@@ -1133,7 +1234,8 @@ Object? _dispatch(Pointer<bunny_core_t>? core, _Request request, void Function(P
         return null;
       case _DownloadQueueAddRequest r:
         final outId = arena<Int64>();
-        _check(_bindings.bunny_core_download_queue_add(c, r.postId, outId));
+        final poolName = r.poolName == null ? nullptr : r.poolName!.toNativeUtf8(allocator: arena).cast<Char>();
+        _check(_bindings.bunny_core_download_queue_add(c, r.postId, r.poolId, poolName, r.poolPage, outId));
         return outId.value;
       case _DownloadQueueSetStatusRequest r:
         final failureReason = r.failureReason == null ? nullptr : r.failureReason!.toNativeUtf8(allocator: arena).cast<Char>();
@@ -1143,6 +1245,13 @@ Object? _dispatch(Pointer<bunny_core_t>? core, _Request request, void Function(P
         return _handleDownloadQueueList(c);
       case _DownloadQueueClearFinishedRequest():
         _check(_bindings.bunny_core_download_queue_clear_finished(c));
+        return null;
+      case _DownloadStartRequest r:
+        return _handleDownloadStart(r);
+      case _DownloadPollRequest r:
+        return _handleDownloadPoll(r);
+      case _DownloadReleaseRequest r:
+        _bindings.bunny_core_download_release(r.handle);
         return null;
     }
   });
@@ -1336,11 +1445,30 @@ class BunnyCoreNative {
 
   Future<Map<String, Object?>> processQueue() => _send<Map<String, Object?>>(const _ProcessQueueRequest());
 
-  Future<int> downloadQueueAdd(int postId) => _send<int>(_DownloadQueueAddRequest(postId));
+  Future<int> downloadQueueAdd(int postId, {int poolId = 0, String? poolName, int poolPage = 0}) => _send<int>(_DownloadQueueAddRequest(postId, poolId, poolName, poolPage));
 
   Future<void> downloadQueueSetStatus(int id, String status, {String? failureReason}) => _send<void>(_DownloadQueueSetStatusRequest(id, status, failureReason));
 
   Future<List<Map<String, Object?>>> downloadQueueList() => _send<List<Map<String, Object?>>>(const _DownloadQueueListRequest());
 
   Future<void> downloadQueueClearFinished() => _send<void>(const _DownloadQueueClearFinishedRequest());
+
+  /// M66 -- starts fetching fileUrl into destDir/filename natively (see
+  /// bunny_core_download_start's own doc comment). Returns a handle for
+  /// [downloadPoll]/[downloadRelease]; the fetch itself runs on its own
+  /// native thread, not blocking this call or this isolate's pipe.
+  Future<int> downloadStart(String fileUrl, Map<String, String> extraHeaders, String destDir, String filename, String? expectedMd5) =>
+      _send<int>(_DownloadStartRequest(fileUrl, extraHeaders, destDir, filename, expectedMd5));
+
+  /// Cheap -- safe to call frequently (e.g. every ~250ms) while a download
+  /// is in flight. Returns a map with `received`/`total` (int; total -1 if
+  /// unknown)/`done` (bool)/`outcome` (one of 'verified'/'checksumMismatch'/
+  /// 'failed', only once done)/`errorMessage` (String?, only once done and
+  /// only for 'failed').
+  Future<Map<String, Object?>> downloadPoll(int handle) => _send<Map<String, Object?>>(_DownloadPollRequest(handle));
+
+  /// Must be called exactly once for every handle [downloadStart] returned
+  /// successfully, once [downloadPoll] reports done -- joins the native
+  /// thread and frees its resources.
+  Future<void> downloadRelease(int handle) => _send<void>(_DownloadReleaseRequest(handle));
 }

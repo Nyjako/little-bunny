@@ -63,20 +63,21 @@ void setUp(void)
     g_transport.user_data = &g_state;
 }
 
-void tearDown(void) {}
+void tearDown(void)
+{}
 
 /* --- bunny_updater_parse_latest_release (pure, offline) --------------- */
 
 void test_parse_reports_update_available_with_matching_asset(void)
 {
     const char *json = "{"
-                        "\"tag_name\":\"build-42\","
-                        "\"body\":\"Fixed things\","
-                        "\"assets\":["
-                        "{\"name\":\"bunny-server-windows-x64.zip\",\"browser_download_url\":\"https://example.invalid/win.zip\"},"
-                        "{\"name\":\"bunny-server-linux-x64.tar.gz\",\"browser_download_url\":\"https://example.invalid/linux.tar.gz\"},"
-                        "{\"name\":\"SHA256SUMS.txt\",\"browser_download_url\":\"https://example.invalid/SHA256SUMS.txt\"}"
-                        "]}";
+                       "\"tag_name\":\"build-42\","
+                       "\"body\":\"Fixed things\","
+                       "\"assets\":["
+                       "{\"name\":\"bunny-server-windows-x64.zip\",\"browser_download_url\":\"https://example.invalid/win.zip\"},"
+                       "{\"name\":\"bunny-server-linux-x64.tar.gz\",\"browser_download_url\":\"https://example.invalid/linux.tar.gz\"},"
+                       "{\"name\":\"SHA256SUMS.txt\",\"browser_download_url\":\"https://example.invalid/SHA256SUMS.txt\"}"
+                       "]}";
 
     bunny_updater_check_result_t result;
     bool ok = bunny_updater_parse_latest_release(json, strlen(json), 10, "linux-x64.tar.gz", &result);
@@ -95,10 +96,10 @@ void test_parse_reports_update_available_with_matching_asset(void)
 void test_parse_leaves_sha256_sums_url_null_when_the_release_has_none(void)
 {
     const char *json = "{"
-                        "\"tag_name\":\"build-42\","
-                        "\"assets\":["
-                        "{\"name\":\"bunny-server-linux-x64.tar.gz\",\"browser_download_url\":\"https://example.invalid/linux.tar.gz\"}"
-                        "]}";
+                       "\"tag_name\":\"build-42\","
+                       "\"assets\":["
+                       "{\"name\":\"bunny-server-linux-x64.tar.gz\",\"browser_download_url\":\"https://example.invalid/linux.tar.gz\"}"
+                       "]}";
 
     bunny_updater_check_result_t result;
     bunny_updater_parse_latest_release(json, strlen(json), 10, "linux-x64.tar.gz", &result);
@@ -156,8 +157,8 @@ void test_parse_reports_no_update_for_local_dev_build(void)
 void test_parse_update_available_but_no_matching_asset(void)
 {
     const char *json = "{\"tag_name\":\"build-42\",\"assets\":["
-                        "{\"name\":\"bunny-server-windows-x64.zip\",\"browser_download_url\":\"https://example.invalid/win.zip\"}"
-                        "]}";
+                       "{\"name\":\"bunny-server-windows-x64.zip\",\"browser_download_url\":\"https://example.invalid/win.zip\"}"
+                       "]}";
 
     bunny_updater_check_result_t result;
     bunny_updater_parse_latest_release(json, strlen(json), 10, "linux-x64.tar.gz", &result);
@@ -321,8 +322,8 @@ void test_sha256_hex_returns_false_for_a_missing_file(void)
 void test_find_sha256_locates_the_right_entry_among_multiple_lines(void)
 {
     const char *sums = "1111111111111111111111111111111111111111111111111111111111111111  bunny-server-windows-x64.zip\n"
-                        "2222222222222222222222222222222222222222222222222222222222222222  bunny-server-linux-x64.tar.gz\n"
-                        "3333333333333333333333333333333333333333333333333333333333333333  bunny-server-linux-x64-ubuntu22.tar.gz\n";
+                       "2222222222222222222222222222222222222222222222222222222222222222  bunny-server-linux-x64.tar.gz\n"
+                       "3333333333333333333333333333333333333333333333333333333333333333  bunny-server-linux-x64-ubuntu22.tar.gz\n";
 
     char hex[65];
     bool ok = bunny_updater_find_sha256(sums, "bunny-server-linux-x64.tar.gz", hex);

@@ -43,13 +43,11 @@ static const char *E621_COMMENTS_LIST_FIXTURE = "[{\"id\":1,\"post_id\":42,\"cre
  * bunny_core_sync_e621_blacklist in a single fetch. */
 static const char *E621_USER_PROFILE_FIXTURE = "{\"id\":1,\"name\":\"tester\",\"blacklisted_tags\":\"young\\nbrand_new\\nrating:e young\\n( unbalanced\"}";
 
-static const char *E621_TAGS_SEARCH_FIXTURE =
-    "[{\"id\":1,\"name\":\"fox\",\"post_count\":12345,\"category\":5,\"related_tags\":\"canine wolf\",\"is_locked\":false,"
-    "\"created_at\":\"2020-01-01T00:00:00.000-05:00\",\"updated_at\":\"2020-01-02T00:00:00.000-05:00\"}]";
+static const char *E621_TAGS_SEARCH_FIXTURE = "[{\"id\":1,\"name\":\"fox\",\"post_count\":12345,\"category\":5,\"related_tags\":\"canine wolf\",\"is_locked\":false,"
+                                              "\"created_at\":\"2020-01-01T00:00:00.000-05:00\",\"updated_at\":\"2020-01-02T00:00:00.000-05:00\"}]";
 
-static const char *E621_WIKI_PAGE_FIXTURE =
-    "[{\"id\":7,\"title\":\"fox\",\"body\":\"A [[canine]] species.\",\"other_names\":[\"foxes\"],\"is_locked\":false,"
-    "\"created_at\":\"2020-01-01T00:00:00.000-05:00\",\"updated_at\":\"2020-01-02T00:00:00.000-05:00\"}]";
+static const char *E621_WIKI_PAGE_FIXTURE = "[{\"id\":7,\"title\":\"fox\",\"body\":\"A [[canine]] species.\",\"other_names\":[\"foxes\"],\"is_locked\":false,"
+                                            "\"created_at\":\"2020-01-01T00:00:00.000-05:00\",\"updated_at\":\"2020-01-02T00:00:00.000-05:00\"}]";
 
 static const char *E621_TAG_ALIASES_FIXTURE = "[{\"id\":1,\"antecedent_name\":\"foxes\",\"consequent_name\":\"fox\",\"status\":\"active\",\"post_count\":12345}]";
 

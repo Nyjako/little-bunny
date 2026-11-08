@@ -2,6 +2,7 @@ import 'package:bunny_core_ffi/bunny_core_ffi.dart';
 
 import 'bunny_models.dart';
 import 'bunny_repository.dart';
+import 'download_file_native.dart';
 
 BunnyAccount _accountFromMap(Map<String, Object?> m) => BunnyAccount(
   id: m['id'] as int,
@@ -140,6 +141,9 @@ DownloadQueueRecord _downloadQueueRecordFromMap(Map<String, Object?> m) => Downl
   status: m['status'] as String,
   failureReason: m['failureReason'] as String?,
   createdAt: m['createdAt'] as String,
+  poolId: m['poolId'] as int,
+  poolName: m['poolName'] as String?,
+  poolPage: m['poolPage'] as int,
 );
 
 BunnyBlacklistSyncStats _blacklistSyncStatsFromMap(Map<String, Object?> m) => BunnyBlacklistSyncStats(
@@ -469,7 +473,8 @@ class FfiBunnyRepository implements BunnyRepository {
   }
 
   @override
-  Future<int> downloadQueueAdd(int postId) => _wrapped(() => _native.downloadQueueAdd(postId));
+  Future<int> downloadQueueAdd(int postId, {int poolId = 0, String? poolName, int poolPage = 0}) =>
+      _wrapped(() => _native.downloadQueueAdd(postId, poolId: poolId, poolName: poolName, poolPage: poolPage));
 
   @override
   Future<void> downloadQueueSetStatus(int id, String status, {String? failureReason}) => _wrapped(() => _native.downloadQueueSetStatus(id, status, failureReason: failureReason));
@@ -482,4 +487,8 @@ class FfiBunnyRepository implements BunnyRepository {
 
   @override
   Future<void> downloadQueueClearFinished() => _wrapped(() => _native.downloadQueueClearFinished());
+
+  @override
+  Future<DownloadFetchResult> downloadFile(String fileUrl, Map<String, String> extraHeaders, String destDir, String filename, String? expectedMd5, void Function(int received, int? total) onProgress) =>
+      downloadFileViaNative(_native, fileUrl, extraHeaders, destDir, filename, expectedMd5, onProgress);
 }

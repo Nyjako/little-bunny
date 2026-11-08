@@ -522,13 +522,35 @@ class DownloadQueueRecord {
   final String? failureReason;
   final String createdAt;
 
+  /// M65 -- 0/null means this wasn't a pool download. See
+  /// [DownloadManager.downloadPost]'s own doc comment for what these drive:
+  /// a pool-named folder and page-numbered filename instead of the regular
+  /// per-artist scheme.
+  final int poolId;
+  final String? poolName;
+  final int poolPage;
+
   const DownloadQueueRecord({
     required this.id,
     required this.postId,
     required this.status,
     this.failureReason,
     required this.createdAt,
+    this.poolId = 0,
+    this.poolName,
+    this.poolPage = 0,
   });
+}
+
+/// The result of a [BunnyRepository.downloadFile] call (M66) -- mirrors
+/// `bunny_core_download_outcome_t`'s wire strings via [outcome]:
+/// `'verified'`, `'checksumMismatch'`, or `'failed'`. [errorMessage] is only
+/// ever set for `'failed'`.
+class DownloadFetchResult {
+  final String outcome;
+  final String? errorMessage;
+
+  const DownloadFetchResult({required this.outcome, this.errorMessage});
 }
 
 /// Mirrors `bunny_core_blacklist_sync_stats_t` -- the result of pulling the

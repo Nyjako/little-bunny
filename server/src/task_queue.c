@@ -18,7 +18,7 @@ typedef struct
     task_type_t type;
     task_priority_t priority;
     task_status_t status;
-    char *label;       /* owned */
+    char *label; /* owned */
     time_t enqueued_at;
     int64_t search_id; /* valid for TASK_TYPE_SYNC_SEARCH only */
 } task_slot_t;

@@ -650,12 +650,31 @@ class _PostGridScreenState extends State<PostGridScreen> {
   /// direct, still-synchronous actions). Resolves via [_selectedPosts], so a
   /// "select entire search" selection enqueues every matched post, not just
   /// what [_posts] had loaded.
+  ///
+  /// When this screen is itself a pool browse ([_poolId] non-null, M65),
+  /// goes through [DownloadQueueService.enqueuePool] instead, so
+  /// [DownloadManager] files each post under a pool-named folder with a
+  /// page-numbered filename. Each selected post's page is its position in
+  /// the *full* pool ([_entireSearchSelection] ?? [_posts], whichever is
+  /// currently backing [_selectedPosts]), not its position within just the
+  /// selection -- selecting only some of a pool's posts must not renumber
+  /// them. The pool's own fetched name ([_poolInfo], e621 only -- Inkbunny
+  /// has no pool-metadata endpoint at all) is preferred; this search's own
+  /// label is the fallback, covering both Inkbunny pools and an e621 pool
+  /// whose metadata fetch hasn't landed yet.
   void _massDownload(AppLocalizations l10n) {
     final selected = _selectedPosts;
     if (selected.isEmpty) {
       return;
     }
-    widget.downloadQueueService.enqueueAll(selected, widget.repository);
+    final poolId = _poolId;
+    if (poolId != null) {
+      final fullOrder = _entireSearchSelection ?? _posts;
+      final pageByPostId = {for (final (index, post) in fullOrder.indexed) post.id: index + 1};
+      widget.downloadQueueService.enqueuePool(selected, widget.repository, poolId: poolId, poolName: _poolInfo?.name ?? widget.search.label, pageByPostId: pageByPostId);
+    } else {
+      widget.downloadQueueService.enqueueAll(selected, widget.repository);
+    }
     setState(() {
       _selectedPostIds.clear();
       _entireSearchSelection = null;

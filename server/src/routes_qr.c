@@ -22,8 +22,7 @@ static int handle_post_qr(struct mg_connection *conn, server_context_t *ctx)
     cJSON *url_item = cJSON_GetObjectItemCaseSensitive(body, "server_url");
     cJSON *token_item = cJSON_GetObjectItemCaseSensitive(body, "bearer_token");
     cJSON *cert_item = cJSON_GetObjectItemCaseSensitive(body, "cert_sha256");
-    if (!cJSON_IsString(url_item) || !cJSON_IsString(token_item) || !cJSON_IsString(cert_item) || url_item->valuestring[0] == '\0' ||
-        token_item->valuestring[0] == '\0' || cert_item->valuestring[0] == '\0') {
+    if (!cJSON_IsString(url_item) || !cJSON_IsString(token_item) || !cJSON_IsString(cert_item) || url_item->valuestring[0] == '\0' || token_item->valuestring[0] == '\0' || cert_item->valuestring[0] == '\0') {
         cJSON_Delete(body);
         return server_json_respond_error(conn, BUNNY_CORE_ERR_INVALID_ARG);
     }
@@ -36,8 +35,7 @@ static int handle_post_qr(struct mg_connection *conn, server_context_t *ctx)
 
     uint8_t qrcode[qrcodegen_BUFFER_LEN_MAX];
     uint8_t temp_buffer[qrcodegen_BUFFER_LEN_MAX];
-    bool encoded =
-        qrcodegen_encodeText(payload, temp_buffer, qrcode, qrcodegen_Ecc_LOW, qrcodegen_VERSION_MIN, qrcodegen_VERSION_MAX, qrcodegen_Mask_AUTO, true);
+    bool encoded = qrcodegen_encodeText(payload, temp_buffer, qrcode, qrcodegen_Ecc_LOW, qrcodegen_VERSION_MIN, qrcodegen_VERSION_MAX, qrcodegen_Mask_AUTO, true);
     free(payload);
     if (!encoded) {
         /* The only realistic cause: the three fields together are too

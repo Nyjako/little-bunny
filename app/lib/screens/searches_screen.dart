@@ -391,6 +391,32 @@ class _SearchesScreenState extends State<SearchesScreen> with SingleTickerProvid
   /// for updates" app bar action above.
   final Set<int> _syncingSearchIds = {};
 
+  /// Download-selection mode (M65) -- a bare toggle (unlike [PostGridScreen]'s
+  /// own "non-empty set = selection mode" convention), since this screen's
+  /// tiles already use `onTap`/`onLongPress` for opening/editing a search --
+  /// an explicit app-bar action is what enters/exits this mode instead, so
+  /// those two gestures stay available for a non-selected search even while
+  /// others are selected. Only standalone searches are selectable, not whole
+  /// groups at once -- expand a group to select its members individually.
+  bool _selectionMode = false;
+  final Set<int> _selectedSearchIds = {};
+  bool _loadingSelectedSearches = false;
+
+  void _toggleSearchSelection(int searchId) {
+    setState(() {
+      if (!_selectedSearchIds.remove(searchId)) {
+        _selectedSearchIds.add(searchId);
+      }
+    });
+  }
+
+  void _exitSelectionMode() {
+    setState(() {
+      _selectionMode = false;
+      _selectedSearchIds.clear();
+    });
+  }
+
   Future<void> _syncOneSearch(BunnySearch search) async {
     setState(() => _syncingSearchIds.add(search.id));
     try {
@@ -420,6 +446,57 @@ class _SearchesScreenState extends State<SearchesScreen> with SingleTickerProvid
         return;
       }
       await Future.delayed(const Duration(milliseconds: 500));
+    }
+  }
+
+  /// Downloads every post matched by each selected search (M65) -- not just
+  /// whatever a post grid happened to have loaded, same "I actually want
+  /// everything" intent as [PostGridScreen._selectEntireSearch], just
+  /// starting from this screen's own multi-search selection instead of one
+  /// already-open search. Pages through [BunnyRepository.listSearchPosts]
+  /// until an empty page, per search, sequentially -- same stopping
+  /// condition [PostGridScreen._selectEntireSearch] already uses. One
+  /// combined [DownloadQueueService.enqueueAll] call across every selected
+  /// search's posts at the end, so enqueueAll's own dedup (a post could
+  /// legitimately appear in more than one of the selected searches) only
+  /// ever queues it once.
+  Future<void> _downloadSelectedSearches(AppLocalizations l10n) async {
+    final selectedIds = _selectedSearchIds.toSet();
+    if (selectedIds.isEmpty || _dataFuture == null) {
+      return;
+    }
+    setState(() => _loadingSelectedSearches = true);
+    try {
+      final data = await _dataFuture!;
+      final selectedSearches = data.searches.where((search) => selectedIds.contains(search.id)).toList();
+      final allPosts = <BunnyPost>[];
+      for (final search in selectedSearches) {
+        var page = 1;
+        while (true) {
+          final pageItems = await _repository!.listSearchPosts(search.id, page: page);
+          if (pageItems.isEmpty) {
+            break;
+          }
+          allPosts.addAll(pageItems);
+          page++;
+        }
+      }
+      if (!mounted) {
+        return;
+      }
+      widget.downloadQueueService.enqueueAll(allPosts, _repository!);
+      setState(() {
+        _loadingSelectedSearches = false;
+        _selectionMode = false;
+        _selectedSearchIds.clear();
+      });
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(l10n.searchesMassDownloadQueued(allPosts.length))));
+    } catch (_) {
+      if (!mounted) {
+        return;
+      }
+      setState(() => _loadingSelectedSearches = false);
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(l10n.searchesMassDownloadError)));
     }
   }
 
@@ -521,6 +598,15 @@ class _SearchesScreenState extends State<SearchesScreen> with SingleTickerProvid
 
   Widget _searchTile(BunnySearch search) {
     final l10n = AppLocalizations.of(context)!;
+    if (_selectionMode) {
+      return CheckboxListTile(
+        value: _selectedSearchIds.contains(search.id),
+        onChanged: (_) => _toggleSearchSelection(search.id),
+        title: Text(search.label),
+        subtitle: Text(l10n.searchesIntervalSubtitle(search.site.toWireString(), search.intervalHours, search.totalCount)),
+        secondary: search.unseenCount > 0 ? _unseenBadge(search.unseenCount) : null,
+      );
+    }
     return ListTile(
       title: Text(search.label),
       subtitle: Text(l10n.searchesIntervalSubtitle(search.site.toWireString(), search.intervalHours, search.totalCount)),
@@ -708,111 +794,132 @@ class _SearchesScreenState extends State<SearchesScreen> with SingleTickerProvid
       appBar: AppBar(
         toolbarHeight: wide ? compactToolbarHeight : null,
         title: Text(
-          !_syncStatus.active
+          _selectionMode
+              ? l10n.searchesSelectedCount(_selectedSearchIds.length)
+              : !_syncStatus.active
               ? l10n.searchesScreenTitle
               : _syncStatus.total > 0
               ? l10n.searchesSyncAllProgress(_syncStatus.position, _syncStatus.total)
               : l10n.searchesSyncInProgress,
         ),
-        actions: [
-          IconButton(
-            icon: _syncStatus.active ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.sync),
-            tooltip: l10n.searchesCheckForUpdatesTooltip,
-            onPressed: _syncStatus.active ? null : _checkForUpdates,
-          ),
-          IconButton(
-            icon: const Icon(Icons.travel_explore),
-            tooltip: l10n.searchesCustomSearchTooltip,
-            onPressed: () => Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (context) => CustomSearchScreen(
-                  repository: _repository!,
-                  displaySettingsStore: widget.displaySettingsStore,
-                  downloadSettingsStore: widget.downloadSettingsStore,
-                  downloadQueueService: widget.downloadQueueService,
+        leading: _selectionMode ? IconButton(icon: const Icon(Icons.close), tooltip: l10n.commonCancel, onPressed: _exitSelectionMode) : null,
+        actions: _selectionMode
+            ? [
+                _loadingSelectedSearches
+                    ? const Padding(padding: EdgeInsets.all(16), child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)))
+                    : IconButton(
+                        icon: const Icon(Icons.download_outlined),
+                        tooltip: l10n.searchesDownloadSelectedTooltip,
+                        onPressed: _selectedSearchIds.isEmpty ? null : () => _downloadSelectedSearches(l10n),
+                      ),
+              ]
+            : [
+                IconButton(
+                  icon: _syncStatus.active ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.sync),
+                  tooltip: l10n.searchesCheckForUpdatesTooltip,
+                  onPressed: _syncStatus.active ? null : _checkForUpdates,
                 ),
-              ),
-            ),
-          ),
-          IconButton(
-            icon: const Icon(Icons.download_outlined),
-            tooltip: l10n.searchesDownloadQueueTooltip,
-            onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (context) => DownloadQueueScreen(downloadQueueService: widget.downloadQueueService))),
-          ),
-          IconButton(
-            icon: const Icon(Icons.person_outline),
-            tooltip: l10n.searchesAccountsTooltip,
-            onPressed: () => Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (context) => AccountsScreen(
-                  repository: _repository!,
-                  displaySettingsStore: widget.displaySettingsStore,
-                  downloadSettingsStore: widget.downloadSettingsStore,
-                  downloadQueueService: widget.downloadQueueService,
-                ),
-              ),
-            ),
-          ),
-          IconButton(
-            icon: const Icon(Icons.bar_chart_outlined),
-            tooltip: l10n.searchesTagStatsTooltip,
-            onPressed: () => Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (context) => TagStatsScreen(
-                  repository: _repository!,
-                  displaySettingsStore: widget.displaySettingsStore,
-                  downloadSettingsStore: widget.downloadSettingsStore,
-                  downloadQueueService: widget.downloadQueueService,
-                ),
-              ),
-            ),
-          ),
-          IconButton(
-            icon: const Icon(Icons.settings_outlined),
-            tooltip: l10n.searchesSettingsTooltip,
-            onPressed: () async {
-              await Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => SettingsScreen(
-                    repository: _repository!,
-                    themeSettingsStore: widget.themeSettingsStore,
-                    lockService: widget.lockService,
-                    displaySettingsStore: widget.displaySettingsStore,
-                    downloadSettingsStore: widget.downloadSettingsStore,
-                    settingsStore: widget.settingsStore,
-                    onThemeModeChanged: widget.onThemeModeChanged,
-                    onThemeColorChanged: widget.onThemeColorChanged,
-                    onAmoledChanged: widget.onAmoledChanged,
-                    onLanguageCodeChanged: widget.onLanguageCodeChanged,
-                    onRepositoryConfigured: widget.onRepositoryConfigured,
+                IconButton(
+                  icon: const Icon(Icons.travel_explore),
+                  tooltip: l10n.searchesCustomSearchTooltip,
+                  onPressed: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => CustomSearchScreen(
+                        repository: _repository!,
+                        displaySettingsStore: widget.displaySettingsStore,
+                        downloadSettingsStore: widget.downloadSettingsStore,
+                        downloadQueueService: widget.downloadQueueService,
+                      ),
+                    ),
                   ),
                 ),
-              );
-              // Settings can create searches (the Backup section's import,
-              // M11) -- unconditionally refresh on return rather than
-              // threading a bool pop result through, since there's no
-              // "cancelled" case worth skipping a cheap reload for.
-              _refresh();
-            },
-          ),
-          IconButton(icon: const Icon(Icons.create_new_folder_outlined), tooltip: l10n.searchesNewGroupTooltip, onPressed: _createGroup),
-          PopupMenuButton<SearchSortOrder>(
-            icon: const Icon(Icons.sort),
-            tooltip: l10n.searchesSortTooltip,
-            initialValue: _sortOrder,
-            onSelected: _setSortOrder,
-            itemBuilder: (context) => [
-              CheckedPopupMenuItem(value: SearchSortOrder.mostUnseen, checked: _sortOrder == SearchSortOrder.mostUnseen, child: Text(l10n.searchesSortMostUnseen)),
-              CheckedPopupMenuItem(value: SearchSortOrder.label, checked: _sortOrder == SearchSortOrder.label, child: Text(l10n.searchesSortLabel)),
-              CheckedPopupMenuItem(value: SearchSortOrder.recentlyCreated, checked: _sortOrder == SearchSortOrder.recentlyCreated, child: Text(l10n.searchesSortRecentlyCreated)),
-              CheckedPopupMenuItem(value: SearchSortOrder.lastViewed, checked: _sortOrder == SearchSortOrder.lastViewed, child: Text(l10n.searchesSortLastViewed)),
-            ],
-          ),
-        ],
+                IconButton(
+                  icon: const Icon(Icons.download_outlined),
+                  tooltip: l10n.searchesDownloadQueueTooltip,
+                  onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (context) => DownloadQueueScreen(downloadQueueService: widget.downloadQueueService))),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.person_outline),
+                  tooltip: l10n.searchesAccountsTooltip,
+                  onPressed: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => AccountsScreen(
+                        repository: _repository!,
+                        displaySettingsStore: widget.displaySettingsStore,
+                        downloadSettingsStore: widget.downloadSettingsStore,
+                        downloadQueueService: widget.downloadQueueService,
+                      ),
+                    ),
+                  ),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.bar_chart_outlined),
+                  tooltip: l10n.searchesTagStatsTooltip,
+                  onPressed: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => TagStatsScreen(
+                        repository: _repository!,
+                        displaySettingsStore: widget.displaySettingsStore,
+                        downloadSettingsStore: widget.downloadSettingsStore,
+                        downloadQueueService: widget.downloadQueueService,
+                      ),
+                    ),
+                  ),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.settings_outlined),
+                  tooltip: l10n.searchesSettingsTooltip,
+                  onPressed: () async {
+                    await Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => SettingsScreen(
+                          repository: _repository!,
+                          themeSettingsStore: widget.themeSettingsStore,
+                          lockService: widget.lockService,
+                          displaySettingsStore: widget.displaySettingsStore,
+                          downloadSettingsStore: widget.downloadSettingsStore,
+                          settingsStore: widget.settingsStore,
+                          onThemeModeChanged: widget.onThemeModeChanged,
+                          onThemeColorChanged: widget.onThemeColorChanged,
+                          onAmoledChanged: widget.onAmoledChanged,
+                          onLanguageCodeChanged: widget.onLanguageCodeChanged,
+                          onRepositoryConfigured: widget.onRepositoryConfigured,
+                        ),
+                      ),
+                    );
+                    // Settings can create searches (the Backup section's import,
+                    // M11) -- unconditionally refresh on return rather than
+                    // threading a bool pop result through, since there's no
+                    // "cancelled" case worth skipping a cheap reload for.
+                    _refresh();
+                  },
+                ),
+                IconButton(icon: const Icon(Icons.create_new_folder_outlined), tooltip: l10n.searchesNewGroupTooltip, onPressed: _createGroup),
+                PopupMenuButton<SearchSortOrder>(
+                  icon: const Icon(Icons.sort),
+                  tooltip: l10n.searchesSortTooltip,
+                  initialValue: _sortOrder,
+                  onSelected: _setSortOrder,
+                  itemBuilder: (context) => [
+                    CheckedPopupMenuItem(value: SearchSortOrder.mostUnseen, checked: _sortOrder == SearchSortOrder.mostUnseen, child: Text(l10n.searchesSortMostUnseen)),
+                    CheckedPopupMenuItem(value: SearchSortOrder.label, checked: _sortOrder == SearchSortOrder.label, child: Text(l10n.searchesSortLabel)),
+                    CheckedPopupMenuItem(value: SearchSortOrder.recentlyCreated, checked: _sortOrder == SearchSortOrder.recentlyCreated, child: Text(l10n.searchesSortRecentlyCreated)),
+                    CheckedPopupMenuItem(value: SearchSortOrder.lastViewed, checked: _sortOrder == SearchSortOrder.lastViewed, child: Text(l10n.searchesSortLastViewed)),
+                    const PopupMenuDivider(),
+                    // No value -- the parent's onSelected (_setSortOrder)
+                    // above is only ever asked about SearchSortOrder values,
+                    // never this one; PopupMenuItem.onTap runs regardless
+                    // (M65). Folded in here rather than its own app-bar icon
+                    // since a 9th icon doesn't fit next to the other 8 on a
+                    // narrow window (M9.6.6's own compact-width test).
+                    PopupMenuItem<SearchSortOrder>(onTap: () => setState(() => _selectionMode = true), child: Text(l10n.searchesSelectForDownloadTooltip)),
+                  ],
+                ),
+              ],
         bottom: TabBar(
           controller: _tabController,
           labelPadding: wide ? const EdgeInsets.symmetric(horizontal: 16, vertical: 4) : null,

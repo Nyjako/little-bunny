@@ -20,7 +20,39 @@ const _channelName = 'little_bunny/download_foreground_service';
 class AndroidForegroundServiceQueueNotifier implements DownloadQueueNotifier {
   final MethodChannel _channel;
 
-  AndroidForegroundServiceQueueNotifier({MethodChannel? channel}) : _channel = channel ?? const MethodChannel(_channelName);
+  /// Set by `main.dart`, same shape as [FlutterLocalNotificationsQueueNotifier
+  /// .onResumeRequested] -- called whenever the "Resume" notification action
+  /// (M65) lands, whether pushed live via [_handleMethodCall] (the Activity
+  /// was already running) or discovered by [checkPendingResumeRequest]'s own
+  /// startup poll (a fresh launch, where MainActivity.kt can't safely push
+  /// before this class has even registered its handler below).
+  void Function()? onResumeRequested;
+
+  AndroidForegroundServiceQueueNotifier({MethodChannel? channel}) : _channel = channel ?? const MethodChannel(_channelName) {
+    _channel.setMethodCallHandler(_handleMethodCall);
+  }
+
+  Future<void> _handleMethodCall(MethodCall call) async {
+    if (call.method == 'resumeRequested') {
+      onResumeRequested?.call();
+    }
+  }
+
+  /// Call once at startup, after [onResumeRequested] is set -- covers a
+  /// "Resume" tap that launched a fresh engine (MainActivity.kt stores it
+  /// rather than pushing immediately, since Dart's own handler above isn't
+  /// guaranteed to be registered yet at that point). A no-op (false) on
+  /// every other platform/launch path.
+  Future<void> checkPendingResumeRequest() async {
+    try {
+      final pending = await _channel.invokeMethod<bool>('checkPendingResumeRequest') ?? false;
+      if (pending) {
+        onResumeRequested?.call();
+      }
+    } catch (e) {
+      debugPrint('AndroidForegroundServiceQueueNotifier.checkPendingResumeRequest failed: $e');
+    }
+  }
 
   @override
   Future<void> showStarting({required int total}) async {
