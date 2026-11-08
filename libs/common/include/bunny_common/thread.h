@@ -27,19 +27,40 @@ static inline int bunny_mutex_init(bunny_mutex_t *mutex)
     InitializeCriticalSection(mutex);
     return 0;
 }
-static inline void bunny_mutex_destroy(bunny_mutex_t *mutex) { DeleteCriticalSection(mutex); }
-static inline void bunny_mutex_lock(bunny_mutex_t *mutex) { EnterCriticalSection(mutex); }
-static inline void bunny_mutex_unlock(bunny_mutex_t *mutex) { LeaveCriticalSection(mutex); }
+static inline void bunny_mutex_destroy(bunny_mutex_t *mutex)
+{
+    DeleteCriticalSection(mutex);
+}
+static inline void bunny_mutex_lock(bunny_mutex_t *mutex)
+{
+    EnterCriticalSection(mutex);
+}
+static inline void bunny_mutex_unlock(bunny_mutex_t *mutex)
+{
+    LeaveCriticalSection(mutex);
+}
 
 static inline int bunny_cond_init(bunny_cond_t *cond)
 {
     InitializeConditionVariable(cond);
     return 0;
 }
-static inline void bunny_cond_destroy(bunny_cond_t *cond) { (void)cond; /* no destruction needed on Windows */ }
-static inline void bunny_cond_wait(bunny_cond_t *cond, bunny_mutex_t *mutex) { SleepConditionVariableCS(cond, mutex, INFINITE); }
-static inline void bunny_cond_signal(bunny_cond_t *cond) { WakeConditionVariable(cond); }
-static inline void bunny_cond_broadcast(bunny_cond_t *cond) { WakeAllConditionVariable(cond); }
+static inline void bunny_cond_destroy(bunny_cond_t *cond)
+{
+    (void)cond; /* no destruction needed on Windows */
+}
+static inline void bunny_cond_wait(bunny_cond_t *cond, bunny_mutex_t *mutex)
+{
+    SleepConditionVariableCS(cond, mutex, INFINITE);
+}
+static inline void bunny_cond_signal(bunny_cond_t *cond)
+{
+    WakeConditionVariable(cond);
+}
+static inline void bunny_cond_broadcast(bunny_cond_t *cond)
+{
+    WakeAllConditionVariable(cond);
+}
 
 typedef struct
 {
@@ -92,19 +113,52 @@ typedef pthread_mutex_t bunny_mutex_t;
 typedef pthread_cond_t bunny_cond_t;
 typedef pthread_t bunny_thread_t;
 
-static inline int bunny_mutex_init(bunny_mutex_t *mutex) { return pthread_mutex_init(mutex, NULL); }
-static inline void bunny_mutex_destroy(bunny_mutex_t *mutex) { pthread_mutex_destroy(mutex); }
-static inline void bunny_mutex_lock(bunny_mutex_t *mutex) { pthread_mutex_lock(mutex); }
-static inline void bunny_mutex_unlock(bunny_mutex_t *mutex) { pthread_mutex_unlock(mutex); }
+static inline int bunny_mutex_init(bunny_mutex_t *mutex)
+{
+    return pthread_mutex_init(mutex, NULL);
+}
+static inline void bunny_mutex_destroy(bunny_mutex_t *mutex)
+{
+    pthread_mutex_destroy(mutex);
+}
+static inline void bunny_mutex_lock(bunny_mutex_t *mutex)
+{
+    pthread_mutex_lock(mutex);
+}
+static inline void bunny_mutex_unlock(bunny_mutex_t *mutex)
+{
+    pthread_mutex_unlock(mutex);
+}
 
-static inline int bunny_cond_init(bunny_cond_t *cond) { return pthread_cond_init(cond, NULL); }
-static inline void bunny_cond_destroy(bunny_cond_t *cond) { pthread_cond_destroy(cond); }
-static inline void bunny_cond_wait(bunny_cond_t *cond, bunny_mutex_t *mutex) { pthread_cond_wait(cond, mutex); }
-static inline void bunny_cond_signal(bunny_cond_t *cond) { pthread_cond_signal(cond); }
-static inline void bunny_cond_broadcast(bunny_cond_t *cond) { pthread_cond_broadcast(cond); }
+static inline int bunny_cond_init(bunny_cond_t *cond)
+{
+    return pthread_cond_init(cond, NULL);
+}
+static inline void bunny_cond_destroy(bunny_cond_t *cond)
+{
+    pthread_cond_destroy(cond);
+}
+static inline void bunny_cond_wait(bunny_cond_t *cond, bunny_mutex_t *mutex)
+{
+    pthread_cond_wait(cond, mutex);
+}
+static inline void bunny_cond_signal(bunny_cond_t *cond)
+{
+    pthread_cond_signal(cond);
+}
+static inline void bunny_cond_broadcast(bunny_cond_t *cond)
+{
+    pthread_cond_broadcast(cond);
+}
 
-static inline int bunny_thread_create(bunny_thread_t *thread, void *(*fn)(void *), void *arg) { return pthread_create(thread, NULL, fn, arg); }
-static inline int bunny_thread_join(bunny_thread_t thread) { return pthread_join(thread, NULL); }
+static inline int bunny_thread_create(bunny_thread_t *thread, void *(*fn)(void *), void *arg)
+{
+    return pthread_create(thread, NULL, fn, arg);
+}
+static inline int bunny_thread_join(bunny_thread_t thread)
+{
+    return pthread_join(thread, NULL);
+}
 
 #endif
 
@@ -113,10 +167,16 @@ static inline int bunny_thread_join(bunny_thread_t thread) { return pthread_join
  * taking milliseconds instead. Used by the scheduler's poll loop and
  * main.c's shutdown-signal wait loop. */
 #ifdef _WIN32
-static inline void bunny_sleep_seconds(unsigned int seconds) { Sleep(seconds * 1000); }
+static inline void bunny_sleep_seconds(unsigned int seconds)
+{
+    Sleep(seconds * 1000);
+}
 #else
 #include <unistd.h>
-static inline void bunny_sleep_seconds(unsigned int seconds) { sleep(seconds); }
+static inline void bunny_sleep_seconds(unsigned int seconds)
+{
+    sleep(seconds);
+}
 #endif
 
 #endif /* BUNNY_COMMON_THREAD_H */

@@ -249,8 +249,7 @@ bool server_print_connection_qr(const server_config_t *config)
 
     uint8_t qrcode[qrcodegen_BUFFER_LEN_MAX];
     uint8_t temp_buffer[qrcodegen_BUFFER_LEN_MAX];
-    bool encoded =
-        qrcodegen_encodeText(payload, temp_buffer, qrcode, qrcodegen_Ecc_LOW, qrcodegen_VERSION_MIN, qrcodegen_VERSION_MAX, qrcodegen_Mask_AUTO, true);
+    bool encoded = qrcodegen_encodeText(payload, temp_buffer, qrcode, qrcodegen_Ecc_LOW, qrcodegen_VERSION_MIN, qrcodegen_VERSION_MAX, qrcodegen_Mask_AUTO, true);
     if (!encoded) {
         fprintf(stderr, "qr: connection info is too large to encode as a QR code\n");
         free(payload);

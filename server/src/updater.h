@@ -23,11 +23,11 @@ typedef struct
     int latest_build_number;
     char *tag_name;        /* owned; e.g. "build-42" */
     char *download_url;    /* owned; NULL if update_available is false, or
-                             * the release has no asset matching
-                             * asset_name_suffix */
+                            * the release has no asset matching
+                            * asset_name_suffix */
     char *sha256_sums_url; /* owned; the release's "SHA256SUMS.txt" asset's
-                             * download URL, NULL if the release has none
-                             * (e.g. a release built before this existed) */
+                            * download URL, NULL if the release has none
+                            * (e.g. a release built before this existed) */
     char *release_notes;   /* owned; may be NULL (empty release body) */
 } bunny_updater_check_result_t;
 
