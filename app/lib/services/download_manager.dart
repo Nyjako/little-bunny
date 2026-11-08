@@ -81,40 +81,60 @@ class DownloadManager {
     return artist.replaceAll(RegExp(r'[\\/:*?"<>|]'), '_');
   }
 
+  static String _sanitizePoolName(String? name) {
+    if (name == null || name.trim().isEmpty) {
+      return 'untitled';
+    }
+    return name.replaceAll(RegExp(r'[\\/:*?"<>|]'), '_');
+  }
+
+  /// Where [post] lands on disk -- the regular per-artist scheme, unless
+  /// [poolId]/[poolName]/[poolPage] (M65) mark this as part of a pool
+  /// download, in which case it's filed under a pool-named folder with a
+  /// page-numbered filename instead, e.g. `pool:1234 - My Comic/1234 -
+  /// p0007 [987654].png` for pool 1234 ("My Comic"), page 7, post external
+  /// id 987654. e621 caps a pool at 1000 posts, hence the 4-digit zero-padded
+  /// page width -- always enough, never excessive. [poolPage] <= 0 is
+  /// treated the same as "not a pool download" (an unset/sentinel value,
+  /// not a real page).
+  (String folder, String filename) _destinationFor(BunnyPost post, String ext, {int poolId = 0, String? poolName, int poolPage = 0}) {
+    if (poolId > 0 && poolPage > 0) {
+      return ('pool:$poolId - ${_sanitizePoolName(poolName)}', '$poolId - p${poolPage.toString().padLeft(4, '0')} [${post.externalId}].$ext');
+    }
+    return (_sanitizeArtist(post.artist), '${post.externalId}.$ext');
+  }
+
   /// Whether [post] already has a file sitting at the exact deterministic
   /// path [downloadPost] would write to -- "downloaded" is a per-device
   /// filesystem fact (M42), not something a shared server can meaningfully
   /// track: a download recorded on one device used to show as already-
   /// downloaded on every other device sharing the same server, even on a
   /// device that never actually wrote the file. Mirrors [downloadPost]'s own
-  /// path computation exactly (same artist-folder sanitization, same
-  /// `$externalId.$ext` filename, same SAF-vs-plain-path branch) without
-  /// touching the network.
-  Future<bool> isDownloaded(BunnyPost post, String destinationFolder) async {
-    final artistFolder = _sanitizeArtist(post.artist);
+  /// path computation exactly ([_destinationFor], same SAF-vs-plain-path
+  /// branch) without touching the network.
+  Future<bool> isDownloaded(BunnyPost post, String destinationFolder, {int poolId = 0, String? poolName, int poolPage = 0}) async {
     final ext = post.fileExt ?? 'bin';
-    final filename = '${post.externalId}.$ext';
+    final (folder, filename) = _destinationFor(post, ext, poolId: poolId, poolName: poolName, poolPage: poolPage);
     if (destinationFolder.startsWith('content://')) {
-      final child = await SafUtil().child(destinationFolder, [artistFolder, filename]);
+      final child = await SafUtil().child(destinationFolder, [folder, filename]);
       return child != null;
     }
-    return File('$destinationFolder/$artistFolder/$filename').exists();
+    return File('$destinationFolder/$folder/$filename').exists();
   }
 
   /// Reads back whatever already sits at [downloadPost]'s own deterministic
   /// path for [post], if anything does -- same SAF-vs-plain-path branch as
   /// [isDownloaded], just returning the bytes (for a checksum check) and the
   /// resolved path/uri instead of a bare bool. Null if nothing is there yet.
-  Future<(Uint8List bytes, String path)?> _readExistingFile(BunnyPost post, String destinationFolder, String artistFolder, String ext) async {
-    final filename = '${post.externalId}.$ext';
+  Future<(Uint8List bytes, String path)?> _readExistingFile(BunnyPost post, String destinationFolder, String folder, String filename) async {
     if (destinationFolder.startsWith('content://')) {
-      final child = await SafUtil().child(destinationFolder, [artistFolder, filename]);
+      final child = await SafUtil().child(destinationFolder, [folder, filename]);
       if (child == null) {
         return null;
       }
       return (await SafStream().readFileBytes(child.uri), child.uri);
     }
-    final file = File('$destinationFolder/$artistFolder/$filename');
+    final file = File('$destinationFolder/$folder/$filename');
     if (!await file.exists()) {
       return null;
     }
@@ -148,6 +168,10 @@ class DownloadManager {
   /// finished queue and tapping "download all" again). A checksum mismatch
   /// against the existing file (or no file there yet) falls through to a
   /// real fetch/overwrite below, same as before this existed.
+  ///
+  /// [poolId]/[poolName]/[poolPage] (M65) -- see [_destinationFor]'s own
+  /// doc comment for the alternate pool-named folder/filename scheme these
+  /// select.
   Future<DownloadResult> downloadPost(
     BunnyPost post,
     BunnyRepository repository,
@@ -155,15 +179,18 @@ class DownloadManager {
     bool autoFavorite = false,
     bool autoUpvote = false,
     void Function(int received, int? total)? onProgress,
+    int poolId = 0,
+    String? poolName,
+    int poolPage = 0,
   }) async {
     final url = post.fileUrl;
     if (url == null) {
       return const DownloadResult(DownloadOutcome.noFileUrl);
     }
     try {
-      final artistFolder = _sanitizeArtist(post.artist);
       final ext = post.fileExt ?? 'bin';
-      final existing = await _readExistingFile(post, destinationFolder, artistFolder, ext);
+      final (folder, filename) = _destinationFor(post, ext, poolId: poolId, poolName: poolName, poolPage: poolPage);
+      final existing = await _readExistingFile(post, destinationFolder, folder, filename);
       if (existing != null) {
         final (existingBytes, existingPath) = existing;
         final expected = post.fileMd5;
@@ -201,17 +228,17 @@ class DownloadManager {
         // Android's Storage Access Framework (see SettingsScreen's own doc
         // comment on _chooseDownloadFolder) -- dart:io's File/Directory
         // can't write there at all, so this goes through saf_util/saf_stream
-        // instead: create (or reuse) the artist subfolder under the picked
-        // tree, then write the file into it. overwrite: true matches the
-        // plain-path branch below, which always overwrites at the same
-        // deterministic path rather than generating a new name each time.
-        final artistDir = await SafUtil().mkdirp(destinationFolder, [artistFolder]);
-        final newFile = await SafStream().writeFileBytes(artistDir.uri, '${post.externalId}.$ext', _mimeTypeFor(ext), bytes, overwrite: true);
+        // instead: create (or reuse) the folder, then write the file into
+        // it. overwrite: true matches the plain-path branch below, which
+        // always overwrites at the same deterministic path rather than
+        // generating a new name each time.
+        final folderDir = await SafUtil().mkdirp(destinationFolder, [folder]);
+        final newFile = await SafStream().writeFileBytes(folderDir.uri, filename, _mimeTypeFor(ext), bytes, overwrite: true);
         filePath = newFile.uri.toString();
       } else {
-        final directory = Directory('$destinationFolder/$artistFolder');
+        final directory = Directory('$destinationFolder/$folder');
         await directory.create(recursive: true);
-        filePath = '${directory.path}/${post.externalId}.$ext';
+        filePath = '${directory.path}/$filename';
         // Written to a temp file first, then moved into place, so a crash
         // or kill mid-write (M43) never leaves a corrupt, half-written file
         // sitting at the user-visible destination path -- `rename` is atomic
