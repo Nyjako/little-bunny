@@ -670,5 +670,50 @@ void main() {
       expect(find.text('Foxes'), findsOneWidget); // selection mode exited immediately
       expect(downloadQueueService.totalCount, 2);
     });
+
+    testWidgets('mass-downloading from a pool search tags each item with its real pool page (M65)', (WidgetTester tester) async {
+      final repository = FakeBunnyRepository();
+      final poolSearch = const BunnySearch(id: 3, site: BunnySite.e621, label: 'A pool', query: 'pool:123', intervalHours: 24, createdAt: '2026-01-01T00:00:00Z');
+      repository.postsBySearchId[3] = [
+        _post(id: 1, isSeen: false, fileUrl: 'https://example.invalid/1.jpg', fileExt: 'jpg'),
+        _post(id: 2, isSeen: false, fileUrl: 'https://example.invalid/2.jpg', fileExt: 'jpg'),
+        _post(id: 3, isSeen: false, fileUrl: 'https://example.invalid/3.jpg', fileExt: 'jpg'),
+      ];
+      repository.poolInfoById[123] = const BunnyPoolInfo(id: 123, name: 'My Comic', postCount: 3);
+      final downloadQueueService = DownloadQueueService(
+        downloadManager: DownloadManager(client: MockClient((_) async => http.Response.bytes([1, 2, 3], 200))),
+        downloadSettingsStore: const DownloadSettingsStore(),
+      );
+
+      await tester.pumpWidget(
+        wrapWithLocalization(
+          PostGridScreen(
+            search: poolSearch,
+            repository: repository,
+            displaySettingsStore: const DisplaySettingsStore(),
+            downloadSettingsStore: const DownloadSettingsStore(),
+            downloadQueueService: downloadQueueService,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // Select posts 1 and 3, deliberately skipping 2 -- their pool pages
+      // must still be 1 and 3 (their real positions), not 1 and 2.
+      await tester.longPress(find.byKey(const ValueKey(1)));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const ValueKey(3)));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.descendant(of: find.byType(AppBar), matching: find.byIcon(Icons.download)));
+      await tester.pump();
+
+      expect(downloadQueueService.totalCount, 2);
+      final byPostId = {for (final item in downloadQueueService.items) item.post.id: item};
+      expect(byPostId[1]!.poolId, 123);
+      expect(byPostId[1]!.poolName, 'My Comic');
+      expect(byPostId[1]!.poolPage, 1);
+      expect(byPostId[3]!.poolPage, 3);
+    });
   });
 }
