@@ -86,8 +86,14 @@ struct bunny_core
  * never call a function that takes this lock itself (e.g.
  * bunny_core_queue_favorite_add) while already holding it, or the calling
  * thread deadlocks against itself. */
-static inline void bunny_core_db_lock(bunny_core_t *core) { bunny_mutex_lock(&core->db_mutex); }
-static inline void bunny_core_db_unlock(bunny_core_t *core) { bunny_mutex_unlock(&core->db_mutex); }
+static inline void bunny_core_db_lock(bunny_core_t *core)
+{
+    bunny_mutex_lock(&core->db_mutex);
+}
+static inline void bunny_core_db_unlock(bunny_core_t *core)
+{
+    bunny_mutex_unlock(&core->db_mutex);
+}
 
 /* Every bunny_core_* function that only READS core->db (never INSERT/UPDATE/
  * DELETE) uses this pair instead of bunny_core_db_lock/unlock -- picks the
@@ -128,16 +134,21 @@ static inline void bunny_core_db_read_unlock(bunny_core_t *core, size_t slot)
 /* See sync_mutex above -- held around the entire body of a site-syncing
  * function (network calls included), never nested with another call that
  * also takes it. */
-static inline void bunny_core_sync_lock(bunny_core_t *core) { bunny_mutex_lock(&core->sync_mutex); }
-static inline void bunny_core_sync_unlock(bunny_core_t *core) { bunny_mutex_unlock(&core->sync_mutex); }
+static inline void bunny_core_sync_lock(bunny_core_t *core)
+{
+    bunny_mutex_lock(&core->sync_mutex);
+}
+static inline void bunny_core_sync_unlock(bunny_core_t *core)
+{
+    bunny_mutex_unlock(&core->sync_mutex);
+}
 
 /* printf-style wrapper around core->log_callback -- no-op if none is set
  * (standalone/FFI mode). Used by sync.c to report per-search sync progress. */
 #if defined(__GNUC__) || defined(__clang__)
 __attribute__((format(printf, 3, 4)))
 #endif
-static inline void
-bunny_core_log(bunny_core_t *core, const char *level, const char *fmt, ...)
+static inline void bunny_core_log(bunny_core_t *core, const char *level, const char *fmt, ...)
 {
     if (!core->log_callback) {
         return;

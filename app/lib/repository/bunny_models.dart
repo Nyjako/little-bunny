@@ -522,12 +522,23 @@ class DownloadQueueRecord {
   final String? failureReason;
   final String createdAt;
 
+  /// M65 -- 0/null means this wasn't a pool download. See
+  /// [DownloadManager.downloadPost]'s own doc comment for what these drive:
+  /// a pool-named folder and page-numbered filename instead of the regular
+  /// per-artist scheme.
+  final int poolId;
+  final String? poolName;
+  final int poolPage;
+
   const DownloadQueueRecord({
     required this.id,
     required this.postId,
     required this.status,
     this.failureReason,
     required this.createdAt,
+    this.poolId = 0,
+    this.poolName,
+    this.poolPage = 0,
   });
 }
 

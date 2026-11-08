@@ -9,18 +9,21 @@
 
 GOBLIN_DYN_ARRAY_DECL(bunny_db_download_queue_item, bunny_db_download_queue_item_t)
 
-bunny_db_result_t bunny_db_download_queue_add(bunny_db_t *db, int64_t post_id, int64_t *out_id)
+bunny_db_result_t bunny_db_download_queue_add(bunny_db_t *db, int64_t post_id, int64_t pool_id, const char *pool_name, int pool_page, int64_t *out_id)
 {
     if (!db) {
         return BUNNY_DB_ERR_INVALID_ARG;
     }
 
-    const char *sql = "INSERT INTO download_queue (post_id) VALUES (?);";
+    const char *sql = "INSERT INTO download_queue (post_id, pool_id, pool_name, pool_page) VALUES (?, ?, ?, ?);";
     sqlite3_stmt *stmt = NULL;
     if (sqlite3_prepare_v2(db->handle, sql, -1, &stmt, NULL) != SQLITE_OK) {
         return BUNNY_DB_ERR_QUERY_FAILED;
     }
     sqlite3_bind_int64(stmt, 1, post_id);
+    sqlite3_bind_int64(stmt, 2, pool_id);
+    bunny_db_bind_text_or_null(stmt, 3, pool_name);
+    sqlite3_bind_int(stmt, 4, pool_page);
 
     int rc = sqlite3_step(stmt);
     sqlite3_finalize(stmt);
@@ -61,6 +64,9 @@ static void fill_download_queue_item_from_row(sqlite3_stmt *stmt, bunny_db_downl
     out->status = bunny_db_download_queue_status_from_text((const char *)sqlite3_column_text(stmt, 2));
     out->failure_reason = bunny_db_column_text_dup(stmt, 3);
     out->created_at = bunny_db_column_text_dup(stmt, 4);
+    out->pool_id = sqlite3_column_int64(stmt, 5);
+    out->pool_name = bunny_db_column_text_dup(stmt, 6);
+    out->pool_page = sqlite3_column_int(stmt, 7);
 }
 
 bunny_db_result_t bunny_db_download_queue_list(bunny_db_t *db, bunny_db_download_queue_list_t *out_list)
@@ -70,7 +76,7 @@ bunny_db_result_t bunny_db_download_queue_list(bunny_db_t *db, bunny_db_download
     }
     memset(out_list, 0, sizeof(*out_list));
 
-    const char *sql = "SELECT id, post_id, status, failure_reason, created_at FROM download_queue ORDER BY id;";
+    const char *sql = "SELECT id, post_id, status, failure_reason, created_at, pool_id, pool_name, pool_page FROM download_queue ORDER BY id;";
     sqlite3_stmt *stmt = NULL;
     if (sqlite3_prepare_v2(db->handle, sql, -1, &stmt, NULL) != SQLITE_OK) {
         return BUNNY_DB_ERR_QUERY_FAILED;

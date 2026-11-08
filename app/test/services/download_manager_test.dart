@@ -188,6 +188,104 @@ void main() {
     });
   });
 
+  group('pool-aware naming (M65) -- folder/filename scheme when pool context is given', () {
+    test('downloadPost writes under a pool-named folder with a page-numbered, zero-padded filename', () async {
+      final manager = DownloadManager(client: MockClient((_) async => http.Response.bytes([1, 2, 3], 200)));
+      final repository = FakeBunnyRepository();
+
+      final result = await manager.downloadPost(_post(artist: 'someartist'), repository, tempDir.path, poolId: 1234, poolName: 'My Comic', poolPage: 7);
+
+      expect(result.outcome, DownloadOutcome.verified);
+      expect(result.filePath, '${tempDir.path}/pool:1234 - My Comic/1234 - p0007 [42].png');
+    });
+
+    test('sanitizes illegal filesystem characters out of the pool name, same as the artist folder', () async {
+      final manager = DownloadManager(client: MockClient((_) async => http.Response.bytes([1], 200)));
+      final repository = FakeBunnyRepository();
+
+      final result = await manager.downloadPost(_post(), repository, tempDir.path, poolId: 5, poolName: 'Some/Bad:Comic', poolPage: 1);
+
+      expect(result.filePath, '${tempDir.path}/pool:5 - Some_Bad_Comic/5 - p0001 [42].png');
+    });
+
+    test('falls back to "untitled" when poolName is null', () async {
+      final manager = DownloadManager(client: MockClient((_) async => http.Response.bytes([1], 200)));
+      final repository = FakeBunnyRepository();
+
+      final result = await manager.downloadPost(_post(), repository, tempDir.path, poolId: 5, poolName: null, poolPage: 1);
+
+      expect(result.filePath, '${tempDir.path}/pool:5 - untitled/5 - p0001 [42].png');
+    });
+
+    test('a page number past 999 still works without truncating (only pads up to 4 digits)', () async {
+      final manager = DownloadManager(client: MockClient((_) async => http.Response.bytes([1], 200)));
+      final repository = FakeBunnyRepository();
+
+      final result = await manager.downloadPost(_post(), repository, tempDir.path, poolId: 5, poolName: 'Comic', poolPage: 1000);
+
+      expect(result.filePath, '${tempDir.path}/pool:5 - Comic/5 - p1000 [42].png');
+    });
+
+    test('falls back to the plain artist-based scheme when poolId is 0 (not a pool download)', () async {
+      final manager = DownloadManager(client: MockClient((_) async => http.Response.bytes([1], 200)));
+      final repository = FakeBunnyRepository();
+
+      final result = await manager.downloadPost(_post(artist: 'someartist'), repository, tempDir.path, poolName: 'Comic', poolPage: 1);
+
+      expect(result.filePath, '${tempDir.path}/someartist/42.png');
+    });
+
+    test('falls back to the plain artist-based scheme when poolPage is 0, even with a poolId set', () async {
+      final manager = DownloadManager(client: MockClient((_) async => http.Response.bytes([1], 200)));
+      final repository = FakeBunnyRepository();
+
+      final result = await manager.downloadPost(_post(artist: 'someartist'), repository, tempDir.path, poolId: 5, poolName: 'Comic');
+
+      expect(result.filePath, '${tempDir.path}/someartist/42.png');
+    });
+
+    test('isDownloaded checks the pool-named path when pool context is given', () async {
+      final manager = const DownloadManager();
+
+      expect(await manager.isDownloaded(_post(), tempDir.path, poolId: 5, poolName: 'Comic', poolPage: 1), isFalse);
+
+      await Directory('${tempDir.path}/pool:5 - Comic').create(recursive: true);
+      await File('${tempDir.path}/pool:5 - Comic/5 - p0001 [42].png').writeAsBytes([1]);
+
+      expect(await manager.isDownloaded(_post(), tempDir.path, poolId: 5, poolName: 'Comic', poolPage: 1), isTrue);
+    });
+
+    test('a second download of the same pool post with a matching checksum skips the network fetch', () async {
+      final bytes = [1, 2, 3, 4];
+      final expectedMd5 = md5.convert(bytes).toString();
+      await Directory('${tempDir.path}/pool:5 - Comic').create(recursive: true);
+      await File('${tempDir.path}/pool:5 - Comic/5 - p0001 [42].png').writeAsBytes(bytes);
+      final manager = DownloadManager(client: MockClient((_) async => fail('should not have made a network request')));
+      final repository = FakeBunnyRepository();
+
+      final result = await manager.downloadPost(_post(fileMd5: expectedMd5), repository, tempDir.path, poolId: 5, poolName: 'Comic', poolPage: 1);
+
+      expect(result.outcome, DownloadOutcome.verified);
+      expect(result.filePath, '${tempDir.path}/pool:5 - Comic/5 - p0001 [42].png');
+    });
+
+    test('SAF (content:// destination): writes under the pool folder via SafStream', () async {
+      final fakeSafUtil = FakeSafUtilPlatform();
+      final fakeSafStream = FakeSafStreamPlatform(fakeSafUtil);
+      SafUtilPlatform.instance = fakeSafUtil;
+      SafStreamPlatform.instance = fakeSafStream;
+      const treeUri = 'content://com.android.externalstorage.documents/tree/primary%3ADownload';
+      final manager = DownloadManager(client: MockClient((_) async => http.Response.bytes([1, 2, 3], 200)));
+      final repository = FakeBunnyRepository();
+
+      final result = await manager.downloadPost(_post(), repository, treeUri, poolId: 5, poolName: 'Comic', poolPage: 1);
+
+      expect(result.outcome, DownloadOutcome.verified);
+      expect(fakeSafUtil.mkdirpCalls, [(treeUri, 'pool:5 - Comic')]);
+      expect(fakeSafStream.writeFileBytesCalls, [('$treeUri/pool:5 - Comic', '5 - p0001 [42].png', 'image/png')]);
+    });
+  });
+
   test('reports failed on a non-200 response, with the status code as the error message', () async {
     const manager = DownloadManager();
     final repository = FakeBunnyRepository();

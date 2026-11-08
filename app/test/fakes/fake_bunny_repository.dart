@@ -41,6 +41,12 @@ class FakeBunnyRepository implements BunnyRepository {
   /// saved search's results).
   final Map<int, BunnyPost> postsById = {};
 
+  /// Number of times [getPost] should throw for a given post id before
+  /// resolving normally -- simulates a transient failure (e.g. the network
+  /// not being up yet), for exercising [DownloadQueueService]'s retry logic.
+  /// Decrements on each call; once it reaches 0, [getPost] resolves as usual.
+  final Map<int, int> getPostFailuresRemaining = {};
+
   /// Keyed by `'${site.toWireString()}:$query:$page'` -- the posts
   /// [previewSearch] returns for that (site, query, page) triple (M9.6.2
   /// added `page` to support infinite scroll); an unregistered triple
@@ -467,6 +473,11 @@ class FakeBunnyRepository implements BunnyRepository {
 
   @override
   Future<BunnyPost> getPost(int postId) async {
+    final remaining = getPostFailuresRemaining[postId];
+    if (remaining != null && remaining > 0) {
+      getPostFailuresRemaining[postId] = remaining - 1;
+      throw BunnyRepositoryException('simulated transient getPost failure for $postId');
+    }
     final direct = postsById[postId];
     if (direct != null) {
       return direct;
@@ -671,15 +682,15 @@ class FakeBunnyRepository implements BunnyRepository {
   /// Seeds a row as if it had been persisted by a previous run -- for tests
   /// of [DownloadQueueService.restore], which never goes through
   /// [downloadQueueAdd] itself.
-  void seedDownloadQueueRow({required int postId, required String status, String? failureReason}) {
+  void seedDownloadQueueRow({required int postId, required String status, String? failureReason, int poolId = 0, String? poolName, int poolPage = 0}) {
     final id = _nextDownloadQueueId++;
-    _downloadQueueRows[id] = DownloadQueueRecord(id: id, postId: postId, status: status, failureReason: failureReason, createdAt: '2026-01-01T00:00:00Z');
+    _downloadQueueRows[id] = DownloadQueueRecord(id: id, postId: postId, status: status, failureReason: failureReason, createdAt: '2026-01-01T00:00:00Z', poolId: poolId, poolName: poolName, poolPage: poolPage);
   }
 
   @override
-  Future<int> downloadQueueAdd(int postId) async {
+  Future<int> downloadQueueAdd(int postId, {int poolId = 0, String? poolName, int poolPage = 0}) async {
     final id = _nextDownloadQueueId++;
-    _downloadQueueRows[id] = DownloadQueueRecord(id: id, postId: postId, status: 'queued', createdAt: '2026-01-01T00:00:00Z');
+    _downloadQueueRows[id] = DownloadQueueRecord(id: id, postId: postId, status: 'queued', createdAt: '2026-01-01T00:00:00Z', poolId: poolId, poolName: poolName, poolPage: poolPage);
     return id;
   }
 
@@ -689,7 +700,16 @@ class FakeBunnyRepository implements BunnyRepository {
     if (existing == null) {
       return;
     }
-    _downloadQueueRows[id] = DownloadQueueRecord(id: existing.id, postId: existing.postId, status: status, failureReason: failureReason, createdAt: existing.createdAt);
+    _downloadQueueRows[id] = DownloadQueueRecord(
+      id: existing.id,
+      postId: existing.postId,
+      status: status,
+      failureReason: failureReason,
+      createdAt: existing.createdAt,
+      poolId: existing.poolId,
+      poolName: existing.poolName,
+      poolPage: existing.poolPage,
+    );
   }
 
   @override

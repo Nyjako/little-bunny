@@ -131,6 +131,9 @@ void main() {
     expect(items[0]['postId'], 42);
     expect(items[0]['status'], 'queued');
     expect(items[0]['failureReason'], isNull);
+    expect(items[0]['poolId'], 0);
+    expect(items[0]['poolName'], isNull);
+    expect(items[0]['poolPage'], 0);
 
     await native.downloadQueueSetStatus(id, 'failed', failureReason: 'HTTP 500');
     items = await native.downloadQueueList();
@@ -139,6 +142,17 @@ void main() {
 
     await native.downloadQueueClearFinished();
     expect(await native.downloadQueueList(), isEmpty);
+  });
+
+  test('downloadQueueAdd persists pool context (M65)', () async {
+    final id = await native.downloadQueueAdd(99, poolId: 1234, poolName: 'My Comic', poolPage: 7);
+
+    final items = await native.downloadQueueList();
+    expect(items, hasLength(1));
+    expect(items[0]['id'], id);
+    expect(items[0]['poolId'], 1234);
+    expect(items[0]['poolName'], 'My Comic');
+    expect(items[0]['poolPage'], 7);
   });
 
   test('downloadStart/downloadPoll/downloadRelease round-trips a real fetch (M66)', () async {

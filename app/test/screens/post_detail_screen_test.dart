@@ -78,7 +78,7 @@ class _AlreadyDownloadedManager extends DownloadManager {
   const _AlreadyDownloadedManager();
 
   @override
-  Future<bool> isDownloaded(BunnyPost post, String destinationFolder) async => true;
+  Future<bool> isDownloaded(BunnyPost post, String destinationFolder, {int poolId = 0, String? poolName, int poolPage = 0}) async => true;
 }
 
 BunnyPost _post({

@@ -3,6 +3,7 @@ package com.github.nyjako.little_bunny
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
+import android.app.PendingIntent
 import android.app.Service
 import android.content.Intent
 import android.content.pm.ServiceInfo
@@ -96,6 +97,26 @@ class DownloadForegroundService : Service() {
         )
     }
 
+    // Launches/brings MainActivity to the foreground (not a silent background
+    // broadcast) rather than reusing some lighter BroadcastReceiver -- M61's
+    // own investigation already found that swiping the app away from
+    // Recents can kill the whole Dart engine (this service's own
+    // notification is the one thing that survives that independently), so
+    // "resume" tapped from the notification needs a guaranteed-live engine
+    // to actually call back into, same as a normal app launch gets. M65:
+    // see MainActivity.kt's own handling of EXTRA_RESUME_REQUESTED for what
+    // happens once this intent lands.
+    private fun resumeAction(): NotificationCompat.Action {
+        val intent = Intent(this, MainActivity::class.java).apply {
+            action = Intent.ACTION_MAIN
+            addCategory(Intent.CATEGORY_LAUNCHER)
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP
+            putExtra(MainActivity.EXTRA_RESUME_REQUESTED, true)
+        }
+        val pendingIntent = PendingIntent.getActivity(this, 0, intent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+        return NotificationCompat.Action.Builder(0, "Resume", pendingIntent).build()
+    }
+
     private fun progressNotification(done: Int, total: Int, failed: Int, etaText: String?): Notification {
         val failedPart = if (failed > 0) " · $failed failed" else ""
         val etaPart = if (etaText != null) " · ~$etaText left" else ""
@@ -107,6 +128,7 @@ class DownloadForegroundService : Service() {
             .setOnlyAlertOnce(true)
             .setProgress(total, done, false)
             .setPriority(NotificationCompat.PRIORITY_LOW)
+            .addAction(resumeAction())
             .build()
     }
 
@@ -116,6 +138,7 @@ class DownloadForegroundService : Service() {
             .setContentText("$succeeded downloaded, $mismatched checksum mismatch, $failed failed")
             .setSmallIcon(R.drawable.ic_launcher_foreground)
             .setPriority(NotificationCompat.PRIORITY_LOW)
+            .addAction(resumeAction())
             .build()
 
     override fun onBind(intent: Intent?): IBinder? = null

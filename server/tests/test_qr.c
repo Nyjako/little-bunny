@@ -7,8 +7,10 @@
 
 #include "qr.h"
 
-void setUp(void) {}
-void tearDown(void) {}
+void setUp(void)
+{}
+void tearDown(void)
+{}
 
 /* --- server_qr_build_connection_json (pure, offline) -------------------- */
 

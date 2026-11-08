@@ -442,6 +442,36 @@ abstract class AppLocalizations {
   /// **'Check for updates'**
   String get searchesCheckForUpdatesTooltip;
 
+  /// No description provided for @searchesSelectForDownloadTooltip.
+  ///
+  /// In en, this message translates to:
+  /// **'Select searches to download'**
+  String get searchesSelectForDownloadTooltip;
+
+  /// No description provided for @searchesSelectedCount.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} selected'**
+  String searchesSelectedCount(int count);
+
+  /// No description provided for @searchesDownloadSelectedTooltip.
+  ///
+  /// In en, this message translates to:
+  /// **'Download selected'**
+  String get searchesDownloadSelectedTooltip;
+
+  /// No description provided for @searchesMassDownloadQueued.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} queued for download'**
+  String searchesMassDownloadQueued(int count);
+
+  /// No description provided for @searchesMassDownloadError.
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t load all the posts for one or more selected searches. Try again.'**
+  String get searchesMassDownloadError;
+
   /// No description provided for @searchesDownloadQueueTooltip.
   ///
   /// In en, this message translates to:
@@ -1879,6 +1909,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Clear finished'**
   String get downloadQueueClearFinishedTooltip;
+
+  /// No description provided for @downloadQueueResumeTooltip.
+  ///
+  /// In en, this message translates to:
+  /// **'Check for pending downloads'**
+  String get downloadQueueResumeTooltip;
 
   /// No description provided for @downloadQueueChecksumMismatchReason.
   ///

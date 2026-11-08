@@ -798,10 +798,10 @@ class HttpBunnyRepository implements BunnyRepository {
   }
 
   @override
-  Future<int> downloadQueueAdd(int postId) async {
+  Future<int> downloadQueueAdd(int postId, {int poolId = 0, String? poolName, int poolPage = 0}) async {
     final native = await _ensureDownloadQueueNative();
     try {
-      return await native.downloadQueueAdd(postId);
+      return await native.downloadQueueAdd(postId, poolId: poolId, poolName: poolName, poolPage: poolPage);
     } on BunnyCoreNativeException catch (e) {
       throw BunnyRepositoryException(e.message);
     }
@@ -824,7 +824,16 @@ class HttpBunnyRepository implements BunnyRepository {
       final list = await native.downloadQueueList();
       return list
           .map(
-            (m) => DownloadQueueRecord(id: m['id'] as int, postId: m['postId'] as int, status: m['status'] as String, failureReason: m['failureReason'] as String?, createdAt: m['createdAt'] as String),
+            (m) => DownloadQueueRecord(
+              id: m['id'] as int,
+              postId: m['postId'] as int,
+              status: m['status'] as String,
+              failureReason: m['failureReason'] as String?,
+              createdAt: m['createdAt'] as String,
+              poolId: m['poolId'] as int,
+              poolName: m['poolName'] as String?,
+              poolPage: m['poolPage'] as int,
+            ),
           )
           .toList(growable: false);
     } on BunnyCoreNativeException catch (e) {

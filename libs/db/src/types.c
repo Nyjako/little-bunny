@@ -277,6 +277,7 @@ void bunny_db_download_queue_item_free(bunny_db_download_queue_item_t *item)
     }
     free(item->failure_reason);
     free(item->created_at);
+    free(item->pool_name);
     memset(item, 0, sizeof(*item));
 }
 

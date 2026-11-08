@@ -53,9 +53,8 @@ void tearDown(void)
 
 void test_search_tags_maps_results(void)
 {
-    g_e621_state.body =
-        "[{\"id\":1,\"name\":\"fox\",\"post_count\":12345,\"category\":5,\"related_tags\":\"canine wolf\",\"is_locked\":false,"
-        "\"created_at\":\"2020-01-01T00:00:00.000-05:00\",\"updated_at\":\"2020-01-02T00:00:00.000-05:00\"}]";
+    g_e621_state.body = "[{\"id\":1,\"name\":\"fox\",\"post_count\":12345,\"category\":5,\"related_tags\":\"canine wolf\",\"is_locked\":false,"
+                        "\"created_at\":\"2020-01-01T00:00:00.000-05:00\",\"updated_at\":\"2020-01-02T00:00:00.000-05:00\"}]";
 
     bunny_core_tag_list_t tags;
     bunny_core_result_t result = bunny_core_search_tags(g_core, "fox", 0, &tags);
@@ -77,10 +76,9 @@ void test_search_tags_invalid_arg(void)
 
 void test_get_wiki_page_maps_result(void)
 {
-    g_e621_state.body =
-        "[{\"id\":7,\"title\":\"fox\",\"body\":\"A [[canine]] species. See {{author}} for art.\","
-        "\"other_names\":[\"foxes\"],\"is_locked\":false,\"created_at\":\"2020-01-01T00:00:00.000-05:00\","
-        "\"updated_at\":\"2020-01-02T00:00:00.000-05:00\"}]";
+    g_e621_state.body = "[{\"id\":7,\"title\":\"fox\",\"body\":\"A [[canine]] species. See {{author}} for art.\","
+                        "\"other_names\":[\"foxes\"],\"is_locked\":false,\"created_at\":\"2020-01-01T00:00:00.000-05:00\","
+                        "\"updated_at\":\"2020-01-02T00:00:00.000-05:00\"}]";
 
     bunny_core_wiki_page_t page;
     bunny_core_result_t result = bunny_core_get_wiki_page(g_core, "fox", &page);
