@@ -258,8 +258,14 @@ void main() {
 
   testWidgets('the currently-downloading row shows a thumbnail and a determinate batch-progress bar', (WidgetTester tester) async {
     final secondItemGate = Completer<void>();
+    // See "shows a row per concurrently-downloading item"'s own doc comment
+    // for why the poll loop below must wait for this, not just item 2's
+    // status flipping to "downloading" -- a worker can sit claimed for a
+    // while before its fetch call actually reaches the gated await.
+    var secondItemGatingStarted = false;
     repository.downloadFileFetchImpl = (url) async {
       if (url.endsWith('/2.png')) {
+        secondItemGatingStarted = true;
         await secondItemGate.future;
       }
       return http.Response.bytes([1, 2, 3], 200);
@@ -268,7 +274,7 @@ void main() {
 
     await tester.runAsync(() async {
       service.enqueueAll([_post(id: 1, title: 'First'), _post(id: 2, title: 'Second', previewUrl: 'https://example.com/2_preview.jpg')], repository);
-      while (service.downloadingItems.length != 1 || service.downloadingItems.single.post.id != 2) {
+      while (service.downloadingItems.length != 1 || service.downloadingItems.single.post.id != 2 || !secondItemGatingStarted) {
         await Future<void>.delayed(const Duration(milliseconds: 1));
       }
     });
@@ -333,9 +339,22 @@ void main() {
     // immediately ("1 done"); items 2-4 occupy all 3 concurrency slots (all
     // gated, 3 downloading rows); item 5 has nowhere to go ("1 queued").
     final gates = {2: Completer<void>(), 3: Completer<void>(), 4: Completer<void>()};
+    // Tracks which gated requests have actually reached their `await
+    // entry.value.future` below, as opposed to merely being claimed by a
+    // worker (DownloadQueueItemStatus.downloading) -- see the earlier test
+    // in this file ("shows a row per concurrently-downloading item")'s own
+    // doc comment for why the first runAsync block must wait for this, not
+    // just the downloading count: a Future that's still working its way to
+    // its first real await when runAsync returns never gets properly woken
+    // up again by a later runAsync call, which otherwise deadlocks this
+    // test permanently on exactly that item (reproduced locally: item 4's
+    // own fetch call hadn't even started yet by the time the status flip to
+    // "downloading" satisfied a status-only wait condition).
+    final gatingStarted = <int>{};
     repository.downloadFileFetchImpl = (url) async {
       for (final entry in gates.entries) {
         if (url.endsWith('/${entry.key}.png')) {
+          gatingStarted.add(entry.key);
           await entry.value.future;
         }
       }
@@ -345,7 +364,7 @@ void main() {
 
     await tester.runAsync(() async {
       service.enqueueAll(List.generate(5, (i) => _post(id: i + 1)), repository);
-      while (service.downloadingItems.length != 3 || service.pendingCount != 1) {
+      while (service.downloadingItems.length != 3 || service.pendingCount != 1 || gatingStarted.length != 3) {
         await Future<void>.delayed(const Duration(milliseconds: 1));
       }
     });
