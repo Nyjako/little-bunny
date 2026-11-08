@@ -1,0 +1,3 @@
+add_executable(bunny_common_test_md5 test_md5.c)
+target_link_libraries(bunny_common_test_md5 PRIVATE bunny_common unity::framework)
+add_test(NAME bunny_common_test_md5 COMMAND bunny_common_test_md5)
