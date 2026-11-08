@@ -1522,7 +1522,7 @@ void test_action_queue_mark_failed_records_error(void)
 void test_download_queue_add_and_list(void)
 {
     int64_t id = 0;
-    bunny_db_result_t result = bunny_db_download_queue_add(g_db, 42, &id);
+    bunny_db_result_t result = bunny_db_download_queue_add(g_db, 42, 0, NULL, 0, &id);
     TEST_ASSERT_EQUAL(BUNNY_DB_OK, result);
     TEST_ASSERT_TRUE(id > 0);
 
@@ -1534,13 +1534,30 @@ void test_download_queue_add_and_list(void)
     TEST_ASSERT_EQUAL(42, list.items[0].post_id);
     TEST_ASSERT_EQUAL(BUNNY_DB_DOWNLOAD_QUEUE_QUEUED, list.items[0].status);
     TEST_ASSERT_NULL(list.items[0].failure_reason);
+    TEST_ASSERT_EQUAL(0, list.items[0].pool_id);
+    TEST_ASSERT_NULL(list.items[0].pool_name);
+    TEST_ASSERT_EQUAL(0, list.items[0].pool_page);
+    bunny_db_download_queue_list_free(&list);
+}
+
+void test_download_queue_add_with_pool_context(void)
+{
+    int64_t id = 0;
+    bunny_db_result_t result = bunny_db_download_queue_add(g_db, 42, 1234, "My Comic", 7, &id);
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, result);
+
+    bunny_db_download_queue_list_t list;
+    bunny_db_download_queue_list(g_db, &list);
+    TEST_ASSERT_EQUAL(1234, list.items[0].pool_id);
+    TEST_ASSERT_EQUAL_STRING("My Comic", list.items[0].pool_name);
+    TEST_ASSERT_EQUAL(7, list.items[0].pool_page);
     bunny_db_download_queue_list_free(&list);
 }
 
 void test_download_queue_set_status_updates_status_and_failure_reason(void)
 {
     int64_t id = 0;
-    bunny_db_download_queue_add(g_db, 43, &id);
+    bunny_db_download_queue_add(g_db, 43, 0, NULL, 0, &id);
 
     bunny_db_result_t result = bunny_db_download_queue_set_status(g_db, id, BUNNY_DB_DOWNLOAD_QUEUE_FAILED, "HTTP 500");
     TEST_ASSERT_EQUAL(BUNNY_DB_OK, result);
@@ -1556,7 +1573,7 @@ void test_download_queue_set_status_updates_status_and_failure_reason(void)
 void test_download_queue_set_status_clears_a_previous_failure_reason(void)
 {
     int64_t id = 0;
-    bunny_db_download_queue_add(g_db, 44, &id);
+    bunny_db_download_queue_add(g_db, 44, 0, NULL, 0, &id);
     bunny_db_download_queue_set_status(g_db, id, BUNNY_DB_DOWNLOAD_QUEUE_FAILED, "HTTP 500");
 
     bunny_db_result_t result = bunny_db_download_queue_set_status(g_db, id, BUNNY_DB_DOWNLOAD_QUEUE_QUEUED, NULL);
@@ -1572,14 +1589,14 @@ void test_download_queue_set_status_clears_a_previous_failure_reason(void)
 void test_download_queue_clear_finished_drops_terminal_rows_only(void)
 {
     int64_t queued_id = 0, downloading_id = 0, succeeded_id = 0, mismatched_id = 0, failed_id = 0;
-    bunny_db_download_queue_add(g_db, 1, &queued_id);
-    bunny_db_download_queue_add(g_db, 2, &downloading_id);
+    bunny_db_download_queue_add(g_db, 1, 0, NULL, 0, &queued_id);
+    bunny_db_download_queue_add(g_db, 2, 0, NULL, 0, &downloading_id);
     bunny_db_download_queue_set_status(g_db, downloading_id, BUNNY_DB_DOWNLOAD_QUEUE_DOWNLOADING, NULL);
-    bunny_db_download_queue_add(g_db, 3, &succeeded_id);
+    bunny_db_download_queue_add(g_db, 3, 0, NULL, 0, &succeeded_id);
     bunny_db_download_queue_set_status(g_db, succeeded_id, BUNNY_DB_DOWNLOAD_QUEUE_SUCCEEDED, NULL);
-    bunny_db_download_queue_add(g_db, 4, &mismatched_id);
+    bunny_db_download_queue_add(g_db, 4, 0, NULL, 0, &mismatched_id);
     bunny_db_download_queue_set_status(g_db, mismatched_id, BUNNY_DB_DOWNLOAD_QUEUE_CHECKSUM_MISMATCH, NULL);
-    bunny_db_download_queue_add(g_db, 5, &failed_id);
+    bunny_db_download_queue_add(g_db, 5, 0, NULL, 0, &failed_id);
     bunny_db_download_queue_set_status(g_db, failed_id, BUNNY_DB_DOWNLOAD_QUEUE_FAILED, "oops");
 
     bunny_db_result_t result = bunny_db_download_queue_clear_finished(g_db);
@@ -2829,6 +2846,7 @@ int main(void)
     RUN_TEST(test_action_queue_mark_done_removes_from_pending);
     RUN_TEST(test_action_queue_mark_failed_records_error);
     RUN_TEST(test_download_queue_add_and_list);
+    RUN_TEST(test_download_queue_add_with_pool_context);
     RUN_TEST(test_download_queue_set_status_updates_status_and_failure_reason);
     RUN_TEST(test_download_queue_set_status_clears_a_previous_failure_reason);
     RUN_TEST(test_download_queue_clear_finished_drops_terminal_rows_only);

@@ -497,7 +497,8 @@ bunny_core_result_t bunny_core_process_queue(bunny_core_t *core, bunny_core_queu
  * action queue above but with no site/network logic of its own: the actual
  * fetch, file write, and checksum check all happen on the Dart side. */
 
-bunny_core_result_t bunny_core_download_queue_add(bunny_core_t *core, int64_t post_id, int64_t *out_id);
+/* pool_id 0/pool_name NULL for a regular (non-pool) download. */
+bunny_core_result_t bunny_core_download_queue_add(bunny_core_t *core, int64_t post_id, int64_t pool_id, const char *pool_name, int pool_page, int64_t *out_id);
 bunny_core_result_t bunny_core_download_queue_set_status(bunny_core_t *core, int64_t id, bunny_db_download_queue_status_t status, const char *failure_reason);
 bunny_core_result_t bunny_core_download_queue_list(bunny_core_t *core, bunny_db_download_queue_list_t *out_list);
 bunny_core_result_t bunny_core_download_queue_clear_finished(bunny_core_t *core);

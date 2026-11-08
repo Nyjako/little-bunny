@@ -282,6 +282,13 @@ typedef struct
     bunny_db_download_queue_status_t status;
     char *failure_reason; /* may be NULL */
     char *created_at;
+    /* M65 -- 0/NULL (pool_id/pool_name) means this isn't a pool download,
+     * same sentinel convention as bunny_db_search_t.group_id. pool_name is
+     * stored as of enqueue time, not re-resolved later -- the pool could be
+     * renamed/deleted by the time a restored row actually downloads. */
+    int64_t pool_id;
+    char *pool_name; /* may be NULL */
+    int pool_page;
 } bunny_db_download_queue_item_t;
 
 typedef struct

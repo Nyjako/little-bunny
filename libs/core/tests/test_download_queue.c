@@ -26,7 +26,7 @@ void tearDown(void)
 void test_download_queue_add_and_list(void)
 {
     int64_t id = 0;
-    bunny_core_result_t result = bunny_core_download_queue_add(g_core, 42, &id);
+    bunny_core_result_t result = bunny_core_download_queue_add(g_core, 42, 0, NULL, 0, &id);
     TEST_ASSERT_EQUAL(BUNNY_CORE_OK, result);
     TEST_ASSERT_TRUE(id > 0);
 
@@ -43,7 +43,7 @@ void test_download_queue_add_and_list(void)
 void test_download_queue_set_status(void)
 {
     int64_t id = 0;
-    bunny_core_download_queue_add(g_core, 7, &id);
+    bunny_core_download_queue_add(g_core, 7, 0, NULL, 0, &id);
 
     bunny_core_result_t result = bunny_core_download_queue_set_status(g_core, id, BUNNY_DB_DOWNLOAD_QUEUE_FAILED, "HTTP 500");
     TEST_ASSERT_EQUAL(BUNNY_CORE_OK, result);
@@ -58,8 +58,8 @@ void test_download_queue_set_status(void)
 void test_download_queue_clear_finished_drops_terminal_rows_only(void)
 {
     int64_t queued_id = 0, failed_id = 0;
-    bunny_core_download_queue_add(g_core, 1, &queued_id);
-    bunny_core_download_queue_add(g_core, 2, &failed_id);
+    bunny_core_download_queue_add(g_core, 1, 0, NULL, 0, &queued_id);
+    bunny_core_download_queue_add(g_core, 2, 0, NULL, 0, &failed_id);
     bunny_core_download_queue_set_status(g_core, failed_id, BUNNY_DB_DOWNLOAD_QUEUE_FAILED, "oops");
 
     bunny_core_result_t result = bunny_core_download_queue_clear_finished(g_core);

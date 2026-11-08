@@ -105,6 +105,17 @@ static const bunny_db_migration_t BUNNY_DB_MIGRATIONS[] = {
      * set -- see that function's own doc comment for why. Always 0 for
      * e621 rows, which never go through the thin/full distinction. */
     {17, "ALTER TABLE posts ADD COLUMN inkbunny_details_backfilled INTEGER NOT NULL DEFAULT 0;"},
+    /* Lets a download know it's part of a pool (M65), so DownloadManager
+     * (Dart side) can file it under a pool-named folder with a page-numbered
+     * filename instead of the regular per-artist scheme. 0/NULL (never a
+     * real e621/Inkbunny pool id) means "not a pool download" -- same
+     * sentinel convention group_id (migration 11) already uses, not a
+     * second nullable-tracking column. pool_name is stored redundantly
+     * here (not just pool_id) since the pool itself could be renamed or
+     * deleted by the time a restored row actually downloads. */
+    {18, "ALTER TABLE download_queue ADD COLUMN pool_id INTEGER NOT NULL DEFAULT 0;"
+         "ALTER TABLE download_queue ADD COLUMN pool_name TEXT;"
+         "ALTER TABLE download_queue ADD COLUMN pool_page INTEGER NOT NULL DEFAULT 0;"},
 };
 // clang-format on
 
