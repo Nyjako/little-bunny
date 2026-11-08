@@ -20,6 +20,10 @@ const _channelName = 'Downloads';
 /// has a reference to), so it's hardcoded rather than generated at runtime.
 const _windowsGuid = '9a3f5cf1-851e-4f11-ab69-e6dc3cd884b3';
 
+/// Action id for the notification's "Resume" button (M65) -- matched against
+/// `NotificationResponse.actionId` in [initialize]'s response callback.
+const _resumeActionId = 'resume';
+
 /// Real implementation of [DownloadQueueNotifier], wrapping
 /// `flutter_local_notifications`. Every method swallows its own exceptions
 /// (missing permission, unsupported platform, plugin not initialized,
@@ -29,6 +33,14 @@ const _windowsGuid = '9a3f5cf1-851e-4f11-ab69-e6dc3cd884b3';
 /// can see a notification about it.
 class FlutterLocalNotificationsQueueNotifier implements DownloadQueueNotifier {
   final FlutterLocalNotificationsPlugin _plugin;
+
+  /// Set by `main.dart` after construction -- this class deliberately knows
+  /// nothing about [DownloadQueueService]/`BunnyRepository` itself (neither
+  /// is available yet at the point this notifier is constructed, and the
+  /// active repository can change later via a mode switch), so it just
+  /// forwards the "Resume" action tap (M65) as a bare signal and lets the
+  /// caller decide what "resume" means right now.
+  void Function()? onResumeRequested;
 
   FlutterLocalNotificationsQueueNotifier({FlutterLocalNotificationsPlugin? plugin}) : _plugin = plugin ?? FlutterLocalNotificationsPlugin();
 
@@ -52,6 +64,11 @@ class FlutterLocalNotificationsQueueNotifier implements DownloadQueueNotifier {
           linux: LinuxInitializationSettings(defaultActionName: 'Open'),
           windows: WindowsInitializationSettings(appName: 'Little Bunny', appUserModelId: 'com.github.nyjako.little_bunny', guid: _windowsGuid),
         ),
+        onDidReceiveNotificationResponse: (response) {
+          if (response.actionId == _resumeActionId) {
+            onResumeRequested?.call();
+          }
+        },
       );
       if (Platform.isAndroid) {
         await _plugin.resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()?.requestNotificationsPermission();
@@ -72,6 +89,10 @@ class FlutterLocalNotificationsQueueNotifier implements DownloadQueueNotifier {
       showProgress: showProgress,
       maxProgress: maxProgress,
       progress: progress,
+      // showsUserInterface: false -- tapping it fires the response callback
+      // above without bringing the app to the foreground, same as Android's
+      // own system "retry download" notification actions.
+      actions: const [AndroidNotificationAction(_resumeActionId, 'Resume', showsUserInterface: false)],
     ),
   );
 

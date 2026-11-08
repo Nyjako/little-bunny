@@ -20,7 +20,7 @@ import '../fakes/fake_path_provider.dart';
 import '../fakes/fake_secret_store.dart';
 import '../fakes/test_app.dart';
 
-Widget _wrap(FakeBunnyRepository repository) => wrapWithLocalization(
+Widget _wrap(FakeBunnyRepository repository, {DownloadQueueService? downloadQueueService}) => wrapWithLocalization(
   BunnyRepositoryScope(
     repository: repository,
     child: SearchesScreen(
@@ -28,7 +28,7 @@ Widget _wrap(FakeBunnyRepository repository) => wrapWithLocalization(
       themeSettingsStore: const ThemeSettingsStore(),
       displaySettingsStore: const DisplaySettingsStore(),
       downloadSettingsStore: const DownloadSettingsStore(),
-      downloadQueueService: DownloadQueueService(downloadManager: const DownloadManager(), downloadSettingsStore: const DownloadSettingsStore()),
+      downloadQueueService: downloadQueueService ?? DownloadQueueService(downloadManager: const DownloadManager(), downloadSettingsStore: const DownloadSettingsStore()),
       settingsStore: RepositorySettingsStore(FakeSecretStore()),
       onThemeModeChanged: (_) {},
       onThemeColorChanged: (_) {},
@@ -241,6 +241,43 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Foxes'), findsOneWidget);
+  });
+
+  testWidgets('selecting multiple searches and downloading queues every post from each (M65)', (WidgetTester tester) async {
+    final repository = FakeBunnyRepository();
+    final firstId = await repository.createSearch(BunnySite.e621, 'Foxes', 'fox');
+    final secondId = await repository.createSearch(BunnySite.e621, 'Wolves', 'wolf');
+    repository.postsBySearchId[firstId] = [
+      BunnyPost(id: 1, site: BunnySite.e621, externalId: 1, score: 0, favCount: 0, commentCount: 0, width: 100, height: 100, cachedAt: '2026-01-01T00:00:00Z', isSeen: false, isFavorited: false),
+    ];
+    repository.postsBySearchId[secondId] = [
+      BunnyPost(id: 2, site: BunnySite.e621, externalId: 2, score: 0, favCount: 0, commentCount: 0, width: 100, height: 100, cachedAt: '2026-01-01T00:00:00Z', isSeen: false, isFavorited: false),
+      BunnyPost(id: 3, site: BunnySite.e621, externalId: 3, score: 0, favCount: 0, commentCount: 0, width: 100, height: 100, cachedAt: '2026-01-01T00:00:00Z', isSeen: false, isFavorited: false),
+    ];
+    final downloadQueueService = DownloadQueueService(downloadManager: const DownloadManager(), downloadSettingsStore: const DownloadSettingsStore());
+
+    await tester.pumpWidget(_wrap(repository, downloadQueueService: downloadQueueService));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byIcon(Icons.sort));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Select searches to download'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('0 selected'), findsOneWidget);
+    await tester.tap(find.text('Foxes'));
+    await tester.tap(find.text('Wolves'));
+    await tester.pumpAndSettle();
+    expect(find.text('2 selected'), findsOneWidget);
+
+    await tester.tap(find.byTooltip('Download selected'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('3 queued for download'), findsOneWidget);
+    expect(downloadQueueService.totalCount, 3);
+    expect(downloadQueueService.items.map((item) => item.post.id).toSet(), {1, 2, 3});
+    // Exits selection mode and clears the selection once queued.
+    expect(find.text('Searches'), findsWidgets);
   });
 
   testWidgets('sort order defaults to most-unseen-first and persists a change (M13.1)', (WidgetTester tester) async {

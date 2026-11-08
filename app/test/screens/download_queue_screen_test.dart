@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
+import 'package:little_bunny/bunny_repository_scope.dart';
 import 'package:little_bunny/repository/bunny_models.dart';
 import 'package:little_bunny/screens/download_queue_screen.dart';
 import 'package:little_bunny/services/download_manager.dart';
@@ -61,7 +62,7 @@ void main() {
     }
   });
 
-  Widget wrap(DownloadQueueService service) => wrapWithLocalization(DownloadQueueScreen(downloadQueueService: service));
+  Widget wrap(DownloadQueueService service) => wrapWithLocalization(BunnyRepositoryScope(repository: repository, child: DownloadQueueScreen(downloadQueueService: service)));
 
   testWidgets('shows the empty state when nothing is queued', (WidgetTester tester) async {
     final service = DownloadQueueService(downloadManager: const DownloadManager(), downloadSettingsStore: const DownloadSettingsStore());
@@ -70,6 +71,29 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Nothing here right now.'), findsOneWidget);
+  });
+
+  testWidgets('tapping the resume button re-checks the persisted queue (M65)', (WidgetTester tester) async {
+    final service = DownloadQueueService(downloadManager: DownloadManager(client: MockClient((_) async => http.Response.bytes([1, 2, 3], 200))), downloadSettingsStore: const DownloadSettingsStore());
+    repository.postsById[1] = _post(id: 1, title: 'Resumed');
+    repository.seedDownloadQueueRow(postId: 1, status: 'queued');
+
+    await tester.pumpWidget(wrap(service));
+    await tester.pumpAndSettle();
+    expect(find.text('Nothing here right now.'), findsOneWidget);
+
+    await tester.runAsync(() async {
+      await tester.tap(find.byTooltip('Check for pending downloads'));
+      while (service.totalCount == 0) {
+        await Future<void>.delayed(const Duration(milliseconds: 1));
+      }
+      while (service.isActive) {
+        await Future<void>.delayed(const Duration(milliseconds: 1));
+      }
+    });
+    await tester.pump();
+
+    expect(service.succeededCount, 1);
   });
 
   testWidgets('shows a row per concurrently-downloading item, alongside queued/failed counts (M62)', (WidgetTester tester) async {

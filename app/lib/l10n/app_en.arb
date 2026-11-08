@@ -87,6 +87,17 @@
   "searchesSortRecentlyCreated": "Recently created",
   "searchesSortLastViewed": "Last viewed",
   "searchesCheckForUpdatesTooltip": "Check for updates",
+  "searchesSelectForDownloadTooltip": "Select searches to download",
+  "searchesSelectedCount": "{count} selected",
+  "@searchesSelectedCount": {
+    "placeholders": {"count": {"type": "int"}}
+  },
+  "searchesDownloadSelectedTooltip": "Download selected",
+  "searchesMassDownloadQueued": "{count} queued for download",
+  "@searchesMassDownloadQueued": {
+    "placeholders": {"count": {"type": "int"}}
+  },
+  "searchesMassDownloadError": "Couldn't load all the posts for one or more selected searches. Try again.",
   "searchesDownloadQueueTooltip": "Downloads",
   "searchesSyncAllProgress": "{done}/{total} checked",
   "@searchesSyncAllProgress": {
@@ -445,6 +456,7 @@
   "downloadQueueRetryTooltip": "Retry",
   "downloadQueueRetryAllTooltip": "Retry all",
   "downloadQueueClearFinishedTooltip": "Clear finished",
+  "downloadQueueResumeTooltip": "Check for pending downloads",
   "downloadQueueChecksumMismatchReason": "Downloaded, but the checksum didn't match",
   "downloadQueueQueuedCount": "{count} queued",
   "@downloadQueueQueuedCount": {

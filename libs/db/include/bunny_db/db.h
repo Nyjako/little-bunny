@@ -455,7 +455,9 @@ bunny_db_result_t bunny_db_action_queue_mark_failed(bunny_db_t *db, int64_t acti
  * queued/downloading/failed -- bunny_db itself never touches a file or the
  * network, same arm's-length relationship it has with action_queue above. */
 
-bunny_db_result_t bunny_db_download_queue_add(bunny_db_t *db, int64_t post_id, int64_t *out_id);
+/* pool_id 0/pool_name NULL for a regular (non-pool) download -- see
+ * bunny_db_download_queue_item_t's own doc comment. */
+bunny_db_result_t bunny_db_download_queue_add(bunny_db_t *db, int64_t post_id, int64_t pool_id, const char *pool_name, int pool_page, int64_t *out_id);
 bunny_db_result_t bunny_db_download_queue_set_status(bunny_db_t *db, int64_t id, bunny_db_download_queue_status_t status, const char *failure_reason);
 bunny_db_result_t bunny_db_download_queue_list(bunny_db_t *db, bunny_db_download_queue_list_t *out_list);
 bunny_db_result_t bunny_db_download_queue_clear_finished(bunny_db_t *db);

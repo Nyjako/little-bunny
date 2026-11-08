@@ -1,6 +1,7 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 
+import '../bunny_repository_scope.dart';
 import '../l10n/app_localizations.dart';
 import '../repository/bunny_models.dart';
 import '../services/download_queue_service.dart';
@@ -117,6 +118,18 @@ class DownloadQueueScreen extends StatelessWidget {
       appBar: AppBar(
         title: Text(l10n.downloadQueueScreenTitle),
         actions: [
+          // Always visible, not conditional on anything -- cheap to call
+          // even when there's nothing to resume (M65). The main reason this
+          // exists: restore()'s own automatic retries at launch are
+          // best-effort, not a guarantee -- a networked-mode server/network
+          // that's still not reachable after those few retries leaves rows
+          // persisted but unresolved, with nothing else that would ever
+          // retry them again without the user asking.
+          IconButton(
+            icon: const Icon(Icons.sync),
+            tooltip: l10n.downloadQueueResumeTooltip,
+            onPressed: () => downloadQueueService.resume(BunnyRepositoryScope.of(context)),
+          ),
           AnimatedBuilder(
             animation: downloadQueueService,
             builder: (context, child) => downloadQueueService.failedItems.isEmpty

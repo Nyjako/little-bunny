@@ -326,8 +326,9 @@ abstract interface class BunnyRepository {
   /// mode stores this in the same database as everything else;
   /// [HttpBunnyRepository] keeps its own small dedicated local db for this
   /// one table, since networked mode has no local cache of posts/searches to
-  /// share a database with.
-  Future<int> downloadQueueAdd(int postId);
+  /// share a database with. [poolId]/[poolName]/[poolPage] (M65) mark this
+  /// as a pool download -- see [DownloadQueueRecord]'s own doc comment.
+  Future<int> downloadQueueAdd(int postId, {int poolId = 0, String? poolName, int poolPage = 0});
 
   /// Updates [id]'s status in place -- [status] is one of `'queued'`,
   /// `'downloading'`, `'succeeded'`, `'checksum_mismatch'`, or `'failed'`,

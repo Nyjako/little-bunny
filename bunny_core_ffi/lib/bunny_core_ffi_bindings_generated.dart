@@ -2113,20 +2113,24 @@ class BunnyCoreFfiBindings {
         )
       >();
 
-  /// --- Download queue --------------------------------------------------------------
-  /// Tracks DownloadManager's own file fetches (the Flutter app's, not anything
-  /// this library fetches itself) through to completion, so a killed/restarted
-  /// process doesn't lose track of what was queued/downloading/failed -- thin
-  /// lock/unlock pass-throughs to bunny_db_download_queue_*, same shape as the
-  /// action queue above but with no site/network logic of its own: the actual
-  /// fetch, file write, and checksum check all happen on the Dart side.
+  /// pool_id 0/pool_name NULL for a regular (non-pool) download.
   bunny_core_result_t bunny_core_download_queue_add(
     ffi.Pointer<bunny_core_t> core,
     int post_id,
+    int pool_id,
+    ffi.Pointer<ffi.Char> pool_name,
+    int pool_page,
     ffi.Pointer<ffi.Int64> out_id,
   ) {
     return bunny_core_result_t.fromValue(
-      _bunny_core_download_queue_add(core, post_id, out_id),
+      _bunny_core_download_queue_add(
+        core,
+        post_id,
+        pool_id,
+        pool_name,
+        pool_page,
+        out_id,
+      ),
     );
   }
 
@@ -2136,13 +2140,23 @@ class BunnyCoreFfiBindings {
           ffi.UnsignedInt Function(
             ffi.Pointer<bunny_core_t>,
             ffi.Int64,
+            ffi.Int64,
+            ffi.Pointer<ffi.Char>,
+            ffi.Int,
             ffi.Pointer<ffi.Int64>,
           )
         >
       >('bunny_core_download_queue_add');
   late final _bunny_core_download_queue_add = _bunny_core_download_queue_addPtr
       .asFunction<
-        int Function(ffi.Pointer<bunny_core_t>, int, ffi.Pointer<ffi.Int64>)
+        int Function(
+          ffi.Pointer<bunny_core_t>,
+          int,
+          int,
+          ffi.Pointer<ffi.Char>,
+          int,
+          ffi.Pointer<ffi.Int64>,
+        )
       >();
 
   bunny_core_result_t bunny_core_download_queue_set_status(
@@ -2968,6 +2982,19 @@ final class bunny_db_download_queue_item_t extends ffi.Struct {
   external ffi.Pointer<ffi.Char> failure_reason;
 
   external ffi.Pointer<ffi.Char> created_at;
+
+  /// M65 -- 0/NULL (pool_id/pool_name) means this isn't a pool download,
+  /// same sentinel convention as bunny_db_search_t.group_id. pool_name is
+  /// stored as of enqueue time, not re-resolved later -- the pool could be
+  /// renamed/deleted by the time a restored row actually downloads.
+  @ffi.Int64()
+  external int pool_id;
+
+  /// may be NULL
+  external ffi.Pointer<ffi.Char> pool_name;
+
+  @ffi.Int()
+  external int pool_page;
 }
 
 final class bunny_db_download_queue_list_t extends ffi.Struct {

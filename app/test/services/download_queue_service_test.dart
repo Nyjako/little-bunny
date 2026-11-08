@@ -459,6 +459,58 @@ void main() {
       expect(restored.totalCount, 1);
       expect(restored.items.single.post.id, 2);
     });
+
+    test('restore retries a transient getPost failure (M65) and still succeeds once it recovers', () async {
+      final post = _post(id: 1);
+      repository.postsById[1] = post;
+      // Fails on the first 2 attempts (e.g. network not up yet at cold
+      // boot), succeeds on the 3rd -- within _getPostRetries' budget.
+      repository.getPostFailuresRemaining[1] = 2;
+      repository.seedDownloadQueueRow(postId: 1, status: 'queued');
+
+      final restored = buildService(client: MockClient((_) async => http.Response.bytes([1, 2, 3], 200)));
+      await restored.restore(repository);
+
+      expect(restored.totalCount, 1);
+      await waitUntilIdle(restored);
+      expect(restored.succeededCount, 1);
+    });
+
+    test('resume (M65) re-checks a row that failed to resolve on the earlier restore() call and picks it up', () async {
+      final post = _post(id: 1);
+      repository.postsById[1] = post;
+      // Exhausts restore()'s retry budget entirely -- the row is left out of
+      // the queue after the first restore() call.
+      repository.getPostFailuresRemaining[1] = 10;
+      repository.seedDownloadQueueRow(postId: 1, status: 'queued');
+
+      final service = buildService(client: MockClient((_) async => http.Response.bytes([1, 2, 3], 200)));
+      await service.restore(repository);
+      expect(service.totalCount, 0);
+
+      // The network has "recovered" by the time resume() is called.
+      repository.getPostFailuresRemaining[1] = 0;
+      await service.resume(repository);
+
+      expect(service.totalCount, 1);
+      await waitUntilIdle(service);
+      expect(service.succeededCount, 1);
+    });
+
+    test('resume (M65) does not duplicate a row already pulled in by a previous restore()', () async {
+      final post = _post(id: 1);
+      repository.postsById[1] = post;
+      repository.seedDownloadQueueRow(postId: 1, status: 'queued');
+
+      final service = buildService(client: MockClient((_) async => http.Response.bytes([1, 2, 3], 200)));
+      await service.restore(repository);
+      await waitUntilIdle(service);
+      expect(service.items, hasLength(1));
+
+      await service.resume(repository);
+
+      expect(service.items, hasLength(1));
+    });
   });
 
   test('showStarting fires before the first HTTP request completes (M57 screen-lock fix)', () async {
