@@ -4,8 +4,10 @@
 
 #include "bunny_common/md5.h"
 
-void setUp(void) {}
-void tearDown(void) {}
+void setUp(void)
+{}
+void tearDown(void)
+{}
 
 static void assert_md5(const char *input, const char *expected_hex)
 {
@@ -44,12 +46,10 @@ void test_incremental_matches_one_shot(void)
     bunny_md5(input, len, one_shot_hex);
 
     bunny_md5_init(&ctx);
-    while (offset < len)
-    {
+    while (offset < len) {
         size_t chunk = chunk_sizes[chunk_index % (sizeof(chunk_sizes) / sizeof(chunk_sizes[0]))];
         chunk_index++;
-        if (chunk > len - offset)
-        {
+        if (chunk > len - offset) {
             chunk = len - offset;
         }
         bunny_md5_update(&ctx, input + offset, chunk);

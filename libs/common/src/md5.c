@@ -12,29 +12,29 @@
 
 #define BUNNY_MD5_ROTL(x, n) (((x) << (n)) | ((x) >> (32 - (n))))
 
-#define BUNNY_MD5_FF(a, b, c, d, x, s, ac)                                                       \
-    {                                                                                            \
-        (a) += BUNNY_MD5_F((b), (c), (d)) + (x) + (uint32_t)(ac);                                \
-        (a) = BUNNY_MD5_ROTL((a), (s));                                                          \
-        (a) += (b);                                                                              \
+#define BUNNY_MD5_FF(a, b, c, d, x, s, ac)                        \
+    {                                                             \
+        (a) += BUNNY_MD5_F((b), (c), (d)) + (x) + (uint32_t)(ac); \
+        (a) = BUNNY_MD5_ROTL((a), (s));                           \
+        (a) += (b);                                               \
     }
-#define BUNNY_MD5_GG(a, b, c, d, x, s, ac)                                                       \
-    {                                                                                            \
-        (a) += BUNNY_MD5_G((b), (c), (d)) + (x) + (uint32_t)(ac);                                \
-        (a) = BUNNY_MD5_ROTL((a), (s));                                                          \
-        (a) += (b);                                                                              \
+#define BUNNY_MD5_GG(a, b, c, d, x, s, ac)                        \
+    {                                                             \
+        (a) += BUNNY_MD5_G((b), (c), (d)) + (x) + (uint32_t)(ac); \
+        (a) = BUNNY_MD5_ROTL((a), (s));                           \
+        (a) += (b);                                               \
     }
-#define BUNNY_MD5_HH(a, b, c, d, x, s, ac)                                                       \
-    {                                                                                            \
-        (a) += BUNNY_MD5_H((b), (c), (d)) + (x) + (uint32_t)(ac);                                \
-        (a) = BUNNY_MD5_ROTL((a), (s));                                                          \
-        (a) += (b);                                                                              \
+#define BUNNY_MD5_HH(a, b, c, d, x, s, ac)                        \
+    {                                                             \
+        (a) += BUNNY_MD5_H((b), (c), (d)) + (x) + (uint32_t)(ac); \
+        (a) = BUNNY_MD5_ROTL((a), (s));                           \
+        (a) += (b);                                               \
     }
-#define BUNNY_MD5_II(a, b, c, d, x, s, ac)                                                       \
-    {                                                                                            \
-        (a) += BUNNY_MD5_I((b), (c), (d)) + (x) + (uint32_t)(ac);                                \
-        (a) = BUNNY_MD5_ROTL((a), (s));                                                          \
-        (a) += (b);                                                                              \
+#define BUNNY_MD5_II(a, b, c, d, x, s, ac)                        \
+    {                                                             \
+        (a) += BUNNY_MD5_I((b), (c), (d)) + (x) + (uint32_t)(ac); \
+        (a) = BUNNY_MD5_ROTL((a), (s));                           \
+        (a) += (b);                                               \
     }
 
 /* Processes exactly one 64-byte block, folding it into state. */
@@ -44,8 +44,7 @@ static void bunny_md5_transform(uint32_t state[4], const unsigned char block[64]
     uint32_t x[16];
     int i;
 
-    for (i = 0; i < 16; i++)
-    {
+    for (i = 0; i < 16; i++) {
         x[i] = (uint32_t)block[i * 4] | ((uint32_t)block[i * 4 + 1] << 8) | ((uint32_t)block[i * 4 + 2] << 16) | ((uint32_t)block[i * 4 + 3] << 24);
     }
 
@@ -138,11 +137,9 @@ void bunny_md5_update(bunny_md5_ctx_t *ctx, const void *data, size_t len)
     const unsigned char *p = (const unsigned char *)data;
     ctx->total_len += len;
 
-    while (len > 0)
-    {
+    while (len > 0) {
         size_t take = 64 - ctx->buffer_len;
-        if (take > len)
-        {
+        if (take > len) {
             take = len;
         }
         memcpy(ctx->buffer + ctx->buffer_len, p, take);
@@ -150,8 +147,7 @@ void bunny_md5_update(bunny_md5_ctx_t *ctx, const void *data, size_t len)
         p += take;
         len -= take;
 
-        if (ctx->buffer_len == 64)
-        {
+        if (ctx->buffer_len == 64) {
             bunny_md5_transform(ctx->state, ctx->buffer);
             ctx->buffer_len = 0;
         }
@@ -172,23 +168,19 @@ void bunny_md5_final(bunny_md5_ctx_t *ctx, char out_hex[33])
      * in this block -- bunny_md5_update's own 64-byte flush logic already
      * handles wrapping into a fresh block if the 0x80 byte above left less
      * than 8 bytes of room. */
-    while (ctx->buffer_len != 56)
-    {
+    while (ctx->buffer_len != 56) {
         bunny_md5_update(ctx, &zero_byte, 1);
     }
 
-    for (i = 0; i < 8; i++)
-    {
+    for (i = 0; i < 8; i++) {
         length_bytes[i] = (unsigned char)(bit_len >> (8 * i));
     }
     bunny_md5_update(ctx, length_bytes, 8);
 
-    for (i = 0; i < 4; i++)
-    {
+    for (i = 0; i < 4; i++) {
         uint32_t word = ctx->state[i];
         size_t byte_index;
-        for (byte_index = 0; byte_index < 4; byte_index++)
-        {
+        for (byte_index = 0; byte_index < 4; byte_index++) {
             unsigned char byte_value = (unsigned char)(word >> (8 * byte_index));
             out_hex[(i * 4 + byte_index) * 2] = hex_digits[(byte_value >> 4) & 0xf];
             out_hex[(i * 4 + byte_index) * 2 + 1] = hex_digits[byte_value & 0xf];
