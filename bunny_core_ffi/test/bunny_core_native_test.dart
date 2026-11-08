@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:bunny_core_ffi/bunny_core_ffi.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -137,6 +139,59 @@ void main() {
 
     await native.downloadQueueClearFinished();
     expect(await native.downloadQueueList(), isEmpty);
+  });
+
+  test('downloadStart/downloadPoll/downloadRelease round-trips a real fetch (M66)', () async {
+    const body = 'the quick brown fox jumps over the lazy dog';
+    final server = await HttpServer.bind('127.0.0.1', 0);
+    final tempDir = await Directory.systemTemp.createTemp('bunny_core_ffi_download_test');
+    try {
+      server.listen((request) async {
+        request.response.statusCode = 200;
+        request.response.write(body);
+        await request.response.close();
+      });
+
+      final handle = await native.downloadStart('http://127.0.0.1:${server.port}/', const {}, tempDir.path, 'test.bin', null);
+      expect(handle, greaterThanOrEqualTo(0));
+
+      Map<String, Object?> result;
+      do {
+        await Future<void>.delayed(const Duration(milliseconds: 10));
+        result = await native.downloadPoll(handle);
+      } while (result['done'] != true);
+      await native.downloadRelease(handle);
+
+      expect(result['outcome'], 'verified');
+      expect(result['received'], body.length);
+      expect(await File('${tempDir.path}/test.bin').readAsString(), body);
+    } finally {
+      await server.close(force: true);
+      await tempDir.delete(recursive: true);
+    }
+  });
+
+  test('downloadStart skips the fetch when a verified file already exists (M66)', () async {
+    const body = 'already on disk';
+    final tempDir = await Directory.systemTemp.createTemp('bunny_core_ffi_download_test');
+    try {
+      await File('${tempDir.path}/test.bin').writeAsString(body);
+
+      // Nothing listens on this port -- if the fetch were actually
+      // attempted, polling would never report a 'verified' outcome.
+      final handle = await native.downloadStart('http://127.0.0.1:1/unreachable', const {}, tempDir.path, 'test.bin', null);
+
+      Map<String, Object?> result;
+      do {
+        await Future<void>.delayed(const Duration(milliseconds: 10));
+        result = await native.downloadPoll(handle);
+      } while (result['done'] != true);
+      await native.downloadRelease(handle);
+
+      expect(result['outcome'], 'verified');
+    } finally {
+      await tempDir.delete(recursive: true);
+    }
   });
 
   test('tagAutocomplete returns an empty list when nothing is cached', () async {
