@@ -4,6 +4,7 @@ add_library(bunny_common STATIC
     src/rate_limit.c
     src/goblin_impl.c
     src/md5.c
+    src/download.c
 )
 
 target_include_directories(bunny_common
