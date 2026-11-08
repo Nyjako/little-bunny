@@ -1,5 +1,8 @@
 import 'dart:async';
+import 'dart:io';
 
+import 'package:crypto/crypto.dart';
+import 'package:http/http.dart' as http;
 import 'package:little_bunny/repository/bunny_models.dart';
 import 'package:little_bunny/repository/bunny_repository.dart';
 import 'package:little_bunny/util/media_type.dart';
@@ -695,6 +698,54 @@ class FakeBunnyRepository implements BunnyRepository {
   @override
   Future<void> downloadQueueClearFinished() async {
     _downloadQueueRows.removeWhere((_, row) => row.status == 'succeeded' || row.status == 'checksum_mismatch' || row.status == 'failed');
+  }
+
+  /// Overrides [downloadFile]'s simulated fetch (M66) -- the real native
+  /// implementation this replaces hands tests nothing to inject a fake
+  /// transport into (it's curl-specific), so this fake instead mirrors the
+  /// old fake-[http.Client]-based tests as closely as possible: supply a
+  /// function (given the requested URL, same as a `MockClient` handler
+  /// would see it, for tests that branch per-URL) returning an
+  /// [http.Response], and this writes whatever bytes it returns to
+  /// `destDir/filename` for real, then verifies/reports the outcome
+  /// exactly like the real implementation does (including the
+  /// skip-fetch-if-already-verified fast path below). Defaults to a
+  /// successful empty-body fetch.
+  Future<http.Response> Function(String fileUrl)? downloadFileFetchImpl;
+
+  /// Full override of [downloadFile] itself, for a test that needs to drive
+  /// `onProgress` on its own timeline (e.g. simulating bytes arriving in
+  /// separate chunks over time) rather than the one-shot-response shape
+  /// [downloadFileFetchImpl] covers -- takes priority over it when set.
+  Future<DownloadFetchResult> Function(String fileUrl, String destDir, String filename, String? expectedMd5, void Function(int received, int? total) onProgress)? downloadFileImpl;
+
+  @override
+  Future<DownloadFetchResult> downloadFile(String fileUrl, Map<String, String> extraHeaders, String destDir, String filename, String? expectedMd5, void Function(int received, int? total) onProgress) async {
+    if (downloadFileImpl != null) {
+      return downloadFileImpl!(fileUrl, destDir, filename, expectedMd5, onProgress);
+    }
+    final file = File('$destDir/$filename');
+    if (await file.exists()) {
+      final existingBytes = await file.readAsBytes();
+      final matchesAlready = expectedMd5 == null || expectedMd5.isEmpty || expectedMd5.toLowerCase() == md5.convert(existingBytes).toString();
+      if (matchesAlready) {
+        return const DownloadFetchResult(outcome: 'verified');
+      }
+    }
+
+    final response = downloadFileFetchImpl != null ? await downloadFileFetchImpl!(fileUrl) : http.Response.bytes(const [], 200);
+    if (response.statusCode != 200) {
+      return DownloadFetchResult(outcome: 'failed', errorMessage: 'HTTP ${response.statusCode}');
+    }
+
+    final bytes = response.bodyBytes;
+    onProgress(bytes.length, bytes.length);
+    await Directory(destDir).create(recursive: true);
+    await file.writeAsBytes(bytes);
+
+    final checksum = md5.convert(bytes).toString();
+    final verified = expectedMd5 == null || expectedMd5.isEmpty || expectedMd5.toLowerCase() == checksum;
+    return DownloadFetchResult(outcome: verified ? 'verified' : 'checksumMismatch');
   }
 
   @override

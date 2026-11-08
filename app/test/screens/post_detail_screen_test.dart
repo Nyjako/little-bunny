@@ -5,8 +5,6 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:http/http.dart' as http;
-import 'package:http/testing.dart';
 import 'package:just_audio_platform_interface/just_audio_platform_interface.dart';
 import 'package:little_bunny/repository/bunny_models.dart';
 import 'package:little_bunny/screens/create_search_screen.dart';
@@ -1447,7 +1445,7 @@ void main() {
     testWidgets('tapping download enqueues the post and shows immediate queued feedback (M43)', (WidgetTester tester) async {
       final repository = FakeBunnyRepository();
       final post = _post(fileExt: 'jpg');
-      final downloadQueueService = DownloadQueueService(downloadManager: DownloadManager(client: MockClient((_) async => http.Response.bytes([1, 2, 3], 200))), downloadSettingsStore: const DownloadSettingsStore());
+      final downloadQueueService = DownloadQueueService(downloadManager: const DownloadManager(), downloadSettingsStore: const DownloadSettingsStore());
 
       await tester.pumpWidget(
         wrapWithLocalization(
@@ -1473,7 +1471,7 @@ void main() {
       SharedPreferences.setMockInitialValues({'download_destination_folder': tempDir.path, 'auto_favorite_on_download': true});
       final repository = FakeBunnyRepository();
       final post = _post(fileExt: 'jpg');
-      final downloadQueueService = DownloadQueueService(downloadManager: DownloadManager(client: MockClient((_) async => http.Response.bytes([1, 2, 3], 200))), downloadSettingsStore: const DownloadSettingsStore());
+      final downloadQueueService = DownloadQueueService(downloadManager: const DownloadManager(), downloadSettingsStore: const DownloadSettingsStore());
 
       await tester.pumpWidget(
         wrapWithLocalization(
@@ -1510,7 +1508,7 @@ void main() {
     testWidgets('does not queue a favorite when auto-favorite-on-download is off (the default)', (WidgetTester tester) async {
       final repository = FakeBunnyRepository();
       final post = _post(fileExt: 'jpg');
-      final downloadQueueService = DownloadQueueService(downloadManager: DownloadManager(client: MockClient((_) async => http.Response.bytes([1, 2, 3], 200))), downloadSettingsStore: const DownloadSettingsStore());
+      final downloadQueueService = DownloadQueueService(downloadManager: const DownloadManager(), downloadSettingsStore: const DownloadSettingsStore());
 
       await tester.pumpWidget(
         wrapWithLocalization(
@@ -1548,7 +1546,7 @@ void main() {
       SharedPreferences.setMockInitialValues({'download_destination_folder': tempDir.path, 'auto_upvote_on_download': true});
       final repository = FakeBunnyRepository();
       final post = _post(fileExt: 'jpg');
-      final downloadQueueService = DownloadQueueService(downloadManager: DownloadManager(client: MockClient((_) async => http.Response.bytes([1, 2, 3], 200))), downloadSettingsStore: const DownloadSettingsStore());
+      final downloadQueueService = DownloadQueueService(downloadManager: const DownloadManager(), downloadSettingsStore: const DownloadSettingsStore());
 
       await tester.pumpWidget(
         wrapWithLocalization(
@@ -1585,7 +1583,7 @@ void main() {
     testWidgets('does not queue an upvote when auto-upvote-on-download is off (the default)', (WidgetTester tester) async {
       final repository = FakeBunnyRepository();
       final post = _post(fileExt: 'jpg');
-      final downloadQueueService = DownloadQueueService(downloadManager: DownloadManager(client: MockClient((_) async => http.Response.bytes([1, 2, 3], 200))), downloadSettingsStore: const DownloadSettingsStore());
+      final downloadQueueService = DownloadQueueService(downloadManager: const DownloadManager(), downloadSettingsStore: const DownloadSettingsStore());
 
       await tester.pumpWidget(
         wrapWithLocalization(
