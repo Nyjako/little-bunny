@@ -2,6 +2,7 @@ import 'package:bunny_core_ffi/bunny_core_ffi.dart';
 
 import 'bunny_models.dart';
 import 'bunny_repository.dart';
+import 'download_file_native.dart';
 
 BunnyAccount _accountFromMap(Map<String, Object?> m) => BunnyAccount(
   id: m['id'] as int,
@@ -486,4 +487,8 @@ class FfiBunnyRepository implements BunnyRepository {
 
   @override
   Future<void> downloadQueueClearFinished() => _wrapped(() => _native.downloadQueueClearFinished());
+
+  @override
+  Future<DownloadFetchResult> downloadFile(String fileUrl, Map<String, String> extraHeaders, String destDir, String filename, String? expectedMd5, void Function(int received, int? total) onProgress) =>
+      downloadFileViaNative(_native, fileUrl, extraHeaders, destDir, filename, expectedMd5, onProgress);
 }

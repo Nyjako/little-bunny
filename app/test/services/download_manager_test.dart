@@ -7,12 +7,10 @@ import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:little_bunny/repository/bunny_models.dart';
 import 'package:little_bunny/services/download_manager.dart';
-import 'package:path_provider_platform_interface/path_provider_platform_interface.dart';
 import 'package:saf_stream/saf_stream_platform_interface.dart';
 import 'package:saf_util/saf_util_platform_interface.dart';
 
 import '../fakes/fake_bunny_repository.dart';
-import '../fakes/fake_path_provider.dart';
 import '../fakes/fake_saf_platform.dart';
 
 BunnyPost _post({BunnySite site = BunnySite.e621, String? artist, String? fileUrl = 'https://static1.e621.net/data/1.png', String? fileExt = 'png', String? fileMd5}) => BunnyPost(
@@ -38,11 +36,6 @@ void main() {
 
   setUp(() async {
     tempDir = await Directory.systemTemp.createTemp('download_manager_test');
-    // downloadPost (M43) now stages the write through getTemporaryDirectory()
-    // before moving it into place -- path_provider's real plugin isn't
-    // registered under a bare `flutter test` VM run, so every test needs
-    // this fake even though none of them touch it directly.
-    PathProviderPlatform.instance = FakePathProviderPlatform();
   });
 
   tearDown(() async {
@@ -52,7 +45,7 @@ void main() {
   });
 
   test('returns noFileUrl without touching the network or filesystem when fileUrl is null', () async {
-    final manager = DownloadManager(client: MockClient((_) async => fail('should not be called')));
+    const manager = DownloadManager();
     final repository = FakeBunnyRepository();
 
     final result = await manager.downloadPost(_post(fileUrl: null), repository, tempDir.path);
@@ -62,8 +55,9 @@ void main() {
 
   test('downloads and verifies a matching checksum, sanitizing the artist folder', () async {
     final bytes = [1, 2, 3, 4];
-    final manager = DownloadManager(client: MockClient((_) async => http.Response.bytes(bytes, 200)));
+    const manager = DownloadManager();
     final repository = FakeBunnyRepository();
+    repository.downloadFileFetchImpl = (_) async => http.Response.bytes(bytes, 200);
     final expectedMd5 = md5.convert(bytes).toString();
 
     final result = await manager.downloadPost(_post(artist: 'some/bad:artist', fileMd5: expectedMd5), repository, tempDir.path);
@@ -75,24 +69,22 @@ void main() {
 
   test('onProgress (M62) reports bytes received against the response\'s own content length', () async {
     final bytes = List.generate(1000, (i) => i % 256);
-    final manager = DownloadManager(client: MockClient((_) async => http.Response.bytes(bytes, 200)));
+    const manager = DownloadManager();
     final repository = FakeBunnyRepository();
+    repository.downloadFileFetchImpl = (_) async => http.Response.bytes(bytes, 200);
     final calls = <(int, int?)>[];
 
     await manager.downloadPost(_post(), repository, tempDir.path, onProgress: (received, total) => calls.add((received, total)));
 
     expect(calls, isNotEmpty);
-    // MockClient delivers the whole body as a single stream chunk, so the
-    // only call seen here already reports the full byte count -- a real
-    // CDN response arrives in several chunks instead, each call reporting
-    // a running total up to this same final value.
     expect(calls.last.$1, bytes.length);
     expect(calls.last.$2, bytes.length);
   });
 
   test('falls back to "unknown" for a null artist', () async {
-    final manager = DownloadManager(client: MockClient((_) async => http.Response.bytes([1], 200)));
+    const manager = DownloadManager();
     final repository = FakeBunnyRepository();
+    repository.downloadFileFetchImpl = (_) async => http.Response.bytes([1], 200);
 
     final result = await manager.downloadPost(_post(artist: null), repository, tempDir.path);
 
@@ -100,8 +92,9 @@ void main() {
   });
 
   test('reports checksumMismatch when fileMd5 does not match the downloaded bytes', () async {
-    final manager = DownloadManager(client: MockClient((_) async => http.Response.bytes([1, 2, 3], 200)));
+    const manager = DownloadManager();
     final repository = FakeBunnyRepository();
+    repository.downloadFileFetchImpl = (_) async => http.Response.bytes([1, 2, 3], 200);
 
     final result = await manager.downloadPost(_post(fileMd5: 'not-the-real-checksum'), repository, tempDir.path);
 
@@ -109,8 +102,9 @@ void main() {
   });
 
   test('treats a post with no published checksum as verified', () async {
-    final manager = DownloadManager(client: MockClient((_) async => http.Response.bytes([1, 2, 3], 200)));
+    const manager = DownloadManager();
     final repository = FakeBunnyRepository();
+    repository.downloadFileFetchImpl = (_) async => http.Response.bytes([1, 2, 3], 200);
 
     final result = await manager.downloadPost(_post(fileMd5: null), repository, tempDir.path);
 
@@ -123,8 +117,9 @@ void main() {
       final expectedMd5 = md5.convert(bytes).toString();
       await Directory('${tempDir.path}/someartist').create(recursive: true);
       await File('${tempDir.path}/someartist/42.png').writeAsBytes(bytes);
-      final manager = DownloadManager(client: MockClient((_) async => fail('should not have made a network request')));
+      const manager = DownloadManager();
       final repository = FakeBunnyRepository();
+      repository.downloadFileFetchImpl = (_) async => fail('should not have made a network request');
 
       final result = await manager.downloadPost(_post(artist: 'someartist', fileMd5: expectedMd5), repository, tempDir.path);
 
@@ -136,8 +131,9 @@ void main() {
     test('no published checksum: an existing file is trusted as-is, same as a fresh download would be', () async {
       await Directory('${tempDir.path}/someartist').create(recursive: true);
       await File('${tempDir.path}/someartist/42.png').writeAsBytes([9, 9, 9]);
-      final manager = DownloadManager(client: MockClient((_) async => fail('should not have made a network request')));
+      const manager = DownloadManager();
       final repository = FakeBunnyRepository();
+      repository.downloadFileFetchImpl = (_) async => fail('should not have made a network request');
 
       final result = await manager.downloadPost(_post(artist: 'someartist', fileMd5: null), repository, tempDir.path);
 
@@ -149,8 +145,9 @@ void main() {
       final correctMd5 = md5.convert(correctBytes).toString();
       await Directory('${tempDir.path}/someartist').create(recursive: true);
       await File('${tempDir.path}/someartist/42.png').writeAsBytes([9, 9, 9]); // stale/corrupt
-      final manager = DownloadManager(client: MockClient((_) async => http.Response.bytes(correctBytes, 200)));
+      const manager = DownloadManager();
       final repository = FakeBunnyRepository();
+      repository.downloadFileFetchImpl = (_) async => http.Response.bytes(correctBytes, 200);
 
       final result = await manager.downloadPost(_post(artist: 'someartist', fileMd5: correctMd5), repository, tempDir.path);
 
@@ -162,8 +159,9 @@ void main() {
       final bytes = [1, 2, 3, 4];
       await Directory('${tempDir.path}/someartist').create(recursive: true);
       await File('${tempDir.path}/someartist/42.png').writeAsBytes(bytes);
-      final manager = DownloadManager(client: MockClient((_) async => fail('should not have made a network request')));
+      const manager = DownloadManager();
       final repository = FakeBunnyRepository();
+      repository.downloadFileFetchImpl = (_) async => fail('should not have made a network request');
 
       await manager.downloadPost(_post(artist: 'someartist', fileMd5: md5.convert(bytes).toString()), repository, tempDir.path, autoFavorite: true, autoUpvote: true);
 
@@ -289,8 +287,9 @@ void main() {
   });
 
   test('reports failed on a non-200 response, with the status code as the error message', () async {
-    final manager = DownloadManager(client: MockClient((_) async => http.Response('', 404)));
+    const manager = DownloadManager();
     final repository = FakeBunnyRepository();
+    repository.downloadFileFetchImpl = (_) async => http.Response('', 404);
 
     final result = await manager.downloadPost(_post(), repository, tempDir.path);
 
@@ -299,8 +298,9 @@ void main() {
   });
 
   test('reports failed with a non-null error message when the request itself throws', () async {
-    final manager = DownloadManager(client: MockClient((_) async => throw const SocketException('connection refused')));
+    const manager = DownloadManager();
     final repository = FakeBunnyRepository();
+    repository.downloadFileFetchImpl = (_) async => throw const SocketException('connection refused');
 
     final result = await manager.downloadPost(_post(), repository, tempDir.path);
 
@@ -310,8 +310,9 @@ void main() {
 
   test('creates the destination directory recursively when it does not already exist', () async {
     final nestedDir = Directory('${tempDir.path}/does/not/exist/yet');
-    final manager = DownloadManager(client: MockClient((_) async => http.Response.bytes([1], 200)));
+    const manager = DownloadManager();
     final repository = FakeBunnyRepository();
+    repository.downloadFileFetchImpl = (_) async => http.Response.bytes([1], 200);
 
     await manager.downloadPost(_post(artist: 'wolf'), repository, nestedDir.path);
 
@@ -326,8 +327,9 @@ void main() {
     });
 
     test('is true once downloadPost has written the file to its deterministic path', () async {
-      final manager = DownloadManager(client: MockClient((_) async => http.Response.bytes([1, 2, 3], 200)));
+      const manager = DownloadManager();
       final repository = FakeBunnyRepository();
+      repository.downloadFileFetchImpl = (_) async => http.Response.bytes([1, 2, 3], 200);
 
       await manager.downloadPost(_post(artist: 'some/bad:artist'), repository, tempDir.path);
 
@@ -380,8 +382,9 @@ void main() {
 
   group('autoFavorite (M10.1)', () {
     test('queues a favorite when a download verifies and autoFavorite is true', () async {
-      final manager = DownloadManager(client: MockClient((_) async => http.Response.bytes([1, 2, 3], 200)));
+      const manager = DownloadManager();
       final repository = FakeBunnyRepository();
+      repository.downloadFileFetchImpl = (_) async => http.Response.bytes([1, 2, 3], 200);
 
       await manager.downloadPost(_post(fileMd5: null), repository, tempDir.path, autoFavorite: true);
 
@@ -390,8 +393,9 @@ void main() {
     });
 
     test('queues a favorite even on a checksum mismatch, since the file was still written', () async {
-      final manager = DownloadManager(client: MockClient((_) async => http.Response.bytes([1, 2, 3], 200)));
+      const manager = DownloadManager();
       final repository = FakeBunnyRepository();
+      repository.downloadFileFetchImpl = (_) async => http.Response.bytes([1, 2, 3], 200);
 
       final result = await manager.downloadPost(_post(fileMd5: 'not-the-real-checksum'), repository, tempDir.path, autoFavorite: true);
 
@@ -400,8 +404,9 @@ void main() {
     });
 
     test('does not queue a favorite when autoFavorite is false (the default)', () async {
-      final manager = DownloadManager(client: MockClient((_) async => http.Response.bytes([1, 2, 3], 200)));
+      const manager = DownloadManager();
       final repository = FakeBunnyRepository();
+      repository.downloadFileFetchImpl = (_) async => http.Response.bytes([1, 2, 3], 200);
 
       await manager.downloadPost(_post(fileMd5: null), repository, tempDir.path);
 
@@ -409,8 +414,9 @@ void main() {
     });
 
     test('does not queue a favorite when there is no file to download', () async {
-      final manager = DownloadManager(client: MockClient((_) async => fail('should not be called')));
+      const manager = DownloadManager();
       final repository = FakeBunnyRepository();
+      repository.downloadFileFetchImpl = (_) async => fail('should not be called');
 
       await manager.downloadPost(_post(fileUrl: null), repository, tempDir.path, autoFavorite: true);
 
@@ -418,8 +424,9 @@ void main() {
     });
 
     test('does not queue a favorite when the download fails', () async {
-      final manager = DownloadManager(client: MockClient((_) async => http.Response('', 404)));
+      const manager = DownloadManager();
       final repository = FakeBunnyRepository();
+      repository.downloadFileFetchImpl = (_) async => http.Response('', 404);
 
       await manager.downloadPost(_post(), repository, tempDir.path, autoFavorite: true);
 
@@ -429,8 +436,9 @@ void main() {
 
   group('autoUpvote (M14.2)', () {
     test('queues an upvote when a download verifies and autoUpvote is true', () async {
-      final manager = DownloadManager(client: MockClient((_) async => http.Response.bytes([1, 2, 3], 200)));
+      const manager = DownloadManager();
       final repository = FakeBunnyRepository();
+      repository.downloadFileFetchImpl = (_) async => http.Response.bytes([1, 2, 3], 200);
 
       await manager.downloadPost(_post(fileMd5: null), repository, tempDir.path, autoUpvote: true);
 
@@ -439,8 +447,9 @@ void main() {
     });
 
     test('queues an upvote even on a checksum mismatch, since the file was still written', () async {
-      final manager = DownloadManager(client: MockClient((_) async => http.Response.bytes([1, 2, 3], 200)));
+      const manager = DownloadManager();
       final repository = FakeBunnyRepository();
+      repository.downloadFileFetchImpl = (_) async => http.Response.bytes([1, 2, 3], 200);
 
       final result = await manager.downloadPost(_post(fileMd5: 'not-the-real-checksum'), repository, tempDir.path, autoUpvote: true);
 
@@ -449,8 +458,9 @@ void main() {
     });
 
     test('does not queue an upvote when autoUpvote is false (the default)', () async {
-      final manager = DownloadManager(client: MockClient((_) async => http.Response.bytes([1, 2, 3], 200)));
+      const manager = DownloadManager();
       final repository = FakeBunnyRepository();
+      repository.downloadFileFetchImpl = (_) async => http.Response.bytes([1, 2, 3], 200);
 
       await manager.downloadPost(_post(fileMd5: null), repository, tempDir.path);
 
@@ -458,8 +468,9 @@ void main() {
     });
 
     test('does not queue an upvote for an Inkbunny post, which has no vote API', () async {
-      final manager = DownloadManager(client: MockClient((_) async => http.Response.bytes([1, 2, 3], 200)));
+      const manager = DownloadManager();
       final repository = FakeBunnyRepository();
+      repository.downloadFileFetchImpl = (_) async => http.Response.bytes([1, 2, 3], 200);
 
       await manager.downloadPost(_post(site: BunnySite.inkbunny, fileMd5: null), repository, tempDir.path, autoUpvote: true);
 
@@ -467,8 +478,9 @@ void main() {
     });
 
     test('does not queue an upvote when there is no file to download', () async {
-      final manager = DownloadManager(client: MockClient((_) async => fail('should not be called')));
+      const manager = DownloadManager();
       final repository = FakeBunnyRepository();
+      repository.downloadFileFetchImpl = (_) async => fail('should not be called');
 
       await manager.downloadPost(_post(fileUrl: null), repository, tempDir.path, autoUpvote: true);
 
@@ -476,8 +488,9 @@ void main() {
     });
 
     test('does not queue an upvote when the download fails', () async {
-      final manager = DownloadManager(client: MockClient((_) async => http.Response('', 404)));
+      const manager = DownloadManager();
       final repository = FakeBunnyRepository();
+      repository.downloadFileFetchImpl = (_) async => http.Response('', 404);
 
       await manager.downloadPost(_post(), repository, tempDir.path, autoUpvote: true);
 

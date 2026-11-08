@@ -4,8 +4,6 @@ import 'dart:io';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:http/http.dart' as http;
-import 'package:http/testing.dart';
 import 'package:little_bunny/repository/bunny_models.dart';
 import 'package:little_bunny/screens/post_grid_screen.dart';
 import 'package:little_bunny/screens/tag_browse_screen.dart';
@@ -641,7 +639,7 @@ void main() {
       // and return immediately, with no more blocking/progress state of
       // its own.
       final downloadQueueService = DownloadQueueService(
-        downloadManager: DownloadManager(client: MockClient((_) async => http.Response.bytes([1, 2, 3], 200))),
+        downloadManager: const DownloadManager(),
         downloadSettingsStore: const DownloadSettingsStore(),
       );
 
@@ -680,10 +678,7 @@ void main() {
         _post(id: 3, isSeen: false, fileUrl: 'https://example.invalid/3.jpg', fileExt: 'jpg'),
       ];
       repository.poolInfoById[123] = const BunnyPoolInfo(id: 123, name: 'My Comic', postCount: 3);
-      final downloadQueueService = DownloadQueueService(
-        downloadManager: DownloadManager(client: MockClient((_) async => http.Response.bytes([1, 2, 3], 200))),
-        downloadSettingsStore: const DownloadSettingsStore(),
-      );
+      final downloadQueueService = DownloadQueueService(downloadManager: const DownloadManager(), downloadSettingsStore: const DownloadSettingsStore());
 
       await tester.pumpWidget(
         wrapWithLocalization(

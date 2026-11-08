@@ -3,6 +3,8 @@ add_library(bunny_common STATIC
     src/json.c
     src/rate_limit.c
     src/goblin_impl.c
+    src/md5.c
+    src/download.c
 )
 
 target_include_directories(bunny_common
@@ -18,3 +20,7 @@ target_link_libraries(bunny_common
     PRIVATE
         CURL::libcurl
 )
+
+if(BUNNY_BUILD_TESTS)
+    add_subdirectory(tests)
+endif()

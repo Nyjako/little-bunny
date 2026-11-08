@@ -16,6 +16,10 @@ add_executable(bunny_core_test_download_queue test_download_queue.c)
 target_link_libraries(bunny_core_test_download_queue PRIVATE bunny_core unity::framework)
 add_test(NAME bunny_core_test_download_queue COMMAND bunny_core_test_download_queue)
 
+add_executable(bunny_core_test_download test_download.c)
+target_link_libraries(bunny_core_test_download PRIVATE bunny_core bunny_test_http_server unity::framework)
+add_test(NAME bunny_core_test_download COMMAND bunny_core_test_download)
+
 add_executable(bunny_core_test_wiki test_wiki.c)
 target_link_libraries(bunny_core_test_wiki PRIVATE bunny_core unity::framework)
 add_test(NAME bunny_core_test_wiki COMMAND bunny_core_test_wiki)

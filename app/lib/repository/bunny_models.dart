@@ -542,6 +542,17 @@ class DownloadQueueRecord {
   });
 }
 
+/// The result of a [BunnyRepository.downloadFile] call (M66) -- mirrors
+/// `bunny_core_download_outcome_t`'s wire strings via [outcome]:
+/// `'verified'`, `'checksumMismatch'`, or `'failed'`. [errorMessage] is only
+/// ever set for `'failed'`.
+class DownloadFetchResult {
+  final String outcome;
+  final String? errorMessage;
+
+  const DownloadFetchResult({required this.outcome, this.errorMessage});
+}
+
 /// Mirrors `bunny_core_blacklist_sync_stats_t` -- the result of pulling the
 /// configured e621 account's own blacklist and importing new entries (M27;
 /// M28/M54 extended this to multi-tag/grammar lines too, not just bare

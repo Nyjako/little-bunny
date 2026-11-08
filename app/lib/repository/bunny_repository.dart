@@ -345,6 +345,26 @@ abstract interface class BunnyRepository {
   /// [DownloadQueueService.clearFinished].
   Future<void> downloadQueueClearFinished();
 
+  /// Fetches [fileUrl] and writes it to [destDir]/[filename] natively (M66)
+  /// -- the actual HTTP fetch + MD5 checksum verification + atomic write
+  /// [DownloadManager]'s plain-filesystem-path branch delegates to, for
+  /// both standalone and networked mode alike: downloads are never proxied
+  /// through the remote server even in networked mode (see
+  /// `docs/architecture.md`), so this is always the same local native call
+  /// regardless of which [BunnyRepository] implementation it's called on.
+  /// [expectedMd5] null/empty means "no checksum to verify, trust as-is."
+  /// [onProgress] is called periodically (not necessarily for every byte)
+  /// as the fetch progresses; its `total` is null if the server never
+  /// reported a Content-Length.
+  Future<DownloadFetchResult> downloadFile(
+    String fileUrl,
+    Map<String, String> extraHeaders,
+    String destDir,
+    String filename,
+    String? expectedMd5,
+    void Function(int received, int? total) onProgress,
+  );
+
   /// Releases whatever this implementation holds open -- the FFI isolate
   /// (and the native `bunny_core_t` handle/sqlite connection it owns) or the
   /// HTTP client's connection pool. Previously never called since a

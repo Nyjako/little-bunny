@@ -490,18 +490,66 @@ typedef struct
 bunny_core_result_t bunny_core_process_queue(bunny_core_t *core, bunny_core_queue_stats_t *out_stats);
 
 /* --- Download queue --------------------------------------------------------------
- * Tracks DownloadManager's own file fetches (the Flutter app's, not anything
- * this library fetches itself) through to completion, so a killed/restarted
- * process doesn't lose track of what was queued/downloading/failed -- thin
- * lock/unlock pass-throughs to bunny_db_download_queue_*, same shape as the
- * action queue above but with no site/network logic of its own: the actual
- * fetch, file write, and checksum check all happen on the Dart side. */
+ * Tracks DownloadManager's own file fetches through to completion, so a
+ * killed/restarted process doesn't lose track of what was queued/
+ * downloading/failed -- thin lock/unlock pass-throughs to
+ * bunny_db_download_queue_*, same shape as the action queue above. The
+ * actual fetch/file write/checksum check are bunny_core_download_start's
+ * own concern (M66, below), not this one's. */
 
 /* pool_id 0/pool_name NULL for a regular (non-pool) download. */
 bunny_core_result_t bunny_core_download_queue_add(bunny_core_t *core, int64_t post_id, int64_t pool_id, const char *pool_name, int pool_page, int64_t *out_id);
 bunny_core_result_t bunny_core_download_queue_set_status(bunny_core_t *core, int64_t id, bunny_db_download_queue_status_t status, const char *failure_reason);
 bunny_core_result_t bunny_core_download_queue_list(bunny_core_t *core, bunny_db_download_queue_list_t *out_list);
 bunny_core_result_t bunny_core_download_queue_clear_finished(bunny_core_t *core);
+
+/* --- Downloading a file (M66) ----------------------------------------------
+ * The actual fetch + checksum verification + atomic write for one post's
+ * file -- used to live entirely on the Dart side (app/lib/services/
+ * download_manager.dart); moved here so the app's one meaningful piece of
+ * non-UI business logic that wasn't already in C finally is, like
+ * everything else (search sync, tag queries, blacklist, ...). Deliberately
+ * take no bunny_core_t* -- a pure network+filesystem operation with no db/
+ * account dependency, unlike every other function in this header; declared
+ * here anyway purely so ffigen (which only scans this file/error.h/
+ * bunny_db/types.h) picks these up alongside everything else.
+ *
+ * bunny_core_download_start spawns its own background thread and returns
+ * almost immediately with a handle -- it does NOT block for the file's
+ * whole download duration, which is what lets several downloads run
+ * concurrently without needing more than bunny_core_ffi's one serialized
+ * dispatch pipe (each of start/poll/release is individually fast). Skips
+ * the network fetch entirely (reporting BUNNY_CORE_DOWNLOAD_VERIFIED
+ * immediately) when a file already sits at dest_dir/filename and either
+ * expected_md5_or_null is NULL/empty or it already matches -- the C-side
+ * single source of truth for "is this post already correctly on disk,"
+ * mirrored by DownloadManager.isDownloaded's own simpler, no-network,
+ * UI-facing existence check on the Dart side (not replaced by this).
+ * extra_headers/extra_header_count are copied internally -- the caller's
+ * own copies don't need to outlive this call. */
+typedef enum
+{
+    BUNNY_CORE_DOWNLOAD_VERIFIED,
+    BUNNY_CORE_DOWNLOAD_CHECKSUM_MISMATCH,
+    BUNNY_CORE_DOWNLOAD_FAILED,
+} bunny_core_download_outcome_t;
+
+bunny_core_result_t bunny_core_download_start(const char *file_url, const bunny_http_header_t *extra_headers, size_t extra_header_count, const char *dest_dir, const char *filename, const char *expected_md5_or_null, int64_t *out_handle);
+
+/* Cheap, lock-guarded read -- safe to call frequently (e.g. every ~250ms)
+ * while a download identified by handle is in flight. *out_outcome/
+ * out_error_message are only meaningful once *out_done is true.
+ * out_error_message/out_error_message_cap may be NULL/0 if the caller
+ * doesn't want the message. Returns BUNNY_CORE_ERR_NOT_FOUND for a handle
+ * that was never returned by bunny_core_download_start, or already
+ * released. */
+bunny_core_result_t bunny_core_download_poll(int64_t handle, int64_t *out_received, int64_t *out_total, bool *out_done, bunny_core_download_outcome_t *out_outcome, char *out_error_message, size_t out_error_message_cap);
+
+/* Joins the background thread (instant if a prior poll already reported
+ * done) and frees the handle's resources. Must be called exactly once for
+ * every handle bunny_core_download_start returned successfully -- a no-op
+ * for an already-released or never-valid handle. */
+void bunny_core_download_release(int64_t handle);
 
 /* --- Diagnostics ----------------------------------------------------------
  * Backs `bunny_server --db-stats`/`--health` (server/src/main.c) -- thin
