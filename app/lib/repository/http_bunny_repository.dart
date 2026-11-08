@@ -10,6 +10,7 @@ import 'package:meta/meta.dart';
 
 import 'bunny_models.dart';
 import 'bunny_repository.dart';
+import 'download_file_native.dart';
 
 BunnyAccount _accountFromJson(Map<String, Object?> j) => BunnyAccount(
   id: (j['id'] as num).toInt(),
@@ -839,6 +840,12 @@ class HttpBunnyRepository implements BunnyRepository {
     } on BunnyCoreNativeException catch (e) {
       throw BunnyRepositoryException(e.message);
     }
+  }
+
+  @override
+  Future<DownloadFetchResult> downloadFile(String fileUrl, Map<String, String> extraHeaders, String destDir, String filename, String? expectedMd5, void Function(int received, int? total) onProgress) async {
+    final native = await _ensureDownloadQueueNative();
+    return downloadFileViaNative(native, fileUrl, extraHeaders, destDir, filename, expectedMd5, onProgress);
   }
 
   /// Recent server log lines (oldest-first), for diagnosing a stuck/slow
