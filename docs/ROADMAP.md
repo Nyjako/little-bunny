@@ -3031,23 +3031,19 @@ this file is the single source of truth for "what's done" across sessions.
   fallback is configured, exactly the relationship wanted: fingerprint first, PIN or
   password if that fails/isn't available.
 
-- [ ] **M61 — Download queue doesn't resume after the app is killed and relaunched**
+- [x] **M61 — Download queue doesn't resume after the app is killed and relaunched**
   Reported by the user: killing or closing the app mid-download loses the remaining
-  queue, and it doesn't pick back up on the next launch. Investigated this pass, not yet
-  reproduced: `DownloadQueueService`'s own persistence (`_persist()`/`restore()`,
-  `pending_downloads.json` under `getApplicationSupportDirectory()`, written atomically
-  via temp-file-then-rename) is real, not mocked, and has passing tests against the
-  actual filesystem (`download_queue_service_test.dart`'s `restore re-enqueues whatever
-  was still pending from a previous run` and the failed-item equivalent) -- and `main.dart`
-  does call `restore(repository)` from both cold-start paths (`_loadPersistedConfig`/
-  `_onConfigured`). So the Dart-level mechanism this app already has for exactly this
-  scenario looks intact on inspection; a live repro is needed to find where it actually
-  breaks for the user, which platform (Android swipe-kill vs. Linux desktop window
-  close behave very differently at the OS level), and whether the queue really never
-  reappears vs. reappearing but failing immediately (e.g. a download-folder permission
-  that isn't re-grantable without the user's explicit action, especially Android SAF
-  scoped storage, failing silently into `DownloadQueueItemStatus.failed` rather than
-  resuming cleanly).
+  queue, and it doesn't pick back up on the next launch. Root cause finally found in
+  M65, after M64 ruled out JSON-persistence durability: in **networked** mode,
+  `restore()`'s `getPost` call is a real HTTP request, run `unawaited()` from `main.dart`
+  right at cold boot -- if the network isn't up yet at that exact moment (common right
+  after an OS boot, or the app launching before networking is ready), every row's
+  `getPost` throws, `restore()`'s old `catch (_) {}` silently dropped the row from view
+  for the rest of the session with no retry, and nothing in the UI ever showed it again
+  until a luckily-timed restart. The rows were never actually deleted from the database --
+  by the time the user started a *new* download moments later (having to load a
+  post/search screen to get there meant the network had recovered by then), the old ones
+  just looked "overwritten" in the UI even though they weren't. Fixed as part of M65.
 
 - [ ] **M62 — Download queue: per-file byte progress, and an architecture decision on
   parallelism**
@@ -3126,3 +3122,42 @@ this file is the single source of truth for "what's done" across sessions.
   M43's Dart-side JSON persistence code (`_persist`/`_persistenceFile`/`flush`, and the
   `main.dart` desktop exit-hook that only existed to wait for that write to land) is
   deleted outright, not kept as a fallback.
+
+- [x] **M65 — Resume reliability, manual resume UI, batch-download searches, pool-aware
+  naming**
+  Four related asks from the user, all touching the download queue:
+  1. **Fixed the M61 "forgotten downloads" bug** at its root (see M61's own entry) --
+     `DownloadQueueService._getPostWithRetry` retries a transient `getPost` failure 3
+     times, 500ms apart, before giving up on a row during `restore()`; a new
+     `resume(BunnyRepository)` method (just `restore()` again, made safely re-callable
+     via a `Set<int> _restoredRowIds` tracking which persisted rows are already in
+     `_items`) lets the user force another attempt later if the automatic retries still
+     weren't enough.
+  2. **Manual resume UI**: a `Icons.sync` button on the download queue screen's `AppBar`
+     calling `resume()`; a `resume` notification action wired on both notifiers --
+     `FlutterLocalNotificationsQueueNotifier` via `AndroidNotificationAction` +
+     `onDidReceiveNotificationResponse`, and `AndroidForegroundServiceQueueNotifier` via
+     a new native `PendingIntent` action in `DownloadForegroundService.kt` that launches
+     `MainActivity` with a `resume_downloads` extra -- handled either immediately via
+     `onNewIntent` (app already running) or queued as `pendingResumeRequest` and polled
+     once by Dart on a fresh engine launch (`checkPendingResumeRequest`), to avoid a race
+     against Dart's handler not being registered yet.
+  3. **Batch-download searches**: `searches_screen.dart` gained its own selection mode
+     (mirroring `post_grid_screen.dart`'s existing one), letting the user multi-select
+     saved searches and download every post from all of them in one action -- each
+     selected search is fully paginated via `listSearchPosts` until an empty page, then
+     the combined post list goes through the existing `enqueueAll` (whose dedup already
+     handles overlap between searches).
+  4. **Pool-aware download naming**: pool downloads (a search whose `query` starts
+     `pool:`) now land in `pool:<id> - <sanitized name>/<id> - p<page, 4-digit
+     zero-padded> [<post external id>].<ext>` instead of the regular per-artist scheme --
+     a post's page is its 1-indexed position in the pool's full, already-ordered post
+     list (not its position within a partial selection, which `post_grid_screen.dart`'s
+     mass-download action computes via an explicit `pageByPostId` map built from the full
+     backing list, to avoid mis-numbering a partial pool selection).
+     `DownloadManager.downloadPost`/`isDownloaded` take optional pool context;
+     `DownloadQueueItem`/`enqueuePool` carry it through to persistence -- `download_queue`
+     gained 3 new nullable/defaulted columns (`pool_id`/`pool_name`/`pool_page`, migration
+     version 18) threaded through `libs/db`, `libs/core`, FFI, and
+     `BunnyRepository.downloadQueueAdd`/`downloadQueueList` the same way every other field
+     on that table already is.
