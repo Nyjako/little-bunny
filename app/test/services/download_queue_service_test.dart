@@ -9,6 +9,7 @@ import 'package:little_bunny/services/download_manager.dart';
 import 'package:little_bunny/services/download_queue_notifier.dart';
 import 'package:little_bunny/services/download_queue_service.dart';
 import 'package:little_bunny/settings/download_settings_store.dart';
+import 'package:little_bunny/util/app_wakelock.dart';
 import 'package:path_provider_platform_interface/path_provider_platform_interface.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:wakelock_plus/wakelock_plus.dart' show wakelockPlusPlatformInstance;
@@ -43,6 +44,12 @@ void main() {
   late FakeWakelockPlusPlatform wakelockPlatform;
 
   setUp(() async {
+    // AppWakelock's reference count (lib/util/app_wakelock.dart) is a bare
+    // static, not scoped to this test -- if an earlier test in this file
+    // threw or timed out before its own cleanup tail released it, the
+    // leaked count otherwise silently turns every acquire() below into a
+    // no-op for the rest of this file's run, with nothing here to show why.
+    AppWakelock.resetForTesting();
     PathProviderPlatform.instance = FakePathProviderPlatform();
     destinationDir = await Directory.systemTemp.createTemp('download_queue_test');
     SharedPreferences.setMockInitialValues({'download_destination_folder': destinationDir.path});
@@ -75,6 +82,29 @@ void main() {
     while (service.isActive) {
       await Future<void>.delayed(const Duration(milliseconds: 1));
     }
+  }
+
+  /// Resolves the instant [service] actually reports an item downloading,
+  /// via its own [ChangeNotifier] notification rather than sampling on a
+  /// fixed delay -- a worker claiming the first item (which flips it to
+  /// `downloading`) only ever happens *after* `_processQueue`'s own
+  /// `AppWakelock.acquire()`/`notifier.showStarting()` calls have already
+  /// completed (see that method's doc comment on ordering), so this is a
+  /// precise, race-free stand-in for "the queue has started" with no
+  /// window where a slow scheduler could be caught mid-transition.
+  Future<void> waitUntilDownloading(DownloadQueueService service) {
+    if (service.downloadingItems.isNotEmpty) {
+      return Future.value();
+    }
+    final started = Completer<void>();
+    void listener() {
+      if (service.downloadingItems.isNotEmpty && !started.isCompleted) {
+        started.complete();
+      }
+    }
+
+    service.addListener(listener);
+    return started.future.whenComplete(() => service.removeListener(listener));
   }
 
   test('enqueue downloads the post and reports progress then a summary', () async {
@@ -544,10 +574,12 @@ void main() {
     );
 
     service.enqueue(_post(id: 1), repository);
-    // Let the queue's own microtasks run, but the HTTP client is still
-    // gated -- showStarting must already have fired by now, well before the
-    // fetch itself resolves.
-    await Future<void>.delayed(const Duration(milliseconds: 1));
+    // The HTTP client is still gated -- showStarting must already have
+    // fired by the time the item is claimed (well before the fetch itself
+    // resolves), so waiting for that claim (rather than a fixed delay,
+    // flaky under load the same way a141a2b's fixed-delay persistence read
+    // was) is both race-free and precise.
+    await waitUntilDownloading(service);
     expect(notifier.startingCalls, [1]);
     expect(notifier.progressCalls, isEmpty);
 
@@ -566,7 +598,11 @@ void main() {
 
     expect(wakelockPlatform.enabledValue, isFalse);
     service.enqueue(_post(id: 1), repository);
-    await Future<void>.delayed(const Duration(milliseconds: 1));
+    // AppWakelock.acquire() always completes before the first item is ever
+    // claimed (see _processQueue's doc comment on ordering) -- waiting for
+    // that claim, rather than a fixed delay, means this can't fire the
+    // assertion early under scheduler contention.
+    await waitUntilDownloading(service);
     expect(wakelockPlatform.enabledValue, isTrue);
 
     firstItemGate.complete();
