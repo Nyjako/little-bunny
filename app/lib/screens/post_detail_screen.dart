@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:chewie/chewie.dart';
 import 'package:flutter/material.dart';
@@ -615,16 +617,30 @@ class _PostDetailPageState extends State<_PostDetailPage> {
     return widget.downloadManager.isDownloaded(_post, folder);
   }
 
-  /// Enqueues and returns immediately (M43) -- the actual fetch/write/
-  /// checksum work now lives entirely inside [DownloadQueueService],
-  /// reported through its notifier rather than this screen's own state.
+  /// Enqueues -- the actual fetch/write/checksum work lives entirely inside
+  /// [DownloadQueueService], reported through its notifier rather than this
+  /// screen's own state; only the row's own persistence is awaited here
+  /// (M43 original, M67 follow-up), not any of that.
   /// [_isDownloadedFuture] deliberately isn't refreshed here: there's no
   /// "download finished" callback to hook anymore by design (the whole
-  /// point is this screen doesn't wait), so the download-done icon only
-  /// updates the next time this screen is (re)opened, not live while
-  /// staying on the same post's page -- an accepted, documented limitation.
-  void _queueDownload(AppLocalizations l10n) {
-    widget.downloadQueueService.enqueue(_post, widget.repository);
+  /// point is this screen doesn't wait for the download itself), so the
+  /// download-done icon only updates the next time this screen is
+  /// (re)opened, not live while staying on the same post's page -- an
+  /// accepted, documented limitation.
+  ///
+  /// Used to fire this off unawaited entirely -- a single enqueue is cheap
+  /// enough that the race seemed negligible, but it's the exact same race
+  /// as a mass-download, just with one item instead of many: closing the
+  /// app right after this screen's own "queued" snackbar could still
+  /// outrun the one insert, losing it the same way a mass-download could
+  /// (M67 -- reported as the download queue screen still showing nothing
+  /// after a restart, even once the mass-download race was already fixed,
+  /// because this single-item path was the one call site that wasn't).
+  Future<void> _queueDownload(AppLocalizations l10n) async {
+    await widget.downloadQueueService.enqueue(_post, widget.repository);
+    if (!mounted) {
+      return;
+    }
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(l10n.postDetailDownloadQueued)));
   }
 

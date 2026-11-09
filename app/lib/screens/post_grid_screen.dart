@@ -640,11 +640,12 @@ class _PostGridScreenState extends State<PostGridScreen> {
     await _refreshLoadedPages();
   }
 
-  /// Enqueues the whole selection and returns immediately (M43) -- the
-  /// actual fetch/write/checksum work, folder/auto-favorite/auto-upvote
-  /// resolution, and action-queue draining all now live inside
-  /// [DownloadQueueService] itself, reported through its notifier rather
-  /// than this screen's own state. No `_refreshLoadedPages()` afterward:
+  /// Enqueues the whole selection -- the actual fetch/write/checksum work,
+  /// folder/auto-favorite/auto-upvote resolution, and action-queue draining
+  /// all live inside [DownloadQueueService] itself, reported through its
+  /// notifier rather than this screen's own state; this only awaits each
+  /// item's own `download_queue` row being durably persisted (M43 original,
+  /// M67 follow-up), not any of that. No `_refreshLoadedPages()` afterward:
   /// downloading never mutates any post field this grid displays (unlike
   /// [_massFavorite]/[_massVote], which call it themselves after their own
   /// direct, still-synchronous actions). Resolves via [_selectedPosts], so a
@@ -662,18 +663,26 @@ class _PostGridScreenState extends State<PostGridScreen> {
   /// has no pool-metadata endpoint at all) is preferred; this search's own
   /// label is the fallback, covering both Inkbunny pools and an e621 pool
   /// whose metadata fetch hasn't landed yet.
-  void _massDownload(AppLocalizations l10n) {
+  Future<void> _massDownload(AppLocalizations l10n) async {
     final selected = _selectedPosts;
     if (selected.isEmpty) {
       return;
     }
     final poolId = _poolId;
+    // Awaited (M67 -- previously fire-and-forget), so this doesn't clear the
+    // selection/show "queued" until every row is actually durable: closing
+    // the app right after that confirmation used to be able to outrun these
+    // inserts for a large selection, silently dropping whatever hadn't
+    // landed yet (see DownloadQueueService.enqueueAll's own doc comment).
     if (poolId != null) {
       final fullOrder = _entireSearchSelection ?? _posts;
       final pageByPostId = {for (final (index, post) in fullOrder.indexed) post.id: index + 1};
-      widget.downloadQueueService.enqueuePool(selected, widget.repository, poolId: poolId, poolName: _poolInfo?.name ?? widget.search.label, pageByPostId: pageByPostId);
+      await widget.downloadQueueService.enqueuePool(selected, widget.repository, poolId: poolId, poolName: _poolInfo?.name ?? widget.search.label, pageByPostId: pageByPostId);
     } else {
-      widget.downloadQueueService.enqueueAll(selected, widget.repository);
+      await widget.downloadQueueService.enqueueAll(selected, widget.repository);
+    }
+    if (!mounted) {
+      return;
     }
     setState(() {
       _selectedPostIds.clear();

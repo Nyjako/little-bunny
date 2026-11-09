@@ -280,6 +280,47 @@ void main() {
     expect(find.text('Searches'), findsWidgets);
   });
 
+  testWidgets('downloading selected searches shows a per-search loading-posts progress dialog (M67)', (WidgetTester tester) async {
+    final repository = FakeBunnyRepository();
+    final firstId = await repository.createSearch(BunnySite.e621, 'Foxes', 'fox');
+    final secondId = await repository.createSearch(BunnySite.e621, 'Wolves', 'wolf');
+    repository.postsBySearchId[firstId] = [
+      BunnyPost(id: 1, site: BunnySite.e621, externalId: 1, score: 0, favCount: 0, commentCount: 0, width: 100, height: 100, cachedAt: '2026-01-01T00:00:00Z', isSeen: false, isFavorited: false),
+    ];
+    repository.postsBySearchId[secondId] = [
+      BunnyPost(id: 2, site: BunnySite.e621, externalId: 2, score: 0, favCount: 0, commentCount: 0, width: 100, height: 100, cachedAt: '2026-01-01T00:00:00Z', isSeen: false, isFavorited: false),
+      BunnyPost(id: 3, site: BunnySite.e621, externalId: 3, score: 0, favCount: 0, commentCount: 0, width: 100, height: 100, cachedAt: '2026-01-01T00:00:00Z', isSeen: false, isFavorited: false),
+    ];
+
+    await tester.pumpWidget(_wrap(repository));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byIcon(Icons.sort));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Select searches to download'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Foxes'));
+    await tester.tap(find.text('Wolves'));
+    await tester.pumpAndSettle();
+
+    // Pauses every listSearchPosts call -- catches the dialog mid-flight, on
+    // the first (1-post, 1-of-2-selected) search, before either ever gets
+    // the chance to finish loading.
+    repository.pauseBeforePage = Completer<void>();
+    await tester.tap(find.byTooltip('Download selected'));
+    await tester.pump();
+
+    expect(find.text('Loading posts data 1/2'), findsOneWidget);
+    expect(find.text('Foxes 0/1'), findsOneWidget);
+
+    repository.pauseBeforePage!.complete();
+    await tester.pumpAndSettle();
+
+    expect(find.text('3 queued for download'), findsOneWidget);
+    // The dialog closed along with everything else settling.
+    expect(find.text('Loading posts data 1/2'), findsNothing);
+  });
+
   testWidgets('sort order defaults to most-unseen-first and persists a change (M13.1)', (WidgetTester tester) async {
     final repository = FakeBunnyRepository();
     final fewUnseenId = await repository.createSearch(BunnySite.e621, 'Alpha', 'alpha');

@@ -72,18 +72,21 @@ void main() {
     expect(find.text('Nothing here right now.'), findsOneWidget);
   });
 
-  testWidgets('tapping the resume button re-checks the persisted queue (M65)', (WidgetTester tester) async {
+  testWidgets('tapping the resume FAB re-checks the persisted queue (M65, M67 follow-up)', (WidgetTester tester) async {
     repository.downloadFileFetchImpl = (_) async => http.Response.bytes([1, 2, 3], 200);
     final service = DownloadQueueService(downloadManager: const DownloadManager(), downloadSettingsStore: const DownloadSettingsStore());
     repository.postsById[1] = _post(id: 1, title: 'Resumed');
     repository.seedDownloadQueueRow(postId: 1, status: 'queued');
+    // Paused so the FAB shows its "resume" face to tap -- otherwise the
+    // default, unpaused state would show "pause" instead.
+    service.pause();
 
     await tester.pumpWidget(wrap(service));
     await tester.pumpAndSettle();
     expect(find.text('Nothing here right now.'), findsOneWidget);
 
     await tester.runAsync(() async {
-      await tester.tap(find.byTooltip('Check for pending downloads'));
+      await tester.tap(find.byTooltip('Resume downloads'));
       while (service.totalCount == 0) {
         await Future<void>.delayed(const Duration(milliseconds: 1));
       }
@@ -93,6 +96,50 @@ void main() {
     });
     await tester.pump();
 
+    expect(service.succeededCount, 1);
+  });
+
+  testWidgets('the pause/resume FAB is always visible, even with nothing queued (M67)', (WidgetTester tester) async {
+    final service = DownloadQueueService(downloadManager: const DownloadManager(), downloadSettingsStore: const DownloadSettingsStore());
+
+    await tester.pumpWidget(wrap(service));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Nothing here right now.'), findsOneWidget);
+    expect(find.byTooltip('Pause downloads'), findsOneWidget);
+  });
+
+  testWidgets('tapping pause stops a still-queued item from starting, and resume restarts it (M67)', (WidgetTester tester) async {
+    repository.downloadFileFetchImpl = (_) async => http.Response.bytes([1, 2, 3], 200);
+    final service = DownloadQueueService(downloadManager: const DownloadManager(), downloadSettingsStore: const DownloadSettingsStore());
+    repository.postsById[1] = _post(id: 1, title: 'Pauseable');
+    repository.seedDownloadQueueRow(postId: 1, status: 'queued');
+
+    await tester.pumpWidget(wrap(service));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byTooltip('Pause downloads'));
+    await tester.pump();
+    expect(find.byTooltip('Resume downloads'), findsOneWidget);
+    expect(service.isPaused, isTrue);
+
+    // restore() while paused still pulls the persisted row into view (it's
+    // the same call `main()` makes at every launch, pause or not), but must
+    // not start downloading it.
+    await tester.runAsync(() => service.restore(repository));
+    await tester.pump();
+    expect(service.pendingCount, 1);
+    expect(service.succeededCount, 0);
+
+    await tester.runAsync(() async {
+      await tester.tap(find.byTooltip('Resume downloads'));
+      while (service.isActive) {
+        await Future<void>.delayed(const Duration(milliseconds: 1));
+      }
+    });
+    await tester.pump();
+
+    expect(service.isPaused, isFalse);
     expect(service.succeededCount, 1);
   });
 

@@ -460,31 +460,51 @@ class _SearchesScreenState extends State<SearchesScreen> with SingleTickerProvid
   /// search's posts at the end, so enqueueAll's own dedup (a post could
   /// legitimately appear in more than one of the selected searches) only
   /// ever queues it once.
+  ///
+  /// This can take a while for several large searches, and the old bare
+  /// AppBar spinner gave no sense of how far along it was -- [_loadProgress]
+  /// (M67) drives a modal dialog showing which search (of how many
+  /// selected) is loading right now and how many of its posts (each
+  /// [BunnySearch.totalCount] is already known) have come in so far, rather
+  /// than leaving the user staring at an un-cancellable spinner with no
+  /// feedback. [enqueueAll] is awaited (M67 follow-up) so the "N queued"
+  /// confirmation -- and the selection actually clearing -- only happens
+  /// once every row is durably persisted, closing the window where closing
+  /// the app right after that confirmation could lose some of them.
   Future<void> _downloadSelectedSearches(AppLocalizations l10n) async {
     final selectedIds = _selectedSearchIds.toSet();
     if (selectedIds.isEmpty || _dataFuture == null) {
       return;
     }
     setState(() => _loadingSelectedSearches = true);
+    final loadProgress = _SelectedSearchesLoadProgress();
+    unawaited(showDialog<void>(context: context, barrierDismissible: false, builder: (context) => _SelectedSearchesLoadDialog(progress: loadProgress)));
     try {
       final data = await _dataFuture!;
       final selectedSearches = data.searches.where((search) => selectedIds.contains(search.id)).toList();
       final allPosts = <BunnyPost>[];
-      for (final search in selectedSearches) {
+      for (final (index, search) in selectedSearches.indexed) {
+        loadProgress.startSearch(index: index + 1, count: selectedSearches.length, label: search.label, total: search.totalCount);
         var page = 1;
+        var searchLoaded = 0;
         while (true) {
           final pageItems = await _repository!.listSearchPosts(search.id, page: page);
           if (pageItems.isEmpty) {
             break;
           }
           allPosts.addAll(pageItems);
+          searchLoaded += pageItems.length;
+          loadProgress.setLoaded(searchLoaded);
           page++;
         }
       }
       if (!mounted) {
         return;
       }
-      widget.downloadQueueService.enqueueAll(allPosts, _repository!);
+      await widget.downloadQueueService.enqueueAll(allPosts, _repository!);
+      if (!mounted) {
+        return;
+      }
       setState(() {
         _loadingSelectedSearches = false;
         _selectionMode = false;
@@ -497,6 +517,10 @@ class _SearchesScreenState extends State<SearchesScreen> with SingleTickerProvid
       }
       setState(() => _loadingSelectedSearches = false);
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(l10n.searchesMassDownloadError)));
+    } finally {
+      if (mounted) {
+        Navigator.of(context).pop();
+      }
     }
   }
 
@@ -954,6 +978,81 @@ class _SearchesScreenState extends State<SearchesScreen> with SingleTickerProvid
         onPressed: onPoolsTab ? _createPoolSearch : _createSearch,
         tooltip: onPoolsTab ? l10n.searchesNewPoolTooltip : l10n.searchesNewSearchTooltip,
         child: const Icon(Icons.add),
+      ),
+    );
+  }
+}
+
+/// Backs [_SearchesScreenState._downloadSelectedSearches]'s loading dialog
+/// (M67) -- a plain [ChangeNotifier] (same pattern [DownloadQueueService]
+/// already uses) rather than a [Stream], since this only ever has the one
+/// dialog listening to it and plain field reads are simpler than wiring a
+/// controller for that.
+class _SelectedSearchesLoadProgress extends ChangeNotifier {
+  int searchIndex = 0;
+  int searchCount = 0;
+  String searchLabel = '';
+  int loaded = 0;
+  int total = 0;
+
+  /// Call once per search, before paging through it -- resets [loaded] to 0
+  /// since it tracks *this* search's own posts loaded so far, not a running
+  /// total across every selected search.
+  void startSearch({required int index, required int count, required String label, required int total}) {
+    searchIndex = index;
+    searchCount = count;
+    searchLabel = label;
+    loaded = 0;
+    this.total = total;
+    notifyListeners();
+  }
+
+  void setLoaded(int loaded) {
+    this.loaded = loaded;
+    notifyListeners();
+  }
+}
+
+/// Non-dismissible -- there's nothing sensible to resume into partway
+/// through paging every selected search's posts, so this blocks the screen
+/// until [_SearchesScreenState._downloadSelectedSearches] either finishes
+/// or fails, same as it already did before this dialog existed (just as a
+/// bare un-cancellable spinner instead).
+class _SelectedSearchesLoadDialog extends StatelessWidget {
+  final _SelectedSearchesLoadProgress progress;
+
+  const _SelectedSearchesLoadDialog({required this.progress});
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
+    return PopScope(
+      canPop: false,
+      child: AlertDialog(
+        content: AnimatedBuilder(
+          animation: progress,
+          builder: (context, child) {
+            // Partial credit for the current search's own progress, not
+            // just a discrete step per search -- smoother for a selection
+            // with only a couple of large searches, where "step" progress
+            // would otherwise sit at the same fraction for a long time.
+            final overall = progress.searchCount > 0 ? (progress.searchIndex - 1 + (progress.total > 0 ? progress.loaded / progress.total : 0)) / progress.searchCount : null;
+            final perSearch = progress.total > 0 ? progress.loaded / progress.total : null;
+            return Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(l10n.searchesLoadingPostsDialogTitle(progress.searchIndex, progress.searchCount)),
+                const SizedBox(height: 8),
+                LinearProgressIndicator(value: overall),
+                const SizedBox(height: 16),
+                Text(l10n.searchesLoadingPostsSearchProgress(progress.searchLabel, progress.loaded, progress.total)),
+                const SizedBox(height: 8),
+                LinearProgressIndicator(value: perSearch),
+              ],
+            );
+          },
+        ),
       ),
     );
   }
