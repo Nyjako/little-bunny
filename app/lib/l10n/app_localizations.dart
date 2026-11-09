@@ -472,6 +472,22 @@ abstract class AppLocalizations {
   /// **'Couldn\'t load all the posts for one or more selected searches. Try again.'**
   String get searchesMassDownloadError;
 
+  /// No description provided for @searchesLoadingPostsDialogTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Loading posts data {index}/{count}'**
+  String searchesLoadingPostsDialogTitle(int index, int count);
+
+  /// No description provided for @searchesLoadingPostsSearchProgress.
+  ///
+  /// In en, this message translates to:
+  /// **'{label} {loaded}/{total}'**
+  String searchesLoadingPostsSearchProgress(
+    String label,
+    int loaded,
+    int total,
+  );
+
   /// No description provided for @searchesDownloadQueueTooltip.
   ///
   /// In en, this message translates to:
@@ -1913,8 +1929,14 @@ abstract class AppLocalizations {
   /// No description provided for @downloadQueueResumeTooltip.
   ///
   /// In en, this message translates to:
-  /// **'Check for pending downloads'**
+  /// **'Resume downloads'**
   String get downloadQueueResumeTooltip;
+
+  /// No description provided for @downloadQueuePauseTooltip.
+  ///
+  /// In en, this message translates to:
+  /// **'Pause downloads'**
+  String get downloadQueuePauseTooltip;
 
   /// No description provided for @downloadQueueChecksumMismatchReason.
   ///

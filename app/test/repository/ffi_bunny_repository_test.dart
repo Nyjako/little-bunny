@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:little_bunny/repository/bunny_models.dart';
 import 'package:little_bunny/repository/bunny_repository.dart';
@@ -207,5 +209,30 @@ void main() {
 
     await repository.downloadQueueClearFinished();
     expect(await repository.downloadQueueList(), isEmpty);
+  });
+
+  test('a download_queue row survives closing and reopening a real, file-backed db (M67)', () async {
+    // Every other test in this file uses ':memory:' (see setUp), which
+    // proves nothing about actual restart durability -- an in-memory
+    // sqlite db is trivially gone the instant the connection closes
+    // regardless of whether the underlying write path is sound. A real
+    // temp file is what actually exercises "does this row still exist
+    // after the app (and its db connection) has fully closed and a brand
+    // new one opens the same file," the exact scenario a restart is.
+    final dir = await Directory.systemTemp.createTemp('ffi_restart_test');
+    addTearDown(() => dir.delete(recursive: true));
+    final dbPath = '${dir.path}/bunny.db';
+
+    final first = await FfiBunnyRepository.open(dbPath: dbPath, userAgent: 'little_bunny_test/0.0.1');
+    final id = await first.downloadQueueAdd(123);
+    await first.close();
+
+    final second = await FfiBunnyRepository.open(dbPath: dbPath, userAgent: 'little_bunny_test/0.0.1');
+    final rows = await second.downloadQueueList();
+    await second.close();
+
+    expect(rows, hasLength(1));
+    expect(rows.single.id, id);
+    expect(rows.single.postId, 123);
   });
 }

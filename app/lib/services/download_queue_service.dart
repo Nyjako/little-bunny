@@ -149,6 +149,17 @@ class DownloadQueueService extends ChangeNotifier {
   final List<DownloadQueueItem> _items = [];
   bool _processing = false;
 
+  /// Set by [pause], cleared by [resume] -- lets the user hold off on new
+  /// downloads starting (e.g. right before disconnecting from wifi, to
+  /// avoid burning mobile data) without losing anything already queued.
+  /// Only gates *claiming a new item*: a worker already mid-download when
+  /// this flips keeps running that one fetch to completion rather than
+  /// aborting it outright, since the native fetch layer has no cancellation
+  /// hook to abort through, and letting one already-started file finish is
+  /// a small, bounded cost compared to the plumbing a hard cancel would need.
+  bool _paused = false;
+  bool get isPaused => _paused;
+
   /// Persisted row ids already pulled into [_items] by [restore] -- lets
   /// [resume] call [restore] again safely (e.g. from a button or
   /// notification action) without re-adding the same row as a duplicate
@@ -201,9 +212,8 @@ class DownloadQueueService extends ChangeNotifier {
   List<DownloadQueueItem> get failedItems =>
       _items.where((item) => item.status == DownloadQueueItemStatus.failed || item.status == DownloadQueueItemStatus.checksumMismatch).toList(growable: false);
 
-  /// Enqueues [post] and returns immediately -- the actual download runs on
-  /// its own, never awaited by the caller.
-  void enqueue(BunnyPost post, BunnyRepository repository) => enqueueAll([post], repository);
+  /// Enqueues [post] -- see [enqueueAll] for why the returned future matters.
+  Future<void> enqueue(BunnyPost post, BunnyRepository repository) => enqueueAll([post], repository);
 
   /// Same as [enqueue], for a whole mass-download selection at once. Up to
   /// [_maxConcurrentDownloads] items download in parallel underneath (M62).
@@ -217,7 +227,23 @@ class DownloadQueueService extends ChangeNotifier {
   /// re-queueable, same as [retryFailed] already allows -- this only guards
   /// against genuinely duplicating in-flight work, not against a
   /// deliberate re-download later.
-  void enqueueAll(List<BunnyPost> posts, BunnyRepository repository) => _enqueueAll(posts, repository);
+  ///
+  /// Returns once every new item's own `download_queue` row is durably
+  /// persisted -- *not* once the downloads themselves finish (those keep
+  /// running in the background regardless of whether the caller awaits
+  /// this). This used to return immediately, before any of those inserts
+  /// had actually landed, on the theory that [restore] would just pick
+  /// everything back up on the next launch anyway. That reasoning missed
+  /// the actual failure mode: a mass-download of ~100 posts followed by the
+  /// user closing the app (or Android killing it) right after the "N queued"
+  /// confirmation landed could outrun the inserts -- a row that was never
+  /// written isn't something [restore] has anything to find on relaunch, so
+  /// it isn't "still queued but forgotten," it's gone. Awaiting this before
+  /// showing that confirmation (or before returning at all) closes that
+  /// window; the dedup/persist logic below already runs synchronously up to
+  /// that point, so this adds latency to the caller, not to when downloading
+  /// actually starts.
+  Future<void> enqueueAll(List<BunnyPost> posts, BunnyRepository repository) => _enqueueAll(posts, repository);
 
   /// Same as [enqueueAll], but every item is marked as part of pool
   /// [poolId]/[poolName] (M65). [pageByPostId] gives each post's *true*
@@ -231,10 +257,10 @@ class DownloadQueueService extends ChangeNotifier {
   /// [DownloadManager.downloadPost] files each item under a pool-named
   /// folder with a page-numbered filename instead of the regular
   /// per-artist scheme.
-  void enqueuePool(List<BunnyPost> posts, BunnyRepository repository, {required int poolId, required String poolName, required Map<int, int> pageByPostId}) =>
+  Future<void> enqueuePool(List<BunnyPost> posts, BunnyRepository repository, {required int poolId, required String poolName, required Map<int, int> pageByPostId}) =>
       _enqueueAll(posts, repository, poolId: poolId, poolName: poolName, pageByPostId: pageByPostId);
 
-  void _enqueueAll(List<BunnyPost> posts, BunnyRepository repository, {int poolId = 0, String? poolName, Map<int, int> pageByPostId = const {}}) {
+  Future<void> _enqueueAll(List<BunnyPost> posts, BunnyRepository repository, {int poolId = 0, String? poolName, Map<int, int> pageByPostId = const {}}) async {
     if (posts.isEmpty) {
       return;
     }
@@ -246,24 +272,34 @@ class DownloadQueueService extends ChangeNotifier {
     if (newPosts.isEmpty) {
       return;
     }
-    _items.addAll(
-      newPosts.map((post) {
-        final page = poolId > 0 ? (pageByPostId[post.id] ?? 0) : 0;
-        return DownloadQueueItem(
-          post: post,
-          repository: repository,
-          status: DownloadQueueItemStatus.queued,
-          queueRowIdFuture: repository.downloadQueueAdd(post.id, poolId: poolId, poolName: poolName, poolPage: page),
-          poolId: poolId,
-          poolName: poolName,
-          poolPage: page,
-        );
-      }),
-    );
+    final newItems = newPosts.map((post) {
+      final page = poolId > 0 ? (pageByPostId[post.id] ?? 0) : 0;
+      return DownloadQueueItem(
+        post: post,
+        repository: repository,
+        status: DownloadQueueItemStatus.queued,
+        queueRowIdFuture: repository.downloadQueueAdd(post.id, poolId: poolId, poolName: poolName, poolPage: page),
+        poolId: poolId,
+        poolName: poolName,
+        poolPage: page,
+      );
+    }).toList(growable: false);
+    _items.addAll(newItems);
     _sessionTotal += newPosts.length;
     notifyListeners();
-    if (!_processing) {
+    if (!_processing && !_paused) {
       unawaited(_processQueue());
+    }
+    // See this method's own doc comment -- the actual durability guarantee.
+    // Best-effort, same as every other persistence call in this class: a
+    // single insert failing here doesn't invalidate the rest of the batch,
+    // and whatever ends up unresolved is still visible in [_items]/the UI,
+    // with every later persisting call against it (e.g. [_persistStatus])
+    // already tolerating the same failure on its own.
+    try {
+      await Future.wait(newItems.map((item) => item.queueRowIdFuture));
+    } catch (_) {
+      // Ignored -- see above.
     }
   }
 
@@ -280,7 +316,7 @@ class DownloadQueueService extends ChangeNotifier {
     _sessionTotal += 1;
     unawaited(_persistStatus(item));
     notifyListeners();
-    if (!_processing) {
+    if (!_processing && !_paused) {
       unawaited(_processQueue());
     }
   }
@@ -299,7 +335,7 @@ class DownloadQueueService extends ChangeNotifier {
     }
     _sessionTotal += toRetry.length;
     notifyListeners();
-    if (!_processing) {
+    if (!_processing && !_paused) {
       unawaited(_processQueue());
     }
   }
@@ -364,6 +400,13 @@ class DownloadQueueService extends ChangeNotifier {
     // without needing to thread them through as parameters.
     Future<void> worker() async {
       while (true) {
+        // Checked before claiming, not instead of draining what's already
+        // in flight -- pause() only stops *new* items from starting (see
+        // its own doc comment); an item already past this check keeps
+        // running to completion.
+        if (_paused) {
+          return;
+        }
         final item = queuedItems.firstOrNull;
         if (item == null) {
           return;
@@ -576,6 +619,22 @@ class DownloadQueueService extends ChangeNotifier {
     }
   }
 
+  /// Rows are resolved this many at a time (M67) -- same bounded-worker-pool
+  /// shape as [_processQueue]'s download workers, just for [_getPostWithRetry]
+  /// calls instead of fetches. [restore] used to walk every row strictly
+  /// one at a time and only touch [_items]/[notifyListeners] once the
+  /// *entire* list had finished -- for a large backlog in networked mode,
+  /// where each row costs a real HTTP round trip, that meant the download
+  /// queue screen showed nothing at all for however long the whole backlog
+  /// took to resolve (minutes, for a few hundred rows), which read as "my
+  /// downloads are gone" even though every row was still sitting there,
+  /// just not drawn yet (M67 -- the actual explanation for reports like
+  /// that, once the separate durability race above was already fixed and
+  /// the symptom persisted). Resolving several rows concurrently rather
+  /// than strictly sequentially also just finishes the whole backlog
+  /// faster.
+  static const _restoreConcurrency = 5;
+
   /// Re-populates the queue from a previous run (M43, extended to cover
   /// every status, not just pending, as part of the queue-visibility
   /// follow-up; moved off a Dart-owned JSON file onto [BunnyRepository]'s
@@ -598,67 +657,79 @@ class DownloadQueueService extends ChangeNotifier {
   /// succeeds. Reuses each row's own existing id (never [enqueueAll], which
   /// would insert a *new* row) -- this is resuming the same persisted
   /// attempt, not starting a fresh one.
+  ///
+  /// Each row is added to [_items] (and [notifyListeners] called) the
+  /// moment *that row's own* fetch resolves (see [_restoreConcurrency]'s
+  /// own doc comment for why this matters) -- not batched up and applied
+  /// once every row in this call has finished.
   Future<void> restore(BunnyRepository repository) async {
     try {
       final rows = await repository.downloadQueueList();
-      if (rows.isEmpty) {
+      final pending = rows.where((row) => !_restoredRowIds.contains(row.id)).toList(growable: false);
+      if (pending.isEmpty) {
         return;
       }
-      final restoredTerminal = <DownloadQueueItem>[];
-      final toReprocess = <DownloadQueueItem>[];
-      for (final row in rows) {
-        if (_restoredRowIds.contains(row.id)) {
-          continue;
-        }
-        try {
-          final post = await _getPostWithRetry(repository, row.postId);
-          _restoredRowIds.add(row.id);
-          if (row.status == 'failed' || row.status == 'checksum_mismatch') {
-            restoredTerminal.add(
-              DownloadQueueItem(
-                post: post,
-                repository: repository,
-                status: row.status == 'failed' ? DownloadQueueItemStatus.failed : DownloadQueueItemStatus.checksumMismatch,
-                failureReason: row.failureReason,
-                queueRowIdFuture: Future.value(row.id),
-                poolId: row.poolId,
-                poolName: row.poolName,
-                poolPage: row.poolPage,
-              ),
-            );
-          } else {
-            if (row.status != 'queued') {
-              unawaited(repository.downloadQueueSetStatus(row.id, 'queued'));
-            }
-            toReprocess.add(
-              DownloadQueueItem(
-                post: post,
-                repository: repository,
-                status: DownloadQueueItemStatus.queued,
-                queueRowIdFuture: Future.value(row.id),
-                poolId: row.poolId,
-                poolName: row.poolName,
-                poolPage: row.poolPage,
-              ),
-            );
+      var nextIndex = 0;
+      // Claiming the next row (reading nextIndex, then incrementing) never
+      // has an await between those two steps, so this is race-free the
+      // same way claiming a queued item in _processQueue's own workers is
+      // (see that method's doc comment) -- two restore workers can never
+      // claim the same row.
+      Future<void> worker() async {
+        while (true) {
+          if (nextIndex >= pending.length) {
+            return;
           }
-        } catch (_) {
-          // Still not resolvable after retrying -- leave it out of
-          // _restoredRowIds so a later resume() call gets another chance.
+          final row = pending[nextIndex++];
+          try {
+            final post = await _getPostWithRetry(repository, row.postId);
+            _restoredRowIds.add(row.id);
+            if (row.status == 'failed' || row.status == 'checksum_mismatch') {
+              _items.add(
+                DownloadQueueItem(
+                  post: post,
+                  repository: repository,
+                  status: row.status == 'failed' ? DownloadQueueItemStatus.failed : DownloadQueueItemStatus.checksumMismatch,
+                  failureReason: row.failureReason,
+                  queueRowIdFuture: Future.value(row.id),
+                  poolId: row.poolId,
+                  poolName: row.poolName,
+                  poolPage: row.poolPage,
+                ),
+              );
+              notifyListeners();
+            } else {
+              if (row.status != 'queued') {
+                unawaited(repository.downloadQueueSetStatus(row.id, 'queued'));
+              }
+              _items.add(
+                DownloadQueueItem(
+                  post: post,
+                  repository: repository,
+                  status: DownloadQueueItemStatus.queued,
+                  queueRowIdFuture: Future.value(row.id),
+                  poolId: row.poolId,
+                  poolName: row.poolName,
+                  poolPage: row.poolPage,
+                ),
+              );
+              _sessionTotal += 1;
+              notifyListeners();
+              // Same race-free reasoning as every other "is anything
+              // already running" check in this class -- see _enqueueAll's
+              // own equivalent.
+              if (!_processing && !_paused) {
+                unawaited(_processQueue());
+              }
+            }
+          } catch (_) {
+            // Still not resolvable after retrying -- leave it out of
+            // _restoredRowIds so a later resume() call gets another chance.
+          }
         }
       }
-      if (restoredTerminal.isNotEmpty) {
-        _items.addAll(restoredTerminal);
-        notifyListeners();
-      }
-      if (toReprocess.isNotEmpty) {
-        _items.addAll(toReprocess);
-        _sessionTotal += toReprocess.length;
-        notifyListeners();
-        if (!_processing) {
-          unawaited(_processQueue());
-        }
-      }
+
+      await Future.wait(List.generate(_restoreConcurrency, (_) => worker()));
     } catch (e) {
       // Best-effort, but not silent -- a failure here means nothing resumes
       // on this launch at all, worth a trace during development.
@@ -666,10 +737,36 @@ class DownloadQueueService extends ChangeNotifier {
     }
   }
 
-  /// Manual re-check for pending downloads (M65) -- a button on the download
-  /// queue screen and a notification action both call this, for whenever
-  /// [restore]'s own automatic retries at launch still weren't enough (e.g.
-  /// the network took longer than that to come up in networked mode). Just
-  /// [restore] again; safe to call repeatedly thanks to [_restoredRowIds].
-  Future<void> resume(BunnyRepository repository) => restore(repository);
+  /// Stops new items from being claimed (see [_paused]'s own doc comment)
+  /// -- a no-op if already paused. The download queue screen's
+  /// pause/resume button (replacing the old always-"check for pending
+  /// downloads" button, M67) calls this, for e.g. pausing right before
+  /// disconnecting from wifi to avoid burning mobile data on whatever's
+  /// still queued.
+  void pause() {
+    if (_paused) {
+      return;
+    }
+    _paused = true;
+    notifyListeners();
+  }
+
+  /// Un-pauses (a no-op if not currently paused) and re-checks for pending
+  /// downloads (M65) -- a button on the download queue screen and a
+  /// notification action both call this, for whenever [restore]'s own
+  /// automatic retries at launch still weren't enough (e.g. the network
+  /// took longer than that to come up in networked mode), *and* for
+  /// whenever [pause] left queued items sitting idle: [restore] alone
+  /// wouldn't restart those (every row still persisted from this session is
+  /// already in [_restoredRowIds], so [restore] finds nothing new to add),
+  /// so this also kicks [_processQueue] directly whenever there's anything
+  /// left in [queuedItems] and nothing's currently processing.
+  Future<void> resume(BunnyRepository repository) async {
+    _paused = false;
+    await restore(repository);
+    if (!_processing && queuedItems.isNotEmpty) {
+      unawaited(_processQueue());
+    }
+    notifyListeners();
+  }
 }

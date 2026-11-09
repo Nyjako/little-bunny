@@ -98,6 +98,14 @@
     "placeholders": {"count": {"type": "int"}}
   },
   "searchesMassDownloadError": "Couldn't load all the posts for one or more selected searches. Try again.",
+  "searchesLoadingPostsDialogTitle": "Loading posts data {index}/{count}",
+  "@searchesLoadingPostsDialogTitle": {
+    "placeholders": {"index": {"type": "int"}, "count": {"type": "int"}}
+  },
+  "searchesLoadingPostsSearchProgress": "{label} {loaded}/{total}",
+  "@searchesLoadingPostsSearchProgress": {
+    "placeholders": {"label": {"type": "String"}, "loaded": {"type": "int"}, "total": {"type": "int"}}
+  },
   "searchesDownloadQueueTooltip": "Downloads",
   "searchesSyncAllProgress": "{done}/{total} checked",
   "@searchesSyncAllProgress": {
@@ -456,7 +464,8 @@
   "downloadQueueRetryTooltip": "Retry",
   "downloadQueueRetryAllTooltip": "Retry all",
   "downloadQueueClearFinishedTooltip": "Clear finished",
-  "downloadQueueResumeTooltip": "Check for pending downloads",
+  "downloadQueueResumeTooltip": "Resume downloads",
+  "downloadQueuePauseTooltip": "Pause downloads",
   "downloadQueueChecksumMismatchReason": "Downloaded, but the checksum didn't match",
   "downloadQueueQueuedCount": "{count} queued",
   "@downloadQueueQueuedCount": {
