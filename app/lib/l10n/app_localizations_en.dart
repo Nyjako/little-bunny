@@ -218,6 +218,20 @@ class AppLocalizationsEn extends AppLocalizations {
       'Couldn\'t load all the posts for one or more selected searches. Try again.';
 
   @override
+  String searchesLoadingPostsDialogTitle(int index, int count) {
+    return 'Loading posts data $index/$count';
+  }
+
+  @override
+  String searchesLoadingPostsSearchProgress(
+    String label,
+    int loaded,
+    int total,
+  ) {
+    return '$label $loaded/$total';
+  }
+
+  @override
   String get searchesDownloadQueueTooltip => 'Downloads';
 
   @override
@@ -1012,7 +1026,10 @@ class AppLocalizationsEn extends AppLocalizations {
   String get downloadQueueClearFinishedTooltip => 'Clear finished';
 
   @override
-  String get downloadQueueResumeTooltip => 'Check for pending downloads';
+  String get downloadQueueResumeTooltip => 'Resume downloads';
+
+  @override
+  String get downloadQueuePauseTooltip => 'Pause downloads';
 
   @override
   String get downloadQueueChecksumMismatchReason =>

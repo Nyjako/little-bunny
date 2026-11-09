@@ -467,9 +467,18 @@ void main() {
 
       final restored = buildService(client: MockClient((_) async => http.Response.bytes([1, 2, 3], 200)));
       await restored.restore(repository);
+      // Not totalCount right after restore() returns: rows now resolve
+      // concurrently (M67), so row 2's own fetch+download can race ahead
+      // and fully finish (resetting session counters back to 0, same as
+      // any batch that fully drains) while row 1 is still working through
+      // its 3 retries -- restore() only returns once every row (including
+      // the slow, ultimately-unresolvable one) is done, by which point
+      // row 2 has had plenty of time to finish too.
+      await waitUntilIdle(restored);
 
-      expect(restored.totalCount, 1);
+      expect(restored.items, hasLength(1));
       expect(restored.items.single.post.id, 2);
+      expect(restored.succeededCount, 1);
     });
 
     test('restore retries a transient getPost failure (M65) and still succeeds once it recovers', () async {

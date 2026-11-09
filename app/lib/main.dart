@@ -207,21 +207,18 @@ class _LittleBunnyAppState extends State<LittleBunnyApp> {
     } else if (_locked) {
       home = LockScreen(lockService: widget.lockService, onUnlocked: _onUnlocked);
     } else {
-      home = BunnyRepositoryScope(
-        repository: _repository!,
-        child: SearchesScreen(
-          lockService: widget.lockService,
-          themeSettingsStore: widget.themeSettingsStore,
-          displaySettingsStore: widget.displaySettingsStore,
-          downloadSettingsStore: widget.downloadSettingsStore,
-          downloadQueueService: widget.downloadQueueService,
-          settingsStore: widget.settingsStore,
-          onThemeModeChanged: (mode) => setState(() => _themeMode = mode),
-          onThemeColorChanged: (color) => setState(() => _themeColor = color),
-          onAmoledChanged: (amoled) => setState(() => _amoled = amoled),
-          onLanguageCodeChanged: (languageCode) => setState(() => _languageCode = languageCode),
-          onRepositoryConfigured: _onConfigured,
-        ),
+      home = SearchesScreen(
+        lockService: widget.lockService,
+        themeSettingsStore: widget.themeSettingsStore,
+        displaySettingsStore: widget.displaySettingsStore,
+        downloadSettingsStore: widget.downloadSettingsStore,
+        downloadQueueService: widget.downloadQueueService,
+        settingsStore: widget.settingsStore,
+        onThemeModeChanged: (mode) => setState(() => _themeMode = mode),
+        onThemeColorChanged: (color) => setState(() => _themeColor = color),
+        onAmoledChanged: (amoled) => setState(() => _amoled = amoled),
+        onLanguageCodeChanged: (languageCode) => setState(() => _languageCode = languageCode),
+        onRepositoryConfigured: _onConfigured,
       );
     }
 
@@ -242,7 +239,7 @@ class _LittleBunnyAppState extends State<LittleBunnyApp> {
       );
     }
 
-    return MaterialApp(
+    final app = MaterialApp(
       onGenerateTitle: (context) => AppLocalizations.of(context)!.appTitle,
       localizationsDelegates: const [AppLocalizations.delegate, GlobalMaterialLocalizations.delegate, GlobalWidgetsLocalizations.delegate, GlobalCupertinoLocalizations.delegate],
       supportedLocales: AppLocalizations.supportedLocales,
@@ -257,5 +254,17 @@ class _LittleBunnyAppState extends State<LittleBunnyApp> {
       themeMode: _themeMode,
       home: home,
     );
+    // Wraps the whole MaterialApp, not just `home` -- `home`'s own content
+    // only ever becomes the *first* route's widget subtree; a screen reached
+    // via Navigator.push (DownloadQueueScreen, PostGridScreen, ...) lives in
+    // a separate route subtree that's a sibling of it under the Navigator's
+    // Overlay, not a descendant. Scoping this only around `home` meant every
+    // pushed screen calling BunnyRepositoryScope.of(context) hit a null
+    // ancestor and crashed with a null-check error -- undetected by the
+    // widget tests, which pump each screen wrapped in its own standalone
+    // BunnyRepositoryScope rather than through real app navigation. Scoping
+    // around the whole MaterialApp instead makes it an ancestor of the
+    // Navigator itself, hence of every route pushed onto it.
+    return _repository == null ? app : BunnyRepositoryScope(repository: _repository!, child: app);
   }
 }
