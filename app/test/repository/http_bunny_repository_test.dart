@@ -964,6 +964,48 @@ void main() {
       expect(lines, ['line one', 'line two']);
     });
 
+    test('getTasks reads the "tasks" array out of the wrapped GET /tasks response', () async {
+      respond = (_) => http.Response(
+        jsonEncode({
+          'tasks': [
+            {'id': 1, 'type': 'sync_search', 'priority': 'high', 'status': 'running', 'label': 'Sync: wolves', 'enqueued_at': '2026-01-01T00:00:00Z'},
+          ],
+          'history': [],
+        }),
+        200,
+      );
+
+      final tasks = await buildRepository().getTasks();
+
+      expect(capturedUri.path, '/tasks');
+      expect(tasks, hasLength(1));
+      expect(tasks.single.label, 'Sync: wolves');
+      expect(tasks.single.priority, BunnyTaskPriority.high);
+      expect(tasks.single.status, BunnyTaskStatus.running);
+    });
+
+    test('getTaskHistory reads the "history" array out of the wrapped GET /tasks response (M68 follow-up)', () async {
+      respond = (_) => http.Response(
+        jsonEncode({
+          'tasks': [],
+          'history': [
+            {'id': 1, 'type': 'sync_search', 'priority': 'high', 'label': 'Sync: foxes', 'enqueued_at': '2026-01-01T00:00:00Z', 'finished_at': '2026-01-01T00:05:00Z', 'succeeded': false},
+          ],
+        }),
+        200,
+      );
+
+      final history = await buildRepository().getTaskHistory();
+
+      expect(capturedUri.path, '/tasks');
+      expect(history, hasLength(1));
+      expect(history.single.label, 'Sync: foxes');
+      expect(history.single.priority, BunnyTaskPriority.high);
+      expect(history.single.enqueuedAt, DateTime.utc(2026, 1, 1));
+      expect(history.single.finishedAt, DateTime.utc(2026, 1, 1, 0, 5));
+      expect(history.single.succeeded, isFalse);
+    });
+
     test('fetchConnectionQrPng sends the right request body and returns the raw PNG bytes', () async {
       respond = (_) => http.Response.bytes([1, 2, 3, 4], 200);
 

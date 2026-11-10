@@ -304,6 +304,11 @@ abstract interface class BunnyRepository {
   /// [FfiBunnyRepository] always returns an empty list.
   Future<List<BunnyTask>> getTasks();
 
+  /// The most recently *finished* task_queue jobs (M68 follow-up), newest
+  /// first -- same server-only/standalone-always-empty reasoning as
+  /// [getTasks].
+  Future<List<BunnyTaskHistoryEntry>> getTaskHistory();
+
   /// Enqueues a favorite-add action; it isn't sent to the site until
   /// [processQueue] runs. `stars` is Inkbunny's 1-3 rating, or omitted for
   /// e621's plain favorite.

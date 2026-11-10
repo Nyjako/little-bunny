@@ -455,6 +455,9 @@ class FfiBunnyRepository implements BunnyRepository {
   Future<List<BunnyTask>> getTasks() async => const [];
 
   @override
+  Future<List<BunnyTaskHistoryEntry>> getTaskHistory() async => const [];
+
+  @override
   Future<void> queueFavoriteAdd(int postId, {int? stars}) => _wrapped(() => _native.queueFavoriteAdd(postId, stars ?? -1));
 
   @override

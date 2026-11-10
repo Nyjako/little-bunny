@@ -1478,6 +1478,30 @@ abstract class AppLocalizations {
   /// **'Pending'**
   String get taskQueueStatusPending;
 
+  /// No description provided for @taskQueueRecentSection.
+  ///
+  /// In en, this message translates to:
+  /// **'Recent'**
+  String get taskQueueRecentSection;
+
+  /// No description provided for @taskQueueFinishedAgo.
+  ///
+  /// In en, this message translates to:
+  /// **'Finished {duration} ago'**
+  String taskQueueFinishedAgo(String duration);
+
+  /// No description provided for @taskQueueSucceeded.
+  ///
+  /// In en, this message translates to:
+  /// **'Succeeded'**
+  String get taskQueueSucceeded;
+
+  /// No description provided for @taskQueueFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Failed'**
+  String get taskQueueFailed;
+
   /// No description provided for @settingsAppearanceSection.
   ///
   /// In en, this message translates to:

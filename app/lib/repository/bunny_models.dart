@@ -497,6 +497,22 @@ class BunnyTask {
   const BunnyTask({required this.id, required this.priority, required this.status, required this.label, required this.enqueuedAt});
 }
 
+/// One entry from `GET /tasks`'s "history" array (M68 follow-up) -- the
+/// most recently *finished* jobs, newest first, as opposed to [BunnyTask]'s
+/// live pending/running list. Purely a debugging aid ("what did the server
+/// just do, and did it succeed"), not meant to double as an audit log --
+/// the server only keeps a small fixed number of these.
+class BunnyTaskHistoryEntry {
+  final int id;
+  final BunnyTaskPriority priority;
+  final String label;
+  final DateTime enqueuedAt;
+  final DateTime finishedAt;
+  final bool succeeded;
+
+  const BunnyTaskHistoryEntry({required this.id, required this.priority, required this.label, required this.enqueuedAt, required this.finishedAt, required this.succeeded});
+}
+
 /// Mirrors `bunny_core_queue_stats_t`.
 class BunnyQueueStats {
   final int actionsProcessed;

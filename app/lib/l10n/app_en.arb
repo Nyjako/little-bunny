@@ -357,6 +357,13 @@
   "taskQueuePriorityLow": "Low",
   "taskQueueStatusRunning": "Running",
   "taskQueueStatusPending": "Pending",
+  "taskQueueRecentSection": "Recent",
+  "taskQueueFinishedAgo": "Finished {duration} ago",
+  "@taskQueueFinishedAgo": {
+    "placeholders": {"duration": {"type": "String"}}
+  },
+  "taskQueueSucceeded": "Succeeded",
+  "taskQueueFailed": "Failed",
   "settingsAppearanceSection": "Appearance",
   "settingsThemeLight": "Light",
   "settingsThemeDark": "Dark",

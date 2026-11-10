@@ -742,7 +742,7 @@ class HttpBunnyRepository implements BunnyRepository {
     if (response.statusCode != 200) {
       _throwError(response);
     }
-    final list = _decodeList(response);
+    final list = (_decodeObject(response)['tasks'] as List).cast<Map<String, Object?>>();
     return list
         .map(
           (e) => BunnyTask(
@@ -751,6 +751,27 @@ class HttpBunnyRepository implements BunnyRepository {
             status: BunnyTaskStatus.fromWireString(e['status'] as String),
             label: e['label'] as String,
             enqueuedAt: DateTime.parse(e['enqueued_at'] as String),
+          ),
+        )
+        .toList();
+  }
+
+  @override
+  Future<List<BunnyTaskHistoryEntry>> getTaskHistory() async {
+    final response = await _client.get(_uri('/tasks'), headers: _headers);
+    if (response.statusCode != 200) {
+      _throwError(response);
+    }
+    final list = (_decodeObject(response)['history'] as List).cast<Map<String, Object?>>();
+    return list
+        .map(
+          (e) => BunnyTaskHistoryEntry(
+            id: (e['id'] as num).toInt(),
+            priority: BunnyTaskPriority.fromWireString(e['priority'] as String),
+            label: e['label'] as String,
+            enqueuedAt: DateTime.parse(e['enqueued_at'] as String),
+            finishedAt: DateTime.parse(e['finished_at'] as String),
+            succeeded: e['succeeded'] as bool,
           ),
         )
         .toList();

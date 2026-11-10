@@ -776,6 +776,20 @@ class AppLocalizationsEn extends AppLocalizations {
   String get taskQueueStatusPending => 'Pending';
 
   @override
+  String get taskQueueRecentSection => 'Recent';
+
+  @override
+  String taskQueueFinishedAgo(String duration) {
+    return 'Finished $duration ago';
+  }
+
+  @override
+  String get taskQueueSucceeded => 'Succeeded';
+
+  @override
+  String get taskQueueFailed => 'Failed';
+
+  @override
   String get settingsAppearanceSection => 'Appearance';
 
   @override
