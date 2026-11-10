@@ -202,6 +202,70 @@ bunny_core_result_t bunny_core_search_list_posts(bunny_core_t *core, int64_t sea
     return bunny_core_map_db_result(result);
 }
 
+bunny_core_result_t bunny_core_slideshow_pick_random_posts(bunny_core_t *core, const int64_t *search_ids, size_t search_id_count, int rating_mask, int media_mask, int count, bunny_db_post_list_t *out_list)
+{
+    if (!core || !search_ids || !out_list || search_id_count == 0 || count <= 0) {
+        return BUNNY_CORE_ERR_INVALID_ARG;
+    }
+    size_t slot;
+    bunny_db_t *read_db = bunny_core_db_read_lock(core, &slot);
+
+    bunny_db_search_list_t searches;
+    bunny_db_result_t search_list_result = bunny_db_search_list(read_db, &searches);
+    if (search_list_result != BUNNY_DB_OK) {
+        bunny_core_db_read_unlock(core, slot);
+        return bunny_core_map_db_result(search_list_result);
+    }
+
+    /* Resolve each given id the same way bunny_core_search_list_posts above
+     * resolves one -- but a pool search has no bunny_db_search_list_posts_random
+     * equivalent (see that function's own doc comment), so it's dropped from
+     * the set entirely rather than failing the whole call; so is a stale id
+     * that doesn't match any real search. */
+    int64_t *resolved_ids = malloc(search_id_count * sizeof(int64_t));
+    bunny_db_site_t *resolved_sites = malloc(search_id_count * sizeof(bunny_db_site_t));
+    bool *resolved_apply_blacklist = malloc(search_id_count * sizeof(bool));
+    if (!resolved_ids || !resolved_sites || !resolved_apply_blacklist) {
+        free(resolved_ids);
+        free(resolved_sites);
+        free(resolved_apply_blacklist);
+        bunny_db_search_list_free(&searches);
+        bunny_core_db_read_unlock(core, slot);
+        return BUNNY_CORE_ERR_UNKNOWN;
+    }
+    size_t resolved_count = 0;
+    for (size_t i = 0; i < search_id_count; i++) {
+        for (size_t j = 0; j < searches.count; j++) {
+            if (searches.items[j].id != search_ids[i]) {
+                continue;
+            }
+            int64_t pool_id = 0;
+            if (bunny_core_parse_pool_id_from_query(searches.items[j].query, &pool_id)) {
+                break; /* pool search -- excluded, see doc comment above */
+            }
+            resolved_ids[resolved_count] = search_ids[i];
+            resolved_sites[resolved_count] = searches.items[j].site;
+            resolved_apply_blacklist[resolved_count] = !bunny_core_is_favorites_query(searches.items[j].site, searches.items[j].query);
+            resolved_count++;
+            break;
+        }
+    }
+    bunny_db_search_list_free(&searches);
+
+    bunny_core_result_t core_result;
+    if (resolved_count == 0) {
+        core_result = BUNNY_CORE_ERR_INVALID_ARG;
+    } else {
+        bunny_db_result_t result = bunny_db_search_list_posts_random(read_db, resolved_ids, resolved_sites, resolved_apply_blacklist, resolved_count, rating_mask, media_mask, count, out_list);
+        core_result = bunny_core_map_db_result(result);
+    }
+    free(resolved_ids);
+    free(resolved_sites);
+    free(resolved_apply_blacklist);
+    bunny_core_db_read_unlock(core, slot);
+    return core_result;
+}
+
 bunny_core_result_t bunny_core_post_get_by_id(bunny_core_t *core, int64_t post_id, bunny_db_post_t *out_post)
 {
     if (!core) {

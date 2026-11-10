@@ -455,6 +455,34 @@ void test_full_account_search_sync_favorite_flow(void)
     free(response.data);
     memset(&response, 0, sizeof(response));
 
+    /* M51: slideshow's random-sample endpoint, reusing the search/post
+     * already synced above. */
+    status = do_request("GET", "/slideshow/posts?search_ids=1&count=5", NULL, &response, true, NULL);
+    TEST_ASSERT_EQUAL(200, status);
+    TEST_ASSERT_NOT_NULL(strstr(response.data, "\"external_id\":1"));
+    free(response.data);
+    memset(&response, 0, sizeof(response));
+
+    status = do_request("GET", "/slideshow/posts?count=5", NULL, &response, true, NULL);
+    TEST_ASSERT_EQUAL(400, status); /* missing search_ids */
+    free(response.data);
+    memset(&response, 0, sizeof(response));
+
+    status = do_request("GET", "/slideshow/posts?search_ids=1", NULL, &response, true, NULL);
+    TEST_ASSERT_EQUAL(400, status); /* missing count */
+    free(response.data);
+    memset(&response, 0, sizeof(response));
+
+    status = do_request("GET", "/slideshow/posts?search_ids=notanumber&count=5", NULL, &response, true, NULL);
+    TEST_ASSERT_EQUAL(400, status); /* malformed search_ids */
+    free(response.data);
+    memset(&response, 0, sizeof(response));
+
+    status = do_request("GET", "/slideshow/posts?search_ids=1,notanumber&count=5", NULL, &response, true, NULL);
+    TEST_ASSERT_EQUAL(400, status); /* malformed second id in the comma list */
+    free(response.data);
+    memset(&response, 0, sizeof(response));
+
     /* M28: e621 posts never populate post_files -- empty, same as sources
      * above is populated and pools below is empty, each reflecting what's
      * actually site-specific vs. not. */

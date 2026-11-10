@@ -65,6 +65,17 @@ void main() {
     expect(await repository.getPostSources(1), isEmpty);
   });
 
+  test('getSlideshowRandomPosts is empty for freshly created searches with no posts (M51)', () async {
+    final id1 = await repository.createSearch(BunnySite.e621, 'wolves', 'wolf');
+    final id2 = await repository.createSearch(BunnySite.e621, 'foxes', 'fox');
+
+    expect(await repository.getSlideshowRandomPosts([id1, id2], 10), isEmpty);
+  });
+
+  test('getSlideshowRandomPosts throws when every given search id resolves to nothing (M51)', () async {
+    await expectLater(repository.getSlideshowRandomPosts([999999], 10), throwsA(isA<BunnyRepositoryException>()));
+  });
+
   test('getPostFiles returns an empty list for a nonexistent post', () async {
     expect(await repository.getPostFiles(1), isEmpty);
   });

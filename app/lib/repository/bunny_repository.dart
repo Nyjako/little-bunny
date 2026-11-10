@@ -181,6 +181,14 @@ abstract interface class BunnyRepository {
   /// none (e.g. every Inkbunny submission -- no such field there).
   Future<List<String>> getPostSources(int postId);
 
+  /// Server-side random sample (M51): `count` posts chosen at random, no
+  /// repeats, from the union of `searchIds`'s own results -- each search's
+  /// own site/blacklist applicability is still respected, same as
+  /// [listSearchPosts]. Never fetches more than `count` posts, unlike
+  /// client-side sampling would need to for a large cached search. May
+  /// return fewer than `count` if the combined, filtered pool is smaller.
+  Future<List<BunnyPost>> getSlideshowRandomPosts(List<int> searchIds, int count, {int ratingMask = kRatingMaskAll, int mediaMask = kMediaMaskAll});
+
   /// Every file on a post, in position order (M28). A single-file post
   /// (including every e621 post) still returns exactly one entry, the same
   /// file [BunnyPost.fileUrl]/[BunnyPost.width]/etc. already represent.

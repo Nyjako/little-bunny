@@ -22,6 +22,7 @@ import 'download_queue_screen.dart';
 import 'edit_search_screen.dart';
 import 'post_grid_screen.dart';
 import 'settings_screen.dart';
+import 'slideshow_screen.dart';
 import 'tag_stats_screen.dart';
 
 /// The app's actual home screen (M8.2 promoted this over [AccountsScreen] --
@@ -524,6 +525,63 @@ class _SearchesScreenState extends State<SearchesScreen> with SingleTickerProvid
     }
   }
 
+  /// A plain two-field dialog (interval seconds, post count) -- unlike
+  /// [_downloadSelectedSearches]'s own multi-page fetch, M51's slideshow is
+  /// one quick server-side random-sample call, so no loading dialog is
+  /// needed here. Leniently parsed the same way [_createPoolSearch]'s own
+  /// `int.tryParse` is -- no fancier forms validation for a first cut.
+  Future<void> _startSlideshow(AppLocalizations l10n) async {
+    final selectedIds = _selectedSearchIds.toList();
+    if (selectedIds.isEmpty) {
+      return;
+    }
+    final intervalController = TextEditingController(text: '5');
+    final countController = TextEditingController(text: '30');
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(l10n.slideshowConfigDialogTitle),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(controller: intervalController, decoration: InputDecoration(labelText: l10n.slideshowIntervalLabel), keyboardType: TextInputType.number, autofocus: true),
+            TextField(controller: countController, decoration: InputDecoration(labelText: l10n.slideshowPostCountLabel), keyboardType: TextInputType.number),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: Text(l10n.commonCancel)),
+          TextButton(onPressed: () => Navigator.pop(context, true), child: Text(l10n.slideshowStartButton)),
+        ],
+      ),
+    );
+    if (confirmed != true) {
+      return;
+    }
+    final interval = int.tryParse(intervalController.text);
+    final count = int.tryParse(countController.text);
+    if (interval == null || interval <= 0 || count == null || count <= 0) {
+      return;
+    }
+
+    try {
+      final posts = await _repository!.getSlideshowRandomPosts(selectedIds, count);
+      if (!mounted) {
+        return;
+      }
+      if (posts.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(l10n.slideshowEmptyResultMessage)));
+        return;
+      }
+      _exitSelectionMode();
+      await Navigator.push(context, MaterialPageRoute(builder: (context) => SlideshowScreen(posts: posts, interval: Duration(seconds: interval), repository: _repository!)));
+    } catch (_) {
+      if (!mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(l10n.slideshowError)));
+    }
+  }
+
   /// Records the open (fire-and-forget -- shouldn't delay navigation) for the
   /// "last viewed" sort order, then awaits the post grid so returning from it
   /// re-sorts the list and the reordering is actually visible (M15).
@@ -809,6 +867,145 @@ class _SearchesScreenState extends State<SearchesScreen> with SingleTickerProvid
     _refresh();
   }
 
+  List<Widget> _selectionModeActions(AppLocalizations l10n) => [
+    _loadingSelectedSearches
+        ? const Padding(padding: EdgeInsets.all(16), child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)))
+        : IconButton(
+            icon: const Icon(Icons.download_outlined),
+            tooltip: l10n.searchesDownloadSelectedTooltip,
+            onPressed: _selectedSearchIds.isEmpty ? null : () => _downloadSelectedSearches(l10n),
+          ),
+    IconButton(icon: const Icon(Icons.slideshow), tooltip: l10n.searchesStartSlideshowTooltip, onPressed: _selectedSearchIds.isEmpty ? null : () => _startSlideshow(l10n)),
+  ];
+
+  Widget _syncIconButton(AppLocalizations l10n) => IconButton(
+    icon: _syncStatus.active ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.sync),
+    tooltip: l10n.searchesCheckForUpdatesTooltip,
+    onPressed: _syncStatus.active ? null : _checkForUpdates,
+  );
+
+  Widget _downloadQueueIconButton(AppLocalizations l10n) => IconButton(
+    icon: const Icon(Icons.download_outlined),
+    tooltip: l10n.searchesDownloadQueueTooltip,
+    onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (context) => DownloadQueueScreen(downloadQueueService: widget.downloadQueueService))),
+  );
+
+  void _openCustomSearch() => Navigator.push(
+    context,
+    MaterialPageRoute(
+      builder: (context) =>
+          CustomSearchScreen(repository: _repository!, displaySettingsStore: widget.displaySettingsStore, downloadSettingsStore: widget.downloadSettingsStore, downloadQueueService: widget.downloadQueueService),
+    ),
+  );
+
+  void _openAccounts() => Navigator.push(
+    context,
+    MaterialPageRoute(
+      builder: (context) =>
+          AccountsScreen(repository: _repository!, displaySettingsStore: widget.displaySettingsStore, downloadSettingsStore: widget.downloadSettingsStore, downloadQueueService: widget.downloadQueueService),
+    ),
+  );
+
+  void _openTagStats() => Navigator.push(
+    context,
+    MaterialPageRoute(
+      builder: (context) =>
+          TagStatsScreen(repository: _repository!, displaySettingsStore: widget.displaySettingsStore, downloadSettingsStore: widget.downloadSettingsStore, downloadQueueService: widget.downloadQueueService),
+    ),
+  );
+
+  Future<void> _openSettings() async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => SettingsScreen(
+          repository: _repository!,
+          themeSettingsStore: widget.themeSettingsStore,
+          lockService: widget.lockService,
+          displaySettingsStore: widget.displaySettingsStore,
+          downloadSettingsStore: widget.downloadSettingsStore,
+          settingsStore: widget.settingsStore,
+          onThemeModeChanged: widget.onThemeModeChanged,
+          onThemeColorChanged: widget.onThemeColorChanged,
+          onAmoledChanged: widget.onAmoledChanged,
+          onLanguageCodeChanged: widget.onLanguageCodeChanged,
+          onRepositoryConfigured: widget.onRepositoryConfigured,
+        ),
+      ),
+    );
+    // Settings can create searches (the Backup section's import, M11) --
+    // unconditionally refresh on return rather than threading a bool pop
+    // result through, since there's no "cancelled" case worth skipping a
+    // cheap reload for.
+    _refresh();
+  }
+
+  List<PopupMenuEntry<SearchSortOrder>> _sortMenuItems(AppLocalizations l10n) => [
+    CheckedPopupMenuItem(value: SearchSortOrder.mostUnseen, checked: _sortOrder == SearchSortOrder.mostUnseen, child: Text(l10n.searchesSortMostUnseen)),
+    CheckedPopupMenuItem(value: SearchSortOrder.label, checked: _sortOrder == SearchSortOrder.label, child: Text(l10n.searchesSortLabel)),
+    CheckedPopupMenuItem(value: SearchSortOrder.recentlyCreated, checked: _sortOrder == SearchSortOrder.recentlyCreated, child: Text(l10n.searchesSortRecentlyCreated)),
+    CheckedPopupMenuItem(value: SearchSortOrder.lastViewed, checked: _sortOrder == SearchSortOrder.lastViewed, child: Text(l10n.searchesSortLastViewed)),
+  ];
+
+  /// A plain icon+label row for a [PopupMenuItem] that reuses an existing
+  /// app-bar icon/tooltip as its own label, rather than new l10n strings.
+  Widget _menuRow(IconData icon, String label) => Row(children: [Icon(icon), const SizedBox(width: 12), Text(label)]);
+
+  List<Widget> _wideModeActions(AppLocalizations l10n) => [
+    _syncIconButton(l10n),
+    IconButton(icon: const Icon(Icons.travel_explore), tooltip: l10n.searchesCustomSearchTooltip, onPressed: _openCustomSearch),
+    _downloadQueueIconButton(l10n),
+    IconButton(icon: const Icon(Icons.person_outline), tooltip: l10n.searchesAccountsTooltip, onPressed: _openAccounts),
+    IconButton(icon: const Icon(Icons.bar_chart_outlined), tooltip: l10n.searchesTagStatsTooltip, onPressed: _openTagStats),
+    IconButton(icon: const Icon(Icons.settings_outlined), tooltip: l10n.searchesSettingsTooltip, onPressed: _openSettings),
+    IconButton(icon: const Icon(Icons.create_new_folder_outlined), tooltip: l10n.searchesNewGroupTooltip, onPressed: _createGroup),
+    PopupMenuButton<SearchSortOrder>(
+      icon: const Icon(Icons.sort),
+      tooltip: l10n.searchesSortTooltip,
+      initialValue: _sortOrder,
+      onSelected: _setSortOrder,
+      itemBuilder: (context) => [
+        ..._sortMenuItems(l10n),
+        const PopupMenuDivider(),
+        // No value -- the parent's onSelected (_setSortOrder) above is only
+        // ever asked about SearchSortOrder values, never this one;
+        // PopupMenuItem.onTap runs regardless (M65). Folded in here rather
+        // than its own app-bar icon since a 9th icon doesn't fit next to
+        // the other 8 on a narrow window (M9.6.6's own compact-width test).
+        PopupMenuItem<SearchSortOrder>(onTap: () => setState(() => _selectionMode = true), child: Text(l10n.searchesSelectForDownloadTooltip)),
+      ],
+    ),
+  ];
+
+  /// Narrow/mobile width (M9.6.6's breakpoint): only [_syncIconButton] and
+  /// [_downloadQueueIconButton] -- the two most frequently used -- stay as
+  /// direct icons; everything else [_wideModeActions] shows individually
+  /// (custom search, accounts, tag stats, settings, new group, sort, and
+  /// select-for-download) folds into one overflow menu, same `value:`-vs-
+  /// `onTap:`-only trick the sort menu above already uses for its own
+  /// value-less item, just extended to more of them.
+  List<Widget> _narrowModeActions(AppLocalizations l10n) => [
+    _syncIconButton(l10n),
+    _downloadQueueIconButton(l10n),
+    PopupMenuButton<SearchSortOrder>(
+      icon: const Icon(Icons.more_vert),
+      tooltip: l10n.searchesMoreActionsTooltip,
+      initialValue: _sortOrder,
+      onSelected: _setSortOrder,
+      itemBuilder: (context) => [
+        ..._sortMenuItems(l10n),
+        const PopupMenuDivider(),
+        PopupMenuItem<SearchSortOrder>(onTap: () => setState(() => _selectionMode = true), child: Text(l10n.searchesSelectForDownloadTooltip)),
+        const PopupMenuDivider(),
+        PopupMenuItem<SearchSortOrder>(onTap: _openCustomSearch, child: _menuRow(Icons.travel_explore, l10n.searchesCustomSearchTooltip)),
+        PopupMenuItem<SearchSortOrder>(onTap: _openAccounts, child: _menuRow(Icons.person_outline, l10n.searchesAccountsTooltip)),
+        PopupMenuItem<SearchSortOrder>(onTap: _openTagStats, child: _menuRow(Icons.bar_chart_outlined, l10n.searchesTagStatsTooltip)),
+        PopupMenuItem<SearchSortOrder>(onTap: _openSettings, child: _menuRow(Icons.settings_outlined, l10n.searchesSettingsTooltip)),
+        PopupMenuItem<SearchSortOrder>(onTap: _createGroup, child: _menuRow(Icons.create_new_folder_outlined, l10n.searchesNewGroupTooltip)),
+      ],
+    ),
+  ];
+
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
@@ -827,123 +1024,7 @@ class _SearchesScreenState extends State<SearchesScreen> with SingleTickerProvid
               : l10n.searchesSyncInProgress,
         ),
         leading: _selectionMode ? IconButton(icon: const Icon(Icons.close), tooltip: l10n.commonCancel, onPressed: _exitSelectionMode) : null,
-        actions: _selectionMode
-            ? [
-                _loadingSelectedSearches
-                    ? const Padding(padding: EdgeInsets.all(16), child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)))
-                    : IconButton(
-                        icon: const Icon(Icons.download_outlined),
-                        tooltip: l10n.searchesDownloadSelectedTooltip,
-                        onPressed: _selectedSearchIds.isEmpty ? null : () => _downloadSelectedSearches(l10n),
-                      ),
-              ]
-            : [
-                IconButton(
-                  icon: _syncStatus.active ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)) : const Icon(Icons.sync),
-                  tooltip: l10n.searchesCheckForUpdatesTooltip,
-                  onPressed: _syncStatus.active ? null : _checkForUpdates,
-                ),
-                IconButton(
-                  icon: const Icon(Icons.travel_explore),
-                  tooltip: l10n.searchesCustomSearchTooltip,
-                  onPressed: () => Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => CustomSearchScreen(
-                        repository: _repository!,
-                        displaySettingsStore: widget.displaySettingsStore,
-                        downloadSettingsStore: widget.downloadSettingsStore,
-                        downloadQueueService: widget.downloadQueueService,
-                      ),
-                    ),
-                  ),
-                ),
-                IconButton(
-                  icon: const Icon(Icons.download_outlined),
-                  tooltip: l10n.searchesDownloadQueueTooltip,
-                  onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (context) => DownloadQueueScreen(downloadQueueService: widget.downloadQueueService))),
-                ),
-                IconButton(
-                  icon: const Icon(Icons.person_outline),
-                  tooltip: l10n.searchesAccountsTooltip,
-                  onPressed: () => Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => AccountsScreen(
-                        repository: _repository!,
-                        displaySettingsStore: widget.displaySettingsStore,
-                        downloadSettingsStore: widget.downloadSettingsStore,
-                        downloadQueueService: widget.downloadQueueService,
-                      ),
-                    ),
-                  ),
-                ),
-                IconButton(
-                  icon: const Icon(Icons.bar_chart_outlined),
-                  tooltip: l10n.searchesTagStatsTooltip,
-                  onPressed: () => Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => TagStatsScreen(
-                        repository: _repository!,
-                        displaySettingsStore: widget.displaySettingsStore,
-                        downloadSettingsStore: widget.downloadSettingsStore,
-                        downloadQueueService: widget.downloadQueueService,
-                      ),
-                    ),
-                  ),
-                ),
-                IconButton(
-                  icon: const Icon(Icons.settings_outlined),
-                  tooltip: l10n.searchesSettingsTooltip,
-                  onPressed: () async {
-                    await Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => SettingsScreen(
-                          repository: _repository!,
-                          themeSettingsStore: widget.themeSettingsStore,
-                          lockService: widget.lockService,
-                          displaySettingsStore: widget.displaySettingsStore,
-                          downloadSettingsStore: widget.downloadSettingsStore,
-                          settingsStore: widget.settingsStore,
-                          onThemeModeChanged: widget.onThemeModeChanged,
-                          onThemeColorChanged: widget.onThemeColorChanged,
-                          onAmoledChanged: widget.onAmoledChanged,
-                          onLanguageCodeChanged: widget.onLanguageCodeChanged,
-                          onRepositoryConfigured: widget.onRepositoryConfigured,
-                        ),
-                      ),
-                    );
-                    // Settings can create searches (the Backup section's import,
-                    // M11) -- unconditionally refresh on return rather than
-                    // threading a bool pop result through, since there's no
-                    // "cancelled" case worth skipping a cheap reload for.
-                    _refresh();
-                  },
-                ),
-                IconButton(icon: const Icon(Icons.create_new_folder_outlined), tooltip: l10n.searchesNewGroupTooltip, onPressed: _createGroup),
-                PopupMenuButton<SearchSortOrder>(
-                  icon: const Icon(Icons.sort),
-                  tooltip: l10n.searchesSortTooltip,
-                  initialValue: _sortOrder,
-                  onSelected: _setSortOrder,
-                  itemBuilder: (context) => [
-                    CheckedPopupMenuItem(value: SearchSortOrder.mostUnseen, checked: _sortOrder == SearchSortOrder.mostUnseen, child: Text(l10n.searchesSortMostUnseen)),
-                    CheckedPopupMenuItem(value: SearchSortOrder.label, checked: _sortOrder == SearchSortOrder.label, child: Text(l10n.searchesSortLabel)),
-                    CheckedPopupMenuItem(value: SearchSortOrder.recentlyCreated, checked: _sortOrder == SearchSortOrder.recentlyCreated, child: Text(l10n.searchesSortRecentlyCreated)),
-                    CheckedPopupMenuItem(value: SearchSortOrder.lastViewed, checked: _sortOrder == SearchSortOrder.lastViewed, child: Text(l10n.searchesSortLastViewed)),
-                    const PopupMenuDivider(),
-                    // No value -- the parent's onSelected (_setSortOrder)
-                    // above is only ever asked about SearchSortOrder values,
-                    // never this one; PopupMenuItem.onTap runs regardless
-                    // (M65). Folded in here rather than its own app-bar icon
-                    // since a 9th icon doesn't fit next to the other 8 on a
-                    // narrow window (M9.6.6's own compact-width test).
-                    PopupMenuItem<SearchSortOrder>(onTap: () => setState(() => _selectionMode = true), child: Text(l10n.searchesSelectForDownloadTooltip)),
-                  ],
-                ),
-              ],
+        actions: _selectionMode ? _selectionModeActions(l10n) : (wide ? _wideModeActions(l10n) : _narrowModeActions(l10n)),
         bottom: TabBar(
           controller: _tabController,
           labelPadding: wide ? const EdgeInsets.symmetric(horizontal: 16, vertical: 4) : null,

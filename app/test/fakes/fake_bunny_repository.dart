@@ -25,6 +25,15 @@ class FakeBunnyRepository implements BunnyRepository {
   final Map<int, BunnyPostRelationships> relationshipsByPostId = {};
   final Map<int, List<int>> poolIdsByPostId = {};
 
+  /// Canned return for [getSlideshowRandomPosts] (M51) -- a real slideshow
+  /// pick is server-side random selection, which has no meaningful fake
+  /// here, so a test just sets the exact posts it wants returned.
+  List<BunnyPost> slideshowRandomPosts = [];
+
+  /// Each entry is the `(searchIds, count, ratingMask, mediaMask)` passed to
+  /// [getSlideshowRandomPosts].
+  final List<(List<int>, int, int, int)> slideshowRandomPostsCalls = [];
+
   /// Per-site tag blacklist (M13.3), as a set so add/remove stay idempotent
   /// the same way the real `bunny_db_blacklist_*` functions are.
   final Map<BunnySite, Set<String>> blacklistBySite = {};
@@ -398,6 +407,12 @@ class FakeBunnyRepository implements BunnyRepository {
 
   @override
   Future<List<String>> getPostSources(int postId) async => List.of(sourcesByPostId[postId] ?? const []);
+
+  @override
+  Future<List<BunnyPost>> getSlideshowRandomPosts(List<int> searchIds, int count, {int ratingMask = kRatingMaskAll, int mediaMask = kMediaMaskAll}) async {
+    slideshowRandomPostsCalls.add((searchIds, count, ratingMask, mediaMask));
+    return List.of(slideshowRandomPosts);
+  }
 
   @override
   Future<List<BunnyPostFile>> getPostFiles(int postId) async => List.of(filesByPostId[postId] ?? const []);

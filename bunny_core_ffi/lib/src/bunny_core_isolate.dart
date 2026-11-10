@@ -369,6 +369,15 @@ class _GetPostSourcesRequest extends _Request {
   const _GetPostSourcesRequest(this.postId);
 }
 
+class _SlideshowPickRandomPostsRequest extends _Request {
+  final List<int> searchIds;
+  final int ratingMask;
+  final int mediaMask;
+  final int count;
+
+  const _SlideshowPickRandomPostsRequest(this.searchIds, this.ratingMask, this.mediaMask, this.count);
+}
+
 class _GetPostFilesRequest extends _Request {
   final int postId;
 
@@ -837,6 +846,28 @@ List<Map<String, Object?>> _handlePreviewSearch(Pointer<bunny_core_t> core, _Pre
   });
 }
 
+/* M51 slideshow -- the first FFI call in this codebase to send an array as
+ * an *input* (every other arena<...> use above is output-only). r.searchIds
+ * is copied into a native Int64 array via the same arena every other
+ * temporary native allocation in this function already uses, freed
+ * automatically when `using` returns. */
+List<Map<String, Object?>> _handleSlideshowPickRandomPosts(Pointer<bunny_core_t> core, _SlideshowPickRandomPostsRequest r) {
+  return using((arena) {
+    final idsPtr = arena<Int64>(r.searchIds.length);
+    for (var i = 0; i < r.searchIds.length; i++) {
+      idsPtr[i] = r.searchIds[i];
+    }
+    final out = arena<bunny_db_post_list_t>();
+    _check(_bindings.bunny_core_slideshow_pick_random_posts(core, idsPtr, r.searchIds.length, r.ratingMask, r.mediaMask, r.count, out));
+    final items = <Map<String, Object?>>[];
+    for (var i = 0; i < out.ref.count; i++) {
+      items.add(_postToMap(out.ref.items[i]));
+    }
+    _bindings.bunny_db_post_list_free(out);
+    return items;
+  });
+}
+
 List<Map<String, Object?>> _handleListMyInkbunnyFavorites(Pointer<bunny_core_t> core, _ListMyInkbunnyFavoritesRequest r) {
   return using((arena) {
     final out = arena<bunny_db_post_list_t>();
@@ -1168,6 +1199,8 @@ Object? _dispatch(Pointer<bunny_core_t>? core, _Request request, void Function(P
         return _handleGetPostTagsByCategory(c, r);
       case _GetPostSourcesRequest r:
         return _handleGetPostSources(c, r);
+      case _SlideshowPickRandomPostsRequest r:
+        return _handleSlideshowPickRandomPosts(c, r);
       case _GetPostFilesRequest r:
         return _handleGetPostFiles(c, r);
       case _GetPostRelationshipsRequest r:
@@ -1397,6 +1430,9 @@ class BunnyCoreNative {
   Future<List<Map<String, Object?>>> getPostTagsByCategory(int postId) => _send<List<Map<String, Object?>>>(_GetPostTagsByCategoryRequest(postId));
 
   Future<List<String>> getPostSources(int postId) => _send<List<String>>(_GetPostSourcesRequest(postId));
+
+  Future<List<Map<String, Object?>>> slideshowPickRandomPosts(List<int> searchIds, int ratingMask, int mediaMask, int count) =>
+      _send<List<Map<String, Object?>>>(_SlideshowPickRandomPostsRequest(searchIds, ratingMask, mediaMask, count));
 
   Future<List<Map<String, Object?>>> getPostFiles(int postId) => _send<List<Map<String, Object?>>>(_GetPostFilesRequest(postId));
 
