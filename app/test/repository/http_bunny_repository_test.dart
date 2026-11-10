@@ -155,6 +155,7 @@ void main() {
             'pinned': true,
             'uses_default_interval': false,
             'group_id': 9,
+            'last_updated_at': '2026-02-01T00:00:00Z',
           },
         ]),
         200,
@@ -173,6 +174,7 @@ void main() {
       expect(searches.single.autoUpvote, isTrue);
       expect(searches.single.pinned, isTrue);
       expect(searches.single.groupId, 9);
+      expect(searches.single.lastUpdatedAt, '2026-02-01T00:00:00Z');
     });
 
     test('setSearchGroup posts group_id to /searches/{id}/group', () async {
