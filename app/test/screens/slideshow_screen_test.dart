@@ -34,7 +34,7 @@ void main() {
     final repository = FakeBunnyRepository();
     final posts = [_post(1), _post(2)];
 
-    await tester.pumpWidget(wrapWithLocalization(SlideshowScreen(posts: posts, interval: const Duration(seconds: 5), repository: repository)));
+    await tester.pumpWidget(wrapWithLocalization(SlideshowScreen(posts: posts, localFilePaths: const {}, interval: const Duration(seconds: 5), repository: repository)));
     await tester.pump();
 
     expect(repository.markPostSeenCalls, hasLength(1));
@@ -48,7 +48,7 @@ void main() {
     // without needing to know which way shuffle() landed.
     final posts = [_post(1, fileExt: 'jpg'), _post(2, fileExt: 'mp4')];
 
-    await tester.pumpWidget(wrapWithLocalization(SlideshowScreen(posts: posts, interval: const Duration(seconds: 1), repository: repository)));
+    await tester.pumpWidget(wrapWithLocalization(SlideshowScreen(posts: posts, localFilePaths: const {}, interval: const Duration(seconds: 1), repository: repository)));
     await tester.pumpAndSettle();
     final videoShowingInitially = find.byType(VideoPlayer).evaluate().isNotEmpty;
 
@@ -66,7 +66,7 @@ void main() {
     final repository = FakeBunnyRepository();
     final posts = [_post(1), _post(2)];
 
-    await tester.pumpWidget(wrapWithLocalization(SlideshowScreen(posts: posts, interval: const Duration(seconds: 1), repository: repository)));
+    await tester.pumpWidget(wrapWithLocalization(SlideshowScreen(posts: posts, localFilePaths: const {}, interval: const Duration(seconds: 1), repository: repository)));
     await tester.pump();
 
     // 3 ticks over a 2-post list: the 3rd tick runs past the end of the
@@ -87,7 +87,7 @@ void main() {
       wrapWithLocalization(
         Builder(
           builder: (context) => ElevatedButton(
-            onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (context) => SlideshowScreen(posts: posts, interval: const Duration(seconds: 1), repository: repository))),
+            onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (context) => SlideshowScreen(posts: posts, localFilePaths: const {}, interval: const Duration(seconds: 1), repository: repository))),
             child: const Text('open'),
           ),
         ),
@@ -105,4 +105,19 @@ void main() {
     // teardown would fail this test with a "pending timer" error here.
     await tester.pump(const Duration(seconds: 2));
   });
+
+  // No widget test covers local-file rendering itself (Image.file/GifPlayer's
+  // localFilePath branch/VideoPlayerController.file) -- confirmed via
+  // several minimal repros that any widget reading a real local file
+  // through dart:io inside a widget's initState (even a bare Image.file
+  // with no other widgets around it) hangs indefinitely under this
+  // project's flutter_test environment, regardless of tester.runAsync
+  // wrapping or byte validity; a pre-existing environment limitation, not
+  // something introduced by or fixable from this branch's own code. The
+  // branch-selection logic itself (PostMediaPage/GifPlayer choosing the
+  // local path over the network one) is simple and type-checked by
+  // analysis; the actual file-reading behavior is exercised for real via
+  // SlideshowPrepareService's own tests (slideshow_prepare_service_test.dart),
+  // which use plain `test()` (no widget-test binding) against real temp
+  // files without hitting this limitation.
 }

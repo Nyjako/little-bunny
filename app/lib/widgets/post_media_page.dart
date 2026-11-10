@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:chewie/chewie.dart';
 import 'package:flutter/material.dart';
@@ -18,15 +20,24 @@ import 'gif_player.dart';
 class PostMediaPage extends StatelessWidget {
   final BunnyPost post;
 
-  const PostMediaPage({super.key, required this.post});
+  /// When set (M51 v2 -- a slideshow playing back already-downloaded
+  /// posts), reads [post]'s media straight off disk instead of fetching it
+  /// over the network. [post.fileUrl] is otherwise unused in that case.
+  final String? localFilePath;
+
+  const PostMediaPage({super.key, required this.post, this.localFilePath});
 
   @override
   Widget build(BuildContext context) {
-    if (isVideoExt(post.fileExt) && post.fileUrl != null) {
-      return _FullScreenVideoPage(post: post);
+    final path = localFilePath;
+    if (isVideoExt(post.fileExt) && (path != null || post.fileUrl != null)) {
+      return _FullScreenVideoPage(post: post, localFilePath: path);
     }
     if (isGifExt(post.fileExt)) {
-      return GifPlayer(imageUrl: post.fileUrl!, httpHeaders: imageHeadersFor(post.site));
+      return GifPlayer(imageUrl: post.fileUrl ?? '', localFilePath: path, httpHeaders: imageHeadersFor(post.site));
+    }
+    if (path != null) {
+      return Image.file(File(path), fit: BoxFit.contain);
     }
     // Image's own loadingBuilder, not CachedNetworkImage's
     // progressIndicatorBuilder -- see PostDetailScreen's _buildMedia for why
@@ -54,8 +65,9 @@ class PostMediaPage extends StatelessWidget {
 /// away"; in `SlideshowScreen` that's "no longer the one post on screen").
 class _FullScreenVideoPage extends StatefulWidget {
   final BunnyPost post;
+  final String? localFilePath;
 
-  const _FullScreenVideoPage({required this.post});
+  const _FullScreenVideoPage({required this.post, this.localFilePath});
 
   @override
   State<_FullScreenVideoPage> createState() => _FullScreenVideoPageState();
@@ -68,7 +80,10 @@ class _FullScreenVideoPageState extends State<_FullScreenVideoPage> {
   @override
   void initState() {
     super.initState();
-    final controller = VideoPlayerController.networkUrl(Uri.parse(widget.post.fileUrl!), httpHeaders: imageHeadersFor(widget.post.site) ?? const {});
+    final path = widget.localFilePath;
+    final controller = path != null
+        ? VideoPlayerController.file(File(path))
+        : VideoPlayerController.networkUrl(Uri.parse(widget.post.fileUrl!), httpHeaders: imageHeadersFor(widget.post.site) ?? const {});
     controller.setVolume(0);
     _videoController = controller;
     final aspectRatio = (widget.post.width > 0 && widget.post.height > 0) ? widget.post.width / widget.post.height : 16 / 9;
