@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
@@ -21,13 +22,19 @@ class GifPlayer extends StatefulWidget {
   final Map<String, String>? httpHeaders;
   final BoxFit fit;
 
+  /// When set (M51 v2 -- a slideshow playing back already-downloaded
+  /// posts), reads the GIF straight off disk instead of fetching/caching
+  /// [imageUrl] over the network -- same [ui.instantiateImageCodec] decode
+  /// step either way, just a different byte source.
+  final String? localFilePath;
+
   /// Injectable, same reasoning as [DownloadManager]/[HttpBunnyRepository]'s
   /// own `client:` parameters -- lets a test substitute a cache manager that
   /// never touches the network, rather than always going through the real
-  /// [DefaultCacheManager] singleton.
+  /// [DefaultCacheManager] singleton. Unused when [localFilePath] is set.
   final BaseCacheManager cacheManager;
 
-  GifPlayer({super.key, required this.imageUrl, this.httpHeaders, this.fit = BoxFit.contain, BaseCacheManager? cacheManager}) : cacheManager = cacheManager ?? DefaultCacheManager();
+  GifPlayer({super.key, required this.imageUrl, this.httpHeaders, this.fit = BoxFit.contain, this.localFilePath, BaseCacheManager? cacheManager}) : cacheManager = cacheManager ?? DefaultCacheManager();
 
   @override
   State<GifPlayer> createState() => _GifPlayerState();
@@ -48,6 +55,11 @@ class _GifPlayerState extends State<GifPlayer> {
   }
 
   void _load() {
+    final localPath = widget.localFilePath;
+    if (localPath != null) {
+      _loadLocal(localPath);
+      return;
+    }
     _downloadSubscription = widget.cacheManager.getFileStream(widget.imageUrl, headers: widget.httpHeaders, withProgress: true).listen(
       (response) async {
         if (response is DownloadProgress) {
@@ -77,6 +89,25 @@ class _GifPlayerState extends State<GifPlayer> {
         // isn't specially handled elsewhere on this screen.
       },
     );
+  }
+
+  Future<void> _loadLocal(String path) async {
+    try {
+      final bytes = await File(path).readAsBytes();
+      final codec = await ui.instantiateImageCodec(bytes);
+      if (!mounted) {
+        codec.dispose();
+        return;
+      }
+      setState(() {
+        _codec = codec;
+        _totalFrames = codec.frameCount;
+        _downloadProgress = null;
+      });
+      _playNextFrame();
+    } catch (_) {
+      // Best-effort, same as the network branch's onError above.
+    }
   }
 
   Future<void> _playNextFrame() async {

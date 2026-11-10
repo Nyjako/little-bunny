@@ -235,4 +235,59 @@ void main() {
     expect(rows.single.id, id);
     expect(rows.single.postId, 123);
   });
+
+  test('slideshowCreate/slideshowList/slideshowGet/slideshowUpdate/slideshowDelete round-trip into BunnySlideshow (M51 v2)', () async {
+    final id = await repository.slideshowCreate('my slideshow', defaultPostsPerSearch: 5);
+
+    final slideshows = await repository.slideshowList();
+    expect(slideshows, hasLength(1));
+    expect(slideshows.single.id, id);
+    expect(slideshows.single.label, 'my slideshow');
+    expect(slideshows.single.defaultPostsPerSearch, 5);
+    expect(slideshows.single.maxTotalPosts, isNull);
+
+    await repository.slideshowUpdate(id, 'renamed', maxTotalPosts: 10);
+    final slideshow = await repository.slideshowGet(id);
+    expect(slideshow.label, 'renamed');
+    expect(slideshow.defaultPostsPerSearch, isNull);
+    expect(slideshow.maxTotalPosts, 10);
+
+    await repository.slideshowDelete(id);
+    expect(await repository.slideshowList(), isEmpty);
+  });
+
+  test('slideshowGet throws for a nonexistent slideshow (M51 v2)', () async {
+    await expectLater(repository.slideshowGet(999), throwsA(isA<BunnyRepositoryException>()));
+  });
+
+  test('slideshowSearchAdd/slideshowSearchList/slideshowPostsList/slideshowSearchRemove round-trip into BunnySlideshowSearch/BunnySlideshowPost (M51 v2)', () async {
+    final searchId = await repository.createSearch(BunnySite.e621, 'wolves', 'wolf', intervalHours: 24);
+    final slideshowId = await repository.slideshowCreate('my slideshow');
+
+    await repository.slideshowSearchAdd(slideshowId, searchId, overrideCount: 3);
+    final links = await repository.slideshowSearchList(slideshowId);
+    expect(links, hasLength(1));
+    expect(links.single.searchId, searchId);
+    expect(links.single.overrideCount, 3);
+
+    // Nothing's actually been synced for this search, so there's nothing to
+    // commit -- this just proves the round trip into BunnySlideshowPost
+    // doesn't throw.
+    expect(await repository.slideshowPostsList(slideshowId), isEmpty);
+    expect(await repository.slideshowPostsList(slideshowId, searchId: searchId), isEmpty);
+
+    await repository.slideshowRerollAll(slideshowId);
+    await repository.slideshowRerollSearch(slideshowId, searchId);
+
+    await repository.slideshowSearchRemove(slideshowId, searchId);
+    expect(await repository.slideshowSearchList(slideshowId), isEmpty);
+  });
+
+  test('slideshowReplacePost throws when the search has nothing to replace with (M51 v2)', () async {
+    final searchId = await repository.createSearch(BunnySite.e621, 'wolves', 'wolf', intervalHours: 24);
+    final slideshowId = await repository.slideshowCreate('my slideshow');
+    await repository.slideshowSearchAdd(slideshowId, searchId);
+
+    await expectLater(repository.slideshowReplacePost(slideshowId, searchId, 1), throwsA(isA<BunnyRepositoryException>()));
+  });
 }

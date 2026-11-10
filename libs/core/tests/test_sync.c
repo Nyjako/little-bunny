@@ -990,6 +990,323 @@ void test_search_list_posts_favorites_search_is_unaffected_by_the_tag_blacklist(
     free(fixture);
 }
 
+void test_slideshow_pick_posts_for_search_now_supports_a_pool_search(void)
+{
+    /* M51 v2 lifts v1's own pool exclusion -- the fixture post is already a
+     * member of pools 5 and 9 (see e621_posts_search.json). */
+    char *fixture = read_fixture("e621_posts_search.json");
+    TEST_ASSERT_NOT_NULL(fixture);
+    g_e621_state.bodies[0] = fixture;
+    g_e621_state.body_count = 1;
+
+    int64_t pool_search_id = 0;
+    bunny_core_result_t result = bunny_core_search_create(g_core, BUNNY_DB_SITE_E621, "my pool", "pool:9", 24, NULL, &pool_search_id);
+    TEST_ASSERT_EQUAL(BUNNY_CORE_OK, result);
+    bunny_core_sync_stats_t stats;
+    result = bunny_core_sync_due_searches(g_core, &stats);
+    TEST_ASSERT_EQUAL(BUNNY_CORE_OK, result);
+    TEST_ASSERT_EQUAL(1, stats.posts_upserted);
+
+    bunny_db_post_list_t posts;
+    result = bunny_core_slideshow_pick_posts_for_search(g_core, pool_search_id, 10, NULL, 0, BUNNY_DB_RATING_MASK_ALL, BUNNY_DB_MEDIA_MASK_ALL, &posts);
+    TEST_ASSERT_EQUAL(BUNNY_CORE_OK, result);
+    TEST_ASSERT_EQUAL(1, (int)posts.count);
+    bunny_db_post_list_free(&posts);
+
+    free(fixture);
+}
+
+void test_slideshow_pick_posts_for_search_rejects_a_nonexistent_search(void)
+{
+    bunny_db_post_list_t posts;
+    bunny_core_result_t result = bunny_core_slideshow_pick_posts_for_search(g_core, 999999, 10, NULL, 0, BUNNY_DB_RATING_MASK_ALL, BUNNY_DB_MEDIA_MASK_ALL, &posts);
+    TEST_ASSERT_EQUAL(BUNNY_CORE_ERR_NOT_FOUND, result);
+}
+
+void test_slideshow_pick_posts_for_search_excludes_given_post_ids(void)
+{
+    char *fixture = build_e621_posts_page_json(5, 7000);
+    TEST_ASSERT_NOT_NULL(fixture);
+    g_e621_state.bodies[0] = fixture;
+    g_e621_state.body_count = 1;
+
+    int64_t search_id = 0;
+    bunny_core_search_create(g_core, BUNNY_DB_SITE_E621, "wolves", "wolf", 24, NULL, &search_id);
+    bunny_core_sync_stats_t stats;
+    bunny_core_sync_due_searches(g_core, &stats);
+    TEST_ASSERT_EQUAL(5, stats.posts_upserted);
+
+    bunny_db_post_list_t all;
+    bunny_core_slideshow_pick_posts_for_search(g_core, search_id, 5, NULL, 0, BUNNY_DB_RATING_MASK_ALL, BUNNY_DB_MEDIA_MASK_ALL, &all);
+    TEST_ASSERT_EQUAL(5, (int)all.count);
+    int64_t excluded[4];
+    for (int i = 0; i < 4; i++) {
+        excluded[i] = all.items[i].id;
+    }
+    bunny_db_post_list_free(&all);
+
+    bunny_db_post_list_t remaining;
+    bunny_core_result_t result = bunny_core_slideshow_pick_posts_for_search(g_core, search_id, 5, excluded, 4, BUNNY_DB_RATING_MASK_ALL, BUNNY_DB_MEDIA_MASK_ALL, &remaining);
+    TEST_ASSERT_EQUAL(BUNNY_CORE_OK, result);
+    TEST_ASSERT_EQUAL(1, (int)remaining.count);
+    bunny_db_post_list_free(&remaining);
+
+    free(fixture);
+}
+
+void test_slideshow_pick_posts_for_search_favorites_search_is_unaffected_by_the_tag_blacklist(void)
+{
+    /* Same exemption M37 already established for bunny_core_search_list_posts
+     * (see test_search_list_posts_favorites_search_is_unaffected_by_the_tag_blacklist
+     * above) -- a favorites search picked for a slideshow should still show
+     * everything favorited, not a filtered subset. */
+    char *fixture = read_fixture("e621_posts_search.json");
+    TEST_ASSERT_NOT_NULL(fixture);
+    g_e621_state.bodies[0] = fixture;
+    g_e621_state.body_count = 1;
+
+    int64_t search_id = 0;
+    bunny_core_result_t result = bunny_core_search_create(g_core, BUNNY_DB_SITE_E621, "Favorites", "fav:someuser", 24, NULL, &search_id);
+    TEST_ASSERT_EQUAL(BUNNY_CORE_OK, result);
+    bunny_core_sync_stats_t stats;
+    result = bunny_core_sync_due_searches(g_core, &stats);
+    TEST_ASSERT_EQUAL(BUNNY_CORE_OK, result);
+    TEST_ASSERT_EQUAL(1, stats.posts_upserted);
+
+    bunny_core_blacklist_add(g_core, BUNNY_DB_SITE_E621, "one");
+
+    bunny_db_post_list_t posts;
+    result = bunny_core_slideshow_pick_posts_for_search(g_core, search_id, 10, NULL, 0, BUNNY_DB_RATING_MASK_ALL, BUNNY_DB_MEDIA_MASK_ALL, &posts);
+    TEST_ASSERT_EQUAL(BUNNY_CORE_OK, result);
+    TEST_ASSERT_EQUAL(1, (int)posts.count);
+    bunny_db_post_list_free(&posts);
+
+    free(fixture);
+}
+
+void test_slideshow_crud_round_trips_through_core(void)
+{
+    int64_t id = 0;
+    TEST_ASSERT_EQUAL(BUNNY_CORE_OK, bunny_core_slideshow_create(g_core, "My Slideshow", true, 5, false, 0, &id));
+
+    bunny_db_slideshow_t slideshow;
+    TEST_ASSERT_EQUAL(BUNNY_CORE_OK, bunny_core_slideshow_get(g_core, id, &slideshow));
+    TEST_ASSERT_EQUAL_STRING("My Slideshow", slideshow.label);
+    bunny_db_slideshow_free(&slideshow);
+
+    bunny_db_slideshow_list_t list;
+    TEST_ASSERT_EQUAL(BUNNY_CORE_OK, bunny_core_slideshow_list(g_core, &list));
+    TEST_ASSERT_EQUAL(1, (int)list.count);
+    bunny_db_slideshow_list_free(&list);
+
+    TEST_ASSERT_EQUAL(BUNNY_CORE_OK, bunny_core_slideshow_delete(g_core, id));
+    bunny_db_slideshow_t gone;
+    TEST_ASSERT_EQUAL(BUNNY_CORE_ERR_NOT_FOUND, bunny_core_slideshow_get(g_core, id, &gone));
+}
+
+void test_slideshow_search_commit_picks_uses_override_count_over_default(void)
+{
+    char *fixture = build_e621_posts_page_json(10, 7100);
+    TEST_ASSERT_NOT_NULL(fixture);
+    g_e621_state.bodies[0] = fixture;
+    g_e621_state.body_count = 1;
+
+    int64_t search_id = 0;
+    bunny_core_search_create(g_core, BUNNY_DB_SITE_E621, "wolves", "wolf", 24, NULL, &search_id);
+    bunny_core_sync_stats_t stats;
+    bunny_core_sync_due_searches(g_core, &stats);
+    TEST_ASSERT_EQUAL(10, stats.posts_upserted);
+
+    int64_t slideshow_id = 0;
+    bunny_core_slideshow_create(g_core, "Show", true, 3, false, 0, &slideshow_id);
+    bunny_core_slideshow_search_add(g_core, slideshow_id, search_id, true, 7);
+
+    TEST_ASSERT_EQUAL(BUNNY_CORE_OK, bunny_core_slideshow_search_commit_picks(g_core, slideshow_id, search_id));
+
+    bunny_db_slideshow_post_list_t committed;
+    bunny_core_slideshow_posts_list(g_core, slideshow_id, search_id, &committed);
+    TEST_ASSERT_EQUAL(7, (int)committed.count); /* override (7), not the slideshow's own default (3) */
+    bunny_db_slideshow_post_list_free(&committed);
+
+    free(fixture);
+}
+
+void test_slideshow_search_commit_picks_falls_back_to_slideshow_default_when_no_override(void)
+{
+    char *fixture = build_e621_posts_page_json(10, 7200);
+    TEST_ASSERT_NOT_NULL(fixture);
+    g_e621_state.bodies[0] = fixture;
+    g_e621_state.body_count = 1;
+
+    int64_t search_id = 0;
+    bunny_core_search_create(g_core, BUNNY_DB_SITE_E621, "wolves", "wolf", 24, NULL, &search_id);
+    bunny_core_sync_stats_t stats;
+    bunny_core_sync_due_searches(g_core, &stats);
+    TEST_ASSERT_EQUAL(10, stats.posts_upserted);
+
+    int64_t slideshow_id = 0;
+    bunny_core_slideshow_create(g_core, "Show", true, 4, false, 0, &slideshow_id);
+    bunny_core_slideshow_search_add(g_core, slideshow_id, search_id, false, 0);
+
+    TEST_ASSERT_EQUAL(BUNNY_CORE_OK, bunny_core_slideshow_search_commit_picks(g_core, slideshow_id, search_id));
+
+    bunny_db_slideshow_post_list_t committed;
+    bunny_core_slideshow_posts_list(g_core, slideshow_id, search_id, &committed);
+    TEST_ASSERT_EQUAL(4, (int)committed.count);
+    bunny_db_slideshow_post_list_free(&committed);
+
+    free(fixture);
+}
+
+void test_slideshow_search_commit_picks_respects_max_total_posts_across_searches(void)
+{
+    char *fixture1 = build_e621_posts_page_json(10, 7300);
+    TEST_ASSERT_NOT_NULL(fixture1);
+    g_e621_state.bodies[0] = fixture1;
+    g_e621_state.body_count = 1;
+
+    int64_t search1_id = 0;
+    bunny_core_search_create(g_core, BUNNY_DB_SITE_E621, "wolves", "wolf", 24, NULL, &search1_id);
+    bunny_core_sync_stats_t stats1;
+    bunny_core_sync_due_searches(g_core, &stats1);
+    TEST_ASSERT_EQUAL(10, stats1.posts_upserted);
+
+    char *fixture2 = build_e621_posts_page_json(10, 7400);
+    g_e621_state.bodies[0] = fixture2;
+    g_e621_state.body_count = 1;
+    g_e621_state.next_index = 0;
+    int64_t search2_id = 0;
+    bunny_core_search_create(g_core, BUNNY_DB_SITE_E621, "foxes", "fox", 24, NULL, &search2_id);
+    bunny_core_sync_stats_t stats2;
+    bunny_core_sync_due_searches(g_core, &stats2);
+    TEST_ASSERT_EQUAL(10, stats2.posts_upserted);
+
+    int64_t slideshow_id = 0;
+    bunny_core_slideshow_create(g_core, "Show", true, 5, true, 6, &slideshow_id); /* 5 per search, 6 total max */
+    bunny_core_slideshow_search_add(g_core, slideshow_id, search1_id, false, 0);
+    bunny_core_slideshow_search_add(g_core, slideshow_id, search2_id, false, 0);
+
+    TEST_ASSERT_EQUAL(BUNNY_CORE_OK, bunny_core_slideshow_search_commit_picks(g_core, slideshow_id, search1_id));
+    TEST_ASSERT_EQUAL(BUNNY_CORE_OK, bunny_core_slideshow_search_commit_picks(g_core, slideshow_id, search2_id));
+
+    bunny_db_slideshow_post_list_t everything;
+    bunny_core_slideshow_posts_list(g_core, slideshow_id, 0, &everything);
+    TEST_ASSERT_TRUE((int)everything.count <= 6); /* first search got up to 5; second got trimmed to fit the remaining budget */
+    bunny_db_slideshow_post_list_free(&everything);
+
+    free(fixture1);
+    free(fixture2);
+}
+
+void test_slideshow_reroll_all_never_duplicates_a_post_across_searches(void)
+{
+    char *fixture1 = build_e621_posts_page_json(5, 7500);
+    TEST_ASSERT_NOT_NULL(fixture1);
+    g_e621_state.bodies[0] = fixture1;
+    g_e621_state.body_count = 1;
+    int64_t search1_id = 0;
+    bunny_core_search_create(g_core, BUNNY_DB_SITE_E621, "wolves", "wolf", 24, NULL, &search1_id);
+    bunny_core_sync_stats_t stats1;
+    bunny_core_sync_due_searches(g_core, &stats1);
+    TEST_ASSERT_EQUAL(5, stats1.posts_upserted);
+
+    /* search2 shares the SAME underlying posts (same query, same fixture
+     * body re-served) -- the only way to prove a reroll's own exclusion set
+     * actually prevents cross-search duplication is if both searches draw
+     * from an overlapping pool. */
+    char *fixture2 = build_e621_posts_page_json(5, 7500);
+    g_e621_state.bodies[0] = fixture2;
+    g_e621_state.body_count = 1;
+    g_e621_state.next_index = 0;
+    int64_t search2_id = 0;
+    bunny_core_search_create(g_core, BUNNY_DB_SITE_E621, "wolves too", "wolf", 48, NULL, &search2_id);
+    bunny_core_sync_stats_t stats2;
+    bunny_core_sync_due_searches(g_core, &stats2);
+    TEST_ASSERT_EQUAL(5, stats2.posts_upserted);
+
+    int64_t slideshow_id = 0;
+    bunny_core_slideshow_create(g_core, "Show", true, 3, false, 0, &slideshow_id);
+    bunny_core_slideshow_search_add(g_core, slideshow_id, search1_id, false, 0);
+    bunny_core_slideshow_search_add(g_core, slideshow_id, search2_id, false, 0);
+
+    TEST_ASSERT_EQUAL(BUNNY_CORE_OK, bunny_core_slideshow_reroll_all(g_core, slideshow_id));
+
+    bunny_db_slideshow_post_list_t everything;
+    bunny_core_slideshow_posts_list(g_core, slideshow_id, 0, &everything);
+    for (size_t i = 0; i < everything.count; i++) {
+        for (size_t j = i + 1; j < everything.count; j++) {
+            TEST_ASSERT_NOT_EQUAL(everything.items[i].post.id, everything.items[j].post.id);
+        }
+    }
+    bunny_db_slideshow_post_list_free(&everything);
+
+    free(fixture1);
+    free(fixture2);
+}
+
+void test_slideshow_replace_post_swaps_to_a_different_post(void)
+{
+    char *fixture = build_e621_posts_page_json(5, 7600);
+    TEST_ASSERT_NOT_NULL(fixture);
+    g_e621_state.bodies[0] = fixture;
+    g_e621_state.body_count = 1;
+    int64_t search_id = 0;
+    bunny_core_search_create(g_core, BUNNY_DB_SITE_E621, "wolves", "wolf", 24, NULL, &search_id);
+    bunny_core_sync_stats_t stats;
+    bunny_core_sync_due_searches(g_core, &stats);
+    TEST_ASSERT_EQUAL(5, stats.posts_upserted);
+
+    int64_t slideshow_id = 0;
+    bunny_core_slideshow_create(g_core, "Show", true, 1, false, 0, &slideshow_id);
+    bunny_core_slideshow_search_add(g_core, slideshow_id, search_id, false, 0);
+    bunny_core_slideshow_search_commit_picks(g_core, slideshow_id, search_id);
+
+    bunny_db_slideshow_post_list_t before;
+    bunny_core_slideshow_posts_list(g_core, slideshow_id, search_id, &before);
+    TEST_ASSERT_EQUAL(1, (int)before.count);
+    int64_t dead_post_id = before.items[0].post.id;
+    bunny_db_slideshow_post_list_free(&before);
+
+    TEST_ASSERT_EQUAL(BUNNY_CORE_OK, bunny_core_slideshow_replace_post(g_core, slideshow_id, search_id, dead_post_id));
+
+    bunny_db_slideshow_post_list_t after;
+    bunny_core_slideshow_posts_list(g_core, slideshow_id, search_id, &after);
+    TEST_ASSERT_EQUAL(1, (int)after.count);
+    TEST_ASSERT_NOT_EQUAL(dead_post_id, after.items[0].post.id);
+    bunny_db_slideshow_post_list_free(&after);
+
+    free(fixture);
+}
+
+void test_slideshow_replace_post_errors_when_the_search_is_exhausted(void)
+{
+    /* A single-post fixture, already fully committed -- nothing left to
+     * draw as a replacement. */
+    char *fixture = read_fixture("e621_posts_search.json");
+    TEST_ASSERT_NOT_NULL(fixture);
+    g_e621_state.bodies[0] = fixture;
+    g_e621_state.body_count = 1;
+    int64_t search_id = 0;
+    bunny_core_search_create(g_core, BUNNY_DB_SITE_E621, "wolves", "wolf", 24, NULL, &search_id);
+    bunny_core_sync_stats_t stats;
+    bunny_core_sync_due_searches(g_core, &stats);
+    TEST_ASSERT_EQUAL(1, stats.posts_upserted);
+
+    int64_t slideshow_id = 0;
+    bunny_core_slideshow_create(g_core, "Show", true, 1, false, 0, &slideshow_id);
+    bunny_core_slideshow_search_add(g_core, slideshow_id, search_id, false, 0);
+    bunny_core_slideshow_search_commit_picks(g_core, slideshow_id, search_id);
+
+    bunny_db_slideshow_post_list_t committed;
+    bunny_core_slideshow_posts_list(g_core, slideshow_id, search_id, &committed);
+    int64_t dead_post_id = committed.items[0].post.id;
+    bunny_db_slideshow_post_list_free(&committed);
+
+    TEST_ASSERT_EQUAL(BUNNY_CORE_ERR_NOT_FOUND, bunny_core_slideshow_replace_post(g_core, slideshow_id, search_id, dead_post_id));
+
+    free(fixture);
+}
+
 void test_preview_search_pool_browse_is_unaffected_by_the_tag_blacklist(void)
 {
     /* M37: a pool browse is exempt -- it's meant to show every post
@@ -2255,6 +2572,17 @@ int main(void)
     RUN_TEST(test_preview_search_pool_browse_is_unaffected_by_the_tag_blacklist);
     RUN_TEST(test_preview_search_favorites_browse_is_unaffected_by_the_tag_blacklist);
     RUN_TEST(test_search_list_posts_favorites_search_is_unaffected_by_the_tag_blacklist);
+    RUN_TEST(test_slideshow_pick_posts_for_search_now_supports_a_pool_search);
+    RUN_TEST(test_slideshow_pick_posts_for_search_rejects_a_nonexistent_search);
+    RUN_TEST(test_slideshow_pick_posts_for_search_excludes_given_post_ids);
+    RUN_TEST(test_slideshow_pick_posts_for_search_favorites_search_is_unaffected_by_the_tag_blacklist);
+    RUN_TEST(test_slideshow_crud_round_trips_through_core);
+    RUN_TEST(test_slideshow_search_commit_picks_uses_override_count_over_default);
+    RUN_TEST(test_slideshow_search_commit_picks_falls_back_to_slideshow_default_when_no_override);
+    RUN_TEST(test_slideshow_search_commit_picks_respects_max_total_posts_across_searches);
+    RUN_TEST(test_slideshow_reroll_all_never_duplicates_a_post_across_searches);
+    RUN_TEST(test_slideshow_replace_post_swaps_to_a_different_post);
+    RUN_TEST(test_slideshow_replace_post_errors_when_the_search_is_exhausted);
     RUN_TEST(test_preview_search_requests_the_given_e621_page);
     RUN_TEST(test_preview_search_requests_the_given_inkbunny_page);
     RUN_TEST(test_preview_search_inkbunny_pool_sends_pool_id_not_literal_text);

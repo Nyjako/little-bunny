@@ -13,6 +13,7 @@ add_library(bunny_db STATIC
     src/stats.c
     src/action_queue.c
     src/download_queue.c
+    src/slideshows.c
 )
 
 target_include_directories(bunny_db

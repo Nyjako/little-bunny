@@ -131,6 +131,22 @@ static inline void bunny_db_bind_text_or_null(sqlite3_stmt *stmt, int idx, const
     "(fav.post_id IS NOT NULL) AS is_favorited, p.score_up, p.score_down, pmv.sample_url, "           \
     "COALESCE(vt.score, 0) AS user_vote, COALESCE(fav.stars, 0) AS favorite_stars "
 
+/* How many columns BUNNY_DB_POST_SELECT_COLUMNS actually selects -- for a
+ * caller that needs to SELECT something ADDITIONAL alongside a full post
+ * row (e.g. slideshows.c joining in sp.search_id) and read it by column
+ * index after bunny_db_fill_post_from_row has already consumed columns
+ * 0..(count-1). Keep in sync with the column list above by hand -- there's
+ * no way to derive this from the macro text itself at compile time. */
+#define BUNNY_DB_POST_SELECT_COLUMNS_COUNT 25
+
+/* Posts per page for bunny_db_search_list_posts/bunny_db_pool_search_list_posts
+ * (see their own doc comments in db.h) -- a local DB listing, not a site API
+ * page size, so this is chosen purely for a reasonable response size rather
+ * than matching e621/Inkbunny's own limits. Shared here (not posts.c-local)
+ * since bunny_db_pool_search_list_posts_random (slideshows.c) needs the same
+ * value to detect a short/last page while draining every page of a pool. */
+#define BUNNY_DB_SEARCH_POSTS_PAGE_SIZE 200
+
 #define BUNNY_DB_POST_SELECT_FROM_JOIN                         \
     "FROM posts p "                                            \
     "LEFT JOIN seen_posts seen ON seen.post_id = p.id "        \

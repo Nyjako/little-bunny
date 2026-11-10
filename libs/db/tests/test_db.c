@@ -1393,6 +1393,230 @@ void test_search_list_posts_paginates(void)
     bunny_db_post_list_free(&page3);
 }
 
+void test_search_list_posts_random_returns_requested_count(void)
+{
+    int64_t search_id = 0;
+    bunny_db_search_create(g_db, BUNNY_DB_SITE_E621, "wolves", "wolf", 24, NULL, &search_id);
+    for (int i = 0; i < 10; i++) {
+        bunny_db_post_upsert_t post;
+        make_test_post(&post, 4000 + i, 1);
+        int64_t post_id = 0;
+        bunny_db_post_upsert(g_db, &post, &post_id);
+        bunny_db_search_add_result(g_db, search_id, post_id, NULL);
+    }
+
+    int64_t ids[] = {search_id};
+    bunny_db_site_t sites[] = {BUNNY_DB_SITE_E621};
+    bool apply_blacklist[] = {true};
+    bunny_db_post_list_t result;
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, bunny_db_search_list_posts_random(g_db, ids, sites, apply_blacklist, 1, BUNNY_DB_RATING_MASK_ALL, BUNNY_DB_MEDIA_MASK_ALL, 4, &result));
+    TEST_ASSERT_EQUAL(4, (int)result.count);
+    /* every returned post really came from the seeded set, and no duplicates */
+    for (size_t i = 0; i < result.count; i++) {
+        TEST_ASSERT_TRUE(result.items[i].external_id >= 4000 && result.items[i].external_id < 4010);
+        for (size_t j = i + 1; j < result.count; j++) {
+            TEST_ASSERT_NOT_EQUAL(result.items[i].id, result.items[j].id);
+        }
+    }
+    bunny_db_post_list_free(&result);
+}
+
+void test_search_list_posts_random_returns_fewer_when_pool_is_smaller(void)
+{
+    int64_t search_id = 0;
+    bunny_db_search_create(g_db, BUNNY_DB_SITE_E621, "wolves", "wolf", 24, NULL, &search_id);
+    bunny_db_post_upsert_t post;
+    make_test_post(&post, 4100, 1);
+    int64_t post_id = 0;
+    bunny_db_post_upsert(g_db, &post, &post_id);
+    bunny_db_search_add_result(g_db, search_id, post_id, NULL);
+
+    int64_t ids[] = {search_id};
+    bunny_db_site_t sites[] = {BUNNY_DB_SITE_E621};
+    bool apply_blacklist[] = {true};
+    bunny_db_post_list_t result;
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, bunny_db_search_list_posts_random(g_db, ids, sites, apply_blacklist, 1, BUNNY_DB_RATING_MASK_ALL, BUNNY_DB_MEDIA_MASK_ALL, 50, &result));
+    TEST_ASSERT_EQUAL(1, (int)result.count);
+    bunny_db_post_list_free(&result);
+}
+
+void test_search_list_posts_random_excludes_other_searches_posts(void)
+{
+    int64_t selected_id = 0;
+    int64_t other_id = 0;
+    bunny_db_search_create(g_db, BUNNY_DB_SITE_E621, "wolves", "wolf", 24, NULL, &selected_id);
+    bunny_db_search_create(g_db, BUNNY_DB_SITE_E621, "foxes", "fox", 24, NULL, &other_id);
+
+    bunny_db_post_upsert_t selected_post;
+    bunny_db_post_upsert_t other_post;
+    make_test_post(&selected_post, 4200, 1);
+    make_test_post(&other_post, 4201, 1);
+    int64_t selected_post_id = 0;
+    int64_t other_post_id = 0;
+    bunny_db_post_upsert(g_db, &selected_post, &selected_post_id);
+    bunny_db_post_upsert(g_db, &other_post, &other_post_id);
+    bunny_db_search_add_result(g_db, selected_id, selected_post_id, NULL);
+    bunny_db_search_add_result(g_db, other_id, other_post_id, NULL);
+
+    int64_t ids[] = {selected_id};
+    bunny_db_site_t sites[] = {BUNNY_DB_SITE_E621};
+    bool apply_blacklist[] = {true};
+    bunny_db_post_list_t result;
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, bunny_db_search_list_posts_random(g_db, ids, sites, apply_blacklist, 1, BUNNY_DB_RATING_MASK_ALL, BUNNY_DB_MEDIA_MASK_ALL, 10, &result));
+    TEST_ASSERT_EQUAL(1, (int)result.count);
+    TEST_ASSERT_EQUAL(selected_post_id, result.items[0].id);
+    bunny_db_post_list_free(&result);
+}
+
+void test_search_list_posts_random_dedupes_a_post_in_two_selected_searches(void)
+{
+    int64_t search1_id = 0;
+    int64_t search2_id = 0;
+    bunny_db_search_create(g_db, BUNNY_DB_SITE_E621, "wolves", "wolf", 24, NULL, &search1_id);
+    bunny_db_search_create(g_db, BUNNY_DB_SITE_E621, "canines", "canine", 24, NULL, &search2_id);
+
+    bunny_db_post_upsert_t post;
+    make_test_post(&post, 4300, 1);
+    int64_t post_id = 0;
+    bunny_db_post_upsert(g_db, &post, &post_id);
+    bunny_db_search_add_result(g_db, search1_id, post_id, NULL);
+    bunny_db_search_add_result(g_db, search2_id, post_id, NULL);
+
+    int64_t ids[] = {search1_id, search2_id};
+    bunny_db_site_t sites[] = {BUNNY_DB_SITE_E621, BUNNY_DB_SITE_E621};
+    bool apply_blacklist[] = {true, true};
+    bunny_db_post_list_t result;
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, bunny_db_search_list_posts_random(g_db, ids, sites, apply_blacklist, 2, BUNNY_DB_RATING_MASK_ALL, BUNNY_DB_MEDIA_MASK_ALL, 10, &result));
+    TEST_ASSERT_EQUAL(1, (int)result.count);
+    bunny_db_post_list_free(&result);
+}
+
+void test_search_list_posts_random_respects_simple_blacklist(void)
+{
+    int64_t search_id = 0;
+    bunny_db_search_create(g_db, BUNNY_DB_SITE_E621, "wolves", "wolf", 24, NULL, &search_id);
+
+    const char *clean_tags[] = {"wolf"};
+    const char *blacklisted_tags[] = {"wolf", "young"};
+    bunny_db_post_upsert_t clean_post;
+    bunny_db_post_upsert_t blacklisted_post;
+    make_test_post(&clean_post, 4400, 1);
+    make_test_post(&blacklisted_post, 4401, 1);
+    clean_post.tags = clean_tags;
+    clean_post.tag_count = 1;
+    blacklisted_post.tags = blacklisted_tags;
+    blacklisted_post.tag_count = 2;
+    int64_t clean_id = 0;
+    int64_t blacklisted_id = 0;
+    bunny_db_post_upsert(g_db, &clean_post, &clean_id);
+    bunny_db_post_upsert(g_db, &blacklisted_post, &blacklisted_id);
+    bunny_db_search_add_result(g_db, search_id, clean_id, NULL);
+    bunny_db_search_add_result(g_db, search_id, blacklisted_id, NULL);
+
+    bunny_db_blacklist_add(g_db, BUNNY_DB_SITE_E621, "young");
+
+    int64_t ids[] = {search_id};
+    bunny_db_site_t sites[] = {BUNNY_DB_SITE_E621};
+    bool apply_blacklist[] = {true};
+    bunny_db_post_list_t result;
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, bunny_db_search_list_posts_random(g_db, ids, sites, apply_blacklist, 1, BUNNY_DB_RATING_MASK_ALL, BUNNY_DB_MEDIA_MASK_ALL, 10, &result));
+    TEST_ASSERT_EQUAL(1, (int)result.count);
+    TEST_ASSERT_EQUAL(clean_id, result.items[0].id);
+    bunny_db_post_list_free(&result);
+}
+
+void test_search_list_posts_random_respects_complex_blacklist_across_both_sites(void)
+{
+    int64_t e621_search_id = 0;
+    int64_t inkbunny_search_id = 0;
+    bunny_db_search_create(g_db, BUNNY_DB_SITE_E621, "wolves", "wolf", 24, NULL, &e621_search_id);
+    bunny_db_search_create(g_db, BUNNY_DB_SITE_INKBUNNY, "wolves", "wolf", 24, NULL, &inkbunny_search_id);
+
+    const char *matching_tags[] = {"wolf", "young", "rating:e"};
+    const char *surviving_tags[] = {"wolf", "young"};
+    bunny_db_post_upsert_t e621_post;
+    bunny_db_post_upsert_t inkbunny_post;
+    make_test_post(&e621_post, 4500, 1);
+    make_test_post(&inkbunny_post, 4501, 1);
+    e621_post.tags = matching_tags;
+    e621_post.tag_count = 3;
+    inkbunny_post.site = BUNNY_DB_SITE_INKBUNNY;
+    inkbunny_post.tags = surviving_tags;
+    inkbunny_post.tag_count = 2;
+    int64_t e621_post_id = 0;
+    int64_t inkbunny_post_id = 0;
+    bunny_db_post_upsert(g_db, &e621_post, &e621_post_id);
+    bunny_db_post_upsert(g_db, &inkbunny_post, &inkbunny_post_id);
+    bunny_db_search_add_result(g_db, e621_search_id, e621_post_id, NULL);
+    bunny_db_search_add_result(g_db, inkbunny_search_id, inkbunny_post_id, NULL);
+
+    /* An AND-group rule, e621-only -- only bunny_db_search_list_posts_random's
+     * own second pass (not the SQL NOT EXISTS clause) catches this. */
+    bunny_db_blacklist_add(g_db, BUNNY_DB_SITE_E621, "rating:e young");
+
+    int64_t ids[] = {e621_search_id, inkbunny_search_id};
+    bunny_db_site_t sites[] = {BUNNY_DB_SITE_E621, BUNNY_DB_SITE_INKBUNNY};
+    bool apply_blacklist[] = {true, true};
+    bunny_db_post_list_t result;
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, bunny_db_search_list_posts_random(g_db, ids, sites, apply_blacklist, 2, BUNNY_DB_RATING_MASK_ALL, BUNNY_DB_MEDIA_MASK_ALL, 10, &result));
+    TEST_ASSERT_EQUAL(1, (int)result.count);
+    TEST_ASSERT_EQUAL(inkbunny_post_id, result.items[0].id);
+    bunny_db_post_list_free(&result);
+}
+
+void test_search_list_posts_random_favorites_style_search_skips_blacklist(void)
+{
+    int64_t search_id = 0;
+    bunny_db_search_create(g_db, BUNNY_DB_SITE_E621, "my favorites", "", 24, NULL, &search_id);
+
+    const char *tags[] = {"young"};
+    bunny_db_post_upsert_t post;
+    make_test_post(&post, 4600, 1);
+    post.tags = tags;
+    post.tag_count = 1;
+    int64_t post_id = 0;
+    bunny_db_post_upsert(g_db, &post, &post_id);
+    bunny_db_search_add_result(g_db, search_id, post_id, NULL);
+
+    bunny_db_blacklist_add(g_db, BUNNY_DB_SITE_E621, "young");
+
+    int64_t ids[] = {search_id};
+    bunny_db_site_t sites[] = {BUNNY_DB_SITE_E621};
+    bool apply_blacklist[] = {false}; /* favorites search -- caller resolves this, see bunny_core */
+    bunny_db_post_list_t result;
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, bunny_db_search_list_posts_random(g_db, ids, sites, apply_blacklist, 1, BUNNY_DB_RATING_MASK_ALL, BUNNY_DB_MEDIA_MASK_ALL, 10, &result));
+    TEST_ASSERT_EQUAL(1, (int)result.count);
+    bunny_db_post_list_free(&result);
+}
+
+void test_search_list_posts_random_respects_rating_and_media_masks(void)
+{
+    int64_t search_id = 0;
+    bunny_db_search_create(g_db, BUNNY_DB_SITE_E621, "wolves", "wolf", 24, NULL, &search_id);
+
+    bunny_db_post_upsert_t safe_post;
+    bunny_db_post_upsert_t explicit_post;
+    make_test_post(&safe_post, 4700, 1);
+    make_test_post(&explicit_post, 4701, 1);
+    safe_post.rating = "s";
+    explicit_post.rating = "e";
+    int64_t safe_id = 0;
+    int64_t explicit_id = 0;
+    bunny_db_post_upsert(g_db, &safe_post, &safe_id);
+    bunny_db_post_upsert(g_db, &explicit_post, &explicit_id);
+    bunny_db_search_add_result(g_db, search_id, safe_id, NULL);
+    bunny_db_search_add_result(g_db, search_id, explicit_id, NULL);
+
+    int64_t ids[] = {search_id};
+    bunny_db_site_t sites[] = {BUNNY_DB_SITE_E621};
+    bool apply_blacklist[] = {true};
+    bunny_db_post_list_t result;
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, bunny_db_search_list_posts_random(g_db, ids, sites, apply_blacklist, 1, BUNNY_DB_RATING_MASK_SAFE, BUNNY_DB_MEDIA_MASK_ALL, 10, &result));
+    TEST_ASSERT_EQUAL(1, (int)result.count);
+    TEST_ASSERT_EQUAL(safe_id, result.items[0].id);
+    bunny_db_post_list_free(&result);
+}
+
 void test_search_mark_all_seen_only_affects_that_searchs_posts(void)
 {
     int64_t search1_id = 0;
@@ -2487,6 +2711,308 @@ void test_pool_search_list_posts_orders_by_position_not_creation_date(void)
     bunny_db_post_list_free(&list);
 }
 
+void test_pool_search_list_posts_random_returns_requested_count_no_repeats(void)
+{
+    int64_t search_id = 0;
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, bunny_db_search_create(g_db, BUNNY_DB_SITE_E621, "my pool", "pool:9", 24, NULL, &search_id));
+    int64_t pool_ids[] = {9};
+    for (int i = 0; i < 10; i++) {
+        bunny_db_post_upsert_t post;
+        make_test_post(&post, 5000 + i, 1);
+        post.pool_ids = pool_ids;
+        post.pool_count = 1;
+        int64_t post_id = 0;
+        TEST_ASSERT_EQUAL(BUNNY_DB_OK, bunny_db_post_upsert(g_db, &post, &post_id));
+        TEST_ASSERT_EQUAL(BUNNY_DB_OK, bunny_db_search_add_result(g_db, search_id, post_id, NULL));
+    }
+
+    bunny_db_post_list_t result;
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, bunny_db_pool_search_list_posts_random(g_db, search_id, 9, 4, &result));
+    TEST_ASSERT_EQUAL(4, (int)result.count);
+    for (size_t i = 0; i < result.count; i++) {
+        TEST_ASSERT_TRUE(result.items[i].external_id >= 5000 && result.items[i].external_id < 5010);
+        for (size_t j = i + 1; j < result.count; j++) {
+            TEST_ASSERT_NOT_EQUAL(result.items[i].id, result.items[j].id);
+        }
+    }
+    bunny_db_post_list_free(&result);
+}
+
+void test_pool_search_list_posts_random_returns_fewer_when_pool_is_smaller(void)
+{
+    int64_t search_id = 0;
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, bunny_db_search_create(g_db, BUNNY_DB_SITE_E621, "my pool", "pool:9", 24, NULL, &search_id));
+    int64_t pool_ids[] = {9};
+    bunny_db_post_upsert_t post;
+    make_test_post(&post, 5100, 1);
+    post.pool_ids = pool_ids;
+    post.pool_count = 1;
+    int64_t post_id = 0;
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, bunny_db_post_upsert(g_db, &post, &post_id));
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, bunny_db_search_add_result(g_db, search_id, post_id, NULL));
+
+    bunny_db_post_list_t result;
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, bunny_db_pool_search_list_posts_random(g_db, search_id, 9, 50, &result));
+    TEST_ASSERT_EQUAL(1, (int)result.count);
+    bunny_db_post_list_free(&result);
+}
+
+void test_slideshow_create_get_update_delete_round_trips(void)
+{
+    int64_t id = 0;
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, bunny_db_slideshow_create(g_db, "My Slideshow", true, 5, false, 0, &id));
+    TEST_ASSERT_TRUE(id > 0);
+
+    bunny_db_slideshow_t slideshow;
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, bunny_db_slideshow_get(g_db, id, &slideshow));
+    TEST_ASSERT_EQUAL_STRING("My Slideshow", slideshow.label);
+    TEST_ASSERT_TRUE(slideshow.has_default_posts_per_search);
+    TEST_ASSERT_EQUAL(5, slideshow.default_posts_per_search);
+    TEST_ASSERT_FALSE(slideshow.has_max_total_posts);
+    bunny_db_slideshow_free(&slideshow);
+
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, bunny_db_slideshow_update(g_db, id, "Renamed", false, 0, true, 100));
+    bunny_db_slideshow_t updated;
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, bunny_db_slideshow_get(g_db, id, &updated));
+    TEST_ASSERT_EQUAL_STRING("Renamed", updated.label);
+    TEST_ASSERT_FALSE(updated.has_default_posts_per_search);
+    TEST_ASSERT_TRUE(updated.has_max_total_posts);
+    TEST_ASSERT_EQUAL(100, updated.max_total_posts);
+    bunny_db_slideshow_free(&updated);
+
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, bunny_db_slideshow_delete(g_db, id));
+    bunny_db_slideshow_t gone;
+    TEST_ASSERT_EQUAL(BUNNY_DB_ERR_NOT_FOUND, bunny_db_slideshow_get(g_db, id, &gone));
+}
+
+void test_slideshow_list_returns_every_slideshow(void)
+{
+    int64_t id1 = 0, id2 = 0;
+    bunny_db_slideshow_create(g_db, "First", false, 0, false, 0, &id1);
+    bunny_db_slideshow_create(g_db, "Second", false, 0, false, 0, &id2);
+
+    bunny_db_slideshow_list_t list;
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, bunny_db_slideshow_list(g_db, &list));
+    TEST_ASSERT_EQUAL(2, (int)list.count);
+    bunny_db_slideshow_list_free(&list);
+}
+
+void test_slideshow_search_add_is_idempotent_and_updates_override_count(void)
+{
+    int64_t slideshow_id = 0;
+    bunny_db_slideshow_create(g_db, "Show", false, 0, false, 0, &slideshow_id);
+    int64_t search_id = 0;
+    bunny_db_search_create(g_db, BUNNY_DB_SITE_E621, "wolves", "wolf", 24, NULL, &search_id);
+
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, bunny_db_slideshow_search_add(g_db, slideshow_id, search_id, true, 10));
+    bunny_db_slideshow_search_list_t list;
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, bunny_db_slideshow_search_list(g_db, slideshow_id, &list));
+    TEST_ASSERT_EQUAL(1, (int)list.count);
+    TEST_ASSERT_EQUAL(10, list.items[0].override_count);
+    bunny_db_slideshow_search_list_free(&list);
+
+    /* Re-adding the same search_id updates override_count in place, not a
+     * second row. */
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, bunny_db_slideshow_search_add(g_db, slideshow_id, search_id, true, 20));
+    bunny_db_slideshow_search_list_t updated;
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, bunny_db_slideshow_search_list(g_db, slideshow_id, &updated));
+    TEST_ASSERT_EQUAL(1, (int)updated.count);
+    TEST_ASSERT_EQUAL(20, updated.items[0].override_count);
+    bunny_db_slideshow_search_list_free(&updated);
+}
+
+void test_slideshow_search_remove_drops_the_link_and_its_committed_posts_but_not_the_search_itself(void)
+{
+    int64_t slideshow_id = 0;
+    bunny_db_slideshow_create(g_db, "Show", false, 0, false, 0, &slideshow_id);
+    int64_t search_id = 0;
+    bunny_db_search_create(g_db, BUNNY_DB_SITE_E621, "wolves", "wolf", 24, NULL, &search_id);
+    bunny_db_slideshow_search_add(g_db, slideshow_id, search_id, false, 0);
+
+    bunny_db_post_upsert_t post;
+    make_test_post(&post, 6000, 1);
+    int64_t post_id = 0;
+    bunny_db_post_upsert(g_db, &post, &post_id);
+    int64_t post_ids[] = {post_id};
+    bunny_db_slideshow_posts_set(g_db, slideshow_id, search_id, post_ids, 1);
+
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, bunny_db_slideshow_search_remove(g_db, slideshow_id, search_id));
+
+    bunny_db_slideshow_search_list_t links;
+    bunny_db_slideshow_search_list(g_db, slideshow_id, &links);
+    TEST_ASSERT_EQUAL(0, (int)links.count);
+    bunny_db_slideshow_search_list_free(&links);
+
+    bunny_db_int64_list_t remaining_posts;
+    bunny_db_slideshow_all_post_ids(g_db, slideshow_id, &remaining_posts);
+    TEST_ASSERT_EQUAL(0, (int)remaining_posts.count);
+    bunny_db_int64_list_free(&remaining_posts);
+
+    /* The underlying search and post are both untouched -- removing a
+     * search from a slideshow never deletes the search itself. */
+    bunny_db_search_list_t searches;
+    bunny_db_search_list(g_db, &searches);
+    TEST_ASSERT_EQUAL(1, (int)searches.count);
+    bunny_db_search_list_free(&searches);
+}
+
+void test_slideshow_deletion_cascades_to_its_links_and_posts(void)
+{
+    int64_t slideshow_id = 0;
+    bunny_db_slideshow_create(g_db, "Show", false, 0, false, 0, &slideshow_id);
+    int64_t search_id = 0;
+    bunny_db_search_create(g_db, BUNNY_DB_SITE_E621, "wolves", "wolf", 24, NULL, &search_id);
+    bunny_db_slideshow_search_add(g_db, slideshow_id, search_id, false, 0);
+    bunny_db_post_upsert_t post;
+    make_test_post(&post, 6100, 1);
+    int64_t post_id = 0;
+    bunny_db_post_upsert(g_db, &post, &post_id);
+    int64_t post_ids[] = {post_id};
+    bunny_db_slideshow_posts_set(g_db, slideshow_id, search_id, post_ids, 1);
+
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, bunny_db_slideshow_delete(g_db, slideshow_id));
+
+    bunny_db_slideshow_search_list_t links;
+    bunny_db_slideshow_search_list(g_db, slideshow_id, &links);
+    TEST_ASSERT_EQUAL(0, (int)links.count);
+    bunny_db_slideshow_search_list_free(&links);
+
+    bunny_db_int64_list_t remaining_posts;
+    bunny_db_slideshow_all_post_ids(g_db, slideshow_id, &remaining_posts);
+    TEST_ASSERT_EQUAL(0, (int)remaining_posts.count);
+    bunny_db_int64_list_free(&remaining_posts);
+}
+
+void test_slideshow_posts_set_replaces_wholesale(void)
+{
+    int64_t slideshow_id = 0;
+    bunny_db_slideshow_create(g_db, "Show", false, 0, false, 0, &slideshow_id);
+    int64_t search_id = 0;
+    bunny_db_search_create(g_db, BUNNY_DB_SITE_E621, "wolves", "wolf", 24, NULL, &search_id);
+    bunny_db_slideshow_search_add(g_db, slideshow_id, search_id, false, 0);
+
+    int64_t post_ids[3] = {0, 0, 0};
+    for (int i = 0; i < 3; i++) {
+        bunny_db_post_upsert_t post;
+        make_test_post(&post, 6200 + i, 1);
+        bunny_db_post_upsert(g_db, &post, &post_ids[i]);
+    }
+
+    int64_t first_set[] = {post_ids[0], post_ids[1]};
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, bunny_db_slideshow_posts_set(g_db, slideshow_id, search_id, first_set, 2));
+    bunny_db_slideshow_post_list_t after_first;
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, bunny_db_slideshow_posts_list(g_db, slideshow_id, search_id, &after_first));
+    TEST_ASSERT_EQUAL(2, (int)after_first.count);
+    bunny_db_slideshow_post_list_free(&after_first);
+
+    /* A second commit wholesale-replaces the first, not adds to it. */
+    int64_t second_set[] = {post_ids[2]};
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, bunny_db_slideshow_posts_set(g_db, slideshow_id, search_id, second_set, 1));
+    bunny_db_slideshow_post_list_t after_second;
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, bunny_db_slideshow_posts_list(g_db, slideshow_id, search_id, &after_second));
+    TEST_ASSERT_EQUAL(1, (int)after_second.count);
+    TEST_ASSERT_EQUAL(post_ids[2], after_second.items[0].post.id);
+    TEST_ASSERT_EQUAL(search_id, after_second.items[0].search_id);
+    bunny_db_slideshow_post_list_free(&after_second);
+}
+
+void test_slideshow_posts_list_scopes_to_one_search_or_every_search(void)
+{
+    int64_t slideshow_id = 0;
+    bunny_db_slideshow_create(g_db, "Show", false, 0, false, 0, &slideshow_id);
+    int64_t search1_id = 0, search2_id = 0;
+    bunny_db_search_create(g_db, BUNNY_DB_SITE_E621, "wolves", "wolf", 24, NULL, &search1_id);
+    bunny_db_search_create(g_db, BUNNY_DB_SITE_E621, "foxes", "fox", 24, NULL, &search2_id);
+    bunny_db_slideshow_search_add(g_db, slideshow_id, search1_id, false, 0);
+    bunny_db_slideshow_search_add(g_db, slideshow_id, search2_id, false, 0);
+
+    int64_t post1_id = 0, post2_id = 0;
+    bunny_db_post_upsert_t post1, post2;
+    make_test_post(&post1, 6300, 1);
+    make_test_post(&post2, 6301, 1);
+    bunny_db_post_upsert(g_db, &post1, &post1_id);
+    bunny_db_post_upsert(g_db, &post2, &post2_id);
+    int64_t set1[] = {post1_id};
+    int64_t set2[] = {post2_id};
+    bunny_db_slideshow_posts_set(g_db, slideshow_id, search1_id, set1, 1);
+    bunny_db_slideshow_posts_set(g_db, slideshow_id, search2_id, set2, 1);
+
+    bunny_db_slideshow_post_list_t scoped;
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, bunny_db_slideshow_posts_list(g_db, slideshow_id, search1_id, &scoped));
+    TEST_ASSERT_EQUAL(1, (int)scoped.count);
+    TEST_ASSERT_EQUAL(post1_id, scoped.items[0].post.id);
+    bunny_db_slideshow_post_list_free(&scoped);
+
+    bunny_db_slideshow_post_list_t all;
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, bunny_db_slideshow_posts_list(g_db, slideshow_id, 0, &all));
+    TEST_ASSERT_EQUAL(2, (int)all.count);
+    bunny_db_slideshow_post_list_free(&all);
+}
+
+void test_slideshow_post_replace_swaps_exactly_one_post(void)
+{
+    int64_t slideshow_id = 0;
+    bunny_db_slideshow_create(g_db, "Show", false, 0, false, 0, &slideshow_id);
+    int64_t search_id = 0;
+    bunny_db_search_create(g_db, BUNNY_DB_SITE_E621, "wolves", "wolf", 24, NULL, &search_id);
+    bunny_db_slideshow_search_add(g_db, slideshow_id, search_id, false, 0);
+
+    int64_t old_id = 0, new_id = 0;
+    bunny_db_post_upsert_t old_post, new_post;
+    make_test_post(&old_post, 6400, 1);
+    make_test_post(&new_post, 6401, 1);
+    bunny_db_post_upsert(g_db, &old_post, &old_id);
+    bunny_db_post_upsert(g_db, &new_post, &new_id);
+    int64_t initial[] = {old_id};
+    bunny_db_slideshow_posts_set(g_db, slideshow_id, search_id, initial, 1);
+
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, bunny_db_slideshow_post_replace(g_db, slideshow_id, search_id, old_id, new_id));
+
+    bunny_db_slideshow_post_list_t after;
+    bunny_db_slideshow_posts_list(g_db, slideshow_id, search_id, &after);
+    TEST_ASSERT_EQUAL(1, (int)after.count);
+    TEST_ASSERT_EQUAL(new_id, after.items[0].post.id);
+    bunny_db_slideshow_post_list_free(&after);
+}
+
+void test_slideshow_post_replace_rejects_a_post_not_committed_to_this_slideshow(void)
+{
+    int64_t slideshow_id = 0;
+    bunny_db_slideshow_create(g_db, "Show", false, 0, false, 0, &slideshow_id);
+    int64_t search_id = 0;
+    bunny_db_search_create(g_db, BUNNY_DB_SITE_E621, "wolves", "wolf", 24, NULL, &search_id);
+    bunny_db_slideshow_search_add(g_db, slideshow_id, search_id, false, 0);
+
+    TEST_ASSERT_EQUAL(BUNNY_DB_ERR_NOT_FOUND, bunny_db_slideshow_post_replace(g_db, slideshow_id, search_id, 999999, 1));
+}
+
+void test_slideshow_all_post_ids_spans_every_search_in_the_slideshow(void)
+{
+    int64_t slideshow_id = 0;
+    bunny_db_slideshow_create(g_db, "Show", false, 0, false, 0, &slideshow_id);
+    int64_t search1_id = 0, search2_id = 0;
+    bunny_db_search_create(g_db, BUNNY_DB_SITE_E621, "wolves", "wolf", 24, NULL, &search1_id);
+    bunny_db_search_create(g_db, BUNNY_DB_SITE_E621, "foxes", "fox", 24, NULL, &search2_id);
+    bunny_db_slideshow_search_add(g_db, slideshow_id, search1_id, false, 0);
+    bunny_db_slideshow_search_add(g_db, slideshow_id, search2_id, false, 0);
+
+    int64_t post1_id = 0, post2_id = 0;
+    bunny_db_post_upsert_t post1, post2;
+    make_test_post(&post1, 6500, 1);
+    make_test_post(&post2, 6501, 1);
+    bunny_db_post_upsert(g_db, &post1, &post1_id);
+    bunny_db_post_upsert(g_db, &post2, &post2_id);
+    int64_t set1[] = {post1_id};
+    int64_t set2[] = {post2_id};
+    bunny_db_slideshow_posts_set(g_db, slideshow_id, search1_id, set1, 1);
+    bunny_db_slideshow_posts_set(g_db, slideshow_id, search2_id, set2, 1);
+
+    bunny_db_int64_list_t ids;
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, bunny_db_slideshow_all_post_ids(g_db, slideshow_id, &ids));
+    TEST_ASSERT_EQUAL(2, (int)ids.count);
+    bunny_db_int64_list_free(&ids);
+}
+
 /* Resyncing a post (e.g. its own search's next due check) must not wipe out
  * a position that bunny_db_pool_set_post_positions already determined --
  * only genuinely stale pool memberships get deleted; one still reported by
@@ -2840,6 +3366,14 @@ int main(void)
     RUN_TEST(test_search_list_posts_orders_newest_first_by_site_date);
     RUN_TEST(test_search_list_posts_orders_a_post_with_no_site_date_by_cached_at_instead);
     RUN_TEST(test_search_list_posts_paginates);
+    RUN_TEST(test_search_list_posts_random_returns_requested_count);
+    RUN_TEST(test_search_list_posts_random_returns_fewer_when_pool_is_smaller);
+    RUN_TEST(test_search_list_posts_random_excludes_other_searches_posts);
+    RUN_TEST(test_search_list_posts_random_dedupes_a_post_in_two_selected_searches);
+    RUN_TEST(test_search_list_posts_random_respects_simple_blacklist);
+    RUN_TEST(test_search_list_posts_random_respects_complex_blacklist_across_both_sites);
+    RUN_TEST(test_search_list_posts_random_favorites_style_search_skips_blacklist);
+    RUN_TEST(test_search_list_posts_random_respects_rating_and_media_masks);
     RUN_TEST(test_post_get_by_id);
     RUN_TEST(test_post_get_by_id_not_found);
     RUN_TEST(test_action_queue_add_and_list_pending);
@@ -2891,6 +3425,18 @@ int main(void)
     RUN_TEST(test_pool_search_list_posts_sorts_unknown_positions_after_known_ones);
     RUN_TEST(test_pool_search_list_posts_paginates);
     RUN_TEST(test_pool_search_list_posts_orders_by_position_not_creation_date);
+    RUN_TEST(test_pool_search_list_posts_random_returns_requested_count_no_repeats);
+    RUN_TEST(test_pool_search_list_posts_random_returns_fewer_when_pool_is_smaller);
+    RUN_TEST(test_slideshow_create_get_update_delete_round_trips);
+    RUN_TEST(test_slideshow_list_returns_every_slideshow);
+    RUN_TEST(test_slideshow_search_add_is_idempotent_and_updates_override_count);
+    RUN_TEST(test_slideshow_search_remove_drops_the_link_and_its_committed_posts_but_not_the_search_itself);
+    RUN_TEST(test_slideshow_deletion_cascades_to_its_links_and_posts);
+    RUN_TEST(test_slideshow_posts_set_replaces_wholesale);
+    RUN_TEST(test_slideshow_posts_list_scopes_to_one_search_or_every_search);
+    RUN_TEST(test_slideshow_post_replace_swaps_exactly_one_post);
+    RUN_TEST(test_slideshow_post_replace_rejects_a_post_not_committed_to_this_slideshow);
+    RUN_TEST(test_slideshow_all_post_ids_spans_every_search_in_the_slideshow);
     RUN_TEST(test_resyncing_a_post_preserves_its_existing_pool_position);
     RUN_TEST(test_distinct_pool_ids_lists_every_pool_referenced_by_any_post);
     RUN_TEST(test_post_mark_inkbunny_details_backfilled_sets_the_flag);

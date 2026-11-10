@@ -3045,7 +3045,7 @@ this file is the single source of truth for "what's done" across sessions.
   post/search screen to get there meant the network had recovered by then), the old ones
   just looked "overwritten" in the UI even though they weren't. Fixed as part of M65.
 
-- [ ] **M62 — Download queue: per-file byte progress, and an architecture decision on
+- [x] **M62 — Download queue: per-file byte progress, and an architecture decision on
   parallelism**
   Two related asks from the user, scoped together since they interact:
   1. **Landed**: the queue screen's single `LinearProgressIndicator`
@@ -3060,20 +3060,16 @@ this file is the single source of truth for "what's done" across sessions.
      batch bar. The notification's own progress bar is deliberately untouched (still
      batch-level) -- wiring byte progress into it needs throttling across a platform
      channel that wasn't verified without a real device.
-  2. **Still open**: the user also wants downloads to run in parallel (plus moving
-     checksum validation to its own thread), since files come from a CDN that can
-     serve several requests at once. `_processQueue` today is strictly sequential
-     (`while (true) { item = queuedItems.firstOrNull; ... }`, one item at a time by
-     design, matching this codebase's other mass-action code) and checksum hashing
-     (`md5.convert(bytes)`) runs synchronously on the main isolate right after the
-     full body is buffered -- moving it off-thread means `compute()` (a worker
-     isolate), not a true shared-memory thread, since Dart isolates don't share
-     memory. This is in tension with the just-landed single "current file" progress
-     bar, which assumes one file downloading at a time -- parallel downloads would
-     need either N progress bars or a different UI concept (e.g. an aggregate
-     byte-progress bar across all in-flight files), plus a concurrency cap so a
-     multi-thousand-item mass-download doesn't open an unbounded number of
-     simultaneous CDN connections.
+  2. **Landed**: up to 3 items now download concurrently (`DownloadQueueService.
+     _maxConcurrentDownloads`, a worker-pool pattern -- the same shape `restore()`'s own
+     bounded-concurrency fix later reused, see M64/the download-queue-persistence fix).
+     Each worker claims the next queued item and runs it to completion before claiming
+     another, so the UI's "current file" bar became "every currently-downloading item
+     gets its own row" instead of needing a single aggregate concept. Checksum
+     validation moved off the main isolate for real too, but by a later, more complete
+     fix than originally scoped here -- M66 moved the entire fetch+MD5+write pipeline
+     into native C, each download running on its own OS thread, so hashing was never a
+     Dart-isolate concern again rather than being moved to a `compute()` worker isolate.
 
 - [ ] **M63 — Linux download notification: no progress bar, and a new bubble per file**
   The user's report: on Linux, the download notification shows no progress bar at all,

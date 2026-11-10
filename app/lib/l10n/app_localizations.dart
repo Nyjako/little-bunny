@@ -124,6 +124,12 @@ abstract class AppLocalizations {
   /// **'Continue'**
   String get commonContinue;
 
+  /// No description provided for @commonMustBeANumber.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter a whole number'**
+  String get commonMustBeANumber;
+
   /// No description provided for @setupScreenTitle.
   ///
   /// In en, this message translates to:
@@ -388,6 +394,12 @@ abstract class AppLocalizations {
   /// **'Pools'**
   String get searchesTabPools;
 
+  /// No description provided for @searchesTabSlideshows.
+  ///
+  /// In en, this message translates to:
+  /// **'Slideshows'**
+  String get searchesTabSlideshows;
+
   /// No description provided for @searchesPoolsEmptyState.
   ///
   /// In en, this message translates to:
@@ -411,6 +423,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Sort'**
   String get searchesSortTooltip;
+
+  /// No description provided for @searchesMoreActionsTooltip.
+  ///
+  /// In en, this message translates to:
+  /// **'More'**
+  String get searchesMoreActionsTooltip;
 
   /// No description provided for @searchesSortMostUnseen.
   ///
@@ -1304,6 +1322,18 @@ abstract class AppLocalizations {
   /// **'Enter new PIN'**
   String get lockSetupNewPinHeading;
 
+  /// No description provided for @lockSetupConfirmPinHeading.
+  ///
+  /// In en, this message translates to:
+  /// **'Confirm new PIN'**
+  String get lockSetupConfirmPinHeading;
+
+  /// No description provided for @lockSetupBackToNewPin.
+  ///
+  /// In en, this message translates to:
+  /// **'Back'**
+  String get lockSetupBackToNewPin;
+
   /// No description provided for @lockSetupConfirmLabel.
   ///
   /// In en, this message translates to:
@@ -1466,6 +1496,30 @@ abstract class AppLocalizations {
   /// **'Pending'**
   String get taskQueueStatusPending;
 
+  /// No description provided for @taskQueueRecentSection.
+  ///
+  /// In en, this message translates to:
+  /// **'Recent'**
+  String get taskQueueRecentSection;
+
+  /// No description provided for @taskQueueFinishedAgo.
+  ///
+  /// In en, this message translates to:
+  /// **'Finished {duration} ago'**
+  String taskQueueFinishedAgo(String duration);
+
+  /// No description provided for @taskQueueSucceeded.
+  ///
+  /// In en, this message translates to:
+  /// **'Succeeded'**
+  String get taskQueueSucceeded;
+
+  /// No description provided for @taskQueueFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Failed'**
+  String get taskQueueFailed;
+
   /// No description provided for @settingsAppearanceSection.
   ///
   /// In en, this message translates to:
@@ -1562,6 +1616,18 @@ abstract class AppLocalizations {
   /// **'System default'**
   String get settingsLanguageSystemDefault;
 
+  /// No description provided for @settingsUpdatesSection.
+  ///
+  /// In en, this message translates to:
+  /// **'Updates'**
+  String get settingsUpdatesSection;
+
+  /// No description provided for @settingsAutoCheckForUpdatesLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Automatically check for updates'**
+  String get settingsAutoCheckForUpdatesLabel;
+
   /// No description provided for @settingsAppLockSection.
   ///
   /// In en, this message translates to:
@@ -1621,6 +1687,42 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Open source licenses'**
   String get aboutLicensesEntry;
+
+  /// No description provided for @aboutCheckForUpdateButton.
+  ///
+  /// In en, this message translates to:
+  /// **'Check for app update'**
+  String get aboutCheckForUpdateButton;
+
+  /// No description provided for @aboutNoUpdateAvailable.
+  ///
+  /// In en, this message translates to:
+  /// **'No update available'**
+  String get aboutNoUpdateAvailable;
+
+  /// No description provided for @aboutViewChangelogEntry.
+  ///
+  /// In en, this message translates to:
+  /// **'View changelog'**
+  String get aboutViewChangelogEntry;
+
+  /// No description provided for @changelogScreenTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Changelog'**
+  String get changelogScreenTitle;
+
+  /// No description provided for @changelogEmptyState.
+  ///
+  /// In en, this message translates to:
+  /// **'No release history available.'**
+  String get changelogEmptyState;
+
+  /// No description provided for @changelogLoadError.
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to load the changelog: {error}'**
+  String changelogLoadError(String error);
 
   /// No description provided for @settingsSyncSection.
   ///
@@ -2003,6 +2105,233 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Also known as: {names}'**
   String wikiPageOtherNamesLabel(String names);
+
+  /// No description provided for @slideshowsScreenEmptyState.
+  ///
+  /// In en, this message translates to:
+  /// **'No slideshows yet. Tap + to create one.'**
+  String get slideshowsScreenEmptyState;
+
+  /// No description provided for @slideshowsNewTooltip.
+  ///
+  /// In en, this message translates to:
+  /// **'New slideshow'**
+  String get slideshowsNewTooltip;
+
+  /// No description provided for @slideshowsNoLimitSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'No post limit'**
+  String get slideshowsNoLimitSubtitle;
+
+  /// No description provided for @slideshowsMaxPostsSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Up to {count} posts'**
+  String slideshowsMaxPostsSubtitle(int count);
+
+  /// No description provided for @slideshowsDeleteDialogTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete slideshow'**
+  String get slideshowsDeleteDialogTitle;
+
+  /// No description provided for @slideshowsDeleteDialogContent.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete \"{label}\"? Already-downloaded files are kept unless you also choose to remove them.'**
+  String slideshowsDeleteDialogContent(String label);
+
+  /// No description provided for @slideshowsDeleteAlsoFilesLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Also delete downloaded files'**
+  String get slideshowsDeleteAlsoFilesLabel;
+
+  /// No description provided for @slideshowEditCreateTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'New slideshow'**
+  String get slideshowEditCreateTitle;
+
+  /// No description provided for @slideshowEditEditTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Edit slideshow'**
+  String get slideshowEditEditTitle;
+
+  /// No description provided for @slideshowEditLabelField.
+  ///
+  /// In en, this message translates to:
+  /// **'Label'**
+  String get slideshowEditLabelField;
+
+  /// No description provided for @slideshowEditDefaultCountField.
+  ///
+  /// In en, this message translates to:
+  /// **'Default posts per search (blank = no limit)'**
+  String get slideshowEditDefaultCountField;
+
+  /// No description provided for @slideshowEditMaxTotalField.
+  ///
+  /// In en, this message translates to:
+  /// **'Maximum total posts (blank = no limit)'**
+  String get slideshowEditMaxTotalField;
+
+  /// No description provided for @slideshowEditIntervalField.
+  ///
+  /// In en, this message translates to:
+  /// **'Seconds per slide'**
+  String get slideshowEditIntervalField;
+
+  /// No description provided for @slideshowEditSaveButton.
+  ///
+  /// In en, this message translates to:
+  /// **'Save'**
+  String get slideshowEditSaveButton;
+
+  /// No description provided for @slideshowEditSearchesHeading.
+  ///
+  /// In en, this message translates to:
+  /// **'Searches'**
+  String get slideshowEditSearchesHeading;
+
+  /// No description provided for @slideshowEditAddSearchTooltip.
+  ///
+  /// In en, this message translates to:
+  /// **'Add search'**
+  String get slideshowEditAddSearchTooltip;
+
+  /// No description provided for @slideshowEditAddSearchDialogTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Add searches'**
+  String get slideshowEditAddSearchDialogTitle;
+
+  /// No description provided for @slideshowEditAddSearchSubmit.
+  ///
+  /// In en, this message translates to:
+  /// **'Add'**
+  String get slideshowEditAddSearchSubmit;
+
+  /// No description provided for @slideshowEditNoMoreSearchesToAdd.
+  ///
+  /// In en, this message translates to:
+  /// **'Every search is already added'**
+  String get slideshowEditNoMoreSearchesToAdd;
+
+  /// No description provided for @slideshowEditSearchesEmptyState.
+  ///
+  /// In en, this message translates to:
+  /// **'No searches added yet. Save the slideshow first, then add one.'**
+  String get slideshowEditSearchesEmptyState;
+
+  /// No description provided for @slideshowEditOverrideCountDialogTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Posts for \"{label}\"'**
+  String slideshowEditOverrideCountDialogTitle(String label);
+
+  /// No description provided for @slideshowEditOverrideCountField.
+  ///
+  /// In en, this message translates to:
+  /// **'Override count (blank = use the slideshow default)'**
+  String get slideshowEditOverrideCountField;
+
+  /// No description provided for @slideshowEditOverrideCountSet.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} posts'**
+  String slideshowEditOverrideCountSet(int count);
+
+  /// No description provided for @slideshowEditOverrideUsesDefault.
+  ///
+  /// In en, this message translates to:
+  /// **'Uses the slideshow default'**
+  String get slideshowEditOverrideUsesDefault;
+
+  /// No description provided for @slideshowEditRerollSearchTooltip.
+  ///
+  /// In en, this message translates to:
+  /// **'Reroll this search'**
+  String get slideshowEditRerollSearchTooltip;
+
+  /// No description provided for @slideshowEditRerollAllButton.
+  ///
+  /// In en, this message translates to:
+  /// **'Reroll all'**
+  String get slideshowEditRerollAllButton;
+
+  /// No description provided for @slideshowEditRemoveSearchTooltip.
+  ///
+  /// In en, this message translates to:
+  /// **'Remove search'**
+  String get slideshowEditRemoveSearchTooltip;
+
+  /// No description provided for @slideshowEditRemoveSearchDialogTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Remove search'**
+  String get slideshowEditRemoveSearchDialogTitle;
+
+  /// No description provided for @slideshowEditRemoveSearchDialogContent.
+  ///
+  /// In en, this message translates to:
+  /// **'Remove \"{label}\" from this slideshow? Already-downloaded files are kept unless you also choose to remove them.'**
+  String slideshowEditRemoveSearchDialogContent(String label);
+
+  /// No description provided for @slideshowEditPrepareHeading.
+  ///
+  /// In en, this message translates to:
+  /// **'Prepare'**
+  String get slideshowEditPrepareHeading;
+
+  /// No description provided for @slideshowEditPrepareButton.
+  ///
+  /// In en, this message translates to:
+  /// **'Prepare'**
+  String get slideshowEditPrepareButton;
+
+  /// No description provided for @slideshowEditPrepareSummary.
+  ///
+  /// In en, this message translates to:
+  /// **'{ready} ready, {inProgress} downloading, {replaced} replaced, {unreplaceable} couldn\'t be replaced'**
+  String slideshowEditPrepareSummary(
+    int ready,
+    int inProgress,
+    int replaced,
+    int unreplaceable,
+  );
+
+  /// No description provided for @slideshowEditUnreplaceableReason.
+  ///
+  /// In en, this message translates to:
+  /// **'{label}: {reason}'**
+  String slideshowEditUnreplaceableReason(String label, String reason);
+
+  /// No description provided for @slideshowEditRetryButton.
+  ///
+  /// In en, this message translates to:
+  /// **'Retry'**
+  String get slideshowEditRetryButton;
+
+  /// No description provided for @slideshowEditWatchButton.
+  ///
+  /// In en, this message translates to:
+  /// **'Watch'**
+  String get slideshowEditWatchButton;
+
+  /// No description provided for @slideshowEditPrepareErrorMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t prepare the slideshow'**
+  String get slideshowEditPrepareErrorMessage;
+
+  /// No description provided for @slideshowEditNoDestinationFolderMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'No download destination folder configured. Set one in Settings first.'**
+  String get slideshowEditNoDestinationFolderMessage;
 }
 
 class _AppLocalizationsDelegate

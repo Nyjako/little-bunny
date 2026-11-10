@@ -17,6 +17,7 @@ add_library(bunny_server_lib STATIC
     src/routes_queue.c
     src/routes_tags.c
     src/routes_pools.c
+    src/routes_slideshows.c
     src/routes_search.c
     src/routes_blacklist.c
     src/routes_logs.c

@@ -1,20 +1,25 @@
-import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 import '../l10n/app_localizations.dart';
 import '../services/update_apply_service.dart';
 import '../services/update_check_service.dart';
+import '../util/byte_format.dart';
+import 'release_notes_text.dart';
 
 /// Checks for an update and, if one's available, shows a confirmation
-/// dialog -- called once from [SearchesScreen]'s `initState` (M23).
-/// Injectable services for tests; both default to real instances.
-Future<void> checkForUpdateAndMaybePrompt(BuildContext context, {UpdateCheckService checkService = const UpdateCheckService(), UpdateApplyService applyService = const UpdateApplyService()}) async {
+/// dialog -- called once from [SearchesScreen]'s `initState` (M23), and also
+/// from [AboutScreen]'s manual "Check for app update" button. Returns
+/// whether an update was actually found (and the dialog shown), so the
+/// manual path can confirm it checked ("no update available") while the
+/// automatic path can keep ignoring the result and staying silent either
+/// way. Injectable services for tests; both default to real instances.
+Future<bool> checkForUpdateAndMaybePrompt(BuildContext context, {UpdateCheckService checkService = const UpdateCheckService(), UpdateApplyService applyService = const UpdateApplyService()}) async {
   final result = await checkService.check();
   if (!result.updateAvailable || !context.mounted) {
-    return;
+    return false;
   }
   await showDialog<void>(context: context, builder: (context) => _UpdateDialog(result: result, applyService: applyService));
+  return true;
 }
 
 class _UpdateDialog extends StatefulWidget {
@@ -29,69 +34,9 @@ class _UpdateDialog extends StatefulWidget {
 
 class _UpdateDialogState extends State<_UpdateDialog> {
   bool _updating = false;
-  double? _progress;
+  int _bytesReceived = 0;
+  int? _bytesTotal;
   String? _error;
-
-  /// GitHub's auto-generated release notes (release.yml's
-  /// `generate_release_notes: true`) are plain text with bare PR/compare
-  /// URLs, not markdown links -- these recognizers make those URLs tappable
-  /// while [_releaseNotesSpan] still renders via [SelectableText.rich] so
-  /// the rest of the text stays copyable. Built once and cached rather than
-  /// per-build, since recreating a [TapGestureRecognizer] on every rebuild
-  /// without disposing the old one leaks them.
-  final List<TapGestureRecognizer> _linkRecognizers = [];
-  TextSpan? _releaseNotesSpan;
-
-  static final _urlPattern = RegExp(r'https?://\S+');
-
-  @override
-  void dispose() {
-    for (final recognizer in _linkRecognizers) {
-      recognizer.dispose();
-    }
-    super.dispose();
-  }
-
-  Future<void> _openLink(String url) async {
-    final uri = Uri.tryParse(url);
-    if (uri == null) {
-      return;
-    }
-    await launchUrl(uri, mode: LaunchMode.externalApplication);
-  }
-
-  TextSpan _linkifiedReleaseNotes(BuildContext context, String text) {
-    final cached = _releaseNotesSpan;
-    if (cached != null) {
-      return cached;
-    }
-    final linkStyle = TextStyle(color: Theme.of(context).colorScheme.primary, decoration: TextDecoration.underline);
-    final spans = <InlineSpan>[];
-    var last = 0;
-    for (final match in _urlPattern.allMatches(text)) {
-      if (match.start > last) {
-        spans.add(TextSpan(text: text.substring(last, match.start)));
-      }
-      final url = match.group(0)!;
-      final recognizer = TapGestureRecognizer()..onTap = () => _openLink(url);
-      _linkRecognizers.add(recognizer);
-      spans.add(TextSpan(text: url, style: linkStyle, recognizer: recognizer));
-      last = match.end;
-    }
-    if (last < text.length) {
-      spans.add(TextSpan(text: text.substring(last)));
-    }
-    // No explicit root style -- SelectableText.rich (like Text/Text.rich)
-    // resolves the ambient DefaultTextStyle itself, using its own correctly-
-    // nested context once it's actually built inside AlertDialog's content
-    // Material wrapper. Pre-resolving DefaultTextStyle.of(context) here and
-    // baking it in instead used _UpdateDialogState.build()'s own context --
-    // the one *constructing* the AlertDialog descriptor, not yet inside its
-    // content wrapper -- which fell back to Flutter's intentional "missing
-    // Material ancestor" debug style (48px, black weight, red/yellow
-    // double-underline): exactly the "massive, unreadable" text reported.
-    return _releaseNotesSpan = TextSpan(children: spans);
-  }
 
   Future<void> _update() async {
     setState(() {
@@ -103,9 +48,12 @@ class _UpdateDialogState extends State<_UpdateDialog> {
       ok = await widget.applyService.downloadAndApply(
         widget.result.downloadUrl!,
         sha256SumsUrl: widget.result.sha256SumsUrl,
-        onProgress: (progress) {
+        onProgress: (received, total) {
           if (mounted) {
-            setState(() => _progress = progress);
+            setState(() {
+              _bytesReceived = received;
+              _bytesTotal = total;
+            });
           }
         },
       );
@@ -132,26 +80,41 @@ class _UpdateDialogState extends State<_UpdateDialog> {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
-    return AlertDialog(
-      title: Text(l10n.updateAvailableTitle(widget.result.tagName ?? '')),
-      content: _updating
-          ? Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [LinearProgressIndicator(value: _progress), const SizedBox(height: 12), Text(l10n.updateDownloadingMessage)],
-            )
-          : SingleChildScrollView(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+    final total = _bytesTotal;
+    return PopScope(
+      // Blocks both the barrier tap (showDialog's default barrierDismissible
+      // routes it through Navigator.maybePop, which respects this) and the
+      // system back gesture while a download is actually in flight -- before
+      // _updating flips true, this stays a no-op and "Later"/tapping outside
+      // keep working exactly as before.
+      canPop: !_updating,
+      child: AlertDialog(
+        title: Text(l10n.updateAvailableTitle(widget.result.tagName ?? '')),
+        content: _updating
+            ? Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  if ((widget.result.releaseNotes ?? '').isNotEmpty) SelectableText.rich(_linkifiedReleaseNotes(context, widget.result.releaseNotes!)),
-                  if (_error != null) Padding(padding: const EdgeInsets.only(top: 8), child: Text(_error!, style: TextStyle(color: Theme.of(context).colorScheme.error))),
+                  LinearProgressIndicator(value: total != null && total > 0 ? _bytesReceived / total : null),
+                  const SizedBox(height: 12),
+                  Text(total != null ? '${formatBytesCompact(_bytesReceived)} / ${formatBytesCompact(total)}' : formatBytesCompact(_bytesReceived)),
+                  const SizedBox(height: 4),
+                  Text(l10n.updateDownloadingMessage),
                 ],
+              )
+            : SingleChildScrollView(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if ((widget.result.releaseNotes ?? '').isNotEmpty) ReleaseNotesText(text: widget.result.releaseNotes!),
+                    if (_error != null) Padding(padding: const EdgeInsets.only(top: 8), child: Text(_error!, style: TextStyle(color: Theme.of(context).colorScheme.error))),
+                  ],
+                ),
               ),
-            ),
-      actions: _updating
-          ? const []
-          : [TextButton(onPressed: () => Navigator.of(context).pop(), child: Text(l10n.updateLaterAction)), FilledButton(onPressed: _update, child: Text(l10n.updateNowAction))],
+        actions: _updating
+            ? const []
+            : [TextButton(onPressed: () => Navigator.of(context).pop(), child: Text(l10n.updateLaterAction)), FilledButton(onPressed: _update, child: Text(l10n.updateNowAction))],
+      ),
     );
   }
 }

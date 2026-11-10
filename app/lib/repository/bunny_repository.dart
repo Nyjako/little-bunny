@@ -304,6 +304,11 @@ abstract interface class BunnyRepository {
   /// [FfiBunnyRepository] always returns an empty list.
   Future<List<BunnyTask>> getTasks();
 
+  /// The most recently *finished* task_queue jobs (M68 follow-up), newest
+  /// first -- same server-only/standalone-always-empty reasoning as
+  /// [getTasks].
+  Future<List<BunnyTaskHistoryEntry>> getTaskHistory();
+
   /// Enqueues a favorite-add action; it isn't sent to the site until
   /// [processQueue] runs. `stars` is Inkbunny's 1-3 rating, or omitted for
   /// e621's plain favorite.
@@ -371,4 +376,49 @@ abstract interface class BunnyRepository {
   /// repository lived for the app's entire lifetime; needed now that
   /// switching connection mode from Settings (M15) can discard one mid-run.
   Future<void> close();
+
+  /// Returns the new slideshow's id (M51 v2). `null` [defaultPostsPerSearch]/
+  /// [maxTotalPosts] mean "no cap."
+  Future<int> slideshowCreate(String label, {int? defaultPostsPerSearch, int? maxTotalPosts});
+
+  Future<void> slideshowUpdate(int slideshowId, String label, {int? defaultPostsPerSearch, int? maxTotalPosts});
+
+  Future<void> slideshowDelete(int slideshowId);
+
+  Future<List<BunnySlideshow>> slideshowList();
+
+  Future<BunnySlideshow> slideshowGet(int slideshowId);
+
+  /// Links [searchId] into [slideshowId] (idempotent -- re-adding an
+  /// already-linked search just updates its [overrideCount]) and
+  /// immediately commits its initial picks, so the slideshow has posts to
+  /// prepare/download right away without a separate reroll call.
+  Future<void> slideshowSearchAdd(int slideshowId, int searchId, {int? overrideCount});
+
+  /// Unlinks [searchId] from [slideshowId] and drops its already-committed
+  /// posts from the slideshow -- the search itself, and any files already
+  /// downloaded for it, are untouched.
+  Future<void> slideshowSearchRemove(int slideshowId, int searchId);
+
+  Future<List<BunnySlideshowSearch>> slideshowSearchList(int slideshowId);
+
+  /// Every post currently committed to [slideshowId], optionally scoped to
+  /// just [searchId] (omitted or 0 means every search in the slideshow).
+  Future<List<BunnySlideshowPost>> slideshowPostsList(int slideshowId, {int? searchId});
+
+  /// Rerolls every search linked to [slideshowId], one at a time -- picks a
+  /// fresh set of posts per search, never duplicating a post across
+  /// searches within the same slideshow.
+  Future<void> slideshowRerollAll(int slideshowId);
+
+  /// Rerolls just [searchId]'s own posts within [slideshowId], leaving
+  /// every other linked search's posts untouched.
+  Future<void> slideshowRerollSearch(int slideshowId, int searchId);
+
+  /// Self-healing swap (M51 v2): replaces [deadPostId] (e.g. deleted from
+  /// the site, so its download keeps failing) with a fresh pick from the
+  /// same search. Throws [BunnyRepositoryException] if that search has no
+  /// other post left to pick -- the caller should report that as
+  /// "couldn't be replaced" rather than retrying forever.
+  Future<void> slideshowReplacePost(int slideshowId, int searchId, int deadPostId);
 }

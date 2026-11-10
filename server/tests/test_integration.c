@@ -825,6 +825,165 @@ void test_search_merge_duplicate(void)
     free(response.data);
 }
 
+void test_slideshow_crud(void)
+{
+    response_buffer_t response = {0};
+
+    long status = do_request("POST", "/slideshows", "{\"label\":\"my slideshow\",\"default_posts_per_search\":5}", &response, true, NULL);
+    TEST_ASSERT_EQUAL(201, status);
+    TEST_ASSERT_NOT_NULL(strstr(response.data, "\"id\":1"));
+    free(response.data);
+    memset(&response, 0, sizeof(response));
+
+    status = do_request("GET", "/slideshows", NULL, &response, true, NULL);
+    TEST_ASSERT_EQUAL(200, status);
+    TEST_ASSERT_NOT_NULL(strstr(response.data, "\"label\":\"my slideshow\""));
+    TEST_ASSERT_NOT_NULL(strstr(response.data, "\"default_posts_per_search\":5"));
+    TEST_ASSERT_NOT_NULL(strstr(response.data, "\"max_total_posts\":null"));
+    free(response.data);
+    memset(&response, 0, sizeof(response));
+
+    status = do_request("GET", "/slideshows/1", NULL, &response, true, NULL);
+    TEST_ASSERT_EQUAL(200, status);
+    TEST_ASSERT_NOT_NULL(strstr(response.data, "\"label\":\"my slideshow\""));
+    free(response.data);
+    memset(&response, 0, sizeof(response));
+
+    status = do_request("PUT", "/slideshows/1", "{\"label\":\"renamed\",\"max_total_posts\":10}", &response, true, NULL);
+    TEST_ASSERT_EQUAL(200, status);
+    TEST_ASSERT_NOT_NULL(strstr(response.data, "\"ok\":true"));
+    free(response.data);
+    memset(&response, 0, sizeof(response));
+
+    status = do_request("GET", "/slideshows/1", NULL, &response, true, NULL);
+    TEST_ASSERT_EQUAL(200, status);
+    TEST_ASSERT_NOT_NULL(strstr(response.data, "\"label\":\"renamed\""));
+    TEST_ASSERT_NOT_NULL(strstr(response.data, "\"max_total_posts\":10"));
+    TEST_ASSERT_NOT_NULL(strstr(response.data, "\"default_posts_per_search\":null"));
+    free(response.data);
+    memset(&response, 0, sizeof(response));
+
+    status = do_request("DELETE", "/slideshows/1", NULL, &response, true, NULL);
+    TEST_ASSERT_EQUAL(200, status);
+    TEST_ASSERT_NOT_NULL(strstr(response.data, "\"ok\":true"));
+    free(response.data);
+    memset(&response, 0, sizeof(response));
+
+    status = do_request("GET", "/slideshows/1", NULL, &response, true, NULL);
+    TEST_ASSERT_EQUAL(404, status);
+    free(response.data);
+    memset(&response, 0, sizeof(response));
+}
+
+void test_slideshow_search_add_commits_picks_and_remove_clears_them(void)
+{
+    response_buffer_t response = {0};
+
+    long status = do_request("POST", "/searches", "{\"site\":\"e621\",\"label\":\"wolves\",\"query\":\"wolf\",\"interval_hours\":24}", &response, true, NULL);
+    TEST_ASSERT_EQUAL(201, status);
+    free(response.data);
+    memset(&response, 0, sizeof(response));
+
+    status = do_request("POST", "/sync", NULL, &response, true, NULL);
+    TEST_ASSERT_EQUAL(202, status);
+    free(response.data);
+    memset(&response, 0, sizeof(response));
+    TEST_ASSERT_TRUE(poll_until_response_contains("GET", "/searches/1/posts", "\"external_id\":1"));
+
+    status = do_request("POST", "/slideshows", "{\"label\":\"my slideshow\"}", &response, true, NULL);
+    TEST_ASSERT_EQUAL(201, status);
+    free(response.data);
+    memset(&response, 0, sizeof(response));
+
+    /* Adding a search link also triggers its initial commit-picks -- no
+     * separate "now pick posts" call needed (see
+     * routes_slideshows.c's handle_post_slideshow_searches). */
+    status = do_request("POST", "/slideshows/1/searches", "{\"search_id\":1,\"override_count\":3}", &response, true, NULL);
+    TEST_ASSERT_EQUAL(201, status);
+    free(response.data);
+    memset(&response, 0, sizeof(response));
+
+    status = do_request("GET", "/slideshows/1/searches", NULL, &response, true, NULL);
+    TEST_ASSERT_EQUAL(200, status);
+    TEST_ASSERT_NOT_NULL(strstr(response.data, "\"search_id\":1"));
+    TEST_ASSERT_NOT_NULL(strstr(response.data, "\"override_count\":3"));
+    free(response.data);
+    memset(&response, 0, sizeof(response));
+
+    status = do_request("GET", "/slideshows/1/posts", NULL, &response, true, NULL);
+    TEST_ASSERT_EQUAL(200, status);
+    TEST_ASSERT_NOT_NULL(strstr(response.data, "\"external_id\":1"));
+    free(response.data);
+    memset(&response, 0, sizeof(response));
+
+    status = do_request("GET", "/slideshows/1/posts?search_id=1", NULL, &response, true, NULL);
+    TEST_ASSERT_EQUAL(200, status);
+    TEST_ASSERT_NOT_NULL(strstr(response.data, "\"external_id\":1"));
+    free(response.data);
+    memset(&response, 0, sizeof(response));
+
+    /* A single-post fixture leaves reroll with nothing else to pick --
+     * exercises the route without changing the result. */
+    status = do_request("POST", "/slideshows/1/reroll", NULL, &response, true, NULL);
+    TEST_ASSERT_EQUAL(200, status);
+    free(response.data);
+    memset(&response, 0, sizeof(response));
+
+    status = do_request("POST", "/slideshows/1/searches/1/reroll", NULL, &response, true, NULL);
+    TEST_ASSERT_EQUAL(200, status);
+    free(response.data);
+    memset(&response, 0, sizeof(response));
+
+    /* The search is exhausted (its one post is already committed), so
+     * replacing it has nowhere to go -- BUNNY_CORE_ERR_NOT_FOUND -> 404. */
+    status = do_request("POST", "/slideshows/1/searches/1/replace", "{\"dead_post_id\":1}", &response, true, NULL);
+    TEST_ASSERT_EQUAL(404, status);
+    free(response.data);
+    memset(&response, 0, sizeof(response));
+
+    /* Removing the search link drops its committed posts too, but leaves
+     * the search itself untouched (bunny_db_slideshow_search_remove). */
+    status = do_request("DELETE", "/slideshows/1/searches/1", NULL, &response, true, NULL);
+    TEST_ASSERT_EQUAL(200, status);
+    free(response.data);
+    memset(&response, 0, sizeof(response));
+
+    status = do_request("GET", "/slideshows/1/posts", NULL, &response, true, NULL);
+    TEST_ASSERT_EQUAL(200, status);
+    TEST_ASSERT_EQUAL_STRING("[]", response.data);
+    free(response.data);
+    memset(&response, 0, sizeof(response));
+
+    status = do_request("GET", "/searches/1/posts", NULL, &response, true, NULL);
+    TEST_ASSERT_EQUAL(200, status);
+    TEST_ASSERT_NOT_NULL(strstr(response.data, "\"external_id\":1"));
+    free(response.data);
+    memset(&response, 0, sizeof(response));
+}
+
+void test_slideshow_routes_404_for_a_nonexistent_slideshow(void)
+{
+    response_buffer_t response = {0};
+
+    long status = do_request("GET", "/slideshows/999", NULL, &response, true, NULL);
+    TEST_ASSERT_EQUAL(404, status);
+    free(response.data);
+    memset(&response, 0, sizeof(response));
+
+    /* Neither slideshow 999 nor search 1 exists here -- the INSERT trips a
+     * foreign-key constraint, which bunny_db/bunny_core map to
+     * ERR_CONSTRAINT/ERR_INVALID_ARG (400), not ERR_NOT_FOUND. */
+    status = do_request("POST", "/slideshows/999/searches", "{\"search_id\":1}", &response, true, NULL);
+    TEST_ASSERT_EQUAL(400, status);
+    free(response.data);
+    memset(&response, 0, sizeof(response));
+
+    status = do_request("GET", "/slideshows/not-a-route-at-all", NULL, &response, true, NULL);
+    TEST_ASSERT_EQUAL(404, status);
+    free(response.data);
+    memset(&response, 0, sizeof(response));
+}
+
 void test_group_crud_and_assign_search(void)
 {
     response_buffer_t response = {0};
@@ -1308,6 +1467,47 @@ void test_tasks_endpoint_lists_pending_and_running_jobs_in_fifo_order(void)
     free(response.data);
 }
 
+/* GET /tasks's "history" array (M68 follow-up) -- once a job actually
+ * finishes it's gone from "tasks" with zero trace unless it's recorded
+ * here, which defeats the whole point of this endpoint as a "what's the
+ * server doing/what got stuck" debugging aid. Uses the default (fast) fake
+ * e621 transport -- unlike the FIFO-ordering test above, this one needs the
+ * job to actually finish, not stay visible mid-run. */
+void test_tasks_endpoint_history_records_a_finished_job(void)
+{
+    response_buffer_t response = {0};
+
+    long status = do_request("POST", "/searches", "{\"site\":\"e621\",\"label\":\"wolves\",\"query\":\"wolf\",\"interval_hours\":24}", &response, true, NULL);
+    TEST_ASSERT_EQUAL(201, status);
+    free(response.data);
+    memset(&response, 0, sizeof(response));
+
+    status = do_request("POST", "/searches/1/sync", NULL, &response, true, NULL);
+    TEST_ASSERT_EQUAL(202, status);
+    free(response.data);
+    memset(&response, 0, sizeof(response));
+
+    TEST_ASSERT_TRUE(poll_until_response_contains("GET", "/tasks", "\"finished_at\""));
+
+    status = do_request("GET", "/tasks", NULL, &response, true, NULL);
+    TEST_ASSERT_EQUAL(200, status);
+    TEST_ASSERT_NOT_NULL(strstr(response.data, "\"history\":["));
+    TEST_ASSERT_NOT_NULL(strstr(response.data, "\"label\":\"Sync: wolves\""));
+    TEST_ASSERT_NOT_NULL(strstr(response.data, "\"type\":\"sync_search\""));
+    TEST_ASSERT_NOT_NULL(strstr(response.data, "\"succeeded\":true"));
+    TEST_ASSERT_NOT_NULL(strstr(response.data, "\"finished_at\":"));
+
+    /* The finished job is gone from "tasks" -- only "history" has it. */
+    const char *tasks_start = strstr(response.data, "\"tasks\":[");
+    const char *tasks_end = strstr(response.data, "],\"history\":[");
+    TEST_ASSERT_NOT_NULL(tasks_start);
+    TEST_ASSERT_NOT_NULL(tasks_end);
+    const char *wolves_in_tasks = strstr(tasks_start, "Sync: wolves");
+    TEST_ASSERT_TRUE(wolves_in_tasks == NULL || wolves_in_tasks >= tasks_end);
+
+    free(response.data);
+}
+
 /* The scheduler's own background due-search pass is LOW priority (M24) --
  * when a user explicitly asks for the same work via POST /sync (HIGH)
  * while the background pass is already pending/running, task_queue merges
@@ -1421,6 +1621,9 @@ int main(void)
     RUN_TEST(test_search_pin_and_unpin);
     RUN_TEST(test_search_merge_duplicate);
     RUN_TEST(test_group_crud_and_assign_search);
+    RUN_TEST(test_slideshow_crud);
+    RUN_TEST(test_slideshow_search_add_commits_picks_and_remove_clears_them);
+    RUN_TEST(test_slideshow_routes_404_for_a_nonexistent_slideshow);
     RUN_TEST(test_search_touch_viewed);
     RUN_TEST(test_search_auto_favorite_create_and_update);
     RUN_TEST(test_my_inkbunny_favorites_searches_and_caches_with_favorite_marked);
@@ -1433,6 +1636,7 @@ int main(void)
     RUN_TEST(test_sync_status_is_inactive_when_nothing_is_running);
     RUN_TEST(test_sync_all_reports_progress_and_rejects_duplicate_while_running);
     RUN_TEST(test_tasks_endpoint_lists_pending_and_running_jobs_in_fifo_order);
+    RUN_TEST(test_tasks_endpoint_history_records_a_finished_job);
     RUN_TEST(test_user_triggered_due_sync_promotes_a_pending_background_one_instead_of_duplicating);
     RUN_TEST(test_tags_search);
     RUN_TEST(test_tags_search_missing_name_matches_is_invalid_arg);

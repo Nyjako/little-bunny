@@ -136,6 +136,23 @@ class DownloadManager {
     return File('$destinationFolder/$folder/$filename').exists();
   }
 
+  /// Same deterministic-path computation [isDownloaded] already uses, but
+  /// returning the resolved path (or SAF uri) instead of a bare bool --
+  /// for a caller that needs to actually read the file, not just check
+  /// whether it exists (e.g. a slideshow playing already-downloaded posts
+  /// back from disk). Null if nothing is there yet, same as [isDownloaded]
+  /// returning false.
+  Future<String?> localFilePathFor(BunnyPost post, String destinationFolder, {int poolId = 0, String? poolName, int poolPage = 0}) async {
+    final ext = post.fileExt ?? 'bin';
+    final (folder, filename) = _destinationFor(post, ext, poolId: poolId, poolName: poolName, poolPage: poolPage);
+    if (destinationFolder.startsWith('content://')) {
+      final child = await SafUtil().child(destinationFolder, [folder, filename]);
+      return child?.uri;
+    }
+    final file = File('$destinationFolder/$folder/$filename');
+    return await file.exists() ? file.path : null;
+  }
+
   /// SAF-only now (M66 moved the plain-path equivalent into C, see
   /// [BunnyRepository.downloadFile]'s own skip-fetch fast path). Reads back
   /// whatever already sits at [downloadPost]'s own deterministic SAF path

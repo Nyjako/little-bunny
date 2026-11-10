@@ -2,16 +2,20 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
 import 'package:little_bunny/bunny_repository_scope.dart';
 import 'package:little_bunny/repository/bunny_models.dart';
 import 'package:little_bunny/screens/searches_screen.dart';
 import 'package:little_bunny/services/download_manager.dart';
 import 'package:little_bunny/services/download_queue_service.dart';
+import 'package:little_bunny/services/update_check_service.dart';
 import 'package:little_bunny/settings/app_lock_service.dart';
 import 'package:little_bunny/settings/display_settings_store.dart';
 import 'package:little_bunny/settings/download_settings_store.dart';
 import 'package:little_bunny/settings/repository_settings_store.dart';
 import 'package:little_bunny/settings/theme_settings_store.dart';
+import 'package:little_bunny/settings/update_settings_store.dart';
 import 'package:path_provider_platform_interface/path_provider_platform_interface.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -20,7 +24,7 @@ import '../fakes/fake_path_provider.dart';
 import '../fakes/fake_secret_store.dart';
 import '../fakes/test_app.dart';
 
-Widget _wrap(FakeBunnyRepository repository, {DownloadQueueService? downloadQueueService}) => wrapWithLocalization(
+Widget _wrap(FakeBunnyRepository repository, {DownloadQueueService? downloadQueueService, UpdateSettingsStore? updateSettingsStore, UpdateCheckService? updateCheckService}) => wrapWithLocalization(
   BunnyRepositoryScope(
     repository: repository,
     child: SearchesScreen(
@@ -30,6 +34,8 @@ Widget _wrap(FakeBunnyRepository repository, {DownloadQueueService? downloadQueu
       downloadSettingsStore: const DownloadSettingsStore(),
       downloadQueueService: downloadQueueService ?? DownloadQueueService(downloadManager: const DownloadManager(), downloadSettingsStore: const DownloadSettingsStore()),
       settingsStore: RepositorySettingsStore(FakeSecretStore()),
+      updateSettingsStore: updateSettingsStore ?? const UpdateSettingsStore(),
+      updateCheckService: updateCheckService ?? const UpdateCheckService(),
       onThemeModeChanged: (_) {},
       onThemeColorChanged: (_) {},
       onAmoledChanged: (_) {},
@@ -319,6 +325,55 @@ void main() {
     expect(find.text('3 queued for download'), findsOneWidget);
     // The dialog closed along with everything else settling.
     expect(find.text('Loading posts data 1/2'), findsNothing);
+  });
+
+
+  testWidgets('on narrow widths, most actions fold into one overflow menu, and it still works (M51 declutter)', (WidgetTester tester) async {
+    final repository = FakeBunnyRepository();
+    final searchId = await repository.createSearch(BunnySite.e621, 'Foxes', 'fox');
+    repository.postsBySearchId[searchId] = [
+      BunnyPost(id: 1, site: BunnySite.e621, externalId: 1, score: 0, favCount: 0, commentCount: 0, width: 100, height: 100, cachedAt: '2026-01-01T00:00:00Z', isSeen: false, isFavorited: false),
+    ];
+
+    tester.view.physicalSize = const Size(400, 800);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+    await tester.pumpWidget(_wrap(repository));
+    await tester.pumpAndSettle();
+
+    // Sync and download queue stay as direct icons even on narrow widths.
+    expect(find.byTooltip('Check for updates'), findsOneWidget);
+    expect(find.byTooltip('Downloads'), findsOneWidget);
+    // Everything else is folded away, replaced by one "more" icon.
+    expect(find.byIcon(Icons.travel_explore), findsNothing);
+    expect(find.byIcon(Icons.person_outline), findsNothing);
+    expect(find.byIcon(Icons.bar_chart_outlined), findsNothing);
+    expect(find.byIcon(Icons.settings_outlined), findsNothing);
+    expect(find.byIcon(Icons.sort), findsNothing);
+    expect(find.byIcon(Icons.more_vert), findsOneWidget);
+
+    await tester.tap(find.byIcon(Icons.more_vert));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Most unseen'), findsOneWidget);
+    expect(find.text('Select searches to download'), findsOneWidget);
+    expect(find.text('Custom search'), findsOneWidget);
+    expect(find.text('Accounts'), findsOneWidget);
+    expect(find.text('Tag stats'), findsOneWidget);
+    expect(find.text('Settings'), findsOneWidget);
+    expect(find.text('New group'), findsOneWidget);
+
+    // The folded select-for-download entry still enters selection mode.
+    await tester.tap(find.text('Select searches to download'));
+    await tester.pumpAndSettle();
+    expect(find.text('0 selected'), findsOneWidget);
+
+    await tester.tap(find.text('Foxes'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Download selected'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('1 queued for download'), findsOneWidget);
   });
 
   testWidgets('sort order defaults to most-unseen-first and persists a change (M13.1)', (WidgetTester tester) async {
@@ -783,5 +838,30 @@ void main() {
       expect(repository.searches.single.id, keeperId);
       expect(find.textContaining('duplicate searches found'), findsNothing);
     });
+  });
+
+  testWidgets('skips the automatic update check when auto-check is disabled', (WidgetTester tester) async {
+    SharedPreferences.setMockInitialValues({'update_auto_check_enabled': false});
+    final checkService = UpdateCheckService(
+      currentBuildNumber: 10,
+      client: MockClient((_) async => http.Response('{"tag_name":"build-42","assets":[{"name":"little-bunny-${UpdateCheckService.assetSuffixForPlatform()}","browser_download_url":"https://example.invalid/asset"}]}', 200)),
+    );
+
+    await tester.pumpWidget(_wrap(FakeBunnyRepository(), updateCheckService: checkService));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(AlertDialog), findsNothing);
+  });
+
+  testWidgets('runs the automatic update check when auto-check is enabled (the default)', (WidgetTester tester) async {
+    final checkService = UpdateCheckService(
+      currentBuildNumber: 10,
+      client: MockClient((_) async => http.Response('{"tag_name":"build-42","assets":[{"name":"little-bunny-${UpdateCheckService.assetSuffixForPlatform()}","browser_download_url":"https://example.invalid/asset"}]}', 200)),
+    );
+
+    await tester.pumpWidget(_wrap(FakeBunnyRepository(), updateCheckService: checkService));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(AlertDialog), findsOneWidget);
   });
 }

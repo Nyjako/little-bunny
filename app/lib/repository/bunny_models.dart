@@ -215,6 +215,42 @@ class BunnyPost {
   });
 }
 
+/// A persisted, download-backed slideshow (M51 v2). Mirrors `bunny_db_slideshow_t`.
+/// `null` [defaultPostsPerSearch]/[maxTotalPosts] mean "no cap" -- see
+/// [BunnySlideshowSearch.overrideCount]'s own doc comment for how the
+/// former gets overridden per search.
+class BunnySlideshow {
+  final int id;
+  final String label;
+  final int? defaultPostsPerSearch;
+  final int? maxTotalPosts;
+  final String createdAt;
+
+  const BunnySlideshow({required this.id, required this.label, this.defaultPostsPerSearch, this.maxTotalPosts, required this.createdAt});
+}
+
+/// One search/pool linked into a slideshow. Mirrors `bunny_db_slideshow_search_t`.
+class BunnySlideshowSearch {
+  final int slideshowId;
+  final int searchId;
+
+  /// Overrides the parent slideshow's own [BunnySlideshow.defaultPostsPerSearch]
+  /// for this search specifically; `null` means "use the slideshow's default."
+  final int? overrideCount;
+  final String addedAt;
+
+  const BunnySlideshowSearch({required this.slideshowId, required this.searchId, this.overrideCount, required this.addedAt});
+}
+
+/// One post currently committed to a slideshow, via the specific search that
+/// picked it. Mirrors `bunny_db_slideshow_post_t`.
+class BunnySlideshowPost {
+  final int searchId;
+  final BunnyPost post;
+
+  const BunnySlideshowPost({required this.searchId, required this.post});
+}
+
 /// Mirrors `bunny_db_tag_stat_t` -- a search box's autocomplete suggestion,
 /// ranked by how many cached posts use it.
 class BunnyTagStat {
@@ -495,6 +531,22 @@ class BunnyTask {
   final DateTime enqueuedAt;
 
   const BunnyTask({required this.id, required this.priority, required this.status, required this.label, required this.enqueuedAt});
+}
+
+/// One entry from `GET /tasks`'s "history" array (M68 follow-up) -- the
+/// most recently *finished* jobs, newest first, as opposed to [BunnyTask]'s
+/// live pending/running list. Purely a debugging aid ("what did the server
+/// just do, and did it succeed"), not meant to double as an audit log --
+/// the server only keeps a small fixed number of these.
+class BunnyTaskHistoryEntry {
+  final int id;
+  final BunnyTaskPriority priority;
+  final String label;
+  final DateTime enqueuedAt;
+  final DateTime finishedAt;
+  final bool succeeded;
+
+  const BunnyTaskHistoryEntry({required this.id, required this.priority, required this.label, required this.enqueuedAt, required this.finishedAt, required this.succeeded});
 }
 
 /// Mirrors `bunny_core_queue_stats_t`.

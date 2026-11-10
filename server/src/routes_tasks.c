@@ -45,6 +45,17 @@ static const char *type_to_string(task_type_t type)
     }
 }
 
+static void format_timestamp(char *out, size_t out_size, time_t t)
+{
+    struct tm tm_utc;
+#ifdef _WIN32
+    gmtime_s(&tm_utc, &t);
+#else
+    gmtime_r(&t, &tm_utc);
+#endif
+    strftime(out, out_size, "%Y-%m-%dT%H:%M:%SZ", &tm_utc);
+}
+
 static cJSON *entry_to_json(const task_queue_entry_t *entry)
 {
     cJSON *json = cJSON_CreateObject();
@@ -55,14 +66,29 @@ static cJSON *entry_to_json(const task_queue_entry_t *entry)
     cJSON_AddStringToObject(json, "label", entry->label);
 
     char enqueued_at[32];
-    struct tm tm_utc;
-#ifdef _WIN32
-    gmtime_s(&tm_utc, &entry->enqueued_at);
-#else
-    gmtime_r(&entry->enqueued_at, &tm_utc);
-#endif
-    strftime(enqueued_at, sizeof(enqueued_at), "%Y-%m-%dT%H:%M:%SZ", &tm_utc);
+    format_timestamp(enqueued_at, sizeof(enqueued_at), entry->enqueued_at);
     cJSON_AddStringToObject(json, "enqueued_at", enqueued_at);
+
+    return json;
+}
+
+static cJSON *history_entry_to_json(const task_history_entry_t *entry)
+{
+    cJSON *json = cJSON_CreateObject();
+    cJSON_AddNumberToObject(json, "id", (double)entry->id);
+    cJSON_AddStringToObject(json, "type", type_to_string(entry->type));
+    cJSON_AddStringToObject(json, "priority", priority_to_string(entry->priority));
+    cJSON_AddStringToObject(json, "label", entry->label);
+
+    char enqueued_at[32];
+    format_timestamp(enqueued_at, sizeof(enqueued_at), entry->enqueued_at);
+    cJSON_AddStringToObject(json, "enqueued_at", enqueued_at);
+
+    char finished_at[32];
+    format_timestamp(finished_at, sizeof(finished_at), entry->finished_at);
+    cJSON_AddStringToObject(json, "finished_at", finished_at);
+
+    cJSON_AddBoolToObject(json, "succeeded", entry->succeeded);
 
     return json;
 }
@@ -71,12 +97,24 @@ static int handle_get_tasks(struct mg_connection *conn, server_context_t *ctx)
 {
     task_queue_snapshot_t snapshot;
     task_queue_snapshot_get(ctx->task_queue, &snapshot);
+    task_queue_history_snapshot_t history;
+    task_queue_history_get(ctx->task_queue, &history);
 
-    cJSON *response = cJSON_CreateArray();
+    cJSON *tasks = cJSON_CreateArray();
     for (size_t i = 0; i < snapshot.count; i++) {
-        cJSON_AddItemToArray(response, entry_to_json(&snapshot.items[i]));
+        cJSON_AddItemToArray(tasks, entry_to_json(&snapshot.items[i]));
     }
     task_queue_snapshot_free(&snapshot);
+
+    cJSON *history_json = cJSON_CreateArray();
+    for (size_t i = 0; i < history.count; i++) {
+        cJSON_AddItemToArray(history_json, history_entry_to_json(&history.items[i]));
+    }
+    task_queue_history_snapshot_free(&history);
+
+    cJSON *response = cJSON_CreateObject();
+    cJSON_AddItemToObject(response, "tasks", tasks);
+    cJSON_AddItemToObject(response, "history", history_json);
 
     int status = server_json_respond(conn, 200, response);
     cJSON_Delete(response);

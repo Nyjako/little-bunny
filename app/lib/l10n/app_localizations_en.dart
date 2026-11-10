@@ -24,6 +24,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get commonContinue => 'Continue';
 
   @override
+  String get commonMustBeANumber => 'Enter a whole number';
+
+  @override
   String get setupScreenTitle => 'Set up LittleBunny';
 
   @override
@@ -171,6 +174,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get searchesTabPools => 'Pools';
 
   @override
+  String get searchesTabSlideshows => 'Slideshows';
+
+  @override
   String get searchesPoolsEmptyState => 'No saved pools yet. Tap + to add one.';
 
   @override
@@ -181,6 +187,9 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get searchesSortTooltip => 'Sort';
+
+  @override
+  String get searchesMoreActionsTooltip => 'More';
 
   @override
   String get searchesSortMostUnseen => 'Most unseen';
@@ -685,6 +694,12 @@ class AppLocalizationsEn extends AppLocalizations {
   String get lockSetupNewPinHeading => 'Enter new PIN';
 
   @override
+  String get lockSetupConfirmPinHeading => 'Confirm new PIN';
+
+  @override
+  String get lockSetupBackToNewPin => 'Back';
+
+  @override
   String get lockSetupConfirmLabel => 'Confirm';
 
   @override
@@ -770,6 +785,20 @@ class AppLocalizationsEn extends AppLocalizations {
   String get taskQueueStatusPending => 'Pending';
 
   @override
+  String get taskQueueRecentSection => 'Recent';
+
+  @override
+  String taskQueueFinishedAgo(String duration) {
+    return 'Finished $duration ago';
+  }
+
+  @override
+  String get taskQueueSucceeded => 'Succeeded';
+
+  @override
+  String get taskQueueFailed => 'Failed';
+
+  @override
   String get settingsAppearanceSection => 'Appearance';
 
   @override
@@ -818,6 +847,13 @@ class AppLocalizationsEn extends AppLocalizations {
   String get settingsLanguageSystemDefault => 'System default';
 
   @override
+  String get settingsUpdatesSection => 'Updates';
+
+  @override
+  String get settingsAutoCheckForUpdatesLabel =>
+      'Automatically check for updates';
+
+  @override
   String get settingsAppLockSection => 'App lock';
 
   @override
@@ -849,6 +885,26 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get aboutLicensesEntry => 'Open source licenses';
+
+  @override
+  String get aboutCheckForUpdateButton => 'Check for app update';
+
+  @override
+  String get aboutNoUpdateAvailable => 'No update available';
+
+  @override
+  String get aboutViewChangelogEntry => 'View changelog';
+
+  @override
+  String get changelogScreenTitle => 'Changelog';
+
+  @override
+  String get changelogEmptyState => 'No release history available.';
+
+  @override
+  String changelogLoadError(String error) {
+    return 'Failed to load the changelog: $error';
+  }
 
   @override
   String get settingsSyncSection => 'Sync';
@@ -1073,4 +1129,142 @@ class AppLocalizationsEn extends AppLocalizations {
   String wikiPageOtherNamesLabel(String names) {
     return 'Also known as: $names';
   }
+
+  @override
+  String get slideshowsScreenEmptyState =>
+      'No slideshows yet. Tap + to create one.';
+
+  @override
+  String get slideshowsNewTooltip => 'New slideshow';
+
+  @override
+  String get slideshowsNoLimitSubtitle => 'No post limit';
+
+  @override
+  String slideshowsMaxPostsSubtitle(int count) {
+    return 'Up to $count posts';
+  }
+
+  @override
+  String get slideshowsDeleteDialogTitle => 'Delete slideshow';
+
+  @override
+  String slideshowsDeleteDialogContent(String label) {
+    return 'Delete \"$label\"? Already-downloaded files are kept unless you also choose to remove them.';
+  }
+
+  @override
+  String get slideshowsDeleteAlsoFilesLabel => 'Also delete downloaded files';
+
+  @override
+  String get slideshowEditCreateTitle => 'New slideshow';
+
+  @override
+  String get slideshowEditEditTitle => 'Edit slideshow';
+
+  @override
+  String get slideshowEditLabelField => 'Label';
+
+  @override
+  String get slideshowEditDefaultCountField =>
+      'Default posts per search (blank = no limit)';
+
+  @override
+  String get slideshowEditMaxTotalField =>
+      'Maximum total posts (blank = no limit)';
+
+  @override
+  String get slideshowEditIntervalField => 'Seconds per slide';
+
+  @override
+  String get slideshowEditSaveButton => 'Save';
+
+  @override
+  String get slideshowEditSearchesHeading => 'Searches';
+
+  @override
+  String get slideshowEditAddSearchTooltip => 'Add search';
+
+  @override
+  String get slideshowEditAddSearchDialogTitle => 'Add searches';
+
+  @override
+  String get slideshowEditAddSearchSubmit => 'Add';
+
+  @override
+  String get slideshowEditNoMoreSearchesToAdd =>
+      'Every search is already added';
+
+  @override
+  String get slideshowEditSearchesEmptyState =>
+      'No searches added yet. Save the slideshow first, then add one.';
+
+  @override
+  String slideshowEditOverrideCountDialogTitle(String label) {
+    return 'Posts for \"$label\"';
+  }
+
+  @override
+  String get slideshowEditOverrideCountField =>
+      'Override count (blank = use the slideshow default)';
+
+  @override
+  String slideshowEditOverrideCountSet(int count) {
+    return '$count posts';
+  }
+
+  @override
+  String get slideshowEditOverrideUsesDefault => 'Uses the slideshow default';
+
+  @override
+  String get slideshowEditRerollSearchTooltip => 'Reroll this search';
+
+  @override
+  String get slideshowEditRerollAllButton => 'Reroll all';
+
+  @override
+  String get slideshowEditRemoveSearchTooltip => 'Remove search';
+
+  @override
+  String get slideshowEditRemoveSearchDialogTitle => 'Remove search';
+
+  @override
+  String slideshowEditRemoveSearchDialogContent(String label) {
+    return 'Remove \"$label\" from this slideshow? Already-downloaded files are kept unless you also choose to remove them.';
+  }
+
+  @override
+  String get slideshowEditPrepareHeading => 'Prepare';
+
+  @override
+  String get slideshowEditPrepareButton => 'Prepare';
+
+  @override
+  String slideshowEditPrepareSummary(
+    int ready,
+    int inProgress,
+    int replaced,
+    int unreplaceable,
+  ) {
+    return '$ready ready, $inProgress downloading, $replaced replaced, $unreplaceable couldn\'t be replaced';
+  }
+
+  @override
+  String slideshowEditUnreplaceableReason(String label, String reason) {
+    return '$label: $reason';
+  }
+
+  @override
+  String get slideshowEditRetryButton => 'Retry';
+
+  @override
+  String get slideshowEditWatchButton => 'Watch';
+
+  @override
+  String get slideshowEditPrepareErrorMessage =>
+      'Couldn\'t prepare the slideshow';
+
+  @override
+  String get slideshowEditNoDestinationFolderMessage =>
+      'No download destination folder configured. Set one in Settings first.';
 }

@@ -335,6 +335,101 @@ class BunnyCoreFfiBindings {
             void Function(ffi.Pointer<bunny_db_download_queue_list_t>)
           >();
 
+  void bunny_db_slideshow_free(ffi.Pointer<bunny_db_slideshow_t> slideshow) {
+    return _bunny_db_slideshow_free(slideshow);
+  }
+
+  late final _bunny_db_slideshow_freePtr =
+      _lookup<
+        ffi.NativeFunction<ffi.Void Function(ffi.Pointer<bunny_db_slideshow_t>)>
+      >('bunny_db_slideshow_free');
+  late final _bunny_db_slideshow_free = _bunny_db_slideshow_freePtr
+      .asFunction<void Function(ffi.Pointer<bunny_db_slideshow_t>)>();
+
+  void bunny_db_slideshow_list_free(
+    ffi.Pointer<bunny_db_slideshow_list_t> list,
+  ) {
+    return _bunny_db_slideshow_list_free(list);
+  }
+
+  late final _bunny_db_slideshow_list_freePtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.Void Function(ffi.Pointer<bunny_db_slideshow_list_t>)
+        >
+      >('bunny_db_slideshow_list_free');
+  late final _bunny_db_slideshow_list_free = _bunny_db_slideshow_list_freePtr
+      .asFunction<void Function(ffi.Pointer<bunny_db_slideshow_list_t>)>();
+
+  void bunny_db_slideshow_search_free(
+    ffi.Pointer<bunny_db_slideshow_search_t> item,
+  ) {
+    return _bunny_db_slideshow_search_free(item);
+  }
+
+  late final _bunny_db_slideshow_search_freePtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.Void Function(ffi.Pointer<bunny_db_slideshow_search_t>)
+        >
+      >('bunny_db_slideshow_search_free');
+  late final _bunny_db_slideshow_search_free =
+      _bunny_db_slideshow_search_freePtr
+          .asFunction<
+            void Function(ffi.Pointer<bunny_db_slideshow_search_t>)
+          >();
+
+  void bunny_db_slideshow_search_list_free(
+    ffi.Pointer<bunny_db_slideshow_search_list_t> list,
+  ) {
+    return _bunny_db_slideshow_search_list_free(list);
+  }
+
+  late final _bunny_db_slideshow_search_list_freePtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.Void Function(ffi.Pointer<bunny_db_slideshow_search_list_t>)
+        >
+      >('bunny_db_slideshow_search_list_free');
+  late final _bunny_db_slideshow_search_list_free =
+      _bunny_db_slideshow_search_list_freePtr
+          .asFunction<
+            void Function(ffi.Pointer<bunny_db_slideshow_search_list_t>)
+          >();
+
+  void bunny_db_slideshow_post_free(
+    ffi.Pointer<bunny_db_slideshow_post_t> item,
+  ) {
+    return _bunny_db_slideshow_post_free(item);
+  }
+
+  late final _bunny_db_slideshow_post_freePtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.Void Function(ffi.Pointer<bunny_db_slideshow_post_t>)
+        >
+      >('bunny_db_slideshow_post_free');
+  late final _bunny_db_slideshow_post_free = _bunny_db_slideshow_post_freePtr
+      .asFunction<void Function(ffi.Pointer<bunny_db_slideshow_post_t>)>();
+
+  void bunny_db_slideshow_post_list_free(
+    ffi.Pointer<bunny_db_slideshow_post_list_t> list,
+  ) {
+    return _bunny_db_slideshow_post_list_free(list);
+  }
+
+  late final _bunny_db_slideshow_post_list_freePtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.Void Function(ffi.Pointer<bunny_db_slideshow_post_list_t>)
+        >
+      >('bunny_db_slideshow_post_list_free');
+  late final _bunny_db_slideshow_post_list_free =
+      _bunny_db_slideshow_post_list_freePtr
+          .asFunction<
+            void Function(ffi.Pointer<bunny_db_slideshow_post_list_t>)
+          >();
+
   /// Opens (creating if needed) the underlying bunny_db database and applies its
   /// schema.
   bunny_core_result_t bunny_core_open(
@@ -679,6 +774,488 @@ class BunnyCoreFfiBindings {
           ffi.Pointer<bunny_db_post_list_t>,
         )
       >();
+
+  /// --- Slideshows (M51 v2) ---------------------------------------------------
+  /// A persisted, download-backed slideshow -- see bunny_db's own
+  /// slideshows/slideshow_searches/slideshow_posts tables (schema.h) for the
+  /// storage shape. CRUD here is a thin pass-through; the pick/commit/reroll/
+  /// replace functions are the real orchestration -- see their doc comments in
+  /// libs/core/src/searches.c.
+  bunny_core_result_t bunny_core_slideshow_create(
+    ffi.Pointer<bunny_core_t> core,
+    ffi.Pointer<ffi.Char> label,
+    bool has_default_posts_per_search,
+    int default_posts_per_search,
+    bool has_max_total_posts,
+    int max_total_posts,
+    ffi.Pointer<ffi.Int64> out_id,
+  ) {
+    return bunny_core_result_t.fromValue(
+      _bunny_core_slideshow_create(
+        core,
+        label,
+        has_default_posts_per_search,
+        default_posts_per_search,
+        has_max_total_posts,
+        max_total_posts,
+        out_id,
+      ),
+    );
+  }
+
+  late final _bunny_core_slideshow_createPtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.UnsignedInt Function(
+            ffi.Pointer<bunny_core_t>,
+            ffi.Pointer<ffi.Char>,
+            ffi.Bool,
+            ffi.Int,
+            ffi.Bool,
+            ffi.Int,
+            ffi.Pointer<ffi.Int64>,
+          )
+        >
+      >('bunny_core_slideshow_create');
+  late final _bunny_core_slideshow_create = _bunny_core_slideshow_createPtr
+      .asFunction<
+        int Function(
+          ffi.Pointer<bunny_core_t>,
+          ffi.Pointer<ffi.Char>,
+          bool,
+          int,
+          bool,
+          int,
+          ffi.Pointer<ffi.Int64>,
+        )
+      >();
+
+  bunny_core_result_t bunny_core_slideshow_update(
+    ffi.Pointer<bunny_core_t> core,
+    int slideshow_id,
+    ffi.Pointer<ffi.Char> label,
+    bool has_default_posts_per_search,
+    int default_posts_per_search,
+    bool has_max_total_posts,
+    int max_total_posts,
+  ) {
+    return bunny_core_result_t.fromValue(
+      _bunny_core_slideshow_update(
+        core,
+        slideshow_id,
+        label,
+        has_default_posts_per_search,
+        default_posts_per_search,
+        has_max_total_posts,
+        max_total_posts,
+      ),
+    );
+  }
+
+  late final _bunny_core_slideshow_updatePtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.UnsignedInt Function(
+            ffi.Pointer<bunny_core_t>,
+            ffi.Int64,
+            ffi.Pointer<ffi.Char>,
+            ffi.Bool,
+            ffi.Int,
+            ffi.Bool,
+            ffi.Int,
+          )
+        >
+      >('bunny_core_slideshow_update');
+  late final _bunny_core_slideshow_update = _bunny_core_slideshow_updatePtr
+      .asFunction<
+        int Function(
+          ffi.Pointer<bunny_core_t>,
+          int,
+          ffi.Pointer<ffi.Char>,
+          bool,
+          int,
+          bool,
+          int,
+        )
+      >();
+
+  bunny_core_result_t bunny_core_slideshow_delete(
+    ffi.Pointer<bunny_core_t> core,
+    int slideshow_id,
+  ) {
+    return bunny_core_result_t.fromValue(
+      _bunny_core_slideshow_delete(core, slideshow_id),
+    );
+  }
+
+  late final _bunny_core_slideshow_deletePtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.UnsignedInt Function(ffi.Pointer<bunny_core_t>, ffi.Int64)
+        >
+      >('bunny_core_slideshow_delete');
+  late final _bunny_core_slideshow_delete = _bunny_core_slideshow_deletePtr
+      .asFunction<int Function(ffi.Pointer<bunny_core_t>, int)>();
+
+  bunny_core_result_t bunny_core_slideshow_get(
+    ffi.Pointer<bunny_core_t> core,
+    int slideshow_id,
+    ffi.Pointer<bunny_db_slideshow_t> out_slideshow,
+  ) {
+    return bunny_core_result_t.fromValue(
+      _bunny_core_slideshow_get(core, slideshow_id, out_slideshow),
+    );
+  }
+
+  late final _bunny_core_slideshow_getPtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.UnsignedInt Function(
+            ffi.Pointer<bunny_core_t>,
+            ffi.Int64,
+            ffi.Pointer<bunny_db_slideshow_t>,
+          )
+        >
+      >('bunny_core_slideshow_get');
+  late final _bunny_core_slideshow_get = _bunny_core_slideshow_getPtr
+      .asFunction<
+        int Function(
+          ffi.Pointer<bunny_core_t>,
+          int,
+          ffi.Pointer<bunny_db_slideshow_t>,
+        )
+      >();
+
+  bunny_core_result_t bunny_core_slideshow_list(
+    ffi.Pointer<bunny_core_t> core,
+    ffi.Pointer<bunny_db_slideshow_list_t> out_list,
+  ) {
+    return bunny_core_result_t.fromValue(
+      _bunny_core_slideshow_list(core, out_list),
+    );
+  }
+
+  late final _bunny_core_slideshow_listPtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.UnsignedInt Function(
+            ffi.Pointer<bunny_core_t>,
+            ffi.Pointer<bunny_db_slideshow_list_t>,
+          )
+        >
+      >('bunny_core_slideshow_list');
+  late final _bunny_core_slideshow_list = _bunny_core_slideshow_listPtr
+      .asFunction<
+        int Function(
+          ffi.Pointer<bunny_core_t>,
+          ffi.Pointer<bunny_db_slideshow_list_t>,
+        )
+      >();
+
+  bunny_core_result_t bunny_core_slideshow_search_add(
+    ffi.Pointer<bunny_core_t> core,
+    int slideshow_id,
+    int search_id,
+    bool has_override_count,
+    int override_count,
+  ) {
+    return bunny_core_result_t.fromValue(
+      _bunny_core_slideshow_search_add(
+        core,
+        slideshow_id,
+        search_id,
+        has_override_count,
+        override_count,
+      ),
+    );
+  }
+
+  late final _bunny_core_slideshow_search_addPtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.UnsignedInt Function(
+            ffi.Pointer<bunny_core_t>,
+            ffi.Int64,
+            ffi.Int64,
+            ffi.Bool,
+            ffi.Int,
+          )
+        >
+      >('bunny_core_slideshow_search_add');
+  late final _bunny_core_slideshow_search_add =
+      _bunny_core_slideshow_search_addPtr
+          .asFunction<
+            int Function(ffi.Pointer<bunny_core_t>, int, int, bool, int)
+          >();
+
+  bunny_core_result_t bunny_core_slideshow_search_remove(
+    ffi.Pointer<bunny_core_t> core,
+    int slideshow_id,
+    int search_id,
+  ) {
+    return bunny_core_result_t.fromValue(
+      _bunny_core_slideshow_search_remove(core, slideshow_id, search_id),
+    );
+  }
+
+  late final _bunny_core_slideshow_search_removePtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.UnsignedInt Function(
+            ffi.Pointer<bunny_core_t>,
+            ffi.Int64,
+            ffi.Int64,
+          )
+        >
+      >('bunny_core_slideshow_search_remove');
+  late final _bunny_core_slideshow_search_remove =
+      _bunny_core_slideshow_search_removePtr
+          .asFunction<int Function(ffi.Pointer<bunny_core_t>, int, int)>();
+
+  bunny_core_result_t bunny_core_slideshow_search_list(
+    ffi.Pointer<bunny_core_t> core,
+    int slideshow_id,
+    ffi.Pointer<bunny_db_slideshow_search_list_t> out_list,
+  ) {
+    return bunny_core_result_t.fromValue(
+      _bunny_core_slideshow_search_list(core, slideshow_id, out_list),
+    );
+  }
+
+  late final _bunny_core_slideshow_search_listPtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.UnsignedInt Function(
+            ffi.Pointer<bunny_core_t>,
+            ffi.Int64,
+            ffi.Pointer<bunny_db_slideshow_search_list_t>,
+          )
+        >
+      >('bunny_core_slideshow_search_list');
+  late final _bunny_core_slideshow_search_list =
+      _bunny_core_slideshow_search_listPtr
+          .asFunction<
+            int Function(
+              ffi.Pointer<bunny_core_t>,
+              int,
+              ffi.Pointer<bunny_db_slideshow_search_list_t>,
+            )
+          >();
+
+  /// search_id > 0 scopes to just that search's own committed picks; 0 means
+  /// every search in this slideshow -- same convention
+  /// bunny_db_slideshow_posts_list already uses.
+  bunny_core_result_t bunny_core_slideshow_posts_list(
+    ffi.Pointer<bunny_core_t> core,
+    int slideshow_id,
+    int search_id,
+    ffi.Pointer<bunny_db_slideshow_post_list_t> out_list,
+  ) {
+    return bunny_core_result_t.fromValue(
+      _bunny_core_slideshow_posts_list(core, slideshow_id, search_id, out_list),
+    );
+  }
+
+  late final _bunny_core_slideshow_posts_listPtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.UnsignedInt Function(
+            ffi.Pointer<bunny_core_t>,
+            ffi.Int64,
+            ffi.Int64,
+            ffi.Pointer<bunny_db_slideshow_post_list_t>,
+          )
+        >
+      >('bunny_core_slideshow_posts_list');
+  late final _bunny_core_slideshow_posts_list =
+      _bunny_core_slideshow_posts_listPtr
+          .asFunction<
+            int Function(
+              ffi.Pointer<bunny_core_t>,
+              int,
+              int,
+              ffi.Pointer<bunny_db_slideshow_post_list_t>,
+            )
+          >();
+
+  /// Picks up to `count` posts for a single search_id -- a tag/favorites
+  /// search or a pool search, resolved the same way bunny_core_search_list_posts
+  /// resolves one (no longer excluding pools, lifting M51 v1's own
+  /// limitation), excluding every post_id already in excluded_post_ids. May
+  /// return fewer than `count` -- see bunny_db_search_list_posts_random's own
+  /// doc comment for why that's an accepted outcome, not an error.
+  bunny_core_result_t bunny_core_slideshow_pick_posts_for_search(
+    ffi.Pointer<bunny_core_t> core,
+    int search_id,
+    int count,
+    ffi.Pointer<ffi.Int64> excluded_post_ids,
+    int excluded_count,
+    int rating_mask,
+    int media_mask,
+    ffi.Pointer<bunny_db_post_list_t> out_list,
+  ) {
+    return bunny_core_result_t.fromValue(
+      _bunny_core_slideshow_pick_posts_for_search(
+        core,
+        search_id,
+        count,
+        excluded_post_ids,
+        excluded_count,
+        rating_mask,
+        media_mask,
+        out_list,
+      ),
+    );
+  }
+
+  late final _bunny_core_slideshow_pick_posts_for_searchPtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.UnsignedInt Function(
+            ffi.Pointer<bunny_core_t>,
+            ffi.Int64,
+            ffi.Int,
+            ffi.Pointer<ffi.Int64>,
+            ffi.Size,
+            ffi.Int,
+            ffi.Int,
+            ffi.Pointer<bunny_db_post_list_t>,
+          )
+        >
+      >('bunny_core_slideshow_pick_posts_for_search');
+  late final _bunny_core_slideshow_pick_posts_for_search =
+      _bunny_core_slideshow_pick_posts_for_searchPtr
+          .asFunction<
+            int Function(
+              ffi.Pointer<bunny_core_t>,
+              int,
+              int,
+              ffi.Pointer<ffi.Int64>,
+              int,
+              int,
+              int,
+              ffi.Pointer<bunny_db_post_list_t>,
+            )
+          >();
+
+  /// The real "add a search's picks" / "reroll this search" operation --
+  /// resolves this search-link's effective post count (its own override, else
+  /// the slideshow's own default, else no cap), trims against the slideshow's
+  /// own max_total_posts, picks fresh posts excluding everything already
+  /// committed anywhere in this slideshow, and commits via
+  /// bunny_db_slideshow_posts_set. Identical whether this is the search's
+  /// first-ever commit or a deliberate reroll.
+  bunny_core_result_t bunny_core_slideshow_search_commit_picks(
+    ffi.Pointer<bunny_core_t> core,
+    int slideshow_id,
+    int search_id,
+  ) {
+    return bunny_core_result_t.fromValue(
+      _bunny_core_slideshow_search_commit_picks(core, slideshow_id, search_id),
+    );
+  }
+
+  late final _bunny_core_slideshow_search_commit_picksPtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.UnsignedInt Function(
+            ffi.Pointer<bunny_core_t>,
+            ffi.Int64,
+            ffi.Int64,
+          )
+        >
+      >('bunny_core_slideshow_search_commit_picks');
+  late final _bunny_core_slideshow_search_commit_picks =
+      _bunny_core_slideshow_search_commit_picksPtr
+          .asFunction<int Function(ffi.Pointer<bunny_core_t>, int, int)>();
+
+  /// User-facing "reroll" actions -- reroll_search is a one-line alias for
+  /// _search_commit_picks (reroll IS a fresh commit); reroll_all does it for
+  /// every search currently linked to the slideshow, one at a time, so each
+  /// later search's own exclusion set already reflects any earlier search's
+  /// reroll in the same call. Keeps going past one search's own failure,
+  /// reporting the last failure seen rather than stopping the whole batch
+  /// partway through (same "keep going past one failure" precedent "check for
+  /// updates" already established).
+  bunny_core_result_t bunny_core_slideshow_reroll_search(
+    ffi.Pointer<bunny_core_t> core,
+    int slideshow_id,
+    int search_id,
+  ) {
+    return bunny_core_result_t.fromValue(
+      _bunny_core_slideshow_reroll_search(core, slideshow_id, search_id),
+    );
+  }
+
+  late final _bunny_core_slideshow_reroll_searchPtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.UnsignedInt Function(
+            ffi.Pointer<bunny_core_t>,
+            ffi.Int64,
+            ffi.Int64,
+          )
+        >
+      >('bunny_core_slideshow_reroll_search');
+  late final _bunny_core_slideshow_reroll_search =
+      _bunny_core_slideshow_reroll_searchPtr
+          .asFunction<int Function(ffi.Pointer<bunny_core_t>, int, int)>();
+
+  bunny_core_result_t bunny_core_slideshow_reroll_all(
+    ffi.Pointer<bunny_core_t> core,
+    int slideshow_id,
+  ) {
+    return bunny_core_result_t.fromValue(
+      _bunny_core_slideshow_reroll_all(core, slideshow_id),
+    );
+  }
+
+  late final _bunny_core_slideshow_reroll_allPtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.UnsignedInt Function(ffi.Pointer<bunny_core_t>, ffi.Int64)
+        >
+      >('bunny_core_slideshow_reroll_all');
+  late final _bunny_core_slideshow_reroll_all =
+      _bunny_core_slideshow_reroll_allPtr
+          .asFunction<int Function(ffi.Pointer<bunny_core_t>, int)>();
+
+  /// Self-healing swap-one: draws exactly one fresh replacement for search_id
+  /// (same exclusion set as a fresh pick/reroll) and swaps it in for
+  /// dead_post_id. Returns BUNNY_CORE_ERR_NOT_FOUND when the search has
+  /// nothing left to draw that isn't already committed elsewhere in this
+  /// slideshow -- the caller surfaces that as "couldn't find a replacement,"
+  /// distinct from a download failure.
+  bunny_core_result_t bunny_core_slideshow_replace_post(
+    ffi.Pointer<bunny_core_t> core,
+    int slideshow_id,
+    int search_id,
+    int dead_post_id,
+  ) {
+    return bunny_core_result_t.fromValue(
+      _bunny_core_slideshow_replace_post(
+        core,
+        slideshow_id,
+        search_id,
+        dead_post_id,
+      ),
+    );
+  }
+
+  late final _bunny_core_slideshow_replace_postPtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.UnsignedInt Function(
+            ffi.Pointer<bunny_core_t>,
+            ffi.Int64,
+            ffi.Int64,
+            ffi.Int64,
+          )
+        >
+      >('bunny_core_slideshow_replace_post');
+  late final _bunny_core_slideshow_replace_post =
+      _bunny_core_slideshow_replace_postPtr
+          .asFunction<int Function(ffi.Pointer<bunny_core_t>, int, int, int)>();
 
   /// Pin/unpin a search, toggled directly from the searches list row (M14.1)
   /// rather than through the full edit form -- see bunny_db_search_set_pinned.
@@ -3119,6 +3696,84 @@ final class bunny_db_download_queue_item_t extends ffi.Struct {
 
 final class bunny_db_download_queue_list_t extends ffi.Struct {
   external ffi.Pointer<bunny_db_download_queue_item_t> items;
+
+  @ffi.Size()
+  external int count;
+}
+
+/// A persisted, download-backed slideshow (M51 v2) -- see schema.h's own
+/// comment on the slideshows table. has_default_posts_per_search/
+/// has_max_total_posts guard their int siblings the same way
+/// bunny_db_post_relationships_t.has_parent already does above: 0 is a
+/// genuinely valid count ("no posts yet"/"no cap configured" are both
+/// represented by the has_* flag being false, not by any particular int
+/// value), so a bare sentinel int would be ambiguous here.
+final class bunny_db_slideshow_t extends ffi.Struct {
+  @ffi.Int64()
+  external int id;
+
+  external ffi.Pointer<ffi.Char> label;
+
+  @ffi.Bool()
+  external bool has_default_posts_per_search;
+
+  @ffi.Int()
+  external int default_posts_per_search;
+
+  @ffi.Bool()
+  external bool has_max_total_posts;
+
+  @ffi.Int()
+  external int max_total_posts;
+
+  external ffi.Pointer<ffi.Char> created_at;
+}
+
+final class bunny_db_slideshow_list_t extends ffi.Struct {
+  external ffi.Pointer<bunny_db_slideshow_t> items;
+
+  @ffi.Size()
+  external int count;
+}
+
+/// One search/pool linked into a slideshow. has_override_count false means
+/// "use the parent slideshow's own default_posts_per_search" -- same
+/// has_*-guard reasoning as bunny_db_slideshow_t above.
+final class bunny_db_slideshow_search_t extends ffi.Struct {
+  @ffi.Int64()
+  external int slideshow_id;
+
+  @ffi.Int64()
+  external int search_id;
+
+  @ffi.Bool()
+  external bool has_override_count;
+
+  @ffi.Int()
+  external int override_count;
+
+  external ffi.Pointer<ffi.Char> added_at;
+}
+
+final class bunny_db_slideshow_search_list_t extends ffi.Struct {
+  external ffi.Pointer<bunny_db_slideshow_search_t> items;
+
+  @ffi.Size()
+  external int count;
+}
+
+/// One post currently committed to a slideshow, via the specific search_id
+/// it was picked for -- the full post row is embedded (not just post_id) so
+/// a thumbnail-preview grid never needs a second round trip per post.
+final class bunny_db_slideshow_post_t extends ffi.Struct {
+  @ffi.Int64()
+  external int search_id;
+
+  external bunny_db_post_t post;
+}
+
+final class bunny_db_slideshow_post_list_t extends ffi.Struct {
+  external ffi.Pointer<bunny_db_slideshow_post_t> items;
 
   @ffi.Size()
   external int count;

@@ -13,12 +13,6 @@ GOBLIN_DYN_ARRAY_DECL(bunny_db_string, char *)
 GOBLIN_DYN_ARRAY_DECL(bunny_db_int64, int64_t)
 GOBLIN_DYN_ARRAY_DECL(bunny_db_post_file, bunny_db_post_file_t)
 
-/* Posts per page for bunny_db_search_list_posts/bunny_db_pool_search_list_posts
- * (see their own doc comments in db.h) -- a local DB listing, not a site API
- * page size, so this is chosen purely for a reasonable response size rather
- * than matching e621/Inkbunny's own limits. */
-#define BUNNY_DB_SEARCH_POSTS_PAGE_SIZE 200
-
 /* Per-row rating/media-type bucket, bitwise-ANDed against a caller-supplied
  * mask (M28) -- see the BUNNY_DB_RATING_MASK_ and BUNNY_DB_MEDIA_MASK_
  * constants in db.h for the bit meanings. Mirrors app/lib/widgets/rating_badge.dart's own per-site
@@ -695,6 +689,285 @@ bunny_db_result_t bunny_db_search_list_posts(bunny_db_t *db, int64_t search_id, 
             arr.count = write;
         }
         bunny_db_blacklist_free_rule_asts(&complex_asts);
+    }
+
+    out_list->items = arr.items;
+    out_list->count = arr.count;
+    return BUNNY_DB_OK;
+}
+
+/* Appends "sr.search_id IN (?,?,...)" (count placeholders) to *sql at
+ * *offset, growing *sql via realloc if needed -- helper for
+ * bunny_db_search_list_posts_random's dynamic subquery building below,
+ * where the number of selected searches isn't known at compile time
+ * (unlike post_upsert's own small, bounded pool_ids IN-clause at the top of
+ * this file). */
+static bool bunny_db_append_in_clause(char **sql, size_t *cap, size_t *offset, size_t count)
+{
+    /* Each placeholder needs at most 2 bytes (",?"), plus a little slack
+     * for the clause's own text. */
+    size_t needed = *offset + count * 2 + 32;
+    if (needed > *cap) {
+        char *grown = realloc(*sql, needed);
+        if (!grown) {
+            return false;
+        }
+        *sql = grown;
+        *cap = needed;
+    }
+    *offset += (size_t)snprintf(*sql + *offset, *cap - *offset, "%s", "sr.search_id IN (");
+    for (size_t i = 0; i < count; i++) {
+        *offset += (size_t)snprintf(*sql + *offset, *cap - *offset, "%s", i == 0 ? "?" : ",?");
+    }
+    *offset += (size_t)snprintf(*sql + *offset, *cap - *offset, "%s", ")");
+    return true;
+}
+
+/* Builds one of the two (blacklist-on/off) subqueries for
+ * bunny_db_search_list_posts_random below -- same column/join shape
+ * bunny_db_search_list_posts above uses, minus pagination (this is a
+ * one-shot random pick, not a paginated listing) plus a dynamic
+ * sr.search_id IN (...) in place of a single "= ?". Returns false on
+ * allocation failure. */
+static bool bunny_db_build_random_subquery(char **sql, size_t *cap, size_t *offset, size_t id_count, bool apply_blacklist)
+{
+    size_t needed = *offset + 1024;
+    if (needed > *cap) {
+        char *grown = realloc(*sql, needed);
+        if (!grown) {
+            return false;
+        }
+        *sql = grown;
+        *cap = needed;
+    }
+    /* "%s", not the text as the format string directly -- BUNNY_DB_RATING_MASK_CASE
+     * below contains literal '%' characters (SQL LIKE wildcards), which
+     * snprintf would otherwise parse as its own format specifiers.
+     *
+     * SELECT DISTINCT, not a plain SELECT -- a post linked to more than one
+     * of this subquery's own id_count search_ids joins search_results more
+     * than once (one row per matching search_id), which plain UNION across
+     * the *other* (filtered/unfiltered) subquery can't catch since that
+     * only dedupes across the two subqueries, not within one. Safe here
+     * since every BUNNY_DB_POST_SELECT_FROM_JOIN join is 1:1 or 0:1 per
+     * post (seen/favorites/media variant/votes), so DISTINCT over the full
+     * column set collapses back to exactly one row per real post. */
+    *offset += (size_t)snprintf(*sql + *offset, *cap - *offset, "%s", "SELECT DISTINCT " BUNNY_DB_POST_SELECT_COLUMNS BUNNY_DB_POST_SELECT_FROM_JOIN "JOIN search_results sr ON sr.post_id = p.id WHERE ");
+    if (!bunny_db_append_in_clause(sql, cap, offset, id_count)) {
+        return false;
+    }
+    needed = *offset + 256;
+    if (needed > *cap) {
+        char *grown = realloc(*sql, needed);
+        if (!grown) {
+            return false;
+        }
+        *sql = grown;
+        *cap = needed;
+    }
+    if (apply_blacklist) {
+        *offset += (size_t)snprintf(*sql + *offset, *cap - *offset, "%s",
+                                    " AND NOT EXISTS (SELECT 1 FROM post_tags pt JOIN tags t ON t.id = pt.tag_id "
+                                    "JOIN blacklist_tags bl ON bl.site = t.site AND bl.tag = t.name WHERE pt.post_id = p.id)");
+    }
+    *offset += (size_t)snprintf(*sql + *offset, *cap - *offset, "%s", " AND " BUNNY_DB_RATING_MASK_CASE " & ? != 0 AND " BUNNY_DB_MEDIA_MASK_CASE " & ? != 0");
+    return true;
+}
+
+bunny_db_result_t bunny_db_search_list_posts_random(bunny_db_t *db, const int64_t *search_ids, const bunny_db_site_t *sites, const bool *apply_blacklist_flags, size_t search_id_count, int rating_mask, int media_mask, int count, bunny_db_post_list_t *out_list)
+{
+    if (!db || !out_list || !search_ids || !sites || !apply_blacklist_flags || search_id_count == 0 || count <= 0) {
+        return BUNNY_DB_ERR_INVALID_ARG;
+    }
+    memset(out_list, 0, sizeof(*out_list));
+
+    /* Partition into "apply_blacklist" / "no blacklist" subsets (favorites
+     * searches never apply blacklist, see bunny_core's own resolution --
+     * every other search does) -- at most 2 subqueries, UNION'd below.
+     * UNION (not UNION ALL) also dedupes a post pulled in by more than one
+     * selected search for free, no C-side merge step needed. */
+    int64_t *filtered_ids = malloc(search_id_count * sizeof(int64_t));
+    int64_t *unfiltered_ids = malloc(search_id_count * sizeof(int64_t));
+    if (!filtered_ids || !unfiltered_ids) {
+        free(filtered_ids);
+        free(unfiltered_ids);
+        return BUNNY_DB_ERR_UNKNOWN;
+    }
+    size_t filtered_count = 0, unfiltered_count = 0;
+    for (size_t i = 0; i < search_id_count; i++) {
+        if (apply_blacklist_flags[i]) {
+            filtered_ids[filtered_count++] = search_ids[i];
+        } else {
+            unfiltered_ids[unfiltered_count++] = search_ids[i];
+        }
+    }
+
+    size_t cap = 2048;
+    char *sql = malloc(cap);
+    size_t offset = 0;
+    bool build_ok = sql != NULL;
+    if (build_ok) {
+        sql[0] = '\0';
+        offset += (size_t)snprintf(sql + offset, cap - offset, "%s", "SELECT * FROM (");
+    }
+    if (build_ok && filtered_count > 0) {
+        build_ok = bunny_db_build_random_subquery(&sql, &cap, &offset, filtered_count, true);
+    }
+    if (build_ok && filtered_count > 0 && unfiltered_count > 0) {
+        size_t needed = offset + 16;
+        if (needed > cap) {
+            char *grown = realloc(sql, needed);
+            build_ok = grown != NULL;
+            if (build_ok) {
+                sql = grown;
+                cap = needed;
+            }
+        }
+        if (build_ok) {
+            offset += (size_t)snprintf(sql + offset, cap - offset, "%s", " UNION ");
+        }
+    }
+    if (build_ok && unfiltered_count > 0) {
+        build_ok = bunny_db_build_random_subquery(&sql, &cap, &offset, unfiltered_count, false);
+    }
+    if (build_ok) {
+        size_t needed = offset + 32;
+        if (needed > cap) {
+            char *grown = realloc(sql, needed);
+            build_ok = grown != NULL;
+            if (build_ok) {
+                sql = grown;
+                cap = needed;
+            }
+        }
+    }
+    if (build_ok) {
+        offset += (size_t)snprintf(sql + offset, cap - offset, "%s", ") ORDER BY RANDOM() LIMIT ?;");
+    }
+    if (!build_ok) {
+        free(filtered_ids);
+        free(unfiltered_ids);
+        free(sql);
+        return BUNNY_DB_ERR_UNKNOWN;
+    }
+
+    sqlite3_stmt *stmt = NULL;
+    if (sqlite3_prepare_v2(db->handle, sql, -1, &stmt, NULL) != SQLITE_OK) {
+        free(filtered_ids);
+        free(unfiltered_ids);
+        free(sql);
+        return BUNNY_DB_ERR_QUERY_FAILED;
+    }
+    free(sql);
+
+    int bind_index = 1;
+    if (filtered_count > 0) {
+        for (size_t i = 0; i < filtered_count; i++) {
+            sqlite3_bind_int64(stmt, bind_index++, filtered_ids[i]);
+        }
+        sqlite3_bind_int(stmt, bind_index++, rating_mask);
+        sqlite3_bind_int(stmt, bind_index++, media_mask);
+    }
+    if (unfiltered_count > 0) {
+        for (size_t i = 0; i < unfiltered_count; i++) {
+            sqlite3_bind_int64(stmt, bind_index++, unfiltered_ids[i]);
+        }
+        sqlite3_bind_int(stmt, bind_index++, rating_mask);
+        sqlite3_bind_int(stmt, bind_index++, media_mask);
+    }
+    sqlite3_bind_int(stmt, bind_index++, count);
+    free(filtered_ids);
+    free(unfiltered_ids);
+
+    bunny_db_post_array arr;
+    bunny_db_post_array_init(&arr);
+
+    int rc;
+    while ((rc = sqlite3_step(stmt)) == SQLITE_ROW) {
+        bunny_db_post_t item;
+        memset(&item, 0, sizeof(item));
+        bunny_db_fill_post_from_row(stmt, &item);
+        if (!bunny_db_post_array_push(&arr, item)) {
+            sqlite3_finalize(stmt);
+            bunny_db_post_free(&item);
+            for (size_t i = 0; i < arr.count; i++) {
+                bunny_db_post_free(&arr.items[i]);
+            }
+            bunny_db_post_array_free(&arr);
+            return BUNNY_DB_ERR_UNKNOWN;
+        }
+    }
+    sqlite3_finalize(stmt);
+
+    if (rc != SQLITE_DONE) {
+        for (size_t i = 0; i < arr.count; i++) {
+            bunny_db_post_free(&arr.items[i]);
+        }
+        bunny_db_post_array_free(&arr);
+        return bunny_db_sqlite_rc_to_result(rc);
+    }
+
+    /* Complex-blacklist second pass (M28/M54), once per distinct site
+     * actually present among the surviving rows -- unlike
+     * bunny_db_search_list_posts (one search, one site),
+     * bunny_db_blacklist_fetch_complex_rules only ever checks one site at a
+     * time, and this result set can span both. Skipped entirely when
+     * filtered_count is 0 (every selected search is a favorites search --
+     * nothing here should be blacklist-filtered at all). When it does run,
+     * it applies to every surviving row of a matching site, including one
+     * that's *also* reachable via an unfiltered (favorites-type) search in
+     * the same multi-select -- same accepted imprecision as the UNION
+     * above already has no way to track "which subquery(ies) a
+     * now-deduped row came from," and not worth the extra EXISTS-subquery
+     * bookkeeping needed to special-case what is a narrow edge case
+     * (selecting a favorites search alongside a regular one for the same
+     * slideshow). */
+    if (filtered_count > 0 && arr.count > 0) {
+        for (int site_index = 0; site_index < 2; site_index++) {
+            bunny_db_site_t site = (bunny_db_site_t)site_index;
+            bool site_present = false;
+            for (size_t i = 0; i < arr.count; i++) {
+                if (arr.items[i].site == site) {
+                    site_present = true;
+                    break;
+                }
+            }
+            if (!site_present) {
+                continue;
+            }
+            bunny_db_tag_query_node_ptr_array complex_asts;
+            bunny_db_result_t complex_result = bunny_db_blacklist_fetch_complex_rules(db, site, &complex_asts);
+            if (complex_result != BUNNY_DB_OK) {
+                for (size_t i = 0; i < arr.count; i++) {
+                    bunny_db_post_free(&arr.items[i]);
+                }
+                bunny_db_post_array_free(&arr);
+                return complex_result;
+            }
+            if (complex_asts.count > 0) {
+                size_t write = 0;
+                for (size_t read = 0; read < arr.count; read++) {
+                    if (arr.items[read].site != site) {
+                        arr.items[write++] = arr.items[read];
+                        continue;
+                    }
+                    bunny_db_string_list_t tag_names;
+                    bunny_db_post_get_tag_names(db, arr.items[read].id, &tag_names);
+                    bool blacklisted = false;
+                    for (size_t i = 0; i < complex_asts.count && !blacklisted; i++) {
+                        blacklisted = bunny_tag_query_matches(complex_asts.items[i], (const char *const *)tag_names.items, tag_names.count);
+                    }
+                    bunny_db_string_list_free(&tag_names);
+                    if (blacklisted) {
+                        bunny_db_post_free(&arr.items[read]);
+                    } else {
+                        arr.items[write++] = arr.items[read];
+                    }
+                }
+                arr.count = write;
+            }
+            bunny_db_blacklist_free_rule_asts(&complex_asts);
+        }
     }
 
     out_list->items = arr.items;

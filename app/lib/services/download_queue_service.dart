@@ -212,6 +212,30 @@ class DownloadQueueService extends ChangeNotifier {
   List<DownloadQueueItem> get failedItems =>
       _items.where((item) => item.status == DownloadQueueItemStatus.failed || item.status == DownloadQueueItemStatus.checksumMismatch).toList(growable: false);
 
+  /// Fast, session-only progress signal for [postIds] against this queue's
+  /// live [items] -- counts how many of them currently sit in a terminal
+  /// state ([DownloadQueueItemStatus.succeeded]/[DownloadQueueItemStatus.
+  /// checksumMismatch]/[DownloadQueueItemStatus.failed]) versus the total
+  /// asked about. Meant for a cheap progress bar while a batch (e.g. a
+  /// slideshow's prepare pass, M51 v2) is actively downloading -- *not* the
+  /// authoritative "is this post ready" check, since a [DownloadQueueItemStatus
+  /// .succeeded] item can later be dropped from [items] via [clearFinished]
+  /// while the file it already wrote still correctly sits on disk; that
+  /// check is always [DownloadManager.isDownloaded] instead. A [postIds]
+  /// entry with no matching item at all (never enqueued this session) isn't
+  /// counted as done.
+  (int done, int total) progressFor(Set<int> postIds) {
+    if (postIds.isEmpty) {
+      return (0, 0);
+    }
+    final done = _items.where(
+      (item) =>
+          postIds.contains(item.post.id) &&
+          (item.status == DownloadQueueItemStatus.succeeded || item.status == DownloadQueueItemStatus.checksumMismatch || item.status == DownloadQueueItemStatus.failed),
+    ).length;
+    return (done, postIds.length);
+  }
+
   /// Enqueues [post] -- see [enqueueAll] for why the returned future matters.
   Future<void> enqueue(BunnyPost post, BunnyRepository repository) => enqueueAll([post], repository);
 
@@ -272,6 +296,17 @@ class DownloadQueueService extends ChangeNotifier {
     if (newPosts.isEmpty) {
       return;
     }
+    // A post genuinely already on disk (e.g. from a previous run, after
+    // restore() hasn't reloaded a since-cleared succeeded row) still gets a
+    // queue row/item here -- deliberately so, kept synchronous with no new
+    // await before _sessionTotal/notifyListeners below (every caller of
+    // enqueue/enqueueAll relies on this becoming "active" without an
+    // intervening await). The existing skip-fetch fast path inside
+    // DownloadManager.downloadPost (checks the file exists AND its checksum
+    // still matches before ever touching the network) is what actually
+    // avoids re-downloading it -- that already runs at execution time, so
+    // there's no real work wasted, just a queue row that resolves to
+    // "verified" almost instantly instead of a real fetch.
     final newItems = newPosts.map((post) {
       final page = poolId > 0 ? (pageByPostId[post.id] ?? 0) : 0;
       return DownloadQueueItem(
@@ -670,6 +705,14 @@ class DownloadQueueService extends ChangeNotifier {
         return;
       }
       var nextIndex = 0;
+      // Seeded from whatever's already in _items (an earlier restore()/
+      // enqueue call this session) -- a DB row for a post_id already
+      // represented in memory is a duplicate row, not a new item. row.postId
+      // is known synchronously straight off the DB row, with no await
+      // needed, so claiming it happens in the same race-free spot as
+      // nextIndex++ below -- two DB rows for the same post_id can't both
+      // slip past this on separate workers.
+      final claimedPostIds = _items.map((item) => item.post.id).toSet();
       // Claiming the next row (reading nextIndex, then incrementing) never
       // has an await between those two steps, so this is race-free the
       // same way claiming a queued item in _processQueue's own workers is
@@ -681,6 +724,16 @@ class DownloadQueueService extends ChangeNotifier {
             return;
           }
           final row = pending[nextIndex++];
+          if (!claimedPostIds.add(row.postId)) {
+            // A duplicate row for a post_id already represented in _items --
+            // mark it processed so a later resume() doesn't keep retrying
+            // it forever, but don't create a second in-memory item for the
+            // same post. The orphaned duplicate row itself is left in the
+            // DB -- cleaning that up is a separate concern from "don't show
+            // duplicates in memory."
+            _restoredRowIds.add(row.id);
+            continue;
+          }
           try {
             final post = await _getPostWithRetry(repository, row.postId);
             _restoredRowIds.add(row.id);

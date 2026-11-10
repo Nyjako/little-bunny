@@ -293,3 +293,70 @@ void bunny_db_download_queue_list_free(bunny_db_download_queue_list_t *list)
     list->items = NULL;
     list->count = 0;
 }
+
+void bunny_db_slideshow_free(bunny_db_slideshow_t *slideshow)
+{
+    if (!slideshow) {
+        return;
+    }
+    free(slideshow->label);
+    free(slideshow->created_at);
+    memset(slideshow, 0, sizeof(*slideshow));
+}
+
+void bunny_db_slideshow_list_free(bunny_db_slideshow_list_t *list)
+{
+    if (!list) {
+        return;
+    }
+    for (size_t i = 0; i < list->count; i++) {
+        bunny_db_slideshow_free(&list->items[i]);
+    }
+    free(list->items);
+    list->items = NULL;
+    list->count = 0;
+}
+
+void bunny_db_slideshow_search_free(bunny_db_slideshow_search_t *item)
+{
+    if (!item) {
+        return;
+    }
+    free(item->added_at);
+    memset(item, 0, sizeof(*item));
+}
+
+void bunny_db_slideshow_search_list_free(bunny_db_slideshow_search_list_t *list)
+{
+    if (!list) {
+        return;
+    }
+    for (size_t i = 0; i < list->count; i++) {
+        bunny_db_slideshow_search_free(&list->items[i]);
+    }
+    free(list->items);
+    list->items = NULL;
+    list->count = 0;
+}
+
+void bunny_db_slideshow_post_free(bunny_db_slideshow_post_t *item)
+{
+    if (!item) {
+        return;
+    }
+    bunny_db_post_free(&item->post);
+    memset(item, 0, sizeof(*item));
+}
+
+void bunny_db_slideshow_post_list_free(bunny_db_slideshow_post_list_t *list)
+{
+    if (!list) {
+        return;
+    }
+    for (size_t i = 0; i < list->count; i++) {
+        bunny_db_slideshow_post_free(&list->items[i]);
+    }
+    free(list->items);
+    list->items = NULL;
+    list->count = 0;
+}
