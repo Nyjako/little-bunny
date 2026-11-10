@@ -183,6 +183,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get searchesSortTooltip => 'Sort';
 
   @override
+  String get searchesMoreActionsTooltip => 'More';
+
+  @override
   String get searchesSortMostUnseen => 'Most unseen';
 
   @override
@@ -207,6 +210,28 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get searchesDownloadSelectedTooltip => 'Download selected';
+
+  @override
+  String get searchesStartSlideshowTooltip => 'Start slideshow';
+
+  @override
+  String get slideshowConfigDialogTitle => 'Slideshow settings';
+
+  @override
+  String get slideshowIntervalLabel => 'Interval (seconds)';
+
+  @override
+  String get slideshowPostCountLabel => 'Number of posts';
+
+  @override
+  String get slideshowStartButton => 'Start';
+
+  @override
+  String get slideshowEmptyResultMessage =>
+      'No posts available for a slideshow with these searches.';
+
+  @override
+  String get slideshowError => 'Couldn\'t start the slideshow. Try again.';
 
   @override
   String searchesMassDownloadQueued(int count) {
