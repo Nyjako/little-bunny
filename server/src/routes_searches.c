@@ -39,6 +39,7 @@ static cJSON *search_to_json(const bunny_db_search_t *search)
     add_optional_string(json, "last_viewed_at", search->last_viewed_at);
     cJSON_AddBoolToObject(json, "uses_default_interval", search->uses_default_interval);
     cJSON_AddNumberToObject(json, "group_id", (double)search->group_id);
+    add_optional_string(json, "last_updated_at", search->last_updated_at);
     return json;
 }
 
