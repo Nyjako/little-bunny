@@ -2220,17 +2220,35 @@ abstract class AppLocalizations {
   /// **'Add searches'**
   String get slideshowEditAddSearchDialogTitle;
 
-  /// No description provided for @slideshowEditAddSearchSubmit.
+  /// No description provided for @slideshowEditAddSearchDoneButton.
   ///
   /// In en, this message translates to:
-  /// **'Add'**
-  String get slideshowEditAddSearchSubmit;
+  /// **'Done'**
+  String get slideshowEditAddSearchDoneButton;
+
+  /// No description provided for @slideshowEditNewSearchOption.
+  ///
+  /// In en, this message translates to:
+  /// **'New search'**
+  String get slideshowEditNewSearchOption;
+
+  /// No description provided for @slideshowEditNewPoolOption.
+  ///
+  /// In en, this message translates to:
+  /// **'New pool'**
+  String get slideshowEditNewPoolOption;
 
   /// No description provided for @slideshowEditNoMoreSearchesToAdd.
   ///
   /// In en, this message translates to:
   /// **'Every search is already added'**
   String get slideshowEditNoMoreSearchesToAdd;
+
+  /// No description provided for @slideshowEditNoMorePoolsToAdd.
+  ///
+  /// In en, this message translates to:
+  /// **'Every pool is already added'**
+  String get slideshowEditNoMorePoolsToAdd;
 
   /// No description provided for @slideshowEditSearchesEmptyState.
   ///

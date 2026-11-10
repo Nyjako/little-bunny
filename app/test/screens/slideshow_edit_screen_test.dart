@@ -118,11 +118,8 @@ void main() {
     await tester.tap(find.byTooltip('Add search'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('wolves'));
-    // The dialog's "Add" button is disabled until the checkbox tap above is
-    // actually reflected in its own setState -- without this pump, the tap
-    // below lands on a still-disabled button and silently does nothing.
-    await tester.pump();
-    await tester.tap(find.text('Add'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Done'));
     await tester.pumpAndSettle();
 
     expect(find.text('wolves'), findsOneWidget);
@@ -131,6 +128,94 @@ void main() {
     expect(links, hasLength(1));
     final committed = await repository.slideshowPostsList(id);
     expect(committed.map((p) => p.post.id), [1]);
+  });
+
+  testWidgets('the add-search picker splits Searches/Pools into tabs with pinned items first', (tester) async {
+    final id = await repository.slideshowCreate('my slideshow');
+    final slideshow = (await repository.slideshowList()).single;
+    await repository.createSearch(BunnySite.e621, 'Zebra', 'zebra');
+    final alphaId = await repository.createSearch(BunnySite.e621, 'Alpha', 'alpha');
+    await repository.setSearchPinned(alphaId, true);
+    await repository.createSearch(BunnySite.e621, 'SomePool', 'pool:1');
+
+    await pumpScreen(tester, slideshow: slideshow);
+    await tester.pump();
+
+    await tester.tap(find.byTooltip('Add search'));
+    await tester.pumpAndSettle();
+
+    // Searches tab (default): pinned Alpha sorts above unpinned Zebra, and
+    // the pool doesn't show up here at all.
+    final searchesTabOrder = tester
+        .widgetList<Text>(find.descendant(of: find.byType(TabBarView), matching: find.byType(Text)))
+        .map((text) => text.data)
+        .whereType<String>()
+        .toList();
+    expect(searchesTabOrder.indexOf('Alpha'), lessThan(searchesTabOrder.indexOf('Zebra')));
+    expect(find.text('SomePool'), findsNothing);
+
+    await tester.tap(find.text('Pools'));
+    await tester.pumpAndSettle();
+    expect(find.text('SomePool'), findsOneWidget);
+    expect(find.text('Alpha'), findsNothing);
+
+    await tester.tap(find.text('Done'));
+    await tester.pumpAndSettle();
+    expect(await repository.slideshowSearchList(id), isEmpty);
+  });
+
+  testWidgets('tapping a candidate in the add-search picker links it immediately and keeps the dialog open', (tester) async {
+    final id = await repository.slideshowCreate('my slideshow');
+    final slideshow = (await repository.slideshowList()).single;
+    await repository.createSearch(BunnySite.e621, 'Alpha', 'alpha');
+    await repository.createSearch(BunnySite.e621, 'Beta', 'beta');
+
+    await pumpScreen(tester, slideshow: slideshow);
+    await tester.pump();
+
+    await tester.tap(find.byTooltip('Add search'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Alpha'));
+    await tester.pumpAndSettle();
+
+    // Dialog stays open (no auto-close), Alpha disappears from the
+    // candidate list since it's linked now, Beta is still there to pick.
+    expect(find.text('Add searches'), findsOneWidget);
+    expect(find.text('Alpha'), findsNothing);
+    expect(find.text('Beta'), findsOneWidget);
+    expect(await repository.slideshowSearchList(id), hasLength(1));
+
+    await tester.tap(find.text('Done'));
+    await tester.pumpAndSettle();
+    expect(find.text('Alpha'), findsOneWidget);
+  });
+
+  testWidgets('"New search" in the picker creates a search and links it to the slideshow', (tester) async {
+    final id = await repository.slideshowCreate('my slideshow');
+    final slideshow = (await repository.slideshowList()).single;
+
+    await pumpScreen(tester, slideshow: slideshow);
+    await tester.pump();
+
+    await tester.tap(find.byTooltip('Add search'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('New search'));
+    await tester.pumpAndSettle();
+
+    await tester.enterText(find.widgetWithText(TextFormField, 'Label'), 'Freshly made');
+    await tester.enterText(find.widgetWithText(TextFormField, 'Query'), 'freshtag');
+    await tester.ensureVisible(find.text('Create'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Create'));
+    await tester.pumpAndSettle();
+
+    // Back in the picker: the new search is already linked (no separate
+    // tap needed), and it no longer shows as an addable candidate.
+    expect(find.text('Add searches'), findsOneWidget);
+    expect(find.text('Freshly made'), findsNothing);
+    final links = await repository.slideshowSearchList(id);
+    expect(links, hasLength(1));
+    expect(repository.searches.single.label, 'Freshly made');
   });
 
   testWidgets('shows a message instead of an empty dialog once every search is already added', (tester) async {

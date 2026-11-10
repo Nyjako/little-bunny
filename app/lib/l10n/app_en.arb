@@ -544,8 +544,11 @@
   "slideshowEditSearchesHeading": "Searches",
   "slideshowEditAddSearchTooltip": "Add search",
   "slideshowEditAddSearchDialogTitle": "Add searches",
-  "slideshowEditAddSearchSubmit": "Add",
+  "slideshowEditAddSearchDoneButton": "Done",
+  "slideshowEditNewSearchOption": "New search",
+  "slideshowEditNewPoolOption": "New pool",
   "slideshowEditNoMoreSearchesToAdd": "Every search is already added",
+  "slideshowEditNoMorePoolsToAdd": "Every pool is already added",
   "slideshowEditSearchesEmptyState": "No searches added yet. Save the slideshow first, then add one.",
   "slideshowEditOverrideCountDialogTitle": "Posts for \"{label}\"",
   "@slideshowEditOverrideCountDialogTitle": {

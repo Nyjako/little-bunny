@@ -1197,11 +1197,20 @@ class AppLocalizationsEn extends AppLocalizations {
   String get slideshowEditAddSearchDialogTitle => 'Add searches';
 
   @override
-  String get slideshowEditAddSearchSubmit => 'Add';
+  String get slideshowEditAddSearchDoneButton => 'Done';
+
+  @override
+  String get slideshowEditNewSearchOption => 'New search';
+
+  @override
+  String get slideshowEditNewPoolOption => 'New pool';
 
   @override
   String get slideshowEditNoMoreSearchesToAdd =>
       'Every search is already added';
+
+  @override
+  String get slideshowEditNoMorePoolsToAdd => 'Every pool is already added';
 
   @override
   String get slideshowEditSearchesEmptyState =>
