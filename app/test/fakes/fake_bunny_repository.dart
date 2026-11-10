@@ -25,15 +25,6 @@ class FakeBunnyRepository implements BunnyRepository {
   final Map<int, BunnyPostRelationships> relationshipsByPostId = {};
   final Map<int, List<int>> poolIdsByPostId = {};
 
-  /// Canned return for [getSlideshowRandomPosts] (M51) -- a real slideshow
-  /// pick is server-side random selection, which has no meaningful fake
-  /// here, so a test just sets the exact posts it wants returned.
-  List<BunnyPost> slideshowRandomPosts = [];
-
-  /// Each entry is the `(searchIds, count, ratingMask, mediaMask)` passed to
-  /// [getSlideshowRandomPosts].
-  final List<(List<int>, int, int, int)> slideshowRandomPostsCalls = [];
-
   /// Per-site tag blacklist (M13.3), as a set so add/remove stay idempotent
   /// the same way the real `bunny_db_blacklist_*` functions are.
   final Map<BunnySite, Set<String>> blacklistBySite = {};
@@ -407,12 +398,6 @@ class FakeBunnyRepository implements BunnyRepository {
 
   @override
   Future<List<String>> getPostSources(int postId) async => List.of(sourcesByPostId[postId] ?? const []);
-
-  @override
-  Future<List<BunnyPost>> getSlideshowRandomPosts(List<int> searchIds, int count, {int ratingMask = kRatingMaskAll, int mediaMask = kMediaMaskAll}) async {
-    slideshowRandomPostsCalls.add((searchIds, count, ratingMask, mediaMask));
-    return List.of(slideshowRandomPosts);
-  }
 
   @override
   Future<List<BunnyPostFile>> getPostFiles(int postId) async => List.of(filesByPostId[postId] ?? const []);
@@ -864,6 +849,124 @@ class FakeBunnyRepository implements BunnyRepository {
         await setSearchGroup(searches[i].id, 0);
       }
     }
+  }
+
+  final List<BunnySlideshow> slideshows = [];
+  int _nextSlideshowId = 1;
+  final List<BunnySlideshowSearch> slideshowSearches = [];
+
+  /// Committed posts per slideshow -- not a real random pick (deterministic:
+  /// takes [postsBySearchId] in order, trimmed to whatever count applies),
+  /// same "fake the dependency, not the logic" philosophy as the rest of
+  /// this class; good enough for tests that only care about the end state
+  /// (which posts ended up committed), not which ones a real reroll would
+  /// have picked.
+  final Map<int, List<BunnySlideshowPost>> slideshowPostsBySlideshowId = {};
+
+  void _commitSlideshowSearchPicks(int slideshowId, int searchId) {
+    final slideshow = slideshows.firstWhere((s) => s.id == slideshowId);
+    final link = slideshowSearches.firstWhere((l) => l.slideshowId == slideshowId && l.searchId == searchId);
+    final effectiveCount = link.overrideCount ?? slideshow.defaultPostsPerSearch;
+    final committed = slideshowPostsBySlideshowId.putIfAbsent(slideshowId, () => []);
+    final otherEntries = committed.where((p) => p.searchId != searchId).toList();
+    final excludedIds = otherEntries.map((p) => p.post.id).toSet();
+    var available = (postsBySearchId[searchId] ?? []).where((p) => !excludedIds.contains(p.id)).toList();
+    if (effectiveCount != null && available.length > effectiveCount) {
+      available = available.sublist(0, effectiveCount);
+    }
+    if (slideshow.maxTotalPosts != null) {
+      final allowedForThisSearch = slideshow.maxTotalPosts! - otherEntries.length;
+      available = allowedForThisSearch <= 0 ? [] : available.take(allowedForThisSearch).toList();
+    }
+    committed.removeWhere((p) => p.searchId == searchId);
+    committed.addAll(available.map((post) => BunnySlideshowPost(searchId: searchId, post: post)));
+  }
+
+  @override
+  Future<int> slideshowCreate(String label, {int? defaultPostsPerSearch, int? maxTotalPosts}) async {
+    final id = _nextSlideshowId++;
+    slideshows.add(BunnySlideshow(id: id, label: label, defaultPostsPerSearch: defaultPostsPerSearch, maxTotalPosts: maxTotalPosts, createdAt: '2026-01-01T00:00:00Z'));
+    slideshowPostsBySlideshowId[id] = [];
+    return id;
+  }
+
+  @override
+  Future<void> slideshowUpdate(int slideshowId, String label, {int? defaultPostsPerSearch, int? maxTotalPosts}) async {
+    final index = slideshows.indexWhere((s) => s.id == slideshowId);
+    if (index == -1) {
+      throw const BunnyRepositoryException('slideshow not found');
+    }
+    slideshows[index] = BunnySlideshow(id: slideshowId, label: label, defaultPostsPerSearch: defaultPostsPerSearch, maxTotalPosts: maxTotalPosts, createdAt: slideshows[index].createdAt);
+  }
+
+  @override
+  Future<void> slideshowDelete(int slideshowId) async {
+    slideshows.removeWhere((s) => s.id == slideshowId);
+    slideshowSearches.removeWhere((l) => l.slideshowId == slideshowId);
+    slideshowPostsBySlideshowId.remove(slideshowId);
+  }
+
+  @override
+  Future<List<BunnySlideshow>> slideshowList() async => List.of(slideshows);
+
+  @override
+  Future<BunnySlideshow> slideshowGet(int slideshowId) async {
+    return slideshows.firstWhere((s) => s.id == slideshowId, orElse: () => throw const BunnyRepositoryException('slideshow not found'));
+  }
+
+  @override
+  Future<void> slideshowSearchAdd(int slideshowId, int searchId, {int? overrideCount}) async {
+    final index = slideshowSearches.indexWhere((l) => l.slideshowId == slideshowId && l.searchId == searchId);
+    final link = BunnySlideshowSearch(slideshowId: slideshowId, searchId: searchId, overrideCount: overrideCount, addedAt: '2026-01-01T00:00:00Z');
+    if (index == -1) {
+      slideshowSearches.add(link);
+    } else {
+      slideshowSearches[index] = link;
+    }
+    _commitSlideshowSearchPicks(slideshowId, searchId);
+  }
+
+  @override
+  Future<void> slideshowSearchRemove(int slideshowId, int searchId) async {
+    slideshowSearches.removeWhere((l) => l.slideshowId == slideshowId && l.searchId == searchId);
+    slideshowPostsBySlideshowId[slideshowId]?.removeWhere((p) => p.searchId == searchId);
+  }
+
+  @override
+  Future<List<BunnySlideshowSearch>> slideshowSearchList(int slideshowId) async => slideshowSearches.where((l) => l.slideshowId == slideshowId).toList();
+
+  @override
+  Future<List<BunnySlideshowPost>> slideshowPostsList(int slideshowId, {int? searchId}) async {
+    final all = slideshowPostsBySlideshowId[slideshowId] ?? [];
+    if (searchId == null || searchId == 0) {
+      return List.of(all);
+    }
+    return all.where((p) => p.searchId == searchId).toList();
+  }
+
+  @override
+  Future<void> slideshowRerollAll(int slideshowId) async {
+    for (final link in slideshowSearches.where((l) => l.slideshowId == slideshowId).toList()) {
+      _commitSlideshowSearchPicks(slideshowId, link.searchId);
+    }
+  }
+
+  @override
+  Future<void> slideshowRerollSearch(int slideshowId, int searchId) async => _commitSlideshowSearchPicks(slideshowId, searchId);
+
+  @override
+  Future<void> slideshowReplacePost(int slideshowId, int searchId, int deadPostId) async {
+    final committed = slideshowPostsBySlideshowId.putIfAbsent(slideshowId, () => []);
+    final excludedIds = committed.map((p) => p.post.id).toSet();
+    final replacement = (postsBySearchId[searchId] ?? []).where((p) => !excludedIds.contains(p.id)).firstOrNull;
+    if (replacement == null) {
+      throw const BunnyRepositoryException('search has no other post to replace with');
+    }
+    final deadIndex = committed.indexWhere((p) => p.searchId == searchId && p.post.id == deadPostId);
+    if (deadIndex == -1) {
+      throw const BunnyRepositoryException('post not committed to this search');
+    }
+    committed[deadIndex] = BunnySlideshowPost(searchId: searchId, post: replacement);
   }
 
   @override

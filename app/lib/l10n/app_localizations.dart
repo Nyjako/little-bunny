@@ -466,48 +466,6 @@ abstract class AppLocalizations {
   /// **'Download selected'**
   String get searchesDownloadSelectedTooltip;
 
-  /// No description provided for @searchesStartSlideshowTooltip.
-  ///
-  /// In en, this message translates to:
-  /// **'Start slideshow'**
-  String get searchesStartSlideshowTooltip;
-
-  /// No description provided for @slideshowConfigDialogTitle.
-  ///
-  /// In en, this message translates to:
-  /// **'Slideshow settings'**
-  String get slideshowConfigDialogTitle;
-
-  /// No description provided for @slideshowIntervalLabel.
-  ///
-  /// In en, this message translates to:
-  /// **'Interval (seconds)'**
-  String get slideshowIntervalLabel;
-
-  /// No description provided for @slideshowPostCountLabel.
-  ///
-  /// In en, this message translates to:
-  /// **'Number of posts'**
-  String get slideshowPostCountLabel;
-
-  /// No description provided for @slideshowStartButton.
-  ///
-  /// In en, this message translates to:
-  /// **'Start'**
-  String get slideshowStartButton;
-
-  /// No description provided for @slideshowEmptyResultMessage.
-  ///
-  /// In en, this message translates to:
-  /// **'No posts available for a slideshow with these searches.'**
-  String get slideshowEmptyResultMessage;
-
-  /// No description provided for @slideshowError.
-  ///
-  /// In en, this message translates to:
-  /// **'Couldn\'t start the slideshow. Try again.'**
-  String get slideshowError;
-
   /// No description provided for @searchesMassDownloadQueued.
   ///
   /// In en, this message translates to:

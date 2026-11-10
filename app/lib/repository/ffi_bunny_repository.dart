@@ -32,6 +32,17 @@ BunnySearch _searchFromMap(Map<String, Object?> m) => BunnySearch(
 
 BunnyGroup _groupFromMap(Map<String, Object?> m) => BunnyGroup(id: m['id'] as int, name: m['name'] as String, pinned: m['pinned'] as bool, createdAt: m['createdAt'] as String);
 
+BunnySlideshow _slideshowFromMap(Map<String, Object?> m) => BunnySlideshow(
+  id: m['id'] as int,
+  label: m['label'] as String,
+  defaultPostsPerSearch: m['defaultPostsPerSearch'] as int?,
+  maxTotalPosts: m['maxTotalPosts'] as int?,
+  createdAt: m['createdAt'] as String,
+);
+
+BunnySlideshowSearch _slideshowSearchFromMap(Map<String, Object?> m) =>
+    BunnySlideshowSearch(slideshowId: m['slideshowId'] as int, searchId: m['searchId'] as int, overrideCount: m['overrideCount'] as int?, addedAt: m['addedAt'] as String);
+
 BunnyPost _postFromMap(Map<String, Object?> m) => BunnyPost(
   id: m['id'] as int,
   site: BunnySite.fromWireString(m['site'] as String),
@@ -59,6 +70,8 @@ BunnyPost _postFromMap(Map<String, Object?> m) => BunnyPost(
   userVote: m['userVote'] as int,
   favoriteStars: m['favoriteStars'] as int,
 );
+
+BunnySlideshowPost _slideshowPostFromMap(Map<String, Object?> m) => BunnySlideshowPost(searchId: m['searchId'] as int, post: _postFromMap(m['post'] as Map<String, Object?>));
 
 BunnyTagStat _tagStatFromMap(Map<String, Object?> m) => BunnyTagStat(name: m['name'] as String, count: m['count'] as int);
 
@@ -331,11 +344,6 @@ class FfiBunnyRepository implements BunnyRepository {
   @override
   Future<List<String>> getPostSources(int postId) => _wrapped(() => _native.getPostSources(postId));
 
-  @override
-  Future<List<BunnyPost>> getSlideshowRandomPosts(List<int> searchIds, int count, {int ratingMask = kRatingMaskAll, int mediaMask = kMediaMaskAll}) async {
-    final items = await _wrapped(() => _native.slideshowPickRandomPosts(searchIds, ratingMask, mediaMask, count));
-    return items.map(_postFromMap).toList();
-  }
 
   @override
   Future<List<BunnyPostFile>> getPostFiles(int postId) async {
@@ -497,4 +505,53 @@ class FfiBunnyRepository implements BunnyRepository {
   @override
   Future<DownloadFetchResult> downloadFile(String fileUrl, Map<String, String> extraHeaders, String destDir, String filename, String? expectedMd5, void Function(int received, int? total) onProgress) =>
       downloadFileViaNative(_native, fileUrl, extraHeaders, destDir, filename, expectedMd5, onProgress);
+
+  @override
+  Future<int> slideshowCreate(String label, {int? defaultPostsPerSearch, int? maxTotalPosts}) => _wrapped(() => _native.slideshowCreate(label, defaultPostsPerSearch, maxTotalPosts));
+
+  @override
+  Future<void> slideshowUpdate(int slideshowId, String label, {int? defaultPostsPerSearch, int? maxTotalPosts}) =>
+      _wrapped(() => _native.slideshowUpdate(slideshowId, label, defaultPostsPerSearch, maxTotalPosts));
+
+  @override
+  Future<void> slideshowDelete(int slideshowId) => _wrapped(() => _native.slideshowDelete(slideshowId));
+
+  @override
+  Future<List<BunnySlideshow>> slideshowList() async {
+    final items = await _wrapped(() => _native.slideshowList());
+    return items.map(_slideshowFromMap).toList(growable: false);
+  }
+
+  @override
+  Future<BunnySlideshow> slideshowGet(int slideshowId) async {
+    final map = await _wrapped(() => _native.slideshowGet(slideshowId));
+    return _slideshowFromMap(map);
+  }
+
+  @override
+  Future<void> slideshowSearchAdd(int slideshowId, int searchId, {int? overrideCount}) => _wrapped(() => _native.slideshowSearchAdd(slideshowId, searchId, overrideCount));
+
+  @override
+  Future<void> slideshowSearchRemove(int slideshowId, int searchId) => _wrapped(() => _native.slideshowSearchRemove(slideshowId, searchId));
+
+  @override
+  Future<List<BunnySlideshowSearch>> slideshowSearchList(int slideshowId) async {
+    final items = await _wrapped(() => _native.slideshowSearchList(slideshowId));
+    return items.map(_slideshowSearchFromMap).toList(growable: false);
+  }
+
+  @override
+  Future<List<BunnySlideshowPost>> slideshowPostsList(int slideshowId, {int? searchId}) async {
+    final items = await _wrapped(() => _native.slideshowPostsList(slideshowId, searchId ?? 0));
+    return items.map(_slideshowPostFromMap).toList(growable: false);
+  }
+
+  @override
+  Future<void> slideshowRerollAll(int slideshowId) => _wrapped(() => _native.slideshowRerollAll(slideshowId));
+
+  @override
+  Future<void> slideshowRerollSearch(int slideshowId, int searchId) => _wrapped(() => _native.slideshowRerollSearch(slideshowId, searchId));
+
+  @override
+  Future<void> slideshowReplacePost(int slideshowId, int searchId, int deadPostId) => _wrapped(() => _native.slideshowReplacePost(slideshowId, searchId, deadPostId));
 }
