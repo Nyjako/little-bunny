@@ -240,6 +240,20 @@ bunny_db_result_t bunny_db_search_has_result(bunny_db_t *db, int64_t search_id, 
  * pre-M28 behavior exactly. */
 bunny_db_result_t bunny_db_search_list_posts(bunny_db_t *db, int64_t search_id, bunny_db_site_t site, bool unseen_only, bool apply_blacklist, int rating_mask, int media_mask, int page, bunny_db_post_list_t *out_list);
 
+/* Picks up to `count` posts at random, with no repeats, from the union of
+ * search_ids[0..search_id_count)'s own results (M51 slideshow). Parallel
+ * arrays, not an array of structs -- each search_id carries its own site/
+ * apply_blacklist (a multi-select can mix e621 and Inkbunny searches, and a
+ * favorites search never applies blacklist, same as bunny_db_search_list_posts
+ * above), which also keeps the FFI boundary to primitive arrays. May return
+ * fewer than `count` if the combined, blacklist-filtered pool across every
+ * given search is smaller -- same "can return fewer than requested"
+ * precedent bunny_db_search_list_posts's own complex-blacklist pass already
+ * has. Pool searches have no `ORDER BY RANDOM()` story of their own (see
+ * bunny_db_pool_search_list_posts) -- the caller (bunny_core) is expected to
+ * exclude those search_ids before calling this. */
+bunny_db_result_t bunny_db_search_list_posts_random(bunny_db_t *db, const int64_t *search_ids, const bunny_db_site_t *sites, const bool *apply_blacklist_flags, size_t search_id_count, int rating_mask, int media_mask, int count, bunny_db_post_list_t *out_list);
+
 /* A post's tags with their categories, for a post detail view's sectioned
  * tag display (Artists/Characters/Copyrights/Species/General/Meta for e621;
  * a single uncategorized group for Inkbunny, whose keywords have no

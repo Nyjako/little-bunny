@@ -990,6 +990,82 @@ void test_search_list_posts_favorites_search_is_unaffected_by_the_tag_blacklist(
     free(fixture);
 }
 
+void test_slideshow_pick_random_posts_excludes_a_pool_search_from_a_mixed_selection(void)
+{
+    /* M51: a pool search_id in the mix is silently dropped (see
+     * bunny_core_slideshow_pick_random_posts' own doc comment) -- detected
+     * purely from the query string (bunny_core_parse_pool_id_from_query),
+     * so the pool search doesn't even need a real sync here. */
+    char *fixture = read_fixture("e621_posts_search.json");
+    TEST_ASSERT_NOT_NULL(fixture);
+    g_e621_state.bodies[0] = fixture;
+    g_e621_state.body_count = 1;
+
+    int64_t regular_search_id = 0;
+    bunny_core_result_t result = bunny_core_search_create(g_core, BUNNY_DB_SITE_E621, "wolves", "wolf", 24, NULL, &regular_search_id);
+    TEST_ASSERT_EQUAL(BUNNY_CORE_OK, result);
+    bunny_core_sync_stats_t stats;
+    result = bunny_core_sync_due_searches(g_core, &stats);
+    TEST_ASSERT_EQUAL(BUNNY_CORE_OK, result);
+    TEST_ASSERT_EQUAL(1, stats.posts_upserted);
+
+    int64_t pool_search_id = 0;
+    result = bunny_core_search_create(g_core, BUNNY_DB_SITE_E621, "some pool", "pool:999", 24, NULL, &pool_search_id);
+    TEST_ASSERT_EQUAL(BUNNY_CORE_OK, result);
+
+    int64_t ids[] = {regular_search_id, pool_search_id};
+    bunny_db_post_list_t posts;
+    result = bunny_core_slideshow_pick_random_posts(g_core, ids, 2, BUNNY_DB_RATING_MASK_ALL, BUNNY_DB_MEDIA_MASK_ALL, 10, &posts);
+    TEST_ASSERT_EQUAL(BUNNY_CORE_OK, result);
+    TEST_ASSERT_EQUAL(1, (int)posts.count);
+    bunny_db_post_list_free(&posts);
+
+    free(fixture);
+}
+
+void test_slideshow_pick_random_posts_rejects_when_every_selected_search_is_a_pool(void)
+{
+    int64_t pool_search_id = 0;
+    bunny_core_result_t result = bunny_core_search_create(g_core, BUNNY_DB_SITE_E621, "some pool", "pool:999", 24, NULL, &pool_search_id);
+    TEST_ASSERT_EQUAL(BUNNY_CORE_OK, result);
+
+    int64_t ids[] = {pool_search_id};
+    bunny_db_post_list_t posts;
+    result = bunny_core_slideshow_pick_random_posts(g_core, ids, 1, BUNNY_DB_RATING_MASK_ALL, BUNNY_DB_MEDIA_MASK_ALL, 10, &posts);
+    TEST_ASSERT_EQUAL(BUNNY_CORE_ERR_INVALID_ARG, result);
+}
+
+void test_slideshow_pick_random_posts_favorites_search_is_unaffected_by_the_tag_blacklist(void)
+{
+    /* M51, same exemption M37 already established for bunny_core_search_list_posts
+     * (see test_search_list_posts_favorites_search_is_unaffected_by_the_tag_blacklist
+     * above) -- a favorites search picked for a slideshow should still show
+     * everything favorited, not a filtered subset. */
+    char *fixture = read_fixture("e621_posts_search.json");
+    TEST_ASSERT_NOT_NULL(fixture);
+    g_e621_state.bodies[0] = fixture;
+    g_e621_state.body_count = 1;
+
+    int64_t search_id = 0;
+    bunny_core_result_t result = bunny_core_search_create(g_core, BUNNY_DB_SITE_E621, "Favorites", "fav:someuser", 24, NULL, &search_id);
+    TEST_ASSERT_EQUAL(BUNNY_CORE_OK, result);
+    bunny_core_sync_stats_t stats;
+    result = bunny_core_sync_due_searches(g_core, &stats);
+    TEST_ASSERT_EQUAL(BUNNY_CORE_OK, result);
+    TEST_ASSERT_EQUAL(1, stats.posts_upserted);
+
+    bunny_core_blacklist_add(g_core, BUNNY_DB_SITE_E621, "one");
+
+    int64_t ids[] = {search_id};
+    bunny_db_post_list_t posts;
+    result = bunny_core_slideshow_pick_random_posts(g_core, ids, 1, BUNNY_DB_RATING_MASK_ALL, BUNNY_DB_MEDIA_MASK_ALL, 10, &posts);
+    TEST_ASSERT_EQUAL(BUNNY_CORE_OK, result);
+    TEST_ASSERT_EQUAL(1, (int)posts.count);
+    bunny_db_post_list_free(&posts);
+
+    free(fixture);
+}
+
 void test_preview_search_pool_browse_is_unaffected_by_the_tag_blacklist(void)
 {
     /* M37: a pool browse is exempt -- it's meant to show every post
@@ -2255,6 +2331,9 @@ int main(void)
     RUN_TEST(test_preview_search_pool_browse_is_unaffected_by_the_tag_blacklist);
     RUN_TEST(test_preview_search_favorites_browse_is_unaffected_by_the_tag_blacklist);
     RUN_TEST(test_search_list_posts_favorites_search_is_unaffected_by_the_tag_blacklist);
+    RUN_TEST(test_slideshow_pick_random_posts_excludes_a_pool_search_from_a_mixed_selection);
+    RUN_TEST(test_slideshow_pick_random_posts_rejects_when_every_selected_search_is_a_pool);
+    RUN_TEST(test_slideshow_pick_random_posts_favorites_search_is_unaffected_by_the_tag_blacklist);
     RUN_TEST(test_preview_search_requests_the_given_e621_page);
     RUN_TEST(test_preview_search_requests_the_given_inkbunny_page);
     RUN_TEST(test_preview_search_inkbunny_pool_sends_pool_id_not_literal_text);

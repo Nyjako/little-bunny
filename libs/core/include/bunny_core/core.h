@@ -95,6 +95,18 @@ bunny_core_result_t bunny_core_search_list(bunny_core_t *core, bunny_db_search_l
  * a pool search ignores both, same as it already ignores apply_blacklist. */
 bunny_core_result_t bunny_core_search_list_posts(bunny_core_t *core, int64_t search_id, bool unseen_only, int rating_mask, int media_mask, int page, bunny_db_post_list_t *out_list);
 
+/* M51 slideshow: picks up to `count` posts at random, no repeats, from the
+ * union of search_ids[0..search_id_count)'s own results -- each resolved to
+ * its own site/pool/favorites-ness the same way bunny_core_search_list_posts
+ * above resolves a single search_id. A pool search_id is silently dropped
+ * from the set (pools have their own ordered, non-random listing, see
+ * bunny_db_pool_search_list_posts) rather than failing the whole call; so is
+ * any search_id that doesn't resolve to a real search at all (stale/deleted).
+ * Returns BUNNY_CORE_ERR_INVALID_ARG if that leaves nothing to query (e.g.
+ * every given id was a pool search, or none resolved). May return fewer than
+ * `count` posts -- see bunny_db_search_list_posts_random's own doc comment. */
+bunny_core_result_t bunny_core_slideshow_pick_random_posts(bunny_core_t *core, const int64_t *search_ids, size_t search_id_count, int rating_mask, int media_mask, int count, bunny_db_post_list_t *out_list);
+
 /* Pin/unpin a search, toggled directly from the searches list row (M14.1)
  * rather than through the full edit form -- see bunny_db_search_set_pinned. */
 bunny_core_result_t bunny_core_search_set_pinned(bunny_core_t *core, int64_t search_id, bool pinned);

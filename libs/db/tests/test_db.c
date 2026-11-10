@@ -1393,6 +1393,230 @@ void test_search_list_posts_paginates(void)
     bunny_db_post_list_free(&page3);
 }
 
+void test_search_list_posts_random_returns_requested_count(void)
+{
+    int64_t search_id = 0;
+    bunny_db_search_create(g_db, BUNNY_DB_SITE_E621, "wolves", "wolf", 24, NULL, &search_id);
+    for (int i = 0; i < 10; i++) {
+        bunny_db_post_upsert_t post;
+        make_test_post(&post, 4000 + i, 1);
+        int64_t post_id = 0;
+        bunny_db_post_upsert(g_db, &post, &post_id);
+        bunny_db_search_add_result(g_db, search_id, post_id, NULL);
+    }
+
+    int64_t ids[] = {search_id};
+    bunny_db_site_t sites[] = {BUNNY_DB_SITE_E621};
+    bool apply_blacklist[] = {true};
+    bunny_db_post_list_t result;
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, bunny_db_search_list_posts_random(g_db, ids, sites, apply_blacklist, 1, BUNNY_DB_RATING_MASK_ALL, BUNNY_DB_MEDIA_MASK_ALL, 4, &result));
+    TEST_ASSERT_EQUAL(4, (int)result.count);
+    /* every returned post really came from the seeded set, and no duplicates */
+    for (size_t i = 0; i < result.count; i++) {
+        TEST_ASSERT_TRUE(result.items[i].external_id >= 4000 && result.items[i].external_id < 4010);
+        for (size_t j = i + 1; j < result.count; j++) {
+            TEST_ASSERT_NOT_EQUAL(result.items[i].id, result.items[j].id);
+        }
+    }
+    bunny_db_post_list_free(&result);
+}
+
+void test_search_list_posts_random_returns_fewer_when_pool_is_smaller(void)
+{
+    int64_t search_id = 0;
+    bunny_db_search_create(g_db, BUNNY_DB_SITE_E621, "wolves", "wolf", 24, NULL, &search_id);
+    bunny_db_post_upsert_t post;
+    make_test_post(&post, 4100, 1);
+    int64_t post_id = 0;
+    bunny_db_post_upsert(g_db, &post, &post_id);
+    bunny_db_search_add_result(g_db, search_id, post_id, NULL);
+
+    int64_t ids[] = {search_id};
+    bunny_db_site_t sites[] = {BUNNY_DB_SITE_E621};
+    bool apply_blacklist[] = {true};
+    bunny_db_post_list_t result;
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, bunny_db_search_list_posts_random(g_db, ids, sites, apply_blacklist, 1, BUNNY_DB_RATING_MASK_ALL, BUNNY_DB_MEDIA_MASK_ALL, 50, &result));
+    TEST_ASSERT_EQUAL(1, (int)result.count);
+    bunny_db_post_list_free(&result);
+}
+
+void test_search_list_posts_random_excludes_other_searches_posts(void)
+{
+    int64_t selected_id = 0;
+    int64_t other_id = 0;
+    bunny_db_search_create(g_db, BUNNY_DB_SITE_E621, "wolves", "wolf", 24, NULL, &selected_id);
+    bunny_db_search_create(g_db, BUNNY_DB_SITE_E621, "foxes", "fox", 24, NULL, &other_id);
+
+    bunny_db_post_upsert_t selected_post;
+    bunny_db_post_upsert_t other_post;
+    make_test_post(&selected_post, 4200, 1);
+    make_test_post(&other_post, 4201, 1);
+    int64_t selected_post_id = 0;
+    int64_t other_post_id = 0;
+    bunny_db_post_upsert(g_db, &selected_post, &selected_post_id);
+    bunny_db_post_upsert(g_db, &other_post, &other_post_id);
+    bunny_db_search_add_result(g_db, selected_id, selected_post_id, NULL);
+    bunny_db_search_add_result(g_db, other_id, other_post_id, NULL);
+
+    int64_t ids[] = {selected_id};
+    bunny_db_site_t sites[] = {BUNNY_DB_SITE_E621};
+    bool apply_blacklist[] = {true};
+    bunny_db_post_list_t result;
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, bunny_db_search_list_posts_random(g_db, ids, sites, apply_blacklist, 1, BUNNY_DB_RATING_MASK_ALL, BUNNY_DB_MEDIA_MASK_ALL, 10, &result));
+    TEST_ASSERT_EQUAL(1, (int)result.count);
+    TEST_ASSERT_EQUAL(selected_post_id, result.items[0].id);
+    bunny_db_post_list_free(&result);
+}
+
+void test_search_list_posts_random_dedupes_a_post_in_two_selected_searches(void)
+{
+    int64_t search1_id = 0;
+    int64_t search2_id = 0;
+    bunny_db_search_create(g_db, BUNNY_DB_SITE_E621, "wolves", "wolf", 24, NULL, &search1_id);
+    bunny_db_search_create(g_db, BUNNY_DB_SITE_E621, "canines", "canine", 24, NULL, &search2_id);
+
+    bunny_db_post_upsert_t post;
+    make_test_post(&post, 4300, 1);
+    int64_t post_id = 0;
+    bunny_db_post_upsert(g_db, &post, &post_id);
+    bunny_db_search_add_result(g_db, search1_id, post_id, NULL);
+    bunny_db_search_add_result(g_db, search2_id, post_id, NULL);
+
+    int64_t ids[] = {search1_id, search2_id};
+    bunny_db_site_t sites[] = {BUNNY_DB_SITE_E621, BUNNY_DB_SITE_E621};
+    bool apply_blacklist[] = {true, true};
+    bunny_db_post_list_t result;
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, bunny_db_search_list_posts_random(g_db, ids, sites, apply_blacklist, 2, BUNNY_DB_RATING_MASK_ALL, BUNNY_DB_MEDIA_MASK_ALL, 10, &result));
+    TEST_ASSERT_EQUAL(1, (int)result.count);
+    bunny_db_post_list_free(&result);
+}
+
+void test_search_list_posts_random_respects_simple_blacklist(void)
+{
+    int64_t search_id = 0;
+    bunny_db_search_create(g_db, BUNNY_DB_SITE_E621, "wolves", "wolf", 24, NULL, &search_id);
+
+    const char *clean_tags[] = {"wolf"};
+    const char *blacklisted_tags[] = {"wolf", "young"};
+    bunny_db_post_upsert_t clean_post;
+    bunny_db_post_upsert_t blacklisted_post;
+    make_test_post(&clean_post, 4400, 1);
+    make_test_post(&blacklisted_post, 4401, 1);
+    clean_post.tags = clean_tags;
+    clean_post.tag_count = 1;
+    blacklisted_post.tags = blacklisted_tags;
+    blacklisted_post.tag_count = 2;
+    int64_t clean_id = 0;
+    int64_t blacklisted_id = 0;
+    bunny_db_post_upsert(g_db, &clean_post, &clean_id);
+    bunny_db_post_upsert(g_db, &blacklisted_post, &blacklisted_id);
+    bunny_db_search_add_result(g_db, search_id, clean_id, NULL);
+    bunny_db_search_add_result(g_db, search_id, blacklisted_id, NULL);
+
+    bunny_db_blacklist_add(g_db, BUNNY_DB_SITE_E621, "young");
+
+    int64_t ids[] = {search_id};
+    bunny_db_site_t sites[] = {BUNNY_DB_SITE_E621};
+    bool apply_blacklist[] = {true};
+    bunny_db_post_list_t result;
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, bunny_db_search_list_posts_random(g_db, ids, sites, apply_blacklist, 1, BUNNY_DB_RATING_MASK_ALL, BUNNY_DB_MEDIA_MASK_ALL, 10, &result));
+    TEST_ASSERT_EQUAL(1, (int)result.count);
+    TEST_ASSERT_EQUAL(clean_id, result.items[0].id);
+    bunny_db_post_list_free(&result);
+}
+
+void test_search_list_posts_random_respects_complex_blacklist_across_both_sites(void)
+{
+    int64_t e621_search_id = 0;
+    int64_t inkbunny_search_id = 0;
+    bunny_db_search_create(g_db, BUNNY_DB_SITE_E621, "wolves", "wolf", 24, NULL, &e621_search_id);
+    bunny_db_search_create(g_db, BUNNY_DB_SITE_INKBUNNY, "wolves", "wolf", 24, NULL, &inkbunny_search_id);
+
+    const char *matching_tags[] = {"wolf", "young", "rating:e"};
+    const char *surviving_tags[] = {"wolf", "young"};
+    bunny_db_post_upsert_t e621_post;
+    bunny_db_post_upsert_t inkbunny_post;
+    make_test_post(&e621_post, 4500, 1);
+    make_test_post(&inkbunny_post, 4501, 1);
+    e621_post.tags = matching_tags;
+    e621_post.tag_count = 3;
+    inkbunny_post.site = BUNNY_DB_SITE_INKBUNNY;
+    inkbunny_post.tags = surviving_tags;
+    inkbunny_post.tag_count = 2;
+    int64_t e621_post_id = 0;
+    int64_t inkbunny_post_id = 0;
+    bunny_db_post_upsert(g_db, &e621_post, &e621_post_id);
+    bunny_db_post_upsert(g_db, &inkbunny_post, &inkbunny_post_id);
+    bunny_db_search_add_result(g_db, e621_search_id, e621_post_id, NULL);
+    bunny_db_search_add_result(g_db, inkbunny_search_id, inkbunny_post_id, NULL);
+
+    /* An AND-group rule, e621-only -- only bunny_db_search_list_posts_random's
+     * own second pass (not the SQL NOT EXISTS clause) catches this. */
+    bunny_db_blacklist_add(g_db, BUNNY_DB_SITE_E621, "rating:e young");
+
+    int64_t ids[] = {e621_search_id, inkbunny_search_id};
+    bunny_db_site_t sites[] = {BUNNY_DB_SITE_E621, BUNNY_DB_SITE_INKBUNNY};
+    bool apply_blacklist[] = {true, true};
+    bunny_db_post_list_t result;
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, bunny_db_search_list_posts_random(g_db, ids, sites, apply_blacklist, 2, BUNNY_DB_RATING_MASK_ALL, BUNNY_DB_MEDIA_MASK_ALL, 10, &result));
+    TEST_ASSERT_EQUAL(1, (int)result.count);
+    TEST_ASSERT_EQUAL(inkbunny_post_id, result.items[0].id);
+    bunny_db_post_list_free(&result);
+}
+
+void test_search_list_posts_random_favorites_style_search_skips_blacklist(void)
+{
+    int64_t search_id = 0;
+    bunny_db_search_create(g_db, BUNNY_DB_SITE_E621, "my favorites", "", 24, NULL, &search_id);
+
+    const char *tags[] = {"young"};
+    bunny_db_post_upsert_t post;
+    make_test_post(&post, 4600, 1);
+    post.tags = tags;
+    post.tag_count = 1;
+    int64_t post_id = 0;
+    bunny_db_post_upsert(g_db, &post, &post_id);
+    bunny_db_search_add_result(g_db, search_id, post_id, NULL);
+
+    bunny_db_blacklist_add(g_db, BUNNY_DB_SITE_E621, "young");
+
+    int64_t ids[] = {search_id};
+    bunny_db_site_t sites[] = {BUNNY_DB_SITE_E621};
+    bool apply_blacklist[] = {false}; /* favorites search -- caller resolves this, see bunny_core */
+    bunny_db_post_list_t result;
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, bunny_db_search_list_posts_random(g_db, ids, sites, apply_blacklist, 1, BUNNY_DB_RATING_MASK_ALL, BUNNY_DB_MEDIA_MASK_ALL, 10, &result));
+    TEST_ASSERT_EQUAL(1, (int)result.count);
+    bunny_db_post_list_free(&result);
+}
+
+void test_search_list_posts_random_respects_rating_and_media_masks(void)
+{
+    int64_t search_id = 0;
+    bunny_db_search_create(g_db, BUNNY_DB_SITE_E621, "wolves", "wolf", 24, NULL, &search_id);
+
+    bunny_db_post_upsert_t safe_post;
+    bunny_db_post_upsert_t explicit_post;
+    make_test_post(&safe_post, 4700, 1);
+    make_test_post(&explicit_post, 4701, 1);
+    safe_post.rating = "s";
+    explicit_post.rating = "e";
+    int64_t safe_id = 0;
+    int64_t explicit_id = 0;
+    bunny_db_post_upsert(g_db, &safe_post, &safe_id);
+    bunny_db_post_upsert(g_db, &explicit_post, &explicit_id);
+    bunny_db_search_add_result(g_db, search_id, safe_id, NULL);
+    bunny_db_search_add_result(g_db, search_id, explicit_id, NULL);
+
+    int64_t ids[] = {search_id};
+    bunny_db_site_t sites[] = {BUNNY_DB_SITE_E621};
+    bool apply_blacklist[] = {true};
+    bunny_db_post_list_t result;
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, bunny_db_search_list_posts_random(g_db, ids, sites, apply_blacklist, 1, BUNNY_DB_RATING_MASK_SAFE, BUNNY_DB_MEDIA_MASK_ALL, 10, &result));
+    TEST_ASSERT_EQUAL(1, (int)result.count);
+    TEST_ASSERT_EQUAL(safe_id, result.items[0].id);
+    bunny_db_post_list_free(&result);
+}
+
 void test_search_mark_all_seen_only_affects_that_searchs_posts(void)
 {
     int64_t search1_id = 0;
@@ -2840,6 +3064,14 @@ int main(void)
     RUN_TEST(test_search_list_posts_orders_newest_first_by_site_date);
     RUN_TEST(test_search_list_posts_orders_a_post_with_no_site_date_by_cached_at_instead);
     RUN_TEST(test_search_list_posts_paginates);
+    RUN_TEST(test_search_list_posts_random_returns_requested_count);
+    RUN_TEST(test_search_list_posts_random_returns_fewer_when_pool_is_smaller);
+    RUN_TEST(test_search_list_posts_random_excludes_other_searches_posts);
+    RUN_TEST(test_search_list_posts_random_dedupes_a_post_in_two_selected_searches);
+    RUN_TEST(test_search_list_posts_random_respects_simple_blacklist);
+    RUN_TEST(test_search_list_posts_random_respects_complex_blacklist_across_both_sites);
+    RUN_TEST(test_search_list_posts_random_favorites_style_search_skips_blacklist);
+    RUN_TEST(test_search_list_posts_random_respects_rating_and_media_masks);
     RUN_TEST(test_post_get_by_id);
     RUN_TEST(test_post_get_by_id_not_found);
     RUN_TEST(test_action_queue_add_and_list_pending);
