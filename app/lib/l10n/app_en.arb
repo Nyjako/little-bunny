@@ -94,13 +94,6 @@
     "placeholders": {"count": {"type": "int"}}
   },
   "searchesDownloadSelectedTooltip": "Download selected",
-  "searchesStartSlideshowTooltip": "Start slideshow",
-  "slideshowConfigDialogTitle": "Slideshow settings",
-  "slideshowIntervalLabel": "Interval (seconds)",
-  "slideshowPostCountLabel": "Number of posts",
-  "slideshowStartButton": "Start",
-  "slideshowEmptyResultMessage": "No posts available for a slideshow with these searches.",
-  "slideshowError": "Couldn't start the slideshow. Try again.",
   "searchesMassDownloadQueued": "{count} queued for download",
   "@searchesMassDownloadQueued": {
     "placeholders": {"count": {"type": "int"}}

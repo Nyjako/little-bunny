@@ -22,7 +22,6 @@ import 'download_queue_screen.dart';
 import 'edit_search_screen.dart';
 import 'post_grid_screen.dart';
 import 'settings_screen.dart';
-import 'slideshow_screen.dart';
 import 'tag_stats_screen.dart';
 
 /// The app's actual home screen (M8.2 promoted this over [AccountsScreen] --
@@ -525,63 +524,6 @@ class _SearchesScreenState extends State<SearchesScreen> with SingleTickerProvid
     }
   }
 
-  /// A plain two-field dialog (interval seconds, post count) -- unlike
-  /// [_downloadSelectedSearches]'s own multi-page fetch, M51's slideshow is
-  /// one quick server-side random-sample call, so no loading dialog is
-  /// needed here. Leniently parsed the same way [_createPoolSearch]'s own
-  /// `int.tryParse` is -- no fancier forms validation for a first cut.
-  Future<void> _startSlideshow(AppLocalizations l10n) async {
-    final selectedIds = _selectedSearchIds.toList();
-    if (selectedIds.isEmpty) {
-      return;
-    }
-    final intervalController = TextEditingController(text: '5');
-    final countController = TextEditingController(text: '30');
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text(l10n.slideshowConfigDialogTitle),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(controller: intervalController, decoration: InputDecoration(labelText: l10n.slideshowIntervalLabel), keyboardType: TextInputType.number, autofocus: true),
-            TextField(controller: countController, decoration: InputDecoration(labelText: l10n.slideshowPostCountLabel), keyboardType: TextInputType.number),
-          ],
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: Text(l10n.commonCancel)),
-          TextButton(onPressed: () => Navigator.pop(context, true), child: Text(l10n.slideshowStartButton)),
-        ],
-      ),
-    );
-    if (confirmed != true) {
-      return;
-    }
-    final interval = int.tryParse(intervalController.text);
-    final count = int.tryParse(countController.text);
-    if (interval == null || interval <= 0 || count == null || count <= 0) {
-      return;
-    }
-
-    try {
-      final posts = await _repository!.getSlideshowRandomPosts(selectedIds, count);
-      if (!mounted) {
-        return;
-      }
-      if (posts.isEmpty) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(l10n.slideshowEmptyResultMessage)));
-        return;
-      }
-      _exitSelectionMode();
-      await Navigator.push(context, MaterialPageRoute(builder: (context) => SlideshowScreen(posts: posts, interval: Duration(seconds: interval), repository: _repository!)));
-    } catch (_) {
-      if (!mounted) {
-        return;
-      }
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(l10n.slideshowError)));
-    }
-  }
-
   /// Records the open (fire-and-forget -- shouldn't delay navigation) for the
   /// "last viewed" sort order, then awaits the post grid so returning from it
   /// re-sorts the list and the reordering is actually visible (M15).
@@ -875,7 +817,6 @@ class _SearchesScreenState extends State<SearchesScreen> with SingleTickerProvid
             tooltip: l10n.searchesDownloadSelectedTooltip,
             onPressed: _selectedSearchIds.isEmpty ? null : () => _downloadSelectedSearches(l10n),
           ),
-    IconButton(icon: const Icon(Icons.slideshow), tooltip: l10n.searchesStartSlideshowTooltip, onPressed: _selectedSearchIds.isEmpty ? null : () => _startSlideshow(l10n)),
   ];
 
   Widget _syncIconButton(AppLocalizations l10n) => IconButton(

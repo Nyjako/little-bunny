@@ -476,6 +476,73 @@ bunny_db_result_t bunny_db_download_queue_set_status(bunny_db_t *db, int64_t id,
 bunny_db_result_t bunny_db_download_queue_list(bunny_db_t *db, bunny_db_download_queue_list_t *out_list);
 bunny_db_result_t bunny_db_download_queue_clear_finished(bunny_db_t *db);
 
+/* --- Slideshows (M51 v2) ---------------------------------------------------
+ * A persisted, download-backed slideshow -- see schema.h's own comment on
+ * the three tables backing this. bunny_db itself never touches a file or
+ * the network (same arm's-length relationship it has with action_queue/
+ * download_queue above) -- picking/downloading/playing back is entirely
+ * bunny_core's and the app's own job; this layer only ever stores and
+ * retrieves rows. */
+
+bunny_db_result_t bunny_db_slideshow_create(bunny_db_t *db, const char *label, bool has_default_posts_per_search, int default_posts_per_search, bool has_max_total_posts, int max_total_posts, int64_t *out_id);
+bunny_db_result_t bunny_db_slideshow_update(bunny_db_t *db, int64_t slideshow_id, const char *label, bool has_default_posts_per_search, int default_posts_per_search, bool has_max_total_posts, int max_total_posts);
+bunny_db_result_t bunny_db_slideshow_delete(bunny_db_t *db, int64_t slideshow_id);
+bunny_db_result_t bunny_db_slideshow_get(bunny_db_t *db, int64_t slideshow_id, bunny_db_slideshow_t *out_slideshow);
+bunny_db_result_t bunny_db_slideshow_list(bunny_db_t *db, bunny_db_slideshow_list_t *out_list);
+
+/* Idempotent: re-adding an already-linked search_id updates its
+ * override_count in place rather than erroring -- lets a caller always
+ * call "add" when the user edits a search's own override field, without
+ * needing to know ahead of time whether this is the first time. */
+bunny_db_result_t bunny_db_slideshow_search_add(bunny_db_t *db, int64_t slideshow_id, int64_t search_id, bool has_override_count, int override_count);
+
+/* Drops the link row AND every slideshow_posts row for this (slideshow_id,
+ * search_id) pair -- schema.h's ON DELETE CASCADE only fires when the
+ * PARENT slideshows/searches row itself is deleted, not a slideshow_searches
+ * link row, so removing just one search from an otherwise-intact slideshow
+ * needs this explicit second delete, done here in one transaction. Deleting
+ * any already-downloaded FILES is a separate, deliberate decision made by
+ * the caller (DownloadManager/disk), never
+ * done here. */
+bunny_db_result_t bunny_db_slideshow_search_remove(bunny_db_t *db, int64_t slideshow_id, int64_t search_id);
+bunny_db_result_t bunny_db_slideshow_search_list(bunny_db_t *db, int64_t slideshow_id, bunny_db_slideshow_search_list_t *out_list);
+
+/* Every post currently committed to slideshow_id, each with its full post
+ * row embedded (feeds a thumbnail-preview grid with no second round trip
+ * per post). search_id > 0 scopes to just that one search's own picks (for
+ * a per-search reroll/preview); 0 means "every search in this slideshow." */
+bunny_db_result_t bunny_db_slideshow_posts_list(bunny_db_t *db, int64_t slideshow_id, int64_t search_id, bunny_db_slideshow_post_list_t *out_list);
+
+/* Replaces (slideshow_id, search_id)'s entire committed pick set with
+ * post_ids[0..count) in one transaction -- used both for the first commit
+ * after a search is freshly added, and for "reroll this search" (old picks
+ * dropped, new ones committed). Deliberately not additive: the caller
+ * (bunny_core) already decided what the new set should be; this just makes
+ * it so. */
+bunny_db_result_t bunny_db_slideshow_posts_set(bunny_db_t *db, int64_t slideshow_id, int64_t search_id, const int64_t *post_ids, size_t count);
+
+/* Swaps exactly one committed post for a different one from the same
+ * search -- the self-healing "this post died, pick a new one" primitive.
+ * Returns BUNNY_DB_ERR_NOT_FOUND if old_post_id isn't actually committed to
+ * this slideshow. */
+bunny_db_result_t bunny_db_slideshow_post_replace(bunny_db_t *db, int64_t slideshow_id, int64_t search_id, int64_t old_post_id, int64_t new_post_id);
+
+/* Every post_id currently committed across EVERY search of this slideshow
+ * -- the exclusion set a fresh pick/reroll must avoid duplicating, so the
+ * same post never ends up picked twice via two different searches (or via
+ * a reroll re-drawing something already picked elsewhere in this
+ * slideshow). */
+bunny_db_result_t bunny_db_slideshow_all_post_ids(bunny_db_t *db, int64_t slideshow_id, bunny_db_int64_list_t *out_ids);
+
+/* Pools have no ORDER BY RANDOM() story of their own (see
+ * bunny_db_search_list_posts_random's own doc comment on why) -- a pool is
+ * bounded (e621 caps one at 1000 posts), so this fetches every page of
+ * bunny_db_pool_search_list_posts for (search_id, pool_id) -- unseen_only
+ * always false, this is picking for a slideshow, not a browse -- into one
+ * array, Fisher-Yates-shuffles it in place, then returns the first `count`.
+ * May return fewer than `count` if the pool itself has fewer posts. */
+bunny_db_result_t bunny_db_pool_search_list_posts_random(bunny_db_t *db, int64_t search_id, int64_t pool_id, int count, bunny_db_post_list_t *out_list);
+
 #ifdef __cplusplus
 }
 #endif

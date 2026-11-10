@@ -231,6 +231,157 @@ void main() {
       expect(capturedUri.path, '/groups/9');
     });
 
+    test('slideshowCreate omits null fields and returns the new id (M51 v2)', () async {
+      respond = (_) => http.Response(jsonEncode({'id': 7}), 201);
+
+      final id = await buildRepository().slideshowCreate('my slideshow', defaultPostsPerSearch: 5);
+
+      expect(capturedMethod, 'POST');
+      expect(capturedUri.path, '/slideshows');
+      expect(jsonDecode(capturedBody), {'label': 'my slideshow', 'default_posts_per_search': 5});
+      expect(id, 7);
+    });
+
+    test('slideshowUpdate sends PUT with only the non-null optional fields (M51 v2)', () async {
+      respond = (_) => http.Response(jsonEncode({'ok': true}), 200);
+
+      await buildRepository().slideshowUpdate(7, 'renamed', maxTotalPosts: 10);
+
+      expect(capturedMethod, 'PUT');
+      expect(capturedUri.path, '/slideshows/7');
+      expect(jsonDecode(capturedBody), {'label': 'renamed', 'max_total_posts': 10});
+    });
+
+    test('slideshowDelete sends DELETE to the right path (M51 v2)', () async {
+      respond = (_) => http.Response(jsonEncode({'ok': true}), 200);
+
+      await buildRepository().slideshowDelete(7);
+
+      expect(capturedMethod, 'DELETE');
+      expect(capturedUri.path, '/slideshows/7');
+    });
+
+    test('slideshowList maps a JSON array into BunnySlideshow objects, including null fields (M51 v2)', () async {
+      respond = (_) => http.Response(
+        jsonEncode([
+          {'id': 7, 'label': 'my slideshow', 'default_posts_per_search': null, 'max_total_posts': 10, 'created_at': '2026-01-01T00:00:00Z'},
+        ]),
+        200,
+      );
+
+      final slideshows = await buildRepository().slideshowList();
+
+      expect(slideshows, hasLength(1));
+      expect(slideshows.single.id, 7);
+      expect(slideshows.single.label, 'my slideshow');
+      expect(slideshows.single.defaultPostsPerSearch, isNull);
+      expect(slideshows.single.maxTotalPosts, 10);
+    });
+
+    test('slideshowGet fetches by id (M51 v2)', () async {
+      respond = (_) => http.Response(jsonEncode({'id': 7, 'label': 'my slideshow', 'default_posts_per_search': 5, 'max_total_posts': null, 'created_at': '2026-01-01T00:00:00Z'}), 200);
+
+      final slideshow = await buildRepository().slideshowGet(7);
+
+      expect(capturedMethod, 'GET');
+      expect(capturedUri.path, '/slideshows/7');
+      expect(slideshow.label, 'my slideshow');
+      expect(slideshow.defaultPostsPerSearch, 5);
+    });
+
+    test('slideshowSearchAdd posts search_id and omits override_count when null (M51 v2)', () async {
+      respond = (_) => http.Response(jsonEncode({'ok': true}), 201);
+
+      await buildRepository().slideshowSearchAdd(7, 3);
+
+      expect(capturedMethod, 'POST');
+      expect(capturedUri.path, '/slideshows/7/searches');
+      expect(jsonDecode(capturedBody), {'search_id': 3});
+    });
+
+    test('slideshowSearchAdd includes override_count when given (M51 v2)', () async {
+      respond = (_) => http.Response(jsonEncode({'ok': true}), 201);
+
+      await buildRepository().slideshowSearchAdd(7, 3, overrideCount: 2);
+
+      expect(jsonDecode(capturedBody), {'search_id': 3, 'override_count': 2});
+    });
+
+    test('slideshowSearchRemove sends DELETE to the nested path (M51 v2)', () async {
+      respond = (_) => http.Response(jsonEncode({'ok': true}), 200);
+
+      await buildRepository().slideshowSearchRemove(7, 3);
+
+      expect(capturedMethod, 'DELETE');
+      expect(capturedUri.path, '/slideshows/7/searches/3');
+    });
+
+    test('slideshowSearchList maps a JSON array into BunnySlideshowSearch objects (M51 v2)', () async {
+      respond = (_) => http.Response(
+        jsonEncode([
+          {'slideshow_id': 7, 'search_id': 3, 'override_count': 2, 'added_at': '2026-01-01T00:00:00Z'},
+        ]),
+        200,
+      );
+
+      final links = await buildRepository().slideshowSearchList(7);
+
+      expect(links, hasLength(1));
+      expect(links.single.searchId, 3);
+      expect(links.single.overrideCount, 2);
+    });
+
+    test('slideshowPostsList omits search_id from the query string when not given (M51 v2)', () async {
+      respond = (_) => http.Response(jsonEncode([]), 200);
+
+      await buildRepository().slideshowPostsList(7);
+
+      expect(capturedUri.path, '/slideshows/7/posts');
+      expect(capturedUri.queryParameters, isEmpty);
+    });
+
+    test('slideshowPostsList passes search_id as a query param when given (M51 v2)', () async {
+      respond = (_) => http.Response(jsonEncode([]), 200);
+
+      await buildRepository().slideshowPostsList(7, searchId: 3);
+
+      expect(capturedUri.queryParameters, {'search_id': '3'});
+    });
+
+    test('slideshowRerollAll posts to the slideshow-level reroll route (M51 v2)', () async {
+      respond = (_) => http.Response(jsonEncode({'ok': true}), 200);
+
+      await buildRepository().slideshowRerollAll(7);
+
+      expect(capturedMethod, 'POST');
+      expect(capturedUri.path, '/slideshows/7/reroll');
+    });
+
+    test('slideshowRerollSearch posts to the per-search reroll route (M51 v2)', () async {
+      respond = (_) => http.Response(jsonEncode({'ok': true}), 200);
+
+      await buildRepository().slideshowRerollSearch(7, 3);
+
+      expect(capturedMethod, 'POST');
+      expect(capturedUri.path, '/slideshows/7/searches/3/reroll');
+    });
+
+    test('slideshowReplacePost posts dead_post_id to the per-search replace route (M51 v2)', () async {
+      respond = (_) => http.Response(jsonEncode({'ok': true}), 200);
+
+      await buildRepository().slideshowReplacePost(7, 3, 42);
+
+      expect(capturedMethod, 'POST');
+      expect(capturedUri.path, '/slideshows/7/searches/3/replace');
+      expect(jsonDecode(capturedBody), {'dead_post_id': 42});
+    });
+
+    test('slideshowReplacePost throws BunnyRepositoryException on a 404 (exhausted search) (M51 v2)', () async {
+      respond = (_) => http.Response(jsonEncode({'error': 'not found'}), 404);
+
+      await expectLater(buildRepository().slideshowReplacePost(7, 3, 42), throwsA(isA<BunnyRepositoryException>()));
+    });
+
     test('deleteSearch sends DELETE to the right path', () async {
       respond = (_) => http.Response(jsonEncode({'ok': true}), 200);
 
@@ -524,59 +675,6 @@ void main() {
       expect(sources, ['https://example.com/a', 'https://example.com/b']);
     });
 
-    test('getSlideshowRandomPosts sends search_ids joined by commas, count, and mask query params (M51)', () async {
-      respond = (_) => http.Response(jsonEncode([]), 200);
-
-      await buildRepository().getSlideshowRandomPosts([1, 2, 3], 20);
-
-      expect(capturedMethod, 'GET');
-      expect(capturedUri.path, '/slideshow/posts');
-      expect(capturedUri.queryParameters['search_ids'], '1,2,3');
-      expect(capturedUri.queryParameters['count'], '20');
-      expect(capturedUri.queryParameters['rating_mask'], '15');
-      expect(capturedUri.queryParameters['media_mask'], '7');
-    });
-
-    test('getSlideshowRandomPosts maps a JSON array into BunnyPost objects (M51)', () async {
-      respond = (_) => http.Response(
-        jsonEncode([
-          {
-            'id': 1,
-            'site': 'e621',
-            'external_id': 100,
-            'artist': 'someartist',
-            'title': null,
-            'description': null,
-            'rating': 's',
-            'score': 5,
-            'score_up': 6,
-            'score_down': 1,
-            'fav_count': 2,
-            'comment_count': 0,
-            'file_url': 'https://example.com/1.png',
-            'file_ext': 'png',
-            'file_md5': 'abc',
-            'preview_url': null,
-            'width': 100,
-            'height': 200,
-            'created_at_site': null,
-            'cached_at': '2026-01-01T00:00:00Z',
-            'is_seen': false,
-            'is_favorited': true,
-            'user_vote': 1,
-            'favorite_stars': 0,
-            'sample_url': null,
-          },
-        ]),
-        200,
-      );
-
-      final posts = await buildRepository().getSlideshowRandomPosts([7], 1);
-
-      expect(posts, hasLength(1));
-      expect(posts.single.id, 1);
-      expect(posts.single.artist, 'someartist');
-    });
 
     test('getPostFiles sends GET to the right path and maps the response', () async {
       respond = (_) => http.Response(

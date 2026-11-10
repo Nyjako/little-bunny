@@ -40,6 +40,21 @@ BunnySearch _searchFromJson(Map<String, Object?> j) => BunnySearch(
 
 BunnyGroup _groupFromJson(Map<String, Object?> j) => BunnyGroup(id: (j['id'] as num).toInt(), name: j['name'] as String, pinned: j['pinned'] as bool, createdAt: j['created_at'] as String);
 
+BunnySlideshow _slideshowFromJson(Map<String, Object?> j) => BunnySlideshow(
+  id: (j['id'] as num).toInt(),
+  label: j['label'] as String,
+  defaultPostsPerSearch: (j['default_posts_per_search'] as num?)?.toInt(),
+  maxTotalPosts: (j['max_total_posts'] as num?)?.toInt(),
+  createdAt: j['created_at'] as String,
+);
+
+BunnySlideshowSearch _slideshowSearchFromJson(Map<String, Object?> j) => BunnySlideshowSearch(
+  slideshowId: (j['slideshow_id'] as num).toInt(),
+  searchId: (j['search_id'] as num).toInt(),
+  overrideCount: (j['override_count'] as num?)?.toInt(),
+  addedAt: j['added_at'] as String,
+);
+
 BunnyPost _postFromJson(Map<String, Object?> j) => BunnyPost(
   id: (j['id'] as num).toInt(),
   site: BunnySite.fromWireString(j['site'] as String),
@@ -74,6 +89,8 @@ BunnyPost _postFromJson(Map<String, Object?> j) => BunnyPost(
   userVote: (j['user_vote'] as num?)?.toInt() ?? 0,
   favoriteStars: (j['favorite_stars'] as num?)?.toInt() ?? 0,
 );
+
+BunnySlideshowPost _slideshowPostFromJson(Map<String, Object?> j) => BunnySlideshowPost(searchId: (j['search_id'] as num).toInt(), post: _postFromJson(j['post'] as Map<String, Object?>));
 
 BunnyTagStat _tagStatFromJson(Map<String, Object?> j) => BunnyTagStat(name: j['name'] as String, count: (j['count'] as num).toInt());
 
@@ -533,18 +550,6 @@ class HttpBunnyRepository implements BunnyRepository {
   }
 
   @override
-  Future<List<BunnyPost>> getSlideshowRandomPosts(List<int> searchIds, int count, {int ratingMask = kRatingMaskAll, int mediaMask = kMediaMaskAll}) async {
-    final response = await _client.get(
-      _uri('/slideshow/posts', {'search_ids': searchIds.join(','), 'count': '$count', 'rating_mask': '$ratingMask', 'media_mask': '$mediaMask'}),
-      headers: _headers,
-    );
-    if (response.statusCode != 200) {
-      _throwError(response);
-    }
-    return _decodeList(response).map(_postFromJson).toList();
-  }
-
-  @override
   Future<List<BunnyPostFile>> getPostFiles(int postId) async {
     final response = await _client.get(_uri('/posts/$postId/files'), headers: _headers);
     if (response.statusCode != 200) {
@@ -867,6 +872,119 @@ class HttpBunnyRepository implements BunnyRepository {
   Future<DownloadFetchResult> downloadFile(String fileUrl, Map<String, String> extraHeaders, String destDir, String filename, String? expectedMd5, void Function(int received, int? total) onProgress) async {
     final native = await _ensureDownloadQueueNative();
     return downloadFileViaNative(native, fileUrl, extraHeaders, destDir, filename, expectedMd5, onProgress);
+  }
+
+  @override
+  Future<int> slideshowCreate(String label, {int? defaultPostsPerSearch, int? maxTotalPosts}) async {
+    final response = await _client.post(
+      _uri('/slideshows'),
+      headers: _headers,
+      body: jsonEncode({'label': label, 'default_posts_per_search': ?defaultPostsPerSearch, 'max_total_posts': ?maxTotalPosts}),
+    );
+    if (response.statusCode != 201) {
+      _throwError(response);
+    }
+    return (_decodeObject(response)['id'] as num).toInt();
+  }
+
+  @override
+  Future<void> slideshowUpdate(int slideshowId, String label, {int? defaultPostsPerSearch, int? maxTotalPosts}) async {
+    final response = await _client.put(
+      _uri('/slideshows/$slideshowId'),
+      headers: _headers,
+      body: jsonEncode({'label': label, 'default_posts_per_search': ?defaultPostsPerSearch, 'max_total_posts': ?maxTotalPosts}),
+    );
+    if (response.statusCode != 200) {
+      _throwError(response);
+    }
+  }
+
+  @override
+  Future<void> slideshowDelete(int slideshowId) async {
+    final response = await _client.delete(_uri('/slideshows/$slideshowId'), headers: _headers);
+    if (response.statusCode != 200) {
+      _throwError(response);
+    }
+  }
+
+  @override
+  Future<List<BunnySlideshow>> slideshowList() async {
+    final response = await _client.get(_uri('/slideshows'), headers: _headers);
+    if (response.statusCode != 200) {
+      _throwError(response);
+    }
+    return _decodeList(response).map(_slideshowFromJson).toList();
+  }
+
+  @override
+  Future<BunnySlideshow> slideshowGet(int slideshowId) async {
+    final response = await _client.get(_uri('/slideshows/$slideshowId'), headers: _headers);
+    if (response.statusCode != 200) {
+      _throwError(response);
+    }
+    return _slideshowFromJson(_decodeObject(response));
+  }
+
+  @override
+  Future<void> slideshowSearchAdd(int slideshowId, int searchId, {int? overrideCount}) async {
+    final response = await _client.post(
+      _uri('/slideshows/$slideshowId/searches'),
+      headers: _headers,
+      body: jsonEncode({'search_id': searchId, 'override_count': ?overrideCount}),
+    );
+    if (response.statusCode != 201) {
+      _throwError(response);
+    }
+  }
+
+  @override
+  Future<void> slideshowSearchRemove(int slideshowId, int searchId) async {
+    final response = await _client.delete(_uri('/slideshows/$slideshowId/searches/$searchId'), headers: _headers);
+    if (response.statusCode != 200) {
+      _throwError(response);
+    }
+  }
+
+  @override
+  Future<List<BunnySlideshowSearch>> slideshowSearchList(int slideshowId) async {
+    final response = await _client.get(_uri('/slideshows/$slideshowId/searches'), headers: _headers);
+    if (response.statusCode != 200) {
+      _throwError(response);
+    }
+    return _decodeList(response).map(_slideshowSearchFromJson).toList();
+  }
+
+  @override
+  Future<List<BunnySlideshowPost>> slideshowPostsList(int slideshowId, {int? searchId}) async {
+    final response = await _client.get(_uri('/slideshows/$slideshowId/posts', searchId != null ? {'search_id': '$searchId'} : null), headers: _headers);
+    if (response.statusCode != 200) {
+      _throwError(response);
+    }
+    return _decodeList(response).map(_slideshowPostFromJson).toList();
+  }
+
+  @override
+  Future<void> slideshowRerollAll(int slideshowId) async {
+    final response = await _client.post(_uri('/slideshows/$slideshowId/reroll'), headers: _headers);
+    if (response.statusCode != 200) {
+      _throwError(response);
+    }
+  }
+
+  @override
+  Future<void> slideshowRerollSearch(int slideshowId, int searchId) async {
+    final response = await _client.post(_uri('/slideshows/$slideshowId/searches/$searchId/reroll'), headers: _headers);
+    if (response.statusCode != 200) {
+      _throwError(response);
+    }
+  }
+
+  @override
+  Future<void> slideshowReplacePost(int slideshowId, int searchId, int deadPostId) async {
+    final response = await _client.post(_uri('/slideshows/$slideshowId/searches/$searchId/replace'), headers: _headers, body: jsonEncode({'dead_post_id': deadPostId}));
+    if (response.statusCode != 200) {
+      _throwError(response);
+    }
   }
 
   /// Recent server log lines (oldest-first), for diagnosing a stuck/slow

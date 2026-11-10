@@ -455,34 +455,6 @@ void test_full_account_search_sync_favorite_flow(void)
     free(response.data);
     memset(&response, 0, sizeof(response));
 
-    /* M51: slideshow's random-sample endpoint, reusing the search/post
-     * already synced above. */
-    status = do_request("GET", "/slideshow/posts?search_ids=1&count=5", NULL, &response, true, NULL);
-    TEST_ASSERT_EQUAL(200, status);
-    TEST_ASSERT_NOT_NULL(strstr(response.data, "\"external_id\":1"));
-    free(response.data);
-    memset(&response, 0, sizeof(response));
-
-    status = do_request("GET", "/slideshow/posts?count=5", NULL, &response, true, NULL);
-    TEST_ASSERT_EQUAL(400, status); /* missing search_ids */
-    free(response.data);
-    memset(&response, 0, sizeof(response));
-
-    status = do_request("GET", "/slideshow/posts?search_ids=1", NULL, &response, true, NULL);
-    TEST_ASSERT_EQUAL(400, status); /* missing count */
-    free(response.data);
-    memset(&response, 0, sizeof(response));
-
-    status = do_request("GET", "/slideshow/posts?search_ids=notanumber&count=5", NULL, &response, true, NULL);
-    TEST_ASSERT_EQUAL(400, status); /* malformed search_ids */
-    free(response.data);
-    memset(&response, 0, sizeof(response));
-
-    status = do_request("GET", "/slideshow/posts?search_ids=1,notanumber&count=5", NULL, &response, true, NULL);
-    TEST_ASSERT_EQUAL(400, status); /* malformed second id in the comma list */
-    free(response.data);
-    memset(&response, 0, sizeof(response));
-
     /* M28: e621 posts never populate post_files -- empty, same as sources
      * above is populated and pools below is empty, each reflecting what's
      * actually site-specific vs. not. */
@@ -851,6 +823,165 @@ void test_search_merge_duplicate(void)
     TEST_ASSERT_NOT_NULL(strstr(response.data, "\"id\":1"));
     TEST_ASSERT_NULL(strstr(response.data, "\"id\":2"));
     free(response.data);
+}
+
+void test_slideshow_crud(void)
+{
+    response_buffer_t response = {0};
+
+    long status = do_request("POST", "/slideshows", "{\"label\":\"my slideshow\",\"default_posts_per_search\":5}", &response, true, NULL);
+    TEST_ASSERT_EQUAL(201, status);
+    TEST_ASSERT_NOT_NULL(strstr(response.data, "\"id\":1"));
+    free(response.data);
+    memset(&response, 0, sizeof(response));
+
+    status = do_request("GET", "/slideshows", NULL, &response, true, NULL);
+    TEST_ASSERT_EQUAL(200, status);
+    TEST_ASSERT_NOT_NULL(strstr(response.data, "\"label\":\"my slideshow\""));
+    TEST_ASSERT_NOT_NULL(strstr(response.data, "\"default_posts_per_search\":5"));
+    TEST_ASSERT_NOT_NULL(strstr(response.data, "\"max_total_posts\":null"));
+    free(response.data);
+    memset(&response, 0, sizeof(response));
+
+    status = do_request("GET", "/slideshows/1", NULL, &response, true, NULL);
+    TEST_ASSERT_EQUAL(200, status);
+    TEST_ASSERT_NOT_NULL(strstr(response.data, "\"label\":\"my slideshow\""));
+    free(response.data);
+    memset(&response, 0, sizeof(response));
+
+    status = do_request("PUT", "/slideshows/1", "{\"label\":\"renamed\",\"max_total_posts\":10}", &response, true, NULL);
+    TEST_ASSERT_EQUAL(200, status);
+    TEST_ASSERT_NOT_NULL(strstr(response.data, "\"ok\":true"));
+    free(response.data);
+    memset(&response, 0, sizeof(response));
+
+    status = do_request("GET", "/slideshows/1", NULL, &response, true, NULL);
+    TEST_ASSERT_EQUAL(200, status);
+    TEST_ASSERT_NOT_NULL(strstr(response.data, "\"label\":\"renamed\""));
+    TEST_ASSERT_NOT_NULL(strstr(response.data, "\"max_total_posts\":10"));
+    TEST_ASSERT_NOT_NULL(strstr(response.data, "\"default_posts_per_search\":null"));
+    free(response.data);
+    memset(&response, 0, sizeof(response));
+
+    status = do_request("DELETE", "/slideshows/1", NULL, &response, true, NULL);
+    TEST_ASSERT_EQUAL(200, status);
+    TEST_ASSERT_NOT_NULL(strstr(response.data, "\"ok\":true"));
+    free(response.data);
+    memset(&response, 0, sizeof(response));
+
+    status = do_request("GET", "/slideshows/1", NULL, &response, true, NULL);
+    TEST_ASSERT_EQUAL(404, status);
+    free(response.data);
+    memset(&response, 0, sizeof(response));
+}
+
+void test_slideshow_search_add_commits_picks_and_remove_clears_them(void)
+{
+    response_buffer_t response = {0};
+
+    long status = do_request("POST", "/searches", "{\"site\":\"e621\",\"label\":\"wolves\",\"query\":\"wolf\",\"interval_hours\":24}", &response, true, NULL);
+    TEST_ASSERT_EQUAL(201, status);
+    free(response.data);
+    memset(&response, 0, sizeof(response));
+
+    status = do_request("POST", "/sync", NULL, &response, true, NULL);
+    TEST_ASSERT_EQUAL(202, status);
+    free(response.data);
+    memset(&response, 0, sizeof(response));
+    TEST_ASSERT_TRUE(poll_until_response_contains("GET", "/searches/1/posts", "\"external_id\":1"));
+
+    status = do_request("POST", "/slideshows", "{\"label\":\"my slideshow\"}", &response, true, NULL);
+    TEST_ASSERT_EQUAL(201, status);
+    free(response.data);
+    memset(&response, 0, sizeof(response));
+
+    /* Adding a search link also triggers its initial commit-picks -- no
+     * separate "now pick posts" call needed (see
+     * routes_slideshows.c's handle_post_slideshow_searches). */
+    status = do_request("POST", "/slideshows/1/searches", "{\"search_id\":1,\"override_count\":3}", &response, true, NULL);
+    TEST_ASSERT_EQUAL(201, status);
+    free(response.data);
+    memset(&response, 0, sizeof(response));
+
+    status = do_request("GET", "/slideshows/1/searches", NULL, &response, true, NULL);
+    TEST_ASSERT_EQUAL(200, status);
+    TEST_ASSERT_NOT_NULL(strstr(response.data, "\"search_id\":1"));
+    TEST_ASSERT_NOT_NULL(strstr(response.data, "\"override_count\":3"));
+    free(response.data);
+    memset(&response, 0, sizeof(response));
+
+    status = do_request("GET", "/slideshows/1/posts", NULL, &response, true, NULL);
+    TEST_ASSERT_EQUAL(200, status);
+    TEST_ASSERT_NOT_NULL(strstr(response.data, "\"external_id\":1"));
+    free(response.data);
+    memset(&response, 0, sizeof(response));
+
+    status = do_request("GET", "/slideshows/1/posts?search_id=1", NULL, &response, true, NULL);
+    TEST_ASSERT_EQUAL(200, status);
+    TEST_ASSERT_NOT_NULL(strstr(response.data, "\"external_id\":1"));
+    free(response.data);
+    memset(&response, 0, sizeof(response));
+
+    /* A single-post fixture leaves reroll with nothing else to pick --
+     * exercises the route without changing the result. */
+    status = do_request("POST", "/slideshows/1/reroll", NULL, &response, true, NULL);
+    TEST_ASSERT_EQUAL(200, status);
+    free(response.data);
+    memset(&response, 0, sizeof(response));
+
+    status = do_request("POST", "/slideshows/1/searches/1/reroll", NULL, &response, true, NULL);
+    TEST_ASSERT_EQUAL(200, status);
+    free(response.data);
+    memset(&response, 0, sizeof(response));
+
+    /* The search is exhausted (its one post is already committed), so
+     * replacing it has nowhere to go -- BUNNY_CORE_ERR_NOT_FOUND -> 404. */
+    status = do_request("POST", "/slideshows/1/searches/1/replace", "{\"dead_post_id\":1}", &response, true, NULL);
+    TEST_ASSERT_EQUAL(404, status);
+    free(response.data);
+    memset(&response, 0, sizeof(response));
+
+    /* Removing the search link drops its committed posts too, but leaves
+     * the search itself untouched (bunny_db_slideshow_search_remove). */
+    status = do_request("DELETE", "/slideshows/1/searches/1", NULL, &response, true, NULL);
+    TEST_ASSERT_EQUAL(200, status);
+    free(response.data);
+    memset(&response, 0, sizeof(response));
+
+    status = do_request("GET", "/slideshows/1/posts", NULL, &response, true, NULL);
+    TEST_ASSERT_EQUAL(200, status);
+    TEST_ASSERT_EQUAL_STRING("[]", response.data);
+    free(response.data);
+    memset(&response, 0, sizeof(response));
+
+    status = do_request("GET", "/searches/1/posts", NULL, &response, true, NULL);
+    TEST_ASSERT_EQUAL(200, status);
+    TEST_ASSERT_NOT_NULL(strstr(response.data, "\"external_id\":1"));
+    free(response.data);
+    memset(&response, 0, sizeof(response));
+}
+
+void test_slideshow_routes_404_for_a_nonexistent_slideshow(void)
+{
+    response_buffer_t response = {0};
+
+    long status = do_request("GET", "/slideshows/999", NULL, &response, true, NULL);
+    TEST_ASSERT_EQUAL(404, status);
+    free(response.data);
+    memset(&response, 0, sizeof(response));
+
+    /* Neither slideshow 999 nor search 1 exists here -- the INSERT trips a
+     * foreign-key constraint, which bunny_db/bunny_core map to
+     * ERR_CONSTRAINT/ERR_INVALID_ARG (400), not ERR_NOT_FOUND. */
+    status = do_request("POST", "/slideshows/999/searches", "{\"search_id\":1}", &response, true, NULL);
+    TEST_ASSERT_EQUAL(400, status);
+    free(response.data);
+    memset(&response, 0, sizeof(response));
+
+    status = do_request("GET", "/slideshows/not-a-route-at-all", NULL, &response, true, NULL);
+    TEST_ASSERT_EQUAL(404, status);
+    free(response.data);
+    memset(&response, 0, sizeof(response));
 }
 
 void test_group_crud_and_assign_search(void)
@@ -1449,6 +1580,9 @@ int main(void)
     RUN_TEST(test_search_pin_and_unpin);
     RUN_TEST(test_search_merge_duplicate);
     RUN_TEST(test_group_crud_and_assign_search);
+    RUN_TEST(test_slideshow_crud);
+    RUN_TEST(test_slideshow_search_add_commits_picks_and_remove_clears_them);
+    RUN_TEST(test_slideshow_routes_404_for_a_nonexistent_slideshow);
     RUN_TEST(test_search_touch_viewed);
     RUN_TEST(test_search_auto_favorite_create_and_update);
     RUN_TEST(test_my_inkbunny_favorites_searches_and_caches_with_favorite_marked);

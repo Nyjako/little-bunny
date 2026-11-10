@@ -218,9 +218,46 @@ static const char *const BUNNY_DB_SCHEMA_SQL = "PRAGMA foreign_keys = ON;"
                                                "    failure_reason TEXT,"
                                                "    created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))"
                                                ");"
+                                               /* M51 v2: a persisted, download-backed slideshow. default_posts_per_search/
+                                                * max_total_posts are nullable ("infinite"/"no cap") -- stored as plain
+                                                * SQLite NULL, read back via bunny_db_slideshow_t's own has_* flags
+                                                * (0 is a valid count, so a sentinel int would be ambiguous here). */
+                                               "CREATE TABLE IF NOT EXISTS slideshows ("
+                                               "    id INTEGER PRIMARY KEY,"
+                                               "    label TEXT NOT NULL,"
+                                               "    default_posts_per_search INTEGER,"
+                                               "    max_total_posts INTEGER,"
+                                               "    created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))"
+                                               ");"
+                                               /* One search/pool linked into a slideshow. override_count NULL means
+                                                * "use the parent slideshow's own default_posts_per_search." Deleting
+                                                * the slideshow or the underlying search cascades here -- and from here
+                                                * into slideshow_posts below -- so a slideshow never outlives its own
+                                                * rows getting cleaned up; the app-level "also delete the downloaded
+                                                * files?" question is a separate, deliberate decision made before this
+                                                * row is ever removed, not something this schema can know about. */
+                                               "CREATE TABLE IF NOT EXISTS slideshow_searches ("
+                                               "    slideshow_id INTEGER NOT NULL REFERENCES slideshows(id) ON DELETE CASCADE,"
+                                               "    search_id INTEGER NOT NULL REFERENCES searches(id) ON DELETE CASCADE,"
+                                               "    override_count INTEGER,"
+                                               "    added_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),"
+                                               "    PRIMARY KEY (slideshow_id, search_id)"
+                                               ");"
+                                               /* A post currently committed to a slideshow, via a specific search_id
+                                                * (so a per-search reroll/preview can scope to just this search's own
+                                                * picks, and a fresh pick/reroll knows which posts to exclude from
+                                                * duplicating -- see bunny_db_slideshow_all_post_ids). */
+                                               "CREATE TABLE IF NOT EXISTS slideshow_posts ("
+                                               "    slideshow_id INTEGER NOT NULL REFERENCES slideshows(id) ON DELETE CASCADE,"
+                                               "    search_id INTEGER NOT NULL REFERENCES searches(id) ON DELETE CASCADE,"
+                                               "    post_id INTEGER NOT NULL REFERENCES posts(id) ON DELETE CASCADE,"
+                                               "    PRIMARY KEY (slideshow_id, post_id)"
+                                               ");"
                                                "CREATE INDEX IF NOT EXISTS idx_post_tags_tag_id ON post_tags(tag_id);"
                                                "CREATE INDEX IF NOT EXISTS idx_search_results_search_id ON search_results(search_id);"
                                                "CREATE INDEX IF NOT EXISTS idx_action_queue_status ON action_queue(status);"
-                                               "CREATE INDEX IF NOT EXISTS idx_download_queue_status ON download_queue(status);";
+                                               "CREATE INDEX IF NOT EXISTS idx_download_queue_status ON download_queue(status);"
+                                               "CREATE INDEX IF NOT EXISTS idx_slideshow_searches_slideshow_id ON slideshow_searches(slideshow_id);"
+                                               "CREATE INDEX IF NOT EXISTS idx_slideshow_posts_slideshow_search ON slideshow_posts(slideshow_id, search_id);";
 
 #endif /* BUNNY_DB_SCHEMA_H */

@@ -17,7 +17,7 @@
 #include "routes_search.h"
 #include "routes_searches.h"
 #include "routes_settings.h"
-#include "routes_slideshow.h"
+#include "routes_slideshows.h"
 #include "routes_sync.h"
 #include "routes_tags.h"
 #include "routes_tasks.h"
@@ -154,7 +154,7 @@ server_app_t *server_app_start(const bunny_core_config_t *core_config, const cha
     server_routes_register_queue(app->mg_ctx, &app->ctx);
     server_routes_register_tags(app->mg_ctx, &app->ctx);
     server_routes_register_pools(app->mg_ctx, &app->ctx);
-    server_routes_register_slideshow(app->mg_ctx, &app->ctx);
+    server_routes_register_slideshows(app->mg_ctx, &app->ctx);
     server_routes_register_search(app->mg_ctx, &app->ctx);
     server_routes_register_blacklist(app->mg_ctx, &app->ctx);
     server_routes_register_logs(app->mg_ctx, &app->ctx);

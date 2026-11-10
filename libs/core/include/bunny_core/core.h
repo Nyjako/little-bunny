@@ -95,17 +95,63 @@ bunny_core_result_t bunny_core_search_list(bunny_core_t *core, bunny_db_search_l
  * a pool search ignores both, same as it already ignores apply_blacklist. */
 bunny_core_result_t bunny_core_search_list_posts(bunny_core_t *core, int64_t search_id, bool unseen_only, int rating_mask, int media_mask, int page, bunny_db_post_list_t *out_list);
 
-/* M51 slideshow: picks up to `count` posts at random, no repeats, from the
- * union of search_ids[0..search_id_count)'s own results -- each resolved to
- * its own site/pool/favorites-ness the same way bunny_core_search_list_posts
- * above resolves a single search_id. A pool search_id is silently dropped
- * from the set (pools have their own ordered, non-random listing, see
- * bunny_db_pool_search_list_posts) rather than failing the whole call; so is
- * any search_id that doesn't resolve to a real search at all (stale/deleted).
- * Returns BUNNY_CORE_ERR_INVALID_ARG if that leaves nothing to query (e.g.
- * every given id was a pool search, or none resolved). May return fewer than
- * `count` posts -- see bunny_db_search_list_posts_random's own doc comment. */
-bunny_core_result_t bunny_core_slideshow_pick_random_posts(bunny_core_t *core, const int64_t *search_ids, size_t search_id_count, int rating_mask, int media_mask, int count, bunny_db_post_list_t *out_list);
+/* --- Slideshows (M51 v2) ---------------------------------------------------
+ * A persisted, download-backed slideshow -- see bunny_db's own
+ * slideshows/slideshow_searches/slideshow_posts tables (schema.h) for the
+ * storage shape. CRUD here is a thin pass-through; the pick/commit/reroll/
+ * replace functions are the real orchestration -- see their doc comments in
+ * libs/core/src/searches.c. */
+
+bunny_core_result_t bunny_core_slideshow_create(bunny_core_t *core, const char *label, bool has_default_posts_per_search, int default_posts_per_search, bool has_max_total_posts, int max_total_posts, int64_t *out_id);
+bunny_core_result_t bunny_core_slideshow_update(bunny_core_t *core, int64_t slideshow_id, const char *label, bool has_default_posts_per_search, int default_posts_per_search, bool has_max_total_posts, int max_total_posts);
+bunny_core_result_t bunny_core_slideshow_delete(bunny_core_t *core, int64_t slideshow_id);
+bunny_core_result_t bunny_core_slideshow_get(bunny_core_t *core, int64_t slideshow_id, bunny_db_slideshow_t *out_slideshow);
+bunny_core_result_t bunny_core_slideshow_list(bunny_core_t *core, bunny_db_slideshow_list_t *out_list);
+
+bunny_core_result_t bunny_core_slideshow_search_add(bunny_core_t *core, int64_t slideshow_id, int64_t search_id, bool has_override_count, int override_count);
+bunny_core_result_t bunny_core_slideshow_search_remove(bunny_core_t *core, int64_t slideshow_id, int64_t search_id);
+bunny_core_result_t bunny_core_slideshow_search_list(bunny_core_t *core, int64_t slideshow_id, bunny_db_slideshow_search_list_t *out_list);
+
+/* search_id > 0 scopes to just that search's own committed picks; 0 means
+ * every search in this slideshow -- same convention
+ * bunny_db_slideshow_posts_list already uses. */
+bunny_core_result_t bunny_core_slideshow_posts_list(bunny_core_t *core, int64_t slideshow_id, int64_t search_id, bunny_db_slideshow_post_list_t *out_list);
+
+/* Picks up to `count` posts for a single search_id -- a tag/favorites
+ * search or a pool search, resolved the same way bunny_core_search_list_posts
+ * resolves one (no longer excluding pools, lifting M51 v1's own
+ * limitation), excluding every post_id already in excluded_post_ids. May
+ * return fewer than `count` -- see bunny_db_search_list_posts_random's own
+ * doc comment for why that's an accepted outcome, not an error. */
+bunny_core_result_t bunny_core_slideshow_pick_posts_for_search(bunny_core_t *core, int64_t search_id, int count, const int64_t *excluded_post_ids, size_t excluded_count, int rating_mask, int media_mask, bunny_db_post_list_t *out_list);
+
+/* The real "add a search's picks" / "reroll this search" operation --
+ * resolves this search-link's effective post count (its own override, else
+ * the slideshow's own default, else no cap), trims against the slideshow's
+ * own max_total_posts, picks fresh posts excluding everything already
+ * committed anywhere in this slideshow, and commits via
+ * bunny_db_slideshow_posts_set. Identical whether this is the search's
+ * first-ever commit or a deliberate reroll. */
+bunny_core_result_t bunny_core_slideshow_search_commit_picks(bunny_core_t *core, int64_t slideshow_id, int64_t search_id);
+
+/* User-facing "reroll" actions -- reroll_search is a one-line alias for
+ * _search_commit_picks (reroll IS a fresh commit); reroll_all does it for
+ * every search currently linked to the slideshow, one at a time, so each
+ * later search's own exclusion set already reflects any earlier search's
+ * reroll in the same call. Keeps going past one search's own failure,
+ * reporting the last failure seen rather than stopping the whole batch
+ * partway through (same "keep going past one failure" precedent "check for
+ * updates" already established). */
+bunny_core_result_t bunny_core_slideshow_reroll_search(bunny_core_t *core, int64_t slideshow_id, int64_t search_id);
+bunny_core_result_t bunny_core_slideshow_reroll_all(bunny_core_t *core, int64_t slideshow_id);
+
+/* Self-healing swap-one: draws exactly one fresh replacement for search_id
+ * (same exclusion set as a fresh pick/reroll) and swaps it in for
+ * dead_post_id. Returns BUNNY_CORE_ERR_NOT_FOUND when the search has
+ * nothing left to draw that isn't already committed elsewhere in this
+ * slideshow -- the caller surfaces that as "couldn't find a replacement,"
+ * distinct from a download failure. */
+bunny_core_result_t bunny_core_slideshow_replace_post(bunny_core_t *core, int64_t slideshow_id, int64_t search_id, int64_t dead_post_id);
 
 /* Pin/unpin a search, toggled directly from the searches list row (M14.1)
  * rather than through the full edit form -- see bunny_db_search_set_pinned. */
