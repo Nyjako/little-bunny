@@ -352,6 +352,12 @@ abstract class AppLocalizations {
   /// **'{site} • every {hours}h • {total} posts'**
   String searchesIntervalSubtitle(String site, int hours, int total);
 
+  /// No description provided for @searchesLastUpdatedSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Updated {duration} ago'**
+  String searchesLastUpdatedSubtitle(String duration);
+
   /// No description provided for @searchesPinTooltip.
   ///
   /// In en, this message translates to:
@@ -453,6 +459,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Last viewed'**
   String get searchesSortLastViewed;
+
+  /// No description provided for @searchesSortLastUpdated.
+  ///
+  /// In en, this message translates to:
+  /// **'Last updated'**
+  String get searchesSortLastUpdated;
 
   /// No description provided for @searchesCheckForUpdatesTooltip.
   ///

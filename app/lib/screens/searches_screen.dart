@@ -17,6 +17,7 @@ import '../settings/repository_settings_store.dart';
 import '../settings/theme_settings_store.dart';
 import '../settings/update_settings_store.dart';
 import '../util/duplicate_searches.dart';
+import '../util/duration_format.dart';
 import '../util/responsive.dart';
 import '../widgets/update_dialog.dart';
 import 'accounts_screen.dart';
@@ -83,6 +84,10 @@ sealed class _TreeEntry {
   String get createdAt;
   String get lastViewedAt;
   int get unseenCount;
+
+  /// The most recent sync-found-a-new-post timestamp across this entry
+  /// (M69) -- '' (sorts last, same convention as [lastViewedAt]) if none.
+  String get lastUpdatedAt;
 }
 
 class _SearchEntry extends _TreeEntry {
@@ -100,6 +105,8 @@ class _SearchEntry extends _TreeEntry {
   String get lastViewedAt => search.lastViewedAt ?? '';
   @override
   int get unseenCount => search.unseenCount;
+  @override
+  String get lastUpdatedAt => search.lastUpdatedAt ?? '';
 }
 
 class _GroupEntry extends _TreeEntry {
@@ -119,6 +126,8 @@ class _GroupEntry extends _TreeEntry {
   @override
   int get unseenCount => members.fold(0, (sum, search) => sum + search.unseenCount);
   int get totalCount => members.fold(0, (sum, search) => sum + search.totalCount);
+  @override
+  String get lastUpdatedAt => members.map((search) => search.lastUpdatedAt ?? '').fold('', (a, b) => a.compareTo(b) >= 0 ? a : b);
 }
 
 class _SearchesScreenState extends State<SearchesScreen> with SingleTickerProviderStateMixin {
@@ -177,6 +186,8 @@ class _SearchesScreenState extends State<SearchesScreen> with SingleTickerProvid
           list.sort((a, b) => b.createdAt.compareTo(a.createdAt));
         case SearchSortOrder.lastViewed:
           list.sort((a, b) => (b.lastViewedAt ?? '').compareTo(a.lastViewedAt ?? ''));
+        case SearchSortOrder.lastUpdated:
+          list.sort((a, b) => (b.lastUpdatedAt ?? '').compareTo(a.lastUpdatedAt ?? ''));
       }
     }
 
@@ -204,6 +215,8 @@ class _SearchesScreenState extends State<SearchesScreen> with SingleTickerProvid
           list.sort((a, b) => b.createdAt.compareTo(a.createdAt));
         case SearchSortOrder.lastViewed:
           list.sort((a, b) => b.lastViewedAt.compareTo(a.lastViewedAt));
+        case SearchSortOrder.lastUpdated:
+          list.sort((a, b) => b.lastUpdatedAt.compareTo(a.lastUpdatedAt));
       }
     }
 
@@ -635,6 +648,22 @@ class _SearchesScreenState extends State<SearchesScreen> with SingleTickerProvid
     _refresh();
   }
 
+  /// "Updated {duration} ago" (M69) -- null if [lastUpdatedAt] is null/
+  /// unparseable (no sync has ever found a new post for this search/group
+  /// yet), in which case the row just shows nothing extra rather than a
+  /// placeholder like "never".
+  Widget? _lastUpdatedSubtitle(AppLocalizations l10n, String? lastUpdatedAt) {
+    if (lastUpdatedAt == null) {
+      return null;
+    }
+    final parsed = DateTime.tryParse(lastUpdatedAt);
+    if (parsed == null) {
+      return null;
+    }
+    final ago = formatDurationCompact(DateTime.now().toUtc().difference(parsed));
+    return Text(l10n.searchesLastUpdatedSubtitle(ago), style: Theme.of(context).textTheme.bodySmall);
+  }
+
   Widget _unseenBadge(int unseenCount) => Container(
     margin: const EdgeInsets.only(right: 8),
     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
@@ -653,9 +682,17 @@ class _SearchesScreenState extends State<SearchesScreen> with SingleTickerProvid
         secondary: search.unseenCount > 0 ? _unseenBadge(search.unseenCount) : null,
       );
     }
+    final lastUpdatedSubtitle = _lastUpdatedSubtitle(l10n, search.lastUpdatedAt);
     return ListTile(
       title: Text(search.label),
-      subtitle: Text(l10n.searchesIntervalSubtitle(search.site.toWireString(), search.intervalHours, search.totalCount)),
+      subtitle: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(l10n.searchesIntervalSubtitle(search.site.toWireString(), search.intervalHours, search.totalCount)),
+          ?lastUpdatedSubtitle,
+        ],
+      ),
       trailing: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -682,13 +719,21 @@ class _SearchesScreenState extends State<SearchesScreen> with SingleTickerProvid
   Widget _groupTile(_GroupEntry entry) {
     final l10n = AppLocalizations.of(context)!;
     final members = _sorted(entry.members);
+    final lastUpdatedSubtitle = _lastUpdatedSubtitle(l10n, entry.lastUpdatedAt.isEmpty ? null : entry.lastUpdatedAt);
     return ExpansionTile(
       key: PageStorageKey('group-${entry.group.id}'),
       leading: const Icon(Icons.folder_outlined),
       title: Row(
         children: [Expanded(child: Text(entry.group.name, overflow: TextOverflow.ellipsis)), if (entry.unseenCount > 0) _unseenBadge(entry.unseenCount)],
       ),
-      subtitle: Text(l10n.searchesGroupSubtitle(entry.totalCount)),
+      subtitle: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(l10n.searchesGroupSubtitle(entry.totalCount)),
+          ?lastUpdatedSubtitle,
+        ],
+      ),
       trailing: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -909,6 +954,7 @@ class _SearchesScreenState extends State<SearchesScreen> with SingleTickerProvid
     CheckedPopupMenuItem(value: SearchSortOrder.label, checked: _sortOrder == SearchSortOrder.label, child: Text(l10n.searchesSortLabel)),
     CheckedPopupMenuItem(value: SearchSortOrder.recentlyCreated, checked: _sortOrder == SearchSortOrder.recentlyCreated, child: Text(l10n.searchesSortRecentlyCreated)),
     CheckedPopupMenuItem(value: SearchSortOrder.lastViewed, checked: _sortOrder == SearchSortOrder.lastViewed, child: Text(l10n.searchesSortLastViewed)),
+    CheckedPopupMenuItem(value: SearchSortOrder.lastUpdated, checked: _sortOrder == SearchSortOrder.lastUpdated, child: Text(l10n.searchesSortLastUpdated)),
   ];
 
   /// A plain icon+label row for a [PopupMenuItem] that reuses an existing

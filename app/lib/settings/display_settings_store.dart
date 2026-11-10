@@ -9,8 +9,10 @@ enum PreviewQuality { thumbnail, medium }
 
 /// How [SearchesScreen] orders its saved-search list (M13.1). `mostUnseen`
 /// is the default -- surfacing searches with new results first is more
-/// useful day-to-day than alphabetical order.
-enum SearchSortOrder { mostUnseen, label, recentlyCreated, lastViewed }
+/// useful day-to-day than alphabetical order. `lastUpdated` (M69) is
+/// distinct from `lastViewed` -- the last time a sync actually found a
+/// *new* post, not the last time the user opened the search.
+enum SearchSortOrder { mostUnseen, label, recentlyCreated, lastViewed, lastUpdated }
 
 /// Persists the grid's preview image quality and column count, and the
 /// searches list's sort order (`shared_preferences`, same shape as
