@@ -562,6 +562,22 @@ void main() {
 
       expect(service.items, hasLength(1));
     });
+
+    test('restore skips a second DB row for a post_id already represented by an earlier-loaded row', () async {
+      // Two genuinely separate download_queue rows that both reference the
+      // same post -- a pre-existing gap this is guarding against, not
+      // something restore() should ever surface as two in-memory items.
+      final post = _post(id: 1);
+      repository.postsById[1] = post;
+      repository.seedDownloadQueueRow(postId: 1, status: 'queued');
+      repository.seedDownloadQueueRow(postId: 1, status: 'queued');
+
+      final service = buildService(client: MockClient((_) async => http.Response.bytes([1, 2, 3], 200)));
+      await service.restore(repository);
+      await waitUntilIdle(service);
+
+      expect(service.items, hasLength(1));
+    });
   });
 
   test('showStarting fires before the first HTTP request completes (M57 screen-lock fix)', () async {

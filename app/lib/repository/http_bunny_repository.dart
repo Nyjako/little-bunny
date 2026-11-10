@@ -533,6 +533,18 @@ class HttpBunnyRepository implements BunnyRepository {
   }
 
   @override
+  Future<List<BunnyPost>> getSlideshowRandomPosts(List<int> searchIds, int count, {int ratingMask = kRatingMaskAll, int mediaMask = kMediaMaskAll}) async {
+    final response = await _client.get(
+      _uri('/slideshow/posts', {'search_ids': searchIds.join(','), 'count': '$count', 'rating_mask': '$ratingMask', 'media_mask': '$mediaMask'}),
+      headers: _headers,
+    );
+    if (response.statusCode != 200) {
+      _throwError(response);
+    }
+    return _decodeList(response).map(_postFromJson).toList();
+  }
+
+  @override
   Future<List<BunnyPostFile>> getPostFiles(int postId) async {
     final response = await _client.get(_uri('/posts/$postId/files'), headers: _headers);
     if (response.statusCode != 200) {

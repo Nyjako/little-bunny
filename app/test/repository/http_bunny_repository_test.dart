@@ -524,6 +524,60 @@ void main() {
       expect(sources, ['https://example.com/a', 'https://example.com/b']);
     });
 
+    test('getSlideshowRandomPosts sends search_ids joined by commas, count, and mask query params (M51)', () async {
+      respond = (_) => http.Response(jsonEncode([]), 200);
+
+      await buildRepository().getSlideshowRandomPosts([1, 2, 3], 20);
+
+      expect(capturedMethod, 'GET');
+      expect(capturedUri.path, '/slideshow/posts');
+      expect(capturedUri.queryParameters['search_ids'], '1,2,3');
+      expect(capturedUri.queryParameters['count'], '20');
+      expect(capturedUri.queryParameters['rating_mask'], '15');
+      expect(capturedUri.queryParameters['media_mask'], '7');
+    });
+
+    test('getSlideshowRandomPosts maps a JSON array into BunnyPost objects (M51)', () async {
+      respond = (_) => http.Response(
+        jsonEncode([
+          {
+            'id': 1,
+            'site': 'e621',
+            'external_id': 100,
+            'artist': 'someartist',
+            'title': null,
+            'description': null,
+            'rating': 's',
+            'score': 5,
+            'score_up': 6,
+            'score_down': 1,
+            'fav_count': 2,
+            'comment_count': 0,
+            'file_url': 'https://example.com/1.png',
+            'file_ext': 'png',
+            'file_md5': 'abc',
+            'preview_url': null,
+            'width': 100,
+            'height': 200,
+            'created_at_site': null,
+            'cached_at': '2026-01-01T00:00:00Z',
+            'is_seen': false,
+            'is_favorited': true,
+            'user_vote': 1,
+            'favorite_stars': 0,
+            'sample_url': null,
+          },
+        ]),
+        200,
+      );
+
+      final posts = await buildRepository().getSlideshowRandomPosts([7], 1);
+
+      expect(posts, hasLength(1));
+      expect(posts.single.id, 1);
+      expect(posts.single.artist, 'someartist');
+    });
+
     test('getPostFiles sends GET to the right path and maps the response', () async {
       respond = (_) => http.Response(
         jsonEncode([

@@ -102,6 +102,21 @@ void main() {
     expect(await native.listSearchPosts(id, false, 15, 7, 1), isEmpty);
   });
 
+  test('slideshowPickRandomPosts round-trips a List<int> of search ids and is empty for freshly created searches (M51)', () async {
+    final id1 = await native.createSearch('e621', 'wolves', 'wolf', 24);
+    final id2 = await native.createSearch('e621', 'foxes', 'fox', 24);
+
+    // 15/7 == BUNNY_DB_RATING_MASK_ALL/BUNNY_DB_MEDIA_MASK_ALL (unfiltered).
+    expect(await native.slideshowPickRandomPosts([id1, id2], 15, 7, 10), isEmpty);
+  });
+
+  test('slideshowPickRandomPosts rejects a search_ids set that resolves to nothing (M51)', () async {
+    // A stale/nonexistent id never resolves to a real search -- the whole
+    // call should throw, same as bunny_core_slideshow_pick_random_posts
+    // returning BUNNY_CORE_ERR_INVALID_ARG when every id is excluded.
+    await expectLater(native.slideshowPickRandomPosts([999999], 15, 7, 10), throwsA(isA<BunnyCoreNativeException>()));
+  });
+
   test('syncDueSearches with no searches is a no-op', () async {
     final stats = await native.syncDueSearches();
 

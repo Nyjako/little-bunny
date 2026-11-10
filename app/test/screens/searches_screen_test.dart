@@ -7,6 +7,7 @@ import 'package:http/testing.dart';
 import 'package:little_bunny/bunny_repository_scope.dart';
 import 'package:little_bunny/repository/bunny_models.dart';
 import 'package:little_bunny/screens/searches_screen.dart';
+import 'package:little_bunny/screens/slideshow_screen.dart';
 import 'package:little_bunny/services/download_manager.dart';
 import 'package:little_bunny/services/download_queue_service.dart';
 import 'package:little_bunny/services/update_check_service.dart';
@@ -325,6 +326,147 @@ void main() {
     expect(find.text('3 queued for download'), findsOneWidget);
     // The dialog closed along with everything else settling.
     expect(find.text('Loading posts data 1/2'), findsNothing);
+  });
+
+  testWidgets('the slideshow icon is disabled until at least one search is selected (M51)', (WidgetTester tester) async {
+    final repository = FakeBunnyRepository();
+    await repository.createSearch(BunnySite.e621, 'Foxes', 'fox');
+
+    await tester.pumpWidget(_wrap(repository));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byIcon(Icons.sort));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Select searches to download'));
+    await tester.pumpAndSettle();
+
+    expect(tester.widget<IconButton>(find.widgetWithIcon(IconButton, Icons.slideshow)).onPressed, isNull);
+
+    await tester.tap(find.text('Foxes'));
+    await tester.pumpAndSettle();
+
+    expect(tester.widget<IconButton>(find.widgetWithIcon(IconButton, Icons.slideshow)).onPressed, isNotNull);
+  });
+
+  testWidgets('selecting searches, starting a slideshow, and confirming the dialog pushes SlideshowScreen (M51)', (WidgetTester tester) async {
+    final repository = FakeBunnyRepository();
+    final firstId = await repository.createSearch(BunnySite.e621, 'Foxes', 'fox');
+    final secondId = await repository.createSearch(BunnySite.e621, 'Wolves', 'wolf');
+    repository.slideshowRandomPosts = [
+      BunnyPost(
+        id: 1,
+        site: BunnySite.e621,
+        externalId: 1,
+        score: 0,
+        favCount: 0,
+        commentCount: 0,
+        fileUrl: 'https://example.invalid/1.jpg',
+        fileExt: 'jpg',
+        width: 100,
+        height: 100,
+        cachedAt: '2026-01-01T00:00:00Z',
+        isSeen: false,
+        isFavorited: false,
+      ),
+    ];
+
+    await tester.pumpWidget(_wrap(repository));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byIcon(Icons.sort));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Select searches to download'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Foxes'));
+    await tester.tap(find.text('Wolves'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byTooltip('Start slideshow'));
+    await tester.pumpAndSettle();
+    expect(find.text('Slideshow settings'), findsOneWidget);
+
+    await tester.tap(find.text('Start'));
+    await tester.pumpAndSettle();
+
+    expect(repository.slideshowRandomPostsCalls, hasLength(1));
+    final (calledIds, calledCount, _, _) = repository.slideshowRandomPostsCalls.single;
+    expect(calledIds.toSet(), {firstId, secondId});
+    expect(calledCount, 30); // the dialog's own default
+    expect(find.byType(SlideshowScreen), findsOneWidget);
+  });
+
+  testWidgets('an empty slideshow result shows a snackbar instead of navigating (M51)', (WidgetTester tester) async {
+    final repository = FakeBunnyRepository();
+    await repository.createSearch(BunnySite.e621, 'Foxes', 'fox');
+    repository.slideshowRandomPosts = [];
+
+    await tester.pumpWidget(_wrap(repository));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byIcon(Icons.sort));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Select searches to download'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Foxes'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byTooltip('Start slideshow'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Start'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('No posts available for a slideshow with these searches.'), findsOneWidget);
+    expect(find.byType(SlideshowScreen), findsNothing);
+    // Still in selection mode -- an empty result isn't treated as success.
+    expect(find.text('1 selected'), findsOneWidget);
+  });
+
+  testWidgets('on narrow widths, most actions fold into one overflow menu, and it still works (M51 declutter)', (WidgetTester tester) async {
+    final repository = FakeBunnyRepository();
+    final searchId = await repository.createSearch(BunnySite.e621, 'Foxes', 'fox');
+    repository.postsBySearchId[searchId] = [
+      BunnyPost(id: 1, site: BunnySite.e621, externalId: 1, score: 0, favCount: 0, commentCount: 0, width: 100, height: 100, cachedAt: '2026-01-01T00:00:00Z', isSeen: false, isFavorited: false),
+    ];
+
+    tester.view.physicalSize = const Size(400, 800);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+    await tester.pumpWidget(_wrap(repository));
+    await tester.pumpAndSettle();
+
+    // Sync and download queue stay as direct icons even on narrow widths.
+    expect(find.byTooltip('Check for updates'), findsOneWidget);
+    expect(find.byTooltip('Downloads'), findsOneWidget);
+    // Everything else is folded away, replaced by one "more" icon.
+    expect(find.byIcon(Icons.travel_explore), findsNothing);
+    expect(find.byIcon(Icons.person_outline), findsNothing);
+    expect(find.byIcon(Icons.bar_chart_outlined), findsNothing);
+    expect(find.byIcon(Icons.settings_outlined), findsNothing);
+    expect(find.byIcon(Icons.sort), findsNothing);
+    expect(find.byIcon(Icons.more_vert), findsOneWidget);
+
+    await tester.tap(find.byIcon(Icons.more_vert));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Most unseen'), findsOneWidget);
+    expect(find.text('Select searches to download'), findsOneWidget);
+    expect(find.text('Custom search'), findsOneWidget);
+    expect(find.text('Accounts'), findsOneWidget);
+    expect(find.text('Tag stats'), findsOneWidget);
+    expect(find.text('Settings'), findsOneWidget);
+    expect(find.text('New group'), findsOneWidget);
+
+    // The folded select-for-download entry still enters selection mode.
+    await tester.tap(find.text('Select searches to download'));
+    await tester.pumpAndSettle();
+    expect(find.text('0 selected'), findsOneWidget);
+
+    await tester.tap(find.text('Foxes'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Download selected'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('1 queued for download'), findsOneWidget);
   });
 
   testWidgets('sort order defaults to most-unseen-first and persists a change (M13.1)', (WidgetTester tester) async {
