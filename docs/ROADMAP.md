@@ -3157,3 +3157,42 @@ this file is the single source of truth for "what's done" across sessions.
      version 18) threaded through `libs/db`, `libs/core`, FFI, and
      `BunnyRepository.downloadQueueAdd`/`downloadQueueList` the same way every other field
      on that table already is.
+
+- [ ] **M70 — Android: downloads stop after some time in the background/locked**
+  Reported by the user alongside a separate, now-fixed UI bug (the download queue
+  screen's per-item rows had no `Key`, so `Column`'s default position-based
+  reconciliation could mis-associate a row's state with the wrong post once items
+  cycled through -- fixed by keying `_downloadingItemRow`'s `ListTile` on
+  `item.post.id`, same pattern `downloadQueueFileProgressBar_<id>` already used one
+  level down). This second part -- downloads genuinely stopping, not just a stale
+  display -- needed a live Android device to actually confirm, which this session
+  didn't have; what's documented here is the investigation, not a fix.
+  Already in place and ruled out as the cause: `DownloadForegroundService.kt` (M57)
+  correctly calls `ServiceCompat.startForeground` with `FOREGROUND_SERVICE_TYPE_DATA_SYNC`
+  from every `onStartCommand` branch; `MainActivity.kt` always dispatches via
+  `ContextCompat.startForegroundService` (never the plain, background-illegal
+  `startService`); `AndroidManifest.xml` declares both the service's
+  `foregroundServiceType` and the matching `FOREGROUND_SERVICE_DATA_SYNC` permission;
+  `notifier.clear()` is never called mid-batch. `AppWakelock`/`wakelock_plus` was
+  confirmed (reading `wakelock_plus`'s own Android source,
+  `dev.fluttercommunity.plus.wakelock.Wakelock`) to be a plain `FLAG_KEEP_SCREEN_ON`
+  window flag -- it does nothing at all once the Activity detaches (`activity?.window
+  ?: return`), so it was never actually doing anything for a backgrounded/locked
+  download; the foreground service is correctly the only thing carrying that load,
+  and its own code looks right.
+  Remaining likely causes, none fixable from this app's code alone: (1) OEM-specific
+  battery managers (Samsung/Xiaomi/Huawei etc. -- see dontkillmyapp.com) that kill
+  foreground services regardless of the documented Android contract unless the user
+  manually whitelists the app; (2) Android 14+'s `dataSync` foreground-service-type
+  time budget (6 hours per rolling 24h, triggers `Service.onTimeout()`) -- plausible
+  only for an unusually large/slow batch, not a quick repro; (3) the already-known,
+  already-partially-mitigated "swiping the app from Recents can kill the whole Dart
+  engine" limitation (M61's own finding) -- the existing "Resume" notification action
+  + `checkPendingResumeRequest`/`DownloadQueueService.resume` is the current
+  mitigation (recover, not prevent). The one concrete, buildable next step: request
+  `ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS` (needs the
+  `REQUEST_IGNORE_BATTERY_OPTIMIZATIONS` permission, a user-facing prompt -- likely a
+  button in `SettingsScreen`'s downloads section -- and a design call on when to ask,
+  since Android treats this permission as sensitive and Play Store review scrutinizes
+  its use). Needs a real device (ideally more than one OEM) to actually reproduce and
+  confirm a fix before landing anything here.

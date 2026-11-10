@@ -70,6 +70,14 @@ class DownloadQueueScreen extends StatelessWidget {
     final bytesTotal = item.bytesTotal;
     final previewUrl = item.post.previewUrl;
     return ListTile(
+      // Without this, Flutter matches the old/new children of the
+      // surrounding Column by *position* (index), not identity -- as items
+      // finish and get replaced by whichever one a worker claims next, a
+      // row at the same index can silently keep an unrelated element/state
+      // (e.g. the leading CachedNetworkImage's own widget-level state)
+      // associated with the wrong post. Keyed per-post, same reasoning
+      // (and exact key pattern) as the progress bar below it already uses.
+      key: ValueKey('downloadQueueItemRow_${item.post.id}'),
       leading: SizedBox(
         width: 40,
         height: 40,
