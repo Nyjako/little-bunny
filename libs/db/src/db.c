@@ -116,6 +116,14 @@ static const bunny_db_migration_t BUNNY_DB_MIGRATIONS[] = {
     {18, "ALTER TABLE download_queue ADD COLUMN pool_id INTEGER NOT NULL DEFAULT 0;"
          "ALTER TABLE download_queue ADD COLUMN pool_name TEXT;"
          "ALTER TABLE download_queue ADD COLUMN pool_page INTEGER NOT NULL DEFAULT 0;"},
+    /* Distinct from last_run_at (schema.h's original column -- updates on
+     * every sync attempt regardless of outcome) and last_viewed_at
+     * (migration 7 -- purely user interaction) -- this is the last time a
+     * sync actually found a *new* post for the search, for a "sort by last
+     * updated" option (M69). bunny_db_search_touch_last_updated sets it;
+     * callers only call that when their own posts_upserted count actually
+     * increased. */
+    {19, "ALTER TABLE searches ADD COLUMN last_updated_at TEXT;"},
 };
 // clang-format on
 

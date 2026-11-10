@@ -89,6 +89,14 @@ bunny_db_result_t bunny_db_search_set_pinned(bunny_db_t *db, int64_t search_id, 
  * bunny_db_search_touch_last_run. */
 bunny_db_result_t bunny_db_search_touch_last_viewed(bunny_db_t *db, int64_t search_id);
 
+/* Marks a search as having had a sync that actually found a *new* post, right
+ * now (M69) -- distinct from bunny_db_search_touch_last_run, which updates on
+ * every sync attempt regardless of whether anything new showed up. Callers
+ * (bunny_core_sync_search/bunny_core_sync_due_searches) only call this when
+ * their own posts_upserted count actually increased for this search. Same
+ * single-column-touch shape as bunny_db_search_touch_last_run/_last_viewed. */
+bunny_db_result_t bunny_db_search_touch_last_updated(bunny_db_t *db, int64_t search_id);
+
 /* Updates a search's editable fields in place (M9.7.2) -- replaces the
  * narrower bunny_db_search_set_auto_favorite, whose only caller (the
  * searches-list quick-toggle icon) was removed in favor of a full edit

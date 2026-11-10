@@ -64,6 +64,7 @@ typedef struct
     int64_t highest_synced_external_id; /* highest post id seen by any sync so far; 0 = none yet */
     bool uses_default_interval;         /* see bunny_db_search_options_t above */
     int64_t group_id;                   /* the search_groups row this search belongs to; 0 = ungrouped (M21) */
+    char *last_updated_at;              /* NULL if no sync has ever found a new post -- distinct from last_run_at (M69) */
 } bunny_db_search_t;
 
 /* A folder-like way to organize saved searches in SearchesScreen's tree view
