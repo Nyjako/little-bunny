@@ -31,14 +31,29 @@ class _SlideshowScreenState extends State<SlideshowScreen> {
   late List<int> _order;
   int _cursor = 0;
   Timer? _timer;
+  bool _preloaded = false;
 
   @override
   void initState() {
     super.initState();
     _order = List.generate(widget.posts.length, (i) => i)..shuffle();
     _markSeen(_currentPost);
-    _preloadAll();
     _timer = Timer.periodic(widget.interval, (_) => _advance());
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // precacheImage needs MediaQuery via context, not available yet during
+    // initState (same reason FullScreenPostViewerScreen's own preload call
+    // only ever runs after an async gap) -- didChangeDependencies is the
+    // framework's own recommended place for context-dependent init work.
+    // Guarded to run exactly once; this can otherwise fire again later if
+    // an ancestor InheritedWidget changes.
+    if (!_preloaded) {
+      _preloaded = true;
+      _preloadAll();
+    }
   }
 
   @override
