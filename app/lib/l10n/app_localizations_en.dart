@@ -165,6 +165,33 @@ class AppLocalizationsEn extends AppLocalizations {
   String get searchesSyncRowTooltip => 'Sync now';
 
   @override
+  String get searchesRowMenuEditLabel => 'Edit';
+
+  @override
+  String get searchesRowMenuAddToSlideshowLabel => 'Add to slideshow';
+
+  @override
+  String get searchesAddToSlideshowDialogTitle => 'Add to slideshow';
+
+  @override
+  String get searchesNoSlideshowsYet =>
+      'No slideshows yet -- create one first.';
+
+  @override
+  String searchesAddedToSlideshow(String label) {
+    return 'Added to \"$label\"';
+  }
+
+  @override
+  String get searchesAddSelectedToSlideshowTooltip =>
+      'Add selected to slideshow';
+
+  @override
+  String searchesAddedSelectedToSlideshow(int count, String label) {
+    return '$count added to \"$label\"';
+  }
+
+  @override
   String get searchesRemoveDialogTitle => 'Remove search?';
 
   @override
