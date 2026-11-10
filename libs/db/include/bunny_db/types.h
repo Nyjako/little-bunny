@@ -297,6 +297,63 @@ typedef struct
     size_t count;
 } bunny_db_download_queue_list_t;
 
+/* A persisted, download-backed slideshow (M51 v2) -- see schema.h's own
+ * comment on the slideshows table. has_default_posts_per_search/
+ * has_max_total_posts guard their int siblings the same way
+ * bunny_db_post_relationships_t.has_parent already does above: 0 is a
+ * genuinely valid count ("no posts yet"/"no cap configured" are both
+ * represented by the has_* flag being false, not by any particular int
+ * value), so a bare sentinel int would be ambiguous here. */
+typedef struct
+{
+    int64_t id;
+    char *label;
+    bool has_default_posts_per_search;
+    int default_posts_per_search;
+    bool has_max_total_posts;
+    int max_total_posts;
+    char *created_at;
+} bunny_db_slideshow_t;
+
+typedef struct
+{
+    bunny_db_slideshow_t *items;
+    size_t count;
+} bunny_db_slideshow_list_t;
+
+/* One search/pool linked into a slideshow. has_override_count false means
+ * "use the parent slideshow's own default_posts_per_search" -- same
+ * has_*-guard reasoning as bunny_db_slideshow_t above. */
+typedef struct
+{
+    int64_t slideshow_id;
+    int64_t search_id;
+    bool has_override_count;
+    int override_count;
+    char *added_at;
+} bunny_db_slideshow_search_t;
+
+typedef struct
+{
+    bunny_db_slideshow_search_t *items;
+    size_t count;
+} bunny_db_slideshow_search_list_t;
+
+/* One post currently committed to a slideshow, via the specific search_id
+ * it was picked for -- the full post row is embedded (not just post_id) so
+ * a thumbnail-preview grid never needs a second round trip per post. */
+typedef struct
+{
+    int64_t search_id;
+    bunny_db_post_t post;
+} bunny_db_slideshow_post_t;
+
+typedef struct
+{
+    bunny_db_slideshow_post_t *items;
+    size_t count;
+} bunny_db_slideshow_post_list_t;
+
 void bunny_db_account_free(bunny_db_account_t *account);
 void bunny_db_search_free(bunny_db_search_t *search);
 void bunny_db_search_list_free(bunny_db_search_list_t *list);
@@ -317,6 +374,12 @@ void bunny_db_action_free(bunny_db_action_t *action);
 void bunny_db_action_list_free(bunny_db_action_list_t *list);
 void bunny_db_download_queue_item_free(bunny_db_download_queue_item_t *item);
 void bunny_db_download_queue_list_free(bunny_db_download_queue_list_t *list);
+void bunny_db_slideshow_free(bunny_db_slideshow_t *slideshow);
+void bunny_db_slideshow_list_free(bunny_db_slideshow_list_t *list);
+void bunny_db_slideshow_search_free(bunny_db_slideshow_search_t *item);
+void bunny_db_slideshow_search_list_free(bunny_db_slideshow_search_list_t *list);
+void bunny_db_slideshow_post_free(bunny_db_slideshow_post_t *item);
+void bunny_db_slideshow_post_list_free(bunny_db_slideshow_post_list_t *list);
 
 #ifdef __cplusplus
 }

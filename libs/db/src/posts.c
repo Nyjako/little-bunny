@@ -13,12 +13,6 @@ GOBLIN_DYN_ARRAY_DECL(bunny_db_string, char *)
 GOBLIN_DYN_ARRAY_DECL(bunny_db_int64, int64_t)
 GOBLIN_DYN_ARRAY_DECL(bunny_db_post_file, bunny_db_post_file_t)
 
-/* Posts per page for bunny_db_search_list_posts/bunny_db_pool_search_list_posts
- * (see their own doc comments in db.h) -- a local DB listing, not a site API
- * page size, so this is chosen purely for a reasonable response size rather
- * than matching e621/Inkbunny's own limits. */
-#define BUNNY_DB_SEARCH_POSTS_PAGE_SIZE 200
-
 /* Per-row rating/media-type bucket, bitwise-ANDed against a caller-supplied
  * mask (M28) -- see the BUNNY_DB_RATING_MASK_ and BUNNY_DB_MEDIA_MASK_
  * constants in db.h for the bit meanings. Mirrors app/lib/widgets/rating_badge.dart's own per-site
