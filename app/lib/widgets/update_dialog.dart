@@ -5,6 +5,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../l10n/app_localizations.dart';
 import '../services/update_apply_service.dart';
 import '../services/update_check_service.dart';
+import '../util/byte_format.dart';
 
 /// Checks for an update and, if one's available, shows a confirmation
 /// dialog -- called once from [SearchesScreen]'s `initState` (M23).
@@ -29,7 +30,8 @@ class _UpdateDialog extends StatefulWidget {
 
 class _UpdateDialogState extends State<_UpdateDialog> {
   bool _updating = false;
-  double? _progress;
+  int _bytesReceived = 0;
+  int? _bytesTotal;
   String? _error;
 
   /// GitHub's auto-generated release notes (release.yml's
@@ -103,9 +105,12 @@ class _UpdateDialogState extends State<_UpdateDialog> {
       ok = await widget.applyService.downloadAndApply(
         widget.result.downloadUrl!,
         sha256SumsUrl: widget.result.sha256SumsUrl,
-        onProgress: (progress) {
+        onProgress: (received, total) {
           if (mounted) {
-            setState(() => _progress = progress);
+            setState(() {
+              _bytesReceived = received;
+              _bytesTotal = total;
+            });
           }
         },
       );
@@ -132,26 +137,41 @@ class _UpdateDialogState extends State<_UpdateDialog> {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
-    return AlertDialog(
-      title: Text(l10n.updateAvailableTitle(widget.result.tagName ?? '')),
-      content: _updating
-          ? Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [LinearProgressIndicator(value: _progress), const SizedBox(height: 12), Text(l10n.updateDownloadingMessage)],
-            )
-          : SingleChildScrollView(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+    final total = _bytesTotal;
+    return PopScope(
+      // Blocks both the barrier tap (showDialog's default barrierDismissible
+      // routes it through Navigator.maybePop, which respects this) and the
+      // system back gesture while a download is actually in flight -- before
+      // _updating flips true, this stays a no-op and "Later"/tapping outside
+      // keep working exactly as before.
+      canPop: !_updating,
+      child: AlertDialog(
+        title: Text(l10n.updateAvailableTitle(widget.result.tagName ?? '')),
+        content: _updating
+            ? Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  if ((widget.result.releaseNotes ?? '').isNotEmpty) SelectableText.rich(_linkifiedReleaseNotes(context, widget.result.releaseNotes!)),
-                  if (_error != null) Padding(padding: const EdgeInsets.only(top: 8), child: Text(_error!, style: TextStyle(color: Theme.of(context).colorScheme.error))),
+                  LinearProgressIndicator(value: total != null && total > 0 ? _bytesReceived / total : null),
+                  const SizedBox(height: 12),
+                  Text(total != null ? '${formatBytesCompact(_bytesReceived)} / ${formatBytesCompact(total)}' : formatBytesCompact(_bytesReceived)),
+                  const SizedBox(height: 4),
+                  Text(l10n.updateDownloadingMessage),
                 ],
+              )
+            : SingleChildScrollView(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if ((widget.result.releaseNotes ?? '').isNotEmpty) SelectableText.rich(_linkifiedReleaseNotes(context, widget.result.releaseNotes!)),
+                    if (_error != null) Padding(padding: const EdgeInsets.only(top: 8), child: Text(_error!, style: TextStyle(color: Theme.of(context).colorScheme.error))),
+                  ],
+                ),
               ),
-            ),
-      actions: _updating
-          ? const []
-          : [TextButton(onPressed: () => Navigator.of(context).pop(), child: Text(l10n.updateLaterAction)), FilledButton(onPressed: _update, child: Text(l10n.updateNowAction))],
+        actions: _updating
+            ? const []
+            : [TextButton(onPressed: () => Navigator.of(context).pop(), child: Text(l10n.updateLaterAction)), FilledButton(onPressed: _update, child: Text(l10n.updateNowAction))],
+      ),
     );
   }
 }

@@ -57,6 +57,23 @@ void main() {
     expect(() => service.downloadAndApply(archiveUrl, sha256SumsUrl: sumsUrl), throwsA(isA<Exception>()));
   });
 
+  test('onProgress reports raw received/total byte counts, not a pre-divided fraction', () async {
+    final service = UpdateApplyService(client: mockClient('$realHex  little-bunny-app-linux-x64.tar.gz\n'));
+    final calls = <(int received, int? total)>[];
+
+    // Still throws past verification (the "archive" is just plain bytes,
+    // not a real tar.gz) -- onProgress has already fired by then, which is
+    // all this test needs.
+    await expectLater(
+      service.downloadAndApply(archiveUrl, sha256SumsUrl: sumsUrl, onProgress: (received, total) => calls.add((received, total))),
+      throwsA(anything),
+    );
+
+    expect(calls, isNotEmpty);
+    expect(calls.last.$1, archiveBytes.length);
+    expect(calls.last.$2, archiveBytes.length);
+  });
+
   test('matches a binary-mode ("*filename") SHA256SUMS.txt entry', () async {
     // Verifying this parses correctly is safe up to the point of actually
     // matching -- the exception from the *next* step (the download URL's
