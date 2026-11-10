@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
@@ -37,5 +39,28 @@ void main() {
 
     expect(find.byType(AlertDialog), findsNothing);
     expect(find.text('No update available'), findsOneWidget);
+  });
+
+  testWidgets('tapping "View changelog" opens ChangelogScreen', (WidgetTester tester) async {
+    final checkService = UpdateCheckService(
+      client: MockClient(
+        (_) async => http.Response(
+          jsonEncode([
+            {'tag_name': 'build-42', 'body': 'Fixed things', 'published_at': '2026-01-01T00:00:00Z'},
+          ]),
+          200,
+        ),
+      ),
+    );
+
+    await tester.pumpWidget(wrapWithLocalization(AboutScreen(updateCheckService: checkService)));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('View changelog'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Changelog'), findsOneWidget);
+    expect(find.text('build-42'), findsOneWidget);
+    expect(find.text('Fixed things'), findsOneWidget);
   });
 }

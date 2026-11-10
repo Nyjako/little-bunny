@@ -884,6 +884,20 @@ class AppLocalizationsEn extends AppLocalizations {
   String get aboutNoUpdateAvailable => 'No update available';
 
   @override
+  String get aboutViewChangelogEntry => 'View changelog';
+
+  @override
+  String get changelogScreenTitle => 'Changelog';
+
+  @override
+  String get changelogEmptyState => 'No release history available.';
+
+  @override
+  String changelogLoadError(String error) {
+    return 'Failed to load the changelog: $error';
+  }
+
+  @override
   String get settingsSyncSection => 'Sync';
 
   @override

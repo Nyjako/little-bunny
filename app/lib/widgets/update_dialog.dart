@@ -1,11 +1,10 @@
-import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 import '../l10n/app_localizations.dart';
 import '../services/update_apply_service.dart';
 import '../services/update_check_service.dart';
 import '../util/byte_format.dart';
+import 'release_notes_text.dart';
 
 /// Checks for an update and, if one's available, shows a confirmation
 /// dialog -- called once from [SearchesScreen]'s `initState` (M23), and also
@@ -38,67 +37,6 @@ class _UpdateDialogState extends State<_UpdateDialog> {
   int _bytesReceived = 0;
   int? _bytesTotal;
   String? _error;
-
-  /// GitHub's auto-generated release notes (release.yml's
-  /// `generate_release_notes: true`) are plain text with bare PR/compare
-  /// URLs, not markdown links -- these recognizers make those URLs tappable
-  /// while [_releaseNotesSpan] still renders via [SelectableText.rich] so
-  /// the rest of the text stays copyable. Built once and cached rather than
-  /// per-build, since recreating a [TapGestureRecognizer] on every rebuild
-  /// without disposing the old one leaks them.
-  final List<TapGestureRecognizer> _linkRecognizers = [];
-  TextSpan? _releaseNotesSpan;
-
-  static final _urlPattern = RegExp(r'https?://\S+');
-
-  @override
-  void dispose() {
-    for (final recognizer in _linkRecognizers) {
-      recognizer.dispose();
-    }
-    super.dispose();
-  }
-
-  Future<void> _openLink(String url) async {
-    final uri = Uri.tryParse(url);
-    if (uri == null) {
-      return;
-    }
-    await launchUrl(uri, mode: LaunchMode.externalApplication);
-  }
-
-  TextSpan _linkifiedReleaseNotes(BuildContext context, String text) {
-    final cached = _releaseNotesSpan;
-    if (cached != null) {
-      return cached;
-    }
-    final linkStyle = TextStyle(color: Theme.of(context).colorScheme.primary, decoration: TextDecoration.underline);
-    final spans = <InlineSpan>[];
-    var last = 0;
-    for (final match in _urlPattern.allMatches(text)) {
-      if (match.start > last) {
-        spans.add(TextSpan(text: text.substring(last, match.start)));
-      }
-      final url = match.group(0)!;
-      final recognizer = TapGestureRecognizer()..onTap = () => _openLink(url);
-      _linkRecognizers.add(recognizer);
-      spans.add(TextSpan(text: url, style: linkStyle, recognizer: recognizer));
-      last = match.end;
-    }
-    if (last < text.length) {
-      spans.add(TextSpan(text: text.substring(last)));
-    }
-    // No explicit root style -- SelectableText.rich (like Text/Text.rich)
-    // resolves the ambient DefaultTextStyle itself, using its own correctly-
-    // nested context once it's actually built inside AlertDialog's content
-    // Material wrapper. Pre-resolving DefaultTextStyle.of(context) here and
-    // baking it in instead used _UpdateDialogState.build()'s own context --
-    // the one *constructing* the AlertDialog descriptor, not yet inside its
-    // content wrapper -- which fell back to Flutter's intentional "missing
-    // Material ancestor" debug style (48px, black weight, red/yellow
-    // double-underline): exactly the "massive, unreadable" text reported.
-    return _releaseNotesSpan = TextSpan(children: spans);
-  }
 
   Future<void> _update() async {
     setState(() {
@@ -168,7 +106,7 @@ class _UpdateDialogState extends State<_UpdateDialog> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    if ((widget.result.releaseNotes ?? '').isNotEmpty) SelectableText.rich(_linkifiedReleaseNotes(context, widget.result.releaseNotes!)),
+                    if ((widget.result.releaseNotes ?? '').isNotEmpty) ReleaseNotesText(text: widget.result.releaseNotes!),
                     if (_error != null) Padding(padding: const EdgeInsets.only(top: 8), child: Text(_error!, style: TextStyle(color: Theme.of(context).colorScheme.error))),
                   ],
                 ),

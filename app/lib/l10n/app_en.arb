@@ -398,6 +398,13 @@
   "aboutLicensesEntry": "Open source licenses",
   "aboutCheckForUpdateButton": "Check for app update",
   "aboutNoUpdateAvailable": "No update available",
+  "aboutViewChangelogEntry": "View changelog",
+  "changelogScreenTitle": "Changelog",
+  "changelogEmptyState": "No release history available.",
+  "changelogLoadError": "Failed to load the changelog: {error}",
+  "@changelogLoadError": {
+    "placeholders": {"error": {"type": "String"}}
+  },
   "settingsSyncSection": "Sync",
   "settingsDefaultIntervalLabel": "Default sync interval (hours)",
   "settingsDisplaySection": "Display",

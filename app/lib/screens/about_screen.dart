@@ -6,6 +6,7 @@ import '../l10n/app_localizations.dart';
 import '../services/update_apply_service.dart';
 import '../services/update_check_service.dart';
 import '../widgets/update_dialog.dart';
+import 'changelog_screen.dart';
 
 /// App version/description + open-source license list (M27) -- the license
 /// list itself is Flutter's own [LicensePage]/[LicenseRegistry], which
@@ -57,6 +58,13 @@ class AboutScreen extends StatelessWidget {
             leading: const Icon(Icons.system_update),
             title: Text(l10n.aboutCheckForUpdateButton),
             onTap: () => _checkForUpdate(context),
+          ),
+          ListTile(
+            contentPadding: EdgeInsets.zero,
+            leading: const Icon(Icons.history),
+            title: Text(l10n.aboutViewChangelogEntry),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => ChangelogScreen(checkService: updateCheckService))),
           ),
           ListTile(
             contentPadding: EdgeInsets.zero,

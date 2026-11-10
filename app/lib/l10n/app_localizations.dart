@@ -1682,6 +1682,30 @@ abstract class AppLocalizations {
   /// **'No update available'**
   String get aboutNoUpdateAvailable;
 
+  /// No description provided for @aboutViewChangelogEntry.
+  ///
+  /// In en, this message translates to:
+  /// **'View changelog'**
+  String get aboutViewChangelogEntry;
+
+  /// No description provided for @changelogScreenTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Changelog'**
+  String get changelogScreenTitle;
+
+  /// No description provided for @changelogEmptyState.
+  ///
+  /// In en, this message translates to:
+  /// **'No release history available.'**
+  String get changelogEmptyState;
+
+  /// No description provided for @changelogLoadError.
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to load the changelog: {error}'**
+  String changelogLoadError(String error);
+
   /// No description provided for @settingsSyncSection.
   ///
   /// In en, this message translates to:
