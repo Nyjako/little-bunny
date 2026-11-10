@@ -3158,6 +3158,30 @@ this file is the single source of truth for "what's done" across sessions.
      `BunnyRepository.downloadQueueAdd`/`downloadQueueList` the same way every other field
      on that table already is.
 
+- [x] **M69 — Sort saved searches by last updated (new post found), not just last synced**
+  The user's idea: a new `SearchSortOrder` option distinct from the existing "Recently
+  created" (search creation time) and "Last viewed" (user-interaction time, M15) --
+  "last updated" means the last time a sync actually found a *new* post for that search,
+  not merely the last time a sync *ran* against it. Neither existing timestamp covered
+  this: `last_run_at` updates on every sync regardless of outcome, and `last_viewed_at`
+  is purely user interaction. New `last_updated_at TEXT` column (migration 19), a new
+  `bunny_db_search_touch_last_updated`, threaded through `libs/db`/`libs/core`/FFI
+  (ffigen regenerated)/`BunnyRepository`/`BunnySearch` the same way `last_viewed_at`
+  already was. The subtlety this needed catching: `bunny_core_sync_stats_t.posts_upserted`
+  counts *every* post a sync's pages touched, new or already-known (e621's upsert path
+  increments it unconditionally) -- it can't tell "ran" apart from "found something new."
+  Added a real `new_posts_found` field, incremented only where each site's own upsert path
+  already tracked `was_new`/non-`already_linked` for its own logging, and used *that*
+  (not `posts_upserted`) to decide whether to touch `last_updated_at`, in both
+  `bunny_core_sync_search` (single search, direct check) and `bunny_core_sync_due_searches`
+  (batch -- a before/after delta per search, since the counter runs across the whole
+  batch). `SearchSortOrder.lastUpdated` in `searches_screen.dart`'s `_sorted`/
+  `_sortedEntries`/sort menu, `_GroupEntry.lastUpdatedAt` aggregating the max across
+  members (same shape as its existing `lastViewedAt`). Also added, per a follow-up ask:
+  a visible "Updated {duration} ago" line on each search/group row (not just the sort
+  option) via a small `_lastUpdatedSubtitle` helper reusing `formatDurationCompact`,
+  shown only when the field is actually set.
+
 - [ ] **M70 — Android: downloads stop after some time in the background/locked**
   Reported by the user alongside a separate, now-fixed UI bug (the download queue
   screen's per-item rows had no `Key`, so `Column`'s default position-based

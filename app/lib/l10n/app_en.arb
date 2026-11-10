@@ -69,6 +69,10 @@
       "total": {"type": "int"}
     }
   },
+  "searchesLastUpdatedSubtitle": "Updated {duration} ago",
+  "@searchesLastUpdatedSubtitle": {
+    "placeholders": {"duration": {"type": "String"}}
+  },
   "searchesPinTooltip": "Pin",
   "searchesUnpinTooltip": "Unpin",
   "searchesSyncRowTooltip": "Sync now",
@@ -89,6 +93,7 @@
   "searchesSortLabel": "Label (A-Z)",
   "searchesSortRecentlyCreated": "Recently created",
   "searchesSortLastViewed": "Last viewed",
+  "searchesSortLastUpdated": "Last updated",
   "searchesCheckForUpdatesTooltip": "Check for updates",
   "searchesSelectForDownloadTooltip": "Select searches to download",
   "searchesSelectedCount": "{count} selected",

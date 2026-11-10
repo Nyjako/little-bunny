@@ -94,6 +94,13 @@ class BunnySearch {
   /// The [BunnyGroup] this search belongs to, or 0 if ungrouped (M21).
   final int groupId;
 
+  /// The last time a sync actually found a *new* post for this search --
+  /// null if no sync ever has (M69). Distinct from [lastRunAt] (updates on
+  /// every sync attempt regardless of outcome) and [lastViewedAt] (purely
+  /// user interaction, not site activity) -- feeds the "last updated" sort
+  /// order and the searches list's own per-row indicator.
+  final String? lastUpdatedAt;
+
   /// `pool:<id>` is a real tag e621's own search syntax understands
   /// natively (M9.6.2); Inkbunny's /api_search.php also accepts an
   /// (undocumented, confirmed live) `pool_id` param with the same meaning,
@@ -137,6 +144,7 @@ class BunnySearch {
     this.lastViewedAt,
     this.usesDefaultInterval = false,
     this.groupId = 0,
+    this.lastUpdatedAt,
   });
 }
 

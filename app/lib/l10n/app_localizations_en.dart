@@ -151,6 +151,11 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String searchesLastUpdatedSubtitle(String duration) {
+    return 'Updated $duration ago';
+  }
+
+  @override
   String get searchesPinTooltip => 'Pin';
 
   @override
@@ -202,6 +207,9 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get searchesSortLastViewed => 'Last viewed';
+
+  @override
+  String get searchesSortLastUpdated => 'Last updated';
 
   @override
   String get searchesCheckForUpdatesTooltip => 'Check for updates';

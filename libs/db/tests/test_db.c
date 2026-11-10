@@ -334,6 +334,24 @@ void test_search_touch_last_viewed(void)
     bunny_db_search_list_free(&list);
 }
 
+void test_search_touch_last_updated(void)
+{
+    int64_t id = 0;
+    bunny_db_search_create(g_db, BUNNY_DB_SITE_E621, "temp", "temp", 24, NULL, &id);
+
+    bunny_db_search_list_t list;
+    bunny_db_search_list(g_db, &list);
+    TEST_ASSERT_NULL(list.items[0].last_updated_at);
+    bunny_db_search_list_free(&list);
+
+    bunny_db_result_t result = bunny_db_search_touch_last_updated(g_db, id);
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, result);
+
+    bunny_db_search_list(g_db, &list);
+    TEST_ASSERT_NOT_NULL(list.items[0].last_updated_at);
+    bunny_db_search_list_free(&list);
+}
+
 void test_search_update_sync_progress(void)
 {
     int64_t id = 0;
@@ -3339,6 +3357,7 @@ int main(void)
     RUN_TEST(test_search_merge_duplicate_rejects_merging_a_search_into_itself);
     RUN_TEST(test_search_touch_last_run);
     RUN_TEST(test_search_touch_last_viewed);
+    RUN_TEST(test_search_touch_last_updated);
     RUN_TEST(test_search_update_sync_progress);
     RUN_TEST(test_search_has_result);
     RUN_TEST(test_post_upsert_and_get);

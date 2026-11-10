@@ -658,6 +658,40 @@ void test_sync_single_search_forces_even_when_not_due(void)
     free(response.data);
 }
 
+/* The core-level "only touched when a new post is actually found" invariant
+ * (M69) is proven directly against bunny_db_search_touch_last_updated/
+ * bunny_core_sync_search in libs/db/tests/test_db.c and
+ * libs/core/tests/test_sync.c -- this just confirms the route's own JSON
+ * serialization (routes_searches.c's search_to_json) actually exposes the
+ * field end to end. */
+void test_search_last_updated_at_reflects_a_sync_finding_a_new_post(void)
+{
+    response_buffer_t response = {0};
+
+    long status = do_request("POST", "/searches", "{\"site\":\"e621\",\"label\":\"wolves\",\"query\":\"wolf\",\"interval_hours\":24}", &response, true, NULL);
+    TEST_ASSERT_EQUAL(201, status);
+    free(response.data);
+    memset(&response, 0, sizeof(response));
+
+    status = do_request("GET", "/searches", NULL, &response, true, NULL);
+    TEST_ASSERT_EQUAL(200, status);
+    TEST_ASSERT_NOT_NULL(strstr(response.data, "\"last_updated_at\":null"));
+    free(response.data);
+    memset(&response, 0, sizeof(response));
+
+    status = do_request("POST", "/searches/1/sync", NULL, &response, true, NULL);
+    TEST_ASSERT_EQUAL(202, status);
+    free(response.data);
+    memset(&response, 0, sizeof(response));
+
+    TEST_ASSERT_TRUE(poll_until_response_contains("GET", "/searches/1/posts", "\"external_id\":1"));
+
+    status = do_request("GET", "/searches", NULL, &response, true, NULL);
+    TEST_ASSERT_EQUAL(200, status);
+    TEST_ASSERT_NULL(strstr(response.data, "\"last_updated_at\":null"));
+    free(response.data);
+}
+
 void test_blacklist_add_list_remove(void)
 {
     response_buffer_t response = {0};
@@ -1615,6 +1649,7 @@ int main(void)
     RUN_TEST(test_verify_account);
     RUN_TEST(test_full_account_search_sync_favorite_flow);
     RUN_TEST(test_sync_single_search_forces_even_when_not_due);
+    RUN_TEST(test_search_last_updated_at_reflects_a_sync_finding_a_new_post);
     RUN_TEST(test_blacklist_add_list_remove);
     RUN_TEST(test_tag_query_validate);
     RUN_TEST(test_blacklist_e621_sync_imports_multi_tag_lines_and_skips_invalid_ones);

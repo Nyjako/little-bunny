@@ -457,6 +457,75 @@ void main() {
     expect(tester.getTopLeft(find.text('Zebra')).dy, lessThan(tester.getTopLeft(find.text('Alpha')).dy));
   });
 
+  testWidgets('last-updated sort orders by lastUpdatedAt descending, distinct from lastViewedAt (M69)', (WidgetTester tester) async {
+    final repository = FakeBunnyRepository();
+    final alphaId = await repository.createSearch(BunnySite.e621, 'Alpha', 'alpha');
+    final zebraId = await repository.createSearch(BunnySite.e621, 'Zebra', 'zebra');
+
+    void setLastUpdated(int searchId, String? timestamp) {
+      final index = repository.searches.indexWhere((search) => search.id == searchId);
+      final search = repository.searches[index];
+      repository.searches[index] = BunnySearch(
+        id: search.id,
+        site: search.site,
+        label: search.label,
+        query: search.query,
+        intervalHours: search.intervalHours,
+        createdAt: search.createdAt,
+        // Deliberately the opposite of lastUpdatedAt below -- proves the
+        // sort uses lastUpdatedAt, not lastViewedAt.
+        lastViewedAt: searchId == zebraId ? '2026-01-01T00:00:00Z' : null,
+        lastUpdatedAt: timestamp,
+      );
+    }
+
+    setLastUpdated(alphaId, '2026-02-01T00:00:00Z');
+    setLastUpdated(zebraId, null);
+
+    await tester.pumpWidget(_wrap(repository));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byIcon(Icons.sort));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Last updated'), warnIfMissed: false);
+    await tester.pumpAndSettle();
+
+    // Alpha has a real lastUpdatedAt; Zebra has never had one (null sorts
+    // last), even though Zebra has the more recent lastViewedAt.
+    expect(tester.getTopLeft(find.text('Alpha')).dy, lessThan(tester.getTopLeft(find.text('Zebra')).dy));
+  });
+
+  testWidgets('shows a "last updated" indicator on a row that has one, not on one that never has (M69)', (WidgetTester tester) async {
+    final repository = FakeBunnyRepository();
+    final updatedId = await repository.createSearch(BunnySite.e621, 'Foxes', 'fox');
+    await repository.createSearch(BunnySite.e621, 'Wolves', 'wolf');
+
+    final index = repository.searches.indexWhere((search) => search.id == updatedId);
+    final search = repository.searches[index];
+    repository.searches[index] = BunnySearch(
+      id: search.id,
+      site: search.site,
+      label: search.label,
+      query: search.query,
+      intervalHours: search.intervalHours,
+      createdAt: search.createdAt,
+      lastUpdatedAt: DateTime.now().toUtc().subtract(const Duration(hours: 3)).toIso8601String(),
+    );
+
+    await tester.pumpWidget(_wrap(repository));
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('Updated'), findsOneWidget);
+    expect(
+      find.descendant(of: find.widgetWithText(ListTile, 'Foxes'), matching: find.textContaining('Updated')),
+      findsOneWidget,
+    );
+    expect(
+      find.descendant(of: find.widgetWithText(ListTile, 'Wolves'), matching: find.textContaining('Updated')),
+      findsNothing,
+    );
+  });
+
   testWidgets('tapping "check for updates" syncs every search and re-enables the button when done (M13.2)', (WidgetTester tester) async {
     final repository = FakeBunnyRepository();
     final id1 = await repository.createSearch(BunnySite.e621, 'Foxes', 'fox');
