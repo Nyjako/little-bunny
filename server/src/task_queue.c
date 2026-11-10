@@ -10,6 +10,10 @@
 #include "log.h"
 
 #define TASK_QUEUE_CAPACITY 64
+/* Small on purpose -- this is a debugging aid ("what did the server just
+ * do"), not an audit log; nothing reads further back than the last handful
+ * of finished jobs. */
+#define TASK_HISTORY_CAPACITY 20
 
 typedef struct
 {
@@ -33,6 +37,13 @@ struct task_queue
     bunny_cond_t cond;
     task_slot_t slots[TASK_QUEUE_CAPACITY];
     int64_t next_id;
+
+    /* Ring buffer of finished jobs -- history_write_idx is the slot the
+     * *next* push will overwrite, so the most recently pushed entry is
+     * always at (history_write_idx - 1) mod TASK_HISTORY_CAPACITY. */
+    task_history_entry_t history[TASK_HISTORY_CAPACITY];
+    size_t history_count;
+    size_t history_write_idx;
 
     volatile bool stop_requested;
 };
@@ -141,15 +152,23 @@ static task_dedupe_result_t dedupe_or_promote(task_queue_t *queue, task_type_t t
     return TASK_DEDUPE_DUPLICATE;
 }
 
-static void run_slot(task_queue_t *queue, const task_slot_t *slot)
+/* Returns whether the job succeeded, for task_queue_loop to record into
+ * history -- each case already has a bunny_core_result_t sitting right
+ * there (previously discarded). TASK_TYPE_SYNC_ALL has no single result to
+ * report (it fans out into one bunny_core_sync_search call per search, with
+ * no per-item failure tracking today), so it's judged on whether the
+ * initial bunny_core_search_list lookup that drives the whole pass
+ * succeeded. */
+static bool run_slot(task_queue_t *queue, const task_slot_t *slot)
 {
     const char *source = slot->priority == TASK_PRIORITY_HIGH ? "manual" : "scheduler";
+    bool succeeded = false;
 
     switch (slot->type) {
         case TASK_TYPE_SYNC_SEARCH: {
             server_sync_status_set_active(queue->status, source, slot->label, 0, 0);
             bunny_core_sync_stats_t stats;
-            bunny_core_sync_search(queue->core, slot->search_id, &stats);
+            succeeded = bunny_core_sync_search(queue->core, slot->search_id, &stats) == BUNNY_CORE_OK;
             server_sync_status_clear(queue->status);
             break;
         }
@@ -157,6 +176,7 @@ static void run_slot(task_queue_t *queue, const task_slot_t *slot)
             bunny_db_search_list_t list;
             memset(&list, 0, sizeof(list));
             bunny_core_result_t result = bunny_core_search_list(queue->core, &list);
+            succeeded = result == BUNNY_CORE_OK;
             if (result == BUNNY_CORE_OK) {
                 server_log("INFO", "task queue: starting a forced sync of all %zu searches", list.count);
                 for (size_t i = 0; i < list.count; i++) {
@@ -173,7 +193,7 @@ static void run_slot(task_queue_t *queue, const task_slot_t *slot)
         case TASK_TYPE_SYNC_DUE: {
             server_sync_status_set_active(queue->status, source, NULL, 0, 0);
             bunny_core_sync_stats_t stats;
-            bunny_core_sync_due_searches(queue->core, &stats);
+            succeeded = bunny_core_sync_due_searches(queue->core, &stats) == BUNNY_CORE_OK;
             server_log("INFO", "task queue: synced %d/%d due searches (%d posts upserted)", stats.searches_synced, stats.searches_checked, stats.posts_upserted);
             /* "0 synced" is unremarkable by itself (every search just has a
              * longer interval than the gap between ticks) -- this makes that
@@ -189,7 +209,7 @@ static void run_slot(task_queue_t *queue, const task_slot_t *slot)
         case TASK_TYPE_PROCESS_ACTION_QUEUE: {
             server_sync_status_set_active(queue->status, source, NULL, 0, 0);
             bunny_core_queue_stats_t stats;
-            bunny_core_process_queue(queue->core, &stats);
+            succeeded = bunny_core_process_queue(queue->core, &stats) == BUNNY_CORE_OK;
             server_log("INFO", "task queue: processed %d queued actions (%d succeeded, %d failed)", stats.actions_processed, stats.actions_succeeded, stats.actions_failed);
             server_sync_status_clear(queue->status);
             break;
@@ -201,7 +221,7 @@ static void run_slot(task_queue_t *queue, const task_slot_t *slot)
              * running" flag. */
             server_log("INFO", "task queue: building the tag-stats report");
             bunny_core_stats_report_t report;
-            bunny_core_refresh_stats_report(queue->core, &report);
+            succeeded = bunny_core_refresh_stats_report(queue->core, &report) == BUNNY_CORE_OK;
             bunny_core_stats_report_free(&report);
             server_log("INFO", "task queue: tag-stats report build finished");
             break;
@@ -210,10 +230,30 @@ static void run_slot(task_queue_t *queue, const task_slot_t *slot)
             /* Same reasoning as TASK_TYPE_BUILD_STATS_REPORT above --
              * server_sync_status is specifically for search-sync progress. */
             bunny_core_backfill_stats_t stats;
-            bunny_core_backfill_inkbunny_details(queue->core, &stats);
+            succeeded = bunny_core_backfill_inkbunny_details(queue->core, &stats) == BUNNY_CORE_OK;
             server_log("INFO", "task queue: backfilled %d/%d thin Inkbunny post(s)", stats.found, stats.attempted);
             break;
         }
+    }
+    return succeeded;
+}
+
+/* Caller must hold queue->mutex. Overwrites the oldest entry once the ring
+ * buffer is full. */
+static void push_history(task_queue_t *queue, const task_slot_t *slot, bool succeeded)
+{
+    size_t idx = queue->history_write_idx;
+    free(queue->history[idx].label);
+    queue->history[idx].id = slot->id;
+    queue->history[idx].type = slot->type;
+    queue->history[idx].priority = slot->priority;
+    queue->history[idx].label = goblin_copy_cstr(slot->label);
+    queue->history[idx].enqueued_at = slot->enqueued_at;
+    queue->history[idx].finished_at = time(NULL);
+    queue->history[idx].succeeded = succeeded;
+    queue->history_write_idx = (idx + 1) % TASK_HISTORY_CAPACITY;
+    if (queue->history_count < TASK_HISTORY_CAPACITY) {
+        queue->history_count++;
     }
 }
 
@@ -258,9 +298,10 @@ static void *task_queue_loop(void *arg)
         task_slot_t slot_copy = queue->slots[idx];
         bunny_mutex_unlock(&queue->mutex);
 
-        run_slot(queue, &slot_copy);
+        bool succeeded = run_slot(queue, &slot_copy);
 
         bunny_mutex_lock(&queue->mutex);
+        push_history(queue, &slot_copy, succeeded);
         free(queue->slots[idx].label);
         queue->slots[idx].in_use = false;
         bunny_mutex_unlock(&queue->mutex);
@@ -313,6 +354,9 @@ void task_queue_stop(task_queue_t *queue)
         if (queue->slots[i].in_use) {
             free(queue->slots[i].label);
         }
+    }
+    for (size_t i = 0; i < TASK_HISTORY_CAPACITY; i++) {
+        free(queue->history[i].label);
     }
     free(queue);
 }
@@ -450,6 +494,48 @@ void task_queue_snapshot_get(task_queue_t *queue, task_queue_snapshot_t *out)
 }
 
 void task_queue_snapshot_free(task_queue_snapshot_t *snapshot)
+{
+    if (!snapshot || !snapshot->items) {
+        return;
+    }
+    for (size_t i = 0; i < snapshot->count; i++) {
+        free(snapshot->items[i].label);
+    }
+    free(snapshot->items);
+    snapshot->items = NULL;
+    snapshot->count = 0;
+}
+
+void task_queue_history_get(task_queue_t *queue, task_queue_history_snapshot_t *out)
+{
+    memset(out, 0, sizeof(*out));
+    task_history_entry_t *items = calloc(TASK_HISTORY_CAPACITY, sizeof(task_history_entry_t));
+    if (!items) {
+        return;
+    }
+    size_t count = 0;
+
+    bunny_mutex_lock(&queue->mutex);
+    /* history_write_idx is the *next* write slot, so the most recently
+     * pushed entry is one step back from it -- walk backwards from there. */
+    for (size_t i = 0; i < queue->history_count; i++) {
+        size_t idx = (queue->history_write_idx + TASK_HISTORY_CAPACITY - 1 - i) % TASK_HISTORY_CAPACITY;
+        items[count].id = queue->history[idx].id;
+        items[count].type = queue->history[idx].type;
+        items[count].priority = queue->history[idx].priority;
+        items[count].label = goblin_copy_cstr(queue->history[idx].label);
+        items[count].enqueued_at = queue->history[idx].enqueued_at;
+        items[count].finished_at = queue->history[idx].finished_at;
+        items[count].succeeded = queue->history[idx].succeeded;
+        count++;
+    }
+    bunny_mutex_unlock(&queue->mutex);
+
+    out->items = items;
+    out->count = count;
+}
+
+void task_queue_history_snapshot_free(task_queue_history_snapshot_t *snapshot)
 {
     if (!snapshot || !snapshot->items) {
         return;

@@ -274,7 +274,16 @@ class _LockSetupScreenState extends State<LockSetupScreen> {
     );
   }
 
+  void _backToNewPin() {
+    setState(() {
+      _newPin = '';
+      _confirmPin = '';
+      _error = null;
+    });
+  }
+
   Widget _buildPinEnableFields(BuildContext context, AppLocalizations l10n) {
+    final onNewPinStep = _newPin.length < _pinLength;
     return Column(
       children: [
         Text(l10n.lockSetupPinLengthLabel),
@@ -285,11 +294,19 @@ class _LockSetupScreenState extends State<LockSetupScreen> {
           onSelectionChanged: _submitting ? null : (selection) => _changePinLength(selection.first),
         ),
         const SizedBox(height: 24),
-        Text(l10n.lockSetupNewPinHeading),
-        PinEntry(length: _pinLength, value: _newPin, enabled: !_submitting, onChanged: _onNewPinChanged),
-        const SizedBox(height: 24),
-        Text(l10n.lockSetupConfirmLabel),
-        PinEntry(length: _pinLength, value: _confirmPin, enabled: !_submitting, onChanged: _onConfirmPinChanged),
+        if (onNewPinStep) ...[
+          Text(l10n.lockSetupNewPinHeading),
+          PinEntry(length: _pinLength, value: _newPin, enabled: !_submitting, onChanged: _onNewPinChanged),
+        ] else ...[
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              IconButton(onPressed: _submitting ? null : _backToNewPin, icon: const Icon(Icons.arrow_back), tooltip: l10n.lockSetupBackToNewPin),
+              Text(l10n.lockSetupConfirmPinHeading),
+            ],
+          ),
+          PinEntry(length: _pinLength, value: _confirmPin, enabled: !_submitting, onChanged: _onConfirmPinChanged),
+        ],
       ],
     );
   }

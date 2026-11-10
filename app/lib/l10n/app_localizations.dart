@@ -1310,6 +1310,18 @@ abstract class AppLocalizations {
   /// **'Enter new PIN'**
   String get lockSetupNewPinHeading;
 
+  /// No description provided for @lockSetupConfirmPinHeading.
+  ///
+  /// In en, this message translates to:
+  /// **'Confirm new PIN'**
+  String get lockSetupConfirmPinHeading;
+
+  /// No description provided for @lockSetupBackToNewPin.
+  ///
+  /// In en, this message translates to:
+  /// **'Back'**
+  String get lockSetupBackToNewPin;
+
   /// No description provided for @lockSetupConfirmLabel.
   ///
   /// In en, this message translates to:
@@ -1472,6 +1484,30 @@ abstract class AppLocalizations {
   /// **'Pending'**
   String get taskQueueStatusPending;
 
+  /// No description provided for @taskQueueRecentSection.
+  ///
+  /// In en, this message translates to:
+  /// **'Recent'**
+  String get taskQueueRecentSection;
+
+  /// No description provided for @taskQueueFinishedAgo.
+  ///
+  /// In en, this message translates to:
+  /// **'Finished {duration} ago'**
+  String taskQueueFinishedAgo(String duration);
+
+  /// No description provided for @taskQueueSucceeded.
+  ///
+  /// In en, this message translates to:
+  /// **'Succeeded'**
+  String get taskQueueSucceeded;
+
+  /// No description provided for @taskQueueFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Failed'**
+  String get taskQueueFailed;
+
   /// No description provided for @settingsAppearanceSection.
   ///
   /// In en, this message translates to:
@@ -1568,6 +1604,18 @@ abstract class AppLocalizations {
   /// **'System default'**
   String get settingsLanguageSystemDefault;
 
+  /// No description provided for @settingsUpdatesSection.
+  ///
+  /// In en, this message translates to:
+  /// **'Updates'**
+  String get settingsUpdatesSection;
+
+  /// No description provided for @settingsAutoCheckForUpdatesLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Automatically check for updates'**
+  String get settingsAutoCheckForUpdatesLabel;
+
   /// No description provided for @settingsAppLockSection.
   ///
   /// In en, this message translates to:
@@ -1627,6 +1675,42 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Open source licenses'**
   String get aboutLicensesEntry;
+
+  /// No description provided for @aboutCheckForUpdateButton.
+  ///
+  /// In en, this message translates to:
+  /// **'Check for app update'**
+  String get aboutCheckForUpdateButton;
+
+  /// No description provided for @aboutNoUpdateAvailable.
+  ///
+  /// In en, this message translates to:
+  /// **'No update available'**
+  String get aboutNoUpdateAvailable;
+
+  /// No description provided for @aboutViewChangelogEntry.
+  ///
+  /// In en, this message translates to:
+  /// **'View changelog'**
+  String get aboutViewChangelogEntry;
+
+  /// No description provided for @changelogScreenTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Changelog'**
+  String get changelogScreenTitle;
+
+  /// No description provided for @changelogEmptyState.
+  ///
+  /// In en, this message translates to:
+  /// **'No release history available.'**
+  String get changelogEmptyState;
+
+  /// No description provided for @changelogLoadError.
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to load the changelog: {error}'**
+  String changelogLoadError(String error);
 
   /// No description provided for @settingsSyncSection.
   ///

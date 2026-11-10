@@ -85,7 +85,7 @@ void main() {
     expect(await lockService.isEnabled(), isFalse);
   });
 
-  testWidgets('selecting PIN mode reveals the length picker and two PIN entries, hides the password fields', (WidgetTester tester) async {
+  testWidgets('selecting PIN mode reveals the length picker and one PIN entry (new-PIN step), hides the password fields', (WidgetTester tester) async {
     useTallSurface(tester);
     final lockService = AppLockService(FakeSecretStore());
 
@@ -96,7 +96,8 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('PIN length'), findsOneWidget);
-    expect(find.byType(PinEntry), findsNWidgets(2));
+    expect(find.text('Enter new PIN'), findsOneWidget);
+    expect(find.byType(PinEntry), findsOneWidget);
     expect(find.byType(TextFormField), findsNothing);
   });
 
@@ -119,6 +120,27 @@ void main() {
     expect(newPinWidget.value, isEmpty);
   });
 
+  testWidgets('one PIN entry at a time: new-PIN step gives way to a confirm step once full length is reached', (WidgetTester tester) async {
+    useTallSurface(tester);
+    final lockService = AppLockService(FakeSecretStore());
+
+    await tester.pumpWidget(wrapWithLocalization(LockSetupScreen(lockService: lockService)));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('PIN'));
+    await tester.pumpAndSettle();
+
+    await tapDigits(tester, find.byType(PinEntry), '1357');
+    await tester.pumpAndSettle();
+
+    // Still mid-flow (not enabled yet) -- the new-PIN pad is gone, replaced
+    // by exactly one confirm-PIN pad, with a back action to return.
+    expect(await lockService.isEnabled(), isFalse);
+    expect(find.text('Enter new PIN'), findsNothing);
+    expect(find.text('Confirm new PIN'), findsOneWidget);
+    expect(find.byType(PinEntry), findsOneWidget);
+    expect(find.byIcon(Icons.arrow_back), findsOneWidget);
+  });
+
   testWidgets('matching new/confirm PIN at the configured length auto-enables, no button tap', (WidgetTester tester) async {
     useTallSurface(tester);
     final lockService = AppLockService(FakeSecretStore());
@@ -128,9 +150,9 @@ void main() {
     await tester.tap(find.text('PIN'));
     await tester.pumpAndSettle();
 
-    final pinEntries = find.byType(PinEntry);
-    await tapDigits(tester, pinEntries.at(0), '1357');
-    await tapDigits(tester, pinEntries.at(1), '1357');
+    await tapDigits(tester, find.byType(PinEntry), '1357');
+    await tester.pumpAndSettle();
+    await tapDigits(tester, find.byType(PinEntry), '1357');
     await tester.pumpAndSettle();
 
     expect(await lockService.isEnabled(), isTrue);
@@ -140,7 +162,7 @@ void main() {
     expect(find.text('App lock is currently on.'), findsOneWidget);
   });
 
-  testWidgets('mismatched PIN at matching length shows an error and clears only the confirm entry', (WidgetTester tester) async {
+  testWidgets('mismatched PIN at matching length shows an error, clears only the confirm entry, and stays on the confirm step', (WidgetTester tester) async {
     useTallSurface(tester);
     final lockService = AppLockService(FakeSecretStore());
 
@@ -149,17 +171,39 @@ void main() {
     await tester.tap(find.text('PIN'));
     await tester.pumpAndSettle();
 
-    final pinEntries = find.byType(PinEntry);
-    await tapDigits(tester, pinEntries.at(0), '1357');
-    await tapDigits(tester, pinEntries.at(1), '2468');
+    await tapDigits(tester, find.byType(PinEntry), '1357');
+    await tester.pumpAndSettle();
+    await tapDigits(tester, find.byType(PinEntry), '2468');
     await tester.pumpAndSettle();
 
     expect(find.text('Entries do not match'), findsOneWidget);
     expect(await lockService.isEnabled(), isFalse);
-    final newPinWidget = tester.widget<PinEntry>(find.byType(PinEntry).first);
-    expect(newPinWidget.value, '1357');
-    final confirmPinWidget = tester.widget<PinEntry>(find.byType(PinEntry).at(1));
+    // Still on the confirm step (not bounced back to the new-PIN pad), with
+    // the confirm value cleared ready for another attempt.
+    expect(find.text('Confirm new PIN'), findsOneWidget);
+    final confirmPinWidget = tester.widget<PinEntry>(find.byType(PinEntry));
     expect(confirmPinWidget.value, isEmpty);
+  });
+
+  testWidgets('the back action on the confirm step returns to the new-PIN step with both values cleared', (WidgetTester tester) async {
+    useTallSurface(tester);
+    final lockService = AppLockService(FakeSecretStore());
+
+    await tester.pumpWidget(wrapWithLocalization(LockSetupScreen(lockService: lockService)));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('PIN'));
+    await tester.pumpAndSettle();
+
+    await tapDigits(tester, find.byType(PinEntry), '1357');
+    await tester.pumpAndSettle();
+    expect(find.text('Confirm new PIN'), findsOneWidget);
+
+    await tester.tap(find.byIcon(Icons.arrow_back));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Enter new PIN'), findsOneWidget);
+    final newPinWidget = tester.widget<PinEntry>(find.byType(PinEntry));
+    expect(newPinWidget.value, isEmpty);
   });
 
   testWidgets('PIN disable flow: wrong PIN at full length shows an error without a tap', (WidgetTester tester) async {

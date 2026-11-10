@@ -688,6 +688,12 @@ class AppLocalizationsEn extends AppLocalizations {
   String get lockSetupNewPinHeading => 'Enter new PIN';
 
   @override
+  String get lockSetupConfirmPinHeading => 'Confirm new PIN';
+
+  @override
+  String get lockSetupBackToNewPin => 'Back';
+
+  @override
   String get lockSetupConfirmLabel => 'Confirm';
 
   @override
@@ -773,6 +779,20 @@ class AppLocalizationsEn extends AppLocalizations {
   String get taskQueueStatusPending => 'Pending';
 
   @override
+  String get taskQueueRecentSection => 'Recent';
+
+  @override
+  String taskQueueFinishedAgo(String duration) {
+    return 'Finished $duration ago';
+  }
+
+  @override
+  String get taskQueueSucceeded => 'Succeeded';
+
+  @override
+  String get taskQueueFailed => 'Failed';
+
+  @override
   String get settingsAppearanceSection => 'Appearance';
 
   @override
@@ -821,6 +841,13 @@ class AppLocalizationsEn extends AppLocalizations {
   String get settingsLanguageSystemDefault => 'System default';
 
   @override
+  String get settingsUpdatesSection => 'Updates';
+
+  @override
+  String get settingsAutoCheckForUpdatesLabel =>
+      'Automatically check for updates';
+
+  @override
   String get settingsAppLockSection => 'App lock';
 
   @override
@@ -852,6 +879,26 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get aboutLicensesEntry => 'Open source licenses';
+
+  @override
+  String get aboutCheckForUpdateButton => 'Check for app update';
+
+  @override
+  String get aboutNoUpdateAvailable => 'No update available';
+
+  @override
+  String get aboutViewChangelogEntry => 'View changelog';
+
+  @override
+  String get changelogScreenTitle => 'Changelog';
+
+  @override
+  String get changelogEmptyState => 'No release history available.';
+
+  @override
+  String changelogLoadError(String error) {
+    return 'Failed to load the changelog: $error';
+  }
 
   @override
   String get settingsSyncSection => 'Sync';

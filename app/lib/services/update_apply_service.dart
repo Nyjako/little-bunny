@@ -18,7 +18,7 @@ class UpdateApplyService {
 
   const UpdateApplyService({this.client});
 
-  Future<File> _downloadToFile(String url, String destPath, {void Function(double? progress)? onProgress}) async {
+  Future<File> _downloadToFile(String url, String destPath, {void Function(int received, int? total)? onProgress}) async {
     final httpClient = client ?? http.Client();
     try {
       final request = http.Request('GET', Uri.parse(url));
@@ -29,15 +29,17 @@ class UpdateApplyService {
 
       final file = File(destPath);
       final sink = file.openWrite();
-      final total = response.contentLength;
+      // contentLength is -1 when the server doesn't report one -- normalized
+      // to null here so callers get a plain "unknown total" signal instead
+      // of having to know that -1-means-unknown convention themselves (same
+      // as DownloadManager.downloadPost's own onProgress contract).
+      final total = response.contentLength != null && response.contentLength! >= 0 ? response.contentLength : null;
       var received = 0;
       try {
         await response.stream.listen((chunk) {
           sink.add(chunk);
           received += chunk.length;
-          if (total != null && total > 0) {
-            onProgress?.call(received / total);
-          }
+          onProgress?.call(received, total);
         }).asFuture<void>();
       } finally {
         await sink.close();
@@ -232,7 +234,7 @@ class UpdateApplyService {
 
   Future<String> _tempDirPath() async => (await getTemporaryDirectory()).path;
 
-  Future<bool> downloadAndApply(String downloadUrl, {String? sha256SumsUrl, void Function(double? progress)? onProgress}) async {
+  Future<bool> downloadAndApply(String downloadUrl, {String? sha256SumsUrl, void Function(int received, int? total)? onProgress}) async {
     final tempDir = await _tempDirPath();
     final fileName = downloadUrl.split('/').last;
     final downloadPath = path.join(tempDir, fileName);

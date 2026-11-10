@@ -23,6 +23,7 @@ import 'settings/download_settings_store.dart';
 import 'settings/repository_settings_store.dart';
 import 'settings/secret_store.dart';
 import 'settings/theme_settings_store.dart';
+import 'settings/update_settings_store.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -75,6 +76,7 @@ Future<void> main() async {
       displaySettingsStore: const DisplaySettingsStore(),
       downloadSettingsStore: const DownloadSettingsStore(),
       downloadQueueService: downloadQueueService,
+      updateSettingsStore: const UpdateSettingsStore(),
     ),
   );
 }
@@ -102,6 +104,7 @@ class LittleBunnyApp extends StatefulWidget {
   final DisplaySettingsStore displaySettingsStore;
   final DownloadSettingsStore downloadSettingsStore;
   final DownloadQueueService downloadQueueService;
+  final UpdateSettingsStore updateSettingsStore;
 
   const LittleBunnyApp({
     super.key,
@@ -111,6 +114,7 @@ class LittleBunnyApp extends StatefulWidget {
     required this.displaySettingsStore,
     required this.downloadSettingsStore,
     required this.downloadQueueService,
+    required this.updateSettingsStore,
   });
 
   @override
@@ -214,6 +218,7 @@ class _LittleBunnyAppState extends State<LittleBunnyApp> {
         downloadSettingsStore: widget.downloadSettingsStore,
         downloadQueueService: widget.downloadQueueService,
         settingsStore: widget.settingsStore,
+        updateSettingsStore: widget.updateSettingsStore,
         onThemeModeChanged: (mode) => setState(() => _themeMode = mode),
         onThemeColorChanged: (color) => setState(() => _themeColor = color),
         onAmoledChanged: (amoled) => setState(() => _amoled = amoled),

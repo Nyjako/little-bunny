@@ -31,6 +31,17 @@ class UpdateCheckResult {
   static const none = UpdateCheckResult(updateAvailable: false, latestBuildNumber: 0);
 }
 
+/// One GitHub release, for [UpdateCheckService.fetchRecentReleases] --
+/// deliberately smaller than [UpdateCheckResult] (no asset/download info),
+/// since the changelog screen only ever displays these, never applies one.
+class ReleaseInfo {
+  final String tagName;
+  final String? body;
+  final DateTime? publishedAt;
+
+  const ReleaseInfo({required this.tagName, this.body, this.publishedAt});
+}
+
 /// Checks GitHub's public Releases API (the same one server/src/updater.c
 /// uses, over plain HTTPS) for a release newer than [appBuildNumber] --
 /// deliberately not libgit2: release *binaries* live in GitHub's separate
@@ -118,6 +129,39 @@ class UpdateCheckService {
       );
     } catch (_) {
       return UpdateCheckResult.none;
+    } finally {
+      if (client == null) {
+        httpClient.close();
+      }
+    }
+  }
+
+  /// The last ~20 releases (no pagination -- AboutScreen's "View changelog"
+  /// only ever shows recent history, not a full archive), newest first,
+  /// same as GitHub's own list endpoint default ordering. Same auth-less
+  /// public API [check] already uses, just the list endpoint instead of
+  /// `/latest`. Returns an empty list on any failure (no network, bad
+  /// response, ...), same "nothing to show" contract as [check]'s own
+  /// [UpdateCheckResult.none].
+  Future<List<ReleaseInfo>> fetchRecentReleases() async {
+    final httpClient = client ?? http.Client();
+    try {
+      final response = await httpClient.get(
+        Uri.parse('https://api.github.com/repos/$_repoOwner/$_repoName/releases?per_page=20'),
+        headers: {'User-Agent': 'LittleBunny-App', 'Accept': 'application/vnd.github+json'},
+      );
+      if (response.statusCode != 200) {
+        return const [];
+      }
+
+      final json = jsonDecode(response.body) as List<dynamic>;
+      return json.map((e) {
+        final release = e as Map<String, dynamic>;
+        final publishedAt = release['published_at'] as String?;
+        return ReleaseInfo(tagName: release['tag_name'] as String, body: release['body'] as String?, publishedAt: publishedAt == null ? null : DateTime.tryParse(publishedAt));
+      }).toList();
+    } catch (_) {
+      return const [];
     } finally {
       if (client == null) {
         httpClient.close();

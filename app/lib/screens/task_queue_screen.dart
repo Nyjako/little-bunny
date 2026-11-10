@@ -5,15 +5,18 @@ import 'package:flutter/material.dart';
 import '../l10n/app_localizations.dart';
 import '../repository/bunny_models.dart';
 import '../repository/http_bunny_repository.dart';
+import '../util/duration_format.dart';
 
 /// Shows `GET /tasks` (M24) -- every pending + currently-running task_queue
-/// job, in the order they'll actually run. Server-only, same as
-/// [ServerLogsScreen] (standalone mode's [FfiBunnyRepository.getTasks]
-/// always returns an empty list, since it has no background queue of its
-/// own). Unlike [ServerLogsScreen]'s explicit-refresh-only pattern, this
-/// polls while open -- jobs here are expected to start/finish on their own
-/// while the screen is up, same cadence as [SearchesScreen]'s sync-status
-/// poll.
+/// job, in the order they'll actually run, plus a "Recent" section of the
+/// most recently *finished* ones (M68 follow-up) so a stuck/failed job
+/// isn't just silently gone once it clears the live list. Server-only, same
+/// as [ServerLogsScreen] (standalone mode's [FfiBunnyRepository.getTasks]/
+/// `getTaskHistory` always return an empty list, since it has no background
+/// queue of its own). Unlike [ServerLogsScreen]'s explicit-refresh-only
+/// pattern, this polls while open -- jobs here are expected to start/finish
+/// on their own while the screen is up, same cadence as
+/// [SearchesScreen]'s sync-status poll.
 class TaskQueueScreen extends StatefulWidget {
   final HttpBunnyRepository repository;
 
@@ -24,7 +27,7 @@ class TaskQueueScreen extends StatefulWidget {
 }
 
 class _TaskQueueScreenState extends State<TaskQueueScreen> {
-  Future<List<BunnyTask>>? _tasksFuture;
+  Future<({List<BunnyTask> tasks, List<BunnyTaskHistoryEntry> history})>? _dataFuture;
   Timer? _pollTimer;
 
   @override
@@ -35,7 +38,13 @@ class _TaskQueueScreenState extends State<TaskQueueScreen> {
   }
 
   void _load() {
-    _tasksFuture = widget.repository.getTasks();
+    _dataFuture = _loadData();
+  }
+
+  Future<({List<BunnyTask> tasks, List<BunnyTaskHistoryEntry> history})> _loadData() async {
+    final tasks = await widget.repository.getTasks();
+    final history = await widget.repository.getTaskHistory();
+    return (tasks: tasks, history: history);
   }
 
   @override
@@ -56,13 +65,42 @@ class _TaskQueueScreenState extends State<TaskQueueScreen> {
     BunnyTaskPriority.low => Theme.of(context).colorScheme.outline,
   };
 
+  Widget _taskTile(BuildContext context, AppLocalizations l10n, BunnyTask task) => ListTile(
+    leading: task.status == BunnyTaskStatus.running
+        ? const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(strokeWidth: 2))
+        : Icon(Icons.schedule, color: Theme.of(context).colorScheme.outline),
+    title: Text(task.label),
+    subtitle: Text(task.status == BunnyTaskStatus.running ? l10n.taskQueueStatusRunning : l10n.taskQueueStatusPending),
+    trailing: Chip(
+      label: Text(_priorityLabel(l10n, task.priority)),
+      labelStyle: TextStyle(color: _priorityColor(context, task.priority)),
+      side: BorderSide(color: _priorityColor(context, task.priority)),
+    ),
+  );
+
+  Widget _historyTile(BuildContext context, AppLocalizations l10n, BunnyTaskHistoryEntry entry) {
+    final ago = formatDurationCompact(DateTime.now().difference(entry.finishedAt));
+    return ListTile(
+      leading: entry.succeeded
+          ? const Icon(Icons.check_circle_outline)
+          : Icon(Icons.error_outline, color: Theme.of(context).colorScheme.error),
+      title: Text(entry.label),
+      subtitle: Text(l10n.taskQueueFinishedAgo(ago)),
+      trailing: Chip(
+        label: Text(_priorityLabel(l10n, entry.priority)),
+        labelStyle: TextStyle(color: _priorityColor(context, entry.priority)),
+        side: BorderSide(color: _priorityColor(context, entry.priority)),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
     return Scaffold(
       appBar: AppBar(title: Text(l10n.taskQueueScreenTitle)),
-      body: FutureBuilder<List<BunnyTask>>(
-        future: _tasksFuture,
+      body: FutureBuilder<({List<BunnyTask> tasks, List<BunnyTaskHistoryEntry> history})>(
+        future: _dataFuture,
         builder: (context, snapshot) {
           if (snapshot.hasError) {
             return Center(child: Text('${snapshot.error}'));
@@ -70,27 +108,19 @@ class _TaskQueueScreenState extends State<TaskQueueScreen> {
           if (!snapshot.hasData) {
             return const Center(child: CircularProgressIndicator());
           }
-          final tasks = snapshot.data!;
-          if (tasks.isEmpty) {
+          final tasks = snapshot.data!.tasks;
+          final history = snapshot.data!.history;
+          if (tasks.isEmpty && history.isEmpty) {
             return Center(child: Text(l10n.taskQueueEmptyState));
           }
-          return ListView.builder(
-            itemCount: tasks.length,
-            itemBuilder: (context, index) {
-              final task = tasks[index];
-              return ListTile(
-                leading: task.status == BunnyTaskStatus.running
-                    ? const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(strokeWidth: 2))
-                    : Icon(Icons.schedule, color: Theme.of(context).colorScheme.outline),
-                title: Text(task.label),
-                subtitle: Text(task.status == BunnyTaskStatus.running ? l10n.taskQueueStatusRunning : l10n.taskQueueStatusPending),
-                trailing: Chip(
-                  label: Text(_priorityLabel(l10n, task.priority)),
-                  labelStyle: TextStyle(color: _priorityColor(context, task.priority)),
-                  side: BorderSide(color: _priorityColor(context, task.priority)),
-                ),
-              );
-            },
+          return ListView(
+            children: [
+              if (tasks.isEmpty) Padding(padding: const EdgeInsets.all(16), child: Text(l10n.taskQueueEmptyState)) else ...tasks.map((task) => _taskTile(context, l10n, task)),
+              if (history.isNotEmpty) ...[
+                Padding(padding: const EdgeInsets.fromLTRB(16, 16, 16, 8), child: Text(l10n.taskQueueRecentSection, style: Theme.of(context).textTheme.titleMedium)),
+                ...history.map((entry) => _historyTile(context, l10n, entry)),
+              ],
+            ],
           );
         },
       ),

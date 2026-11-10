@@ -149,4 +149,29 @@ typedef struct
 void task_queue_snapshot_get(task_queue_t *queue, task_queue_snapshot_t *out);
 void task_queue_snapshot_free(task_queue_snapshot_t *snapshot);
 
+typedef struct
+{
+    int64_t id;
+    task_type_t type;
+    task_priority_t priority;
+    char *label; /* owned, never NULL */
+    time_t enqueued_at;
+    time_t finished_at;
+    bool succeeded;
+} task_history_entry_t;
+
+typedef struct
+{
+    task_history_entry_t *items;
+    size_t count;
+} task_queue_history_snapshot_t;
+
+/* The most recently *finished* tasks (a fixed-size ring buffer -- see
+ * TASK_HISTORY_CAPACITY in task_queue.c), newest first. Unlike
+ * task_queue_snapshot_get, this has nothing to do with dispatch order --
+ * it's purely a debugging aid for "what did the server just do, and did it
+ * succeed." */
+void task_queue_history_get(task_queue_t *queue, task_queue_history_snapshot_t *out);
+void task_queue_history_snapshot_free(task_queue_history_snapshot_t *snapshot);
+
 #endif /* BUNNY_SERVER_TASK_QUEUE_H */

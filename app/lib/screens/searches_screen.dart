@@ -7,11 +7,14 @@ import '../l10n/app_localizations.dart';
 import '../repository/bunny_models.dart';
 import '../repository/bunny_repository.dart';
 import '../services/download_queue_service.dart';
+import '../services/update_apply_service.dart';
+import '../services/update_check_service.dart';
 import '../settings/app_lock_service.dart';
 import '../settings/display_settings_store.dart';
 import '../settings/download_settings_store.dart';
 import '../settings/repository_settings_store.dart';
 import '../settings/theme_settings_store.dart';
+import '../settings/update_settings_store.dart';
 import '../util/duplicate_searches.dart';
 import '../util/responsive.dart';
 import '../widgets/update_dialog.dart';
@@ -35,11 +38,17 @@ class SearchesScreen extends StatefulWidget {
   final DownloadSettingsStore downloadSettingsStore;
   final DownloadQueueService downloadQueueService;
   final RepositorySettingsStore settingsStore;
+  final UpdateSettingsStore updateSettingsStore;
   final ValueChanged<ThemeMode> onThemeModeChanged;
   final ValueChanged<ThemeColorOption> onThemeColorChanged;
   final ValueChanged<bool> onAmoledChanged;
   final ValueChanged<String?> onLanguageCodeChanged;
   final ValueChanged<BunnyRepository> onRepositoryConfigured;
+
+  /// Injectable for tests (same reasoning as every other service field
+  /// here); both default to real instances.
+  final UpdateCheckService updateCheckService;
+  final UpdateApplyService updateApplyService;
 
   const SearchesScreen({
     super.key,
@@ -49,11 +58,14 @@ class SearchesScreen extends StatefulWidget {
     required this.downloadSettingsStore,
     required this.downloadQueueService,
     required this.settingsStore,
+    required this.updateSettingsStore,
     required this.onThemeModeChanged,
     required this.onThemeColorChanged,
     required this.onAmoledChanged,
     required this.onLanguageCodeChanged,
     required this.onRepositoryConfigured,
+    this.updateCheckService = const UpdateCheckService(),
+    this.updateApplyService = const UpdateApplyService(),
   });
 
   @override
@@ -129,7 +141,15 @@ class _SearchesScreenState extends State<SearchesScreen> with SingleTickerProvid
     // screen is itself only reached once per launch anyway (the app's main
     // post-setup/post-unlock home), so there's no risk of nagging the user
     // repeatedly within one session.
-    checkForUpdateAndMaybePrompt(context);
+    _maybeCheckForUpdate();
+  }
+
+  Future<void> _maybeCheckForUpdate() async {
+    final autoCheckEnabled = await widget.updateSettingsStore.loadAutoCheckEnabled();
+    if (!mounted || !autoCheckEnabled) {
+      return;
+    }
+    checkForUpdateAndMaybePrompt(context, checkService: widget.updateCheckService, applyService: widget.updateApplyService);
   }
 
   Future<void> _loadSortOrder() async {
@@ -866,6 +886,7 @@ class _SearchesScreenState extends State<SearchesScreen> with SingleTickerProvid
           displaySettingsStore: widget.displaySettingsStore,
           downloadSettingsStore: widget.downloadSettingsStore,
           settingsStore: widget.settingsStore,
+          updateSettingsStore: widget.updateSettingsStore,
           onThemeModeChanged: widget.onThemeModeChanged,
           onThemeColorChanged: widget.onThemeColorChanged,
           onAmoledChanged: widget.onAmoledChanged,
