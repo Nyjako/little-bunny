@@ -212,6 +212,30 @@ class DownloadQueueService extends ChangeNotifier {
   List<DownloadQueueItem> get failedItems =>
       _items.where((item) => item.status == DownloadQueueItemStatus.failed || item.status == DownloadQueueItemStatus.checksumMismatch).toList(growable: false);
 
+  /// Fast, session-only progress signal for [postIds] against this queue's
+  /// live [items] -- counts how many of them currently sit in a terminal
+  /// state ([DownloadQueueItemStatus.succeeded]/[DownloadQueueItemStatus.
+  /// checksumMismatch]/[DownloadQueueItemStatus.failed]) versus the total
+  /// asked about. Meant for a cheap progress bar while a batch (e.g. a
+  /// slideshow's prepare pass, M51 v2) is actively downloading -- *not* the
+  /// authoritative "is this post ready" check, since a [DownloadQueueItemStatus
+  /// .succeeded] item can later be dropped from [items] via [clearFinished]
+  /// while the file it already wrote still correctly sits on disk; that
+  /// check is always [DownloadManager.isDownloaded] instead. A [postIds]
+  /// entry with no matching item at all (never enqueued this session) isn't
+  /// counted as done.
+  (int done, int total) progressFor(Set<int> postIds) {
+    if (postIds.isEmpty) {
+      return (0, 0);
+    }
+    final done = _items.where(
+      (item) =>
+          postIds.contains(item.post.id) &&
+          (item.status == DownloadQueueItemStatus.succeeded || item.status == DownloadQueueItemStatus.checksumMismatch || item.status == DownloadQueueItemStatus.failed),
+    ).length;
+    return (done, postIds.length);
+  }
+
   /// Enqueues [post] -- see [enqueueAll] for why the returned future matters.
   Future<void> enqueue(BunnyPost post, BunnyRepository repository) => enqueueAll([post], repository);
 
