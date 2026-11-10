@@ -49,6 +49,9 @@ void main() {
     expect(searches.single['label'], 'my search');
     expect(searches.single['query'], 'rating:safe');
     expect(searches.single['intervalHours'], 24);
+    // Only ever set by a sync that actually finds a new post (M69) -- never
+    // populated here, no sync has run.
+    expect(searches.single['lastUpdatedAt'], isNull);
   });
 
   test('createGroup then listGroups round-trips, and setSearchGroup/deleteGroup ungroups', () async {

@@ -85,6 +85,7 @@ Map<String, Object?> _searchToMap(bunny_db_search_t search) => {
   'lastViewedAt': _readNullableString(search.last_viewed_at),
   'usesDefaultInterval': search.uses_default_interval,
   'groupId': search.group_id,
+  'lastUpdatedAt': _readNullableString(search.last_updated_at),
 };
 
 Map<String, Object?> _groupToMap(bunny_db_group_t group) => {'id': group.id, 'name': _readNullableString(group.name), 'pinned': group.pinned, 'createdAt': _readNullableString(group.created_at)};

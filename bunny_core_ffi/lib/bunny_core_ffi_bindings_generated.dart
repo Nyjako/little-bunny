@@ -3334,6 +3334,9 @@ final class bunny_db_search_t extends ffi.Struct {
   /// the search_groups row this search belongs to; 0 = ungrouped (M21)
   @ffi.Int64()
   external int group_id;
+
+  /// NULL if no sync has ever found a new post -- distinct from last_run_at (M69)
+  external ffi.Pointer<ffi.Char> last_updated_at;
 }
 
 /// A folder-like way to organize saved searches in SearchesScreen's tree view
@@ -4046,9 +4049,18 @@ final class bunny_core_sync_stats_t extends ffi.Struct {
   @ffi.Int()
   external int searches_synced;
 
-  /// total posts cached/updated across all synced searches
+  /// total posts cached/updated across all synced searches -- new or already-known, every post a sync's own pages touched
   @ffi.Int()
   external int posts_upserted;
+
+  /// Of posts_upserted above, how many weren't already linked to their
+  /// search before this call -- i.e. actually new, not a re-touch of
+  /// something this search already had (M69). Distinguishes "the sync ran"
+  /// from "the sync found something new," which posts_upserted alone can't:
+  /// re-syncing a page of already-known posts still upserts (and re-links)
+  /// every one of them, incrementing posts_upserted without this.
+  @ffi.Int()
+  external int new_posts_found;
 
   /// Seconds until the soonest not-yet-due search (across every search
   /// bunny_core_sync_due_searches looked at) actually becomes due, or -1 if
