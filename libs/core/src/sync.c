@@ -958,6 +958,8 @@ bunny_core_result_t bunny_core_preview_search(bunny_core_t *core, bunny_db_site_
             }
             if (ok && !blacklisted) {
                 bunny_core_post_array_push(&arr, item);
+            } else if (ok) {
+                bunny_db_post_free(&item);
             }
         }
         bunny_db_commit_transaction(core->db);
@@ -1005,6 +1007,8 @@ bunny_core_result_t bunny_core_preview_search(bunny_core_t *core, bunny_db_site_
             }
             if (ok && !blacklisted) {
                 bunny_core_post_array_push(&arr, item);
+            } else if (ok) {
+                bunny_db_post_free(&item);
             }
         }
         bunny_db_commit_transaction(core->db);
