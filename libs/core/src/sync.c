@@ -431,6 +431,9 @@ static void upsert_e621_search_page(bunny_core_t *core, const bunny_db_search_t 
             }
             if (stats) {
                 stats->posts_upserted++;
+                if (was_new) {
+                    stats->new_posts_found++;
+                }
             }
             (*found_count)++;
             if (was_new) {
@@ -703,6 +706,7 @@ static bunny_core_result_t sync_inkbunny_search(bunny_core_t *core, const bunny_
             }
             if (stats) {
                 stats->posts_upserted++;
+                stats->new_posts_found++;
             }
         }
         bunny_db_commit_transaction(core->db);
@@ -1314,12 +1318,21 @@ bunny_core_result_t bunny_core_sync_due_searches(bunny_core_t *core, bunny_core_
             continue;
         }
 
+        /* M69 -- stats.new_posts_found is a running total across this whole
+         * batch (sync_e621_search/sync_inkbunny_search both increment the
+         * same shared counter), so a before/after delta is what tells us
+         * whether *this* search's own pass found something new, not just
+         * activity from an earlier search in the loop. */
+        int new_posts_found_before = stats.new_posts_found;
         bunny_core_result_t sync_result = search->site == BUNNY_DB_SITE_E621 ? sync_e621_search(core, search, &stats, (int)(i + 1), (int)searches.count) : sync_inkbunny_search(core, search, &stats, (int)(i + 1), (int)searches.count);
 
         if (sync_result == BUNNY_CORE_OK) {
             stats.searches_synced++;
             bunny_core_db_lock(core);
             bunny_db_search_touch_last_run(core->db, search->id);
+            if (stats.new_posts_found > new_posts_found_before) {
+                bunny_db_search_touch_last_updated(core->db, search->id);
+            }
             bunny_core_db_unlock(core);
         }
     }
@@ -1366,6 +1379,14 @@ bunny_core_result_t bunny_core_sync_search(bunny_core_t *core, int64_t search_id
         stats.searches_synced = 1;
         bunny_core_db_lock(core);
         bunny_db_search_touch_last_run(core->db, search_id);
+        /* M69 -- distinct from last_run_at above: only touched when this
+         * sync actually found a *new* post, not merely re-touched already-
+         * known ones (posts_upserted counts both; new_posts_found doesn't).
+         * stats was zeroed before this call, so new_posts_found > 0 here
+         * means this search's own sync found something new. */
+        if (stats.new_posts_found > 0) {
+            bunny_db_search_touch_last_updated(core->db, search_id);
+        }
         bunny_core_db_unlock(core);
     }
 

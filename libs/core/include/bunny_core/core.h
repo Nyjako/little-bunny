@@ -470,7 +470,15 @@ typedef struct
 {
     int searches_checked; /* how many saved searches bunny_core_sync_due_searches looked at */
     int searches_synced;  /* how many were due and synced successfully */
-    int posts_upserted;   /* total posts cached/updated across all synced searches */
+    int posts_upserted;   /* total posts cached/updated across all synced searches -- new or already-known, every post a sync's own pages touched */
+
+    /* Of posts_upserted above, how many weren't already linked to their
+     * search before this call -- i.e. actually new, not a re-touch of
+     * something this search already had (M69). Distinguishes "the sync ran"
+     * from "the sync found something new," which posts_upserted alone can't:
+     * re-syncing a page of already-known posts still upserts (and re-links)
+     * every one of them, incrementing posts_upserted without this. */
+    int new_posts_found;
 
     /* Seconds until the soonest not-yet-due search (across every search
      * bunny_core_sync_due_searches looked at) actually becomes due, or -1 if

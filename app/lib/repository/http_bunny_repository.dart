@@ -36,6 +36,7 @@ BunnySearch _searchFromJson(Map<String, Object?> j) => BunnySearch(
   lastViewedAt: j['last_viewed_at'] as String?,
   usesDefaultInterval: j['uses_default_interval'] as bool? ?? false,
   groupId: (j['group_id'] as num?)?.toInt() ?? 0,
+  lastUpdatedAt: j['last_updated_at'] as String?,
 );
 
 BunnyGroup _groupFromJson(Map<String, Object?> j) => BunnyGroup(id: (j['id'] as num).toInt(), name: j['name'] as String, pinned: j['pinned'] as bool, createdAt: j['created_at'] as String);

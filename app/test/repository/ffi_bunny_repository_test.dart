@@ -134,6 +134,9 @@ void main() {
     expect(searches.single.label, 'my search');
     expect(searches.single.intervalHours, 12);
     expect(searches.single.autoFavorite, isFalse);
+    // Only ever set by a sync that actually finds a new post (M69) -- never
+    // populated here, no sync has run.
+    expect(searches.single.lastUpdatedAt, isNull);
   });
 
   test('listSearchPosts is empty for a freshly created search regardless of rating/media mask', () async {

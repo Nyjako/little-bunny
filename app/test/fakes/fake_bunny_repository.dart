@@ -142,6 +142,7 @@ class FakeBunnyRepository implements BunnyRepository {
           lastViewedAt: search.lastViewedAt,
           usesDefaultInterval: search.usesDefaultInterval,
           groupId: search.groupId,
+          lastUpdatedAt: search.lastUpdatedAt,
         ),
       )
       .toList();
@@ -194,6 +195,7 @@ class FakeBunnyRepository implements BunnyRepository {
       lastViewedAt: search.lastViewedAt,
       usesDefaultInterval: search.usesDefaultInterval,
       groupId: search.groupId,
+      lastUpdatedAt: search.lastUpdatedAt,
     );
   }
 
@@ -799,6 +801,7 @@ class FakeBunnyRepository implements BunnyRepository {
       lastViewedAt: DateTime.now().toUtc().toIso8601String(),
       usesDefaultInterval: search.usesDefaultInterval,
       groupId: search.groupId,
+      lastUpdatedAt: search.lastUpdatedAt,
     );
   }
 
@@ -826,6 +829,7 @@ class FakeBunnyRepository implements BunnyRepository {
       lastViewedAt: search.lastViewedAt,
       usesDefaultInterval: search.usesDefaultInterval,
       groupId: groupId,
+      lastUpdatedAt: search.lastUpdatedAt,
     );
   }
 

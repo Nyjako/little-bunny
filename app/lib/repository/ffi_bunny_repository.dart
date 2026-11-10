@@ -28,6 +28,7 @@ BunnySearch _searchFromMap(Map<String, Object?> m) => BunnySearch(
   lastViewedAt: m['lastViewedAt'] as String?,
   usesDefaultInterval: m['usesDefaultInterval'] as bool,
   groupId: m['groupId'] as int,
+  lastUpdatedAt: m['lastUpdatedAt'] as String?,
 );
 
 BunnyGroup _groupFromMap(Map<String, Object?> m) => BunnyGroup(id: m['id'] as int, name: m['name'] as String, pinned: m['pinned'] as bool, createdAt: m['createdAt'] as String);
