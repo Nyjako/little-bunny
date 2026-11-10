@@ -332,6 +332,12 @@ class FfiBunnyRepository implements BunnyRepository {
   Future<List<String>> getPostSources(int postId) => _wrapped(() => _native.getPostSources(postId));
 
   @override
+  Future<List<BunnyPost>> getSlideshowRandomPosts(List<int> searchIds, int count, {int ratingMask = kRatingMaskAll, int mediaMask = kMediaMaskAll}) async {
+    final items = await _wrapped(() => _native.slideshowPickRandomPosts(searchIds, ratingMask, mediaMask, count));
+    return items.map(_postFromMap).toList();
+  }
+
+  @override
   Future<List<BunnyPostFile>> getPostFiles(int postId) async {
     final items = await _wrapped(() => _native.getPostFiles(postId));
     return items.map(_postFileFromMap).toList();
