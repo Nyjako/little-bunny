@@ -824,6 +824,13 @@ class AppLocalizationsEn extends AppLocalizations {
   String get settingsLanguageSystemDefault => 'System default';
 
   @override
+  String get settingsUpdatesSection => 'Updates';
+
+  @override
+  String get settingsAutoCheckForUpdatesLabel =>
+      'Automatically check for updates';
+
+  @override
   String get settingsAppLockSection => 'App lock';
 
   @override
@@ -855,6 +862,12 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get aboutLicensesEntry => 'Open source licenses';
+
+  @override
+  String get aboutCheckForUpdateButton => 'Check for app update';
+
+  @override
+  String get aboutNoUpdateAvailable => 'No update available';
 
   @override
   String get settingsSyncSection => 'Sync';

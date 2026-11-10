@@ -1574,6 +1574,18 @@ abstract class AppLocalizations {
   /// **'System default'**
   String get settingsLanguageSystemDefault;
 
+  /// No description provided for @settingsUpdatesSection.
+  ///
+  /// In en, this message translates to:
+  /// **'Updates'**
+  String get settingsUpdatesSection;
+
+  /// No description provided for @settingsAutoCheckForUpdatesLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Automatically check for updates'**
+  String get settingsAutoCheckForUpdatesLabel;
+
   /// No description provided for @settingsAppLockSection.
   ///
   /// In en, this message translates to:
@@ -1633,6 +1645,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Open source licenses'**
   String get aboutLicensesEntry;
+
+  /// No description provided for @aboutCheckForUpdateButton.
+  ///
+  /// In en, this message translates to:
+  /// **'Check for app update'**
+  String get aboutCheckForUpdateButton;
+
+  /// No description provided for @aboutNoUpdateAvailable.
+  ///
+  /// In en, this message translates to:
+  /// **'No update available'**
+  String get aboutNoUpdateAvailable;
 
   /// No description provided for @settingsSyncSection.
   ///

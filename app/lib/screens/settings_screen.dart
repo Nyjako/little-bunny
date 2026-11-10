@@ -18,6 +18,7 @@ import '../settings/display_settings_store.dart';
 import '../settings/download_settings_store.dart';
 import '../settings/repository_settings_store.dart';
 import '../settings/theme_settings_store.dart';
+import '../settings/update_settings_store.dart';
 import '../util/tag_query.dart';
 import 'about_screen.dart';
 import 'connection_qr_screen.dart';
@@ -38,6 +39,7 @@ class SettingsScreen extends StatefulWidget {
   final DisplaySettingsStore displaySettingsStore;
   final DownloadSettingsStore downloadSettingsStore;
   final RepositorySettingsStore settingsStore;
+  final UpdateSettingsStore updateSettingsStore;
   final ValueChanged<ThemeMode> onThemeModeChanged;
   final ValueChanged<ThemeColorOption> onThemeColorChanged;
   final ValueChanged<bool> onAmoledChanged;
@@ -52,6 +54,7 @@ class SettingsScreen extends StatefulWidget {
     required this.displaySettingsStore,
     required this.downloadSettingsStore,
     required this.settingsStore,
+    required this.updateSettingsStore,
     required this.onThemeModeChanged,
     required this.onThemeColorChanged,
     required this.onAmoledChanged,
@@ -73,6 +76,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   String? _downloadFolder;
   bool _autoFavoriteOnDownload = false;
   bool _autoUpvoteOnDownload = false;
+  bool _autoCheckForUpdates = true;
   final _intervalController = TextEditingController();
   final _gridColumnsController = TextEditingController();
   final _preloadCountController = TextEditingController();
@@ -180,6 +184,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final downloadFolder = await widget.downloadSettingsStore.loadDestinationFolder();
     final autoFavoriteOnDownload = await widget.downloadSettingsStore.loadAutoFavoriteOnDownload();
     final autoUpvoteOnDownload = await widget.downloadSettingsStore.loadAutoUpvoteOnDownload();
+    final autoCheckForUpdates = await widget.updateSettingsStore.loadAutoCheckEnabled();
     if (!mounted) {
       return;
     }
@@ -196,6 +201,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       _downloadFolder = downloadFolder;
       _autoFavoriteOnDownload = autoFavoriteOnDownload;
       _autoUpvoteOnDownload = autoUpvoteOnDownload;
+      _autoCheckForUpdates = autoCheckForUpdates;
     });
   }
 
@@ -305,6 +311,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Future<void> _setAutoUpvoteOnDownload(bool value) async {
     setState(() => _autoUpvoteOnDownload = value);
     await widget.downloadSettingsStore.saveAutoUpvoteOnDownload(value);
+  }
+
+  Future<void> _setAutoCheckForUpdates(bool value) async {
+    setState(() => _autoCheckForUpdates = value);
+    await widget.updateSettingsStore.saveAutoCheckEnabled(value);
   }
 
   Future<void> _loadBlacklist() async {
@@ -680,6 +691,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
               spacing: 8,
               children: _blacklistSuggestions.map((stat) => ActionChip(label: Text('${stat.name} (${stat.count})'), onPressed: () => _applyBlacklistSuggestion(stat.name))).toList(),
             ),
+          const SizedBox(height: 24),
+          Text(l10n.settingsUpdatesSection, style: Theme.of(context).textTheme.titleMedium),
+          SwitchListTile(
+            contentPadding: EdgeInsets.zero,
+            title: Text(l10n.settingsAutoCheckForUpdatesLabel),
+            value: _autoCheckForUpdates,
+            onChanged: _setAutoCheckForUpdates,
+          ),
           const SizedBox(height: 24),
           Text(l10n.settingsAppLockSection, style: Theme.of(context).textTheme.titleMedium),
           ListTile(

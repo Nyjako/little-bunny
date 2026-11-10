@@ -2,16 +2,20 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
 import 'package:little_bunny/bunny_repository_scope.dart';
 import 'package:little_bunny/repository/bunny_models.dart';
 import 'package:little_bunny/screens/searches_screen.dart';
 import 'package:little_bunny/services/download_manager.dart';
 import 'package:little_bunny/services/download_queue_service.dart';
+import 'package:little_bunny/services/update_check_service.dart';
 import 'package:little_bunny/settings/app_lock_service.dart';
 import 'package:little_bunny/settings/display_settings_store.dart';
 import 'package:little_bunny/settings/download_settings_store.dart';
 import 'package:little_bunny/settings/repository_settings_store.dart';
 import 'package:little_bunny/settings/theme_settings_store.dart';
+import 'package:little_bunny/settings/update_settings_store.dart';
 import 'package:path_provider_platform_interface/path_provider_platform_interface.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -20,7 +24,7 @@ import '../fakes/fake_path_provider.dart';
 import '../fakes/fake_secret_store.dart';
 import '../fakes/test_app.dart';
 
-Widget _wrap(FakeBunnyRepository repository, {DownloadQueueService? downloadQueueService}) => wrapWithLocalization(
+Widget _wrap(FakeBunnyRepository repository, {DownloadQueueService? downloadQueueService, UpdateSettingsStore? updateSettingsStore, UpdateCheckService? updateCheckService}) => wrapWithLocalization(
   BunnyRepositoryScope(
     repository: repository,
     child: SearchesScreen(
@@ -30,6 +34,8 @@ Widget _wrap(FakeBunnyRepository repository, {DownloadQueueService? downloadQueu
       downloadSettingsStore: const DownloadSettingsStore(),
       downloadQueueService: downloadQueueService ?? DownloadQueueService(downloadManager: const DownloadManager(), downloadSettingsStore: const DownloadSettingsStore()),
       settingsStore: RepositorySettingsStore(FakeSecretStore()),
+      updateSettingsStore: updateSettingsStore ?? const UpdateSettingsStore(),
+      updateCheckService: updateCheckService ?? const UpdateCheckService(),
       onThemeModeChanged: (_) {},
       onThemeColorChanged: (_) {},
       onAmoledChanged: (_) {},
@@ -783,5 +789,30 @@ void main() {
       expect(repository.searches.single.id, keeperId);
       expect(find.textContaining('duplicate searches found'), findsNothing);
     });
+  });
+
+  testWidgets('skips the automatic update check when auto-check is disabled', (WidgetTester tester) async {
+    SharedPreferences.setMockInitialValues({'update_auto_check_enabled': false});
+    final checkService = UpdateCheckService(
+      currentBuildNumber: 10,
+      client: MockClient((_) async => http.Response('{"tag_name":"build-42","assets":[{"name":"little-bunny-${UpdateCheckService.assetSuffixForPlatform()}","browser_download_url":"https://example.invalid/asset"}]}', 200)),
+    );
+
+    await tester.pumpWidget(_wrap(FakeBunnyRepository(), updateCheckService: checkService));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(AlertDialog), findsNothing);
+  });
+
+  testWidgets('runs the automatic update check when auto-check is enabled (the default)', (WidgetTester tester) async {
+    final checkService = UpdateCheckService(
+      currentBuildNumber: 10,
+      client: MockClient((_) async => http.Response('{"tag_name":"build-42","assets":[{"name":"little-bunny-${UpdateCheckService.assetSuffixForPlatform()}","browser_download_url":"https://example.invalid/asset"}]}', 200)),
+    );
+
+    await tester.pumpWidget(_wrap(FakeBunnyRepository(), updateCheckService: checkService));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(AlertDialog), findsOneWidget);
   });
 }

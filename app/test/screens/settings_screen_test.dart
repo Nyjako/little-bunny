@@ -10,6 +10,7 @@ import 'package:little_bunny/settings/display_settings_store.dart';
 import 'package:little_bunny/settings/download_settings_store.dart';
 import 'package:little_bunny/settings/repository_settings_store.dart';
 import 'package:little_bunny/settings/theme_settings_store.dart';
+import 'package:little_bunny/settings/update_settings_store.dart';
 import 'package:path_provider_platform_interface/path_provider_platform_interface.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -37,6 +38,7 @@ void main() {
           themeSettingsStore: themeStore,
           lockService: AppLockService(FakeSecretStore()),
           downloadSettingsStore: const DownloadSettingsStore(),
+          updateSettingsStore: const UpdateSettingsStore(),
           displaySettingsStore: const DisplaySettingsStore(),
           settingsStore: settingsStore(),
           onThemeModeChanged: (_) {},
@@ -64,6 +66,7 @@ void main() {
           themeSettingsStore: themeStore,
           lockService: AppLockService(FakeSecretStore()),
           downloadSettingsStore: const DownloadSettingsStore(),
+          updateSettingsStore: const UpdateSettingsStore(),
           displaySettingsStore: const DisplaySettingsStore(),
           settingsStore: settingsStore(),
           onThemeModeChanged: (mode) => notified = mode,
@@ -95,6 +98,7 @@ void main() {
           themeSettingsStore: themeStore,
           lockService: AppLockService(FakeSecretStore()),
           downloadSettingsStore: const DownloadSettingsStore(),
+          updateSettingsStore: const UpdateSettingsStore(),
           displaySettingsStore: const DisplaySettingsStore(),
           settingsStore: settingsStore(),
           onThemeModeChanged: (_) {},
@@ -129,6 +133,7 @@ void main() {
           themeSettingsStore: themeStore,
           lockService: AppLockService(FakeSecretStore()),
           downloadSettingsStore: const DownloadSettingsStore(),
+          updateSettingsStore: const UpdateSettingsStore(),
           displaySettingsStore: const DisplaySettingsStore(),
           settingsStore: settingsStore(),
           onThemeModeChanged: (_) {},
@@ -164,6 +169,7 @@ void main() {
           themeSettingsStore: const ThemeSettingsStore(),
           lockService: AppLockService(FakeSecretStore()),
           downloadSettingsStore: const DownloadSettingsStore(),
+          updateSettingsStore: const UpdateSettingsStore(),
           displaySettingsStore: const DisplaySettingsStore(),
           settingsStore: settingsStore(),
           onThemeModeChanged: (_) {},
@@ -194,6 +200,7 @@ void main() {
           themeSettingsStore: const ThemeSettingsStore(),
           lockService: AppLockService(FakeSecretStore()),
           downloadSettingsStore: const DownloadSettingsStore(),
+          updateSettingsStore: const UpdateSettingsStore(),
           displaySettingsStore: const DisplaySettingsStore(),
           settingsStore: settingsStore(),
           onThemeModeChanged: (_) {},
@@ -206,7 +213,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    await tester.dragUntilVisible(find.text('About LittleBunny'), find.byType(ListView), const Offset(0, -300));
+    await tester.dragUntilVisible(find.text('About LittleBunny'), find.byType(ListView), const Offset(0, -500));
     await tester.tap(find.text('About LittleBunny'));
     await tester.pumpAndSettle();
 
@@ -229,6 +236,7 @@ void main() {
           themeSettingsStore: const ThemeSettingsStore(),
           lockService: AppLockService(FakeSecretStore()),
           downloadSettingsStore: const DownloadSettingsStore(),
+          updateSettingsStore: const UpdateSettingsStore(),
           displaySettingsStore: const DisplaySettingsStore(),
           settingsStore: settingsStore(),
           onThemeModeChanged: (_) {},
@@ -255,6 +263,7 @@ void main() {
           lockService: AppLockService(FakeSecretStore()),
           displaySettingsStore: const DisplaySettingsStore(),
           downloadSettingsStore: const DownloadSettingsStore(),
+          updateSettingsStore: const UpdateSettingsStore(),
           settingsStore: settingsStore(),
           onThemeModeChanged: (_) {},
           onThemeColorChanged: (_) {},
@@ -282,6 +291,7 @@ void main() {
           themeSettingsStore: const ThemeSettingsStore(),
           lockService: AppLockService(FakeSecretStore()),
           downloadSettingsStore: const DownloadSettingsStore(),
+          updateSettingsStore: const UpdateSettingsStore(),
           displaySettingsStore: const DisplaySettingsStore(),
           settingsStore: settingsStore(),
           onThemeModeChanged: (_) {},
@@ -319,6 +329,7 @@ void main() {
           downloadSettingsStore: downloadStore,
           displaySettingsStore: const DisplaySettingsStore(),
           settingsStore: settingsStore(),
+          updateSettingsStore: const UpdateSettingsStore(),
           onThemeModeChanged: (_) {},
           onThemeColorChanged: (_) {},
           onAmoledChanged: (_) {},
@@ -357,6 +368,7 @@ void main() {
           downloadSettingsStore: downloadStore,
           displaySettingsStore: const DisplaySettingsStore(),
           settingsStore: settingsStore(),
+          updateSettingsStore: const UpdateSettingsStore(),
           onThemeModeChanged: (_) {},
           onThemeColorChanged: (_) {},
           onAmoledChanged: (_) {},
@@ -376,6 +388,38 @@ void main() {
     expect(await downloadStore.loadAutoUpvoteOnDownload(), isTrue);
   });
 
+  testWidgets('toggling "Automatically check for updates" persists it', (WidgetTester tester) async {
+    const updateStore = UpdateSettingsStore();
+
+    await tester.pumpWidget(
+      wrapWithLocalization(
+        SettingsScreen(
+          repository: FakeBunnyRepository(),
+          themeSettingsStore: const ThemeSettingsStore(),
+          lockService: AppLockService(FakeSecretStore()),
+          downloadSettingsStore: const DownloadSettingsStore(),
+          displaySettingsStore: const DisplaySettingsStore(),
+          settingsStore: settingsStore(),
+          updateSettingsStore: updateStore,
+          onThemeModeChanged: (_) {},
+          onThemeColorChanged: (_) {},
+          onAmoledChanged: (_) {},
+          onLanguageCodeChanged: (_) {},
+          onRepositoryConfigured: (_) {},
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(await updateStore.loadAutoCheckEnabled(), isTrue);
+
+    await tester.dragUntilVisible(find.text('Automatically check for updates'), find.byType(ListView), const Offset(0, -300));
+    await tester.tap(find.widgetWithText(SwitchListTile, 'Automatically check for updates'));
+    await tester.pumpAndSettle();
+
+    expect(await updateStore.loadAutoCheckEnabled(), isFalse);
+  });
+
   testWidgets('picking a preview quality and editing grid columns/image preload count persists all three', (WidgetTester tester) async {
     const displayStore = DisplaySettingsStore();
 
@@ -386,6 +430,7 @@ void main() {
           themeSettingsStore: const ThemeSettingsStore(),
           lockService: AppLockService(FakeSecretStore()),
           downloadSettingsStore: const DownloadSettingsStore(),
+          updateSettingsStore: const UpdateSettingsStore(),
           displaySettingsStore: displayStore,
           settingsStore: settingsStore(),
           onThemeModeChanged: (_) {},
@@ -427,6 +472,7 @@ void main() {
           themeSettingsStore: const ThemeSettingsStore(),
           lockService: AppLockService(FakeSecretStore()),
           downloadSettingsStore: const DownloadSettingsStore(),
+          updateSettingsStore: const UpdateSettingsStore(),
           displaySettingsStore: const DisplaySettingsStore(),
           settingsStore: settingsStore(),
           onThemeModeChanged: (_) {},
@@ -476,6 +522,7 @@ void main() {
           themeSettingsStore: const ThemeSettingsStore(),
           lockService: AppLockService(FakeSecretStore()),
           downloadSettingsStore: const DownloadSettingsStore(),
+          updateSettingsStore: const UpdateSettingsStore(),
           displaySettingsStore: const DisplaySettingsStore(),
           settingsStore: settingsStore(),
           onThemeModeChanged: (_) {},
@@ -524,6 +571,7 @@ void main() {
           themeSettingsStore: const ThemeSettingsStore(),
           lockService: AppLockService(FakeSecretStore()),
           downloadSettingsStore: const DownloadSettingsStore(),
+          updateSettingsStore: const UpdateSettingsStore(),
           displaySettingsStore: const DisplaySettingsStore(),
           settingsStore: settingsStore(),
           onThemeModeChanged: (_) {},
@@ -565,6 +613,7 @@ void main() {
           themeSettingsStore: const ThemeSettingsStore(),
           lockService: AppLockService(FakeSecretStore()),
           downloadSettingsStore: const DownloadSettingsStore(),
+          updateSettingsStore: const UpdateSettingsStore(),
           displaySettingsStore: const DisplaySettingsStore(),
           settingsStore: settingsStore(),
           onThemeModeChanged: (_) {},
@@ -599,6 +648,7 @@ void main() {
           themeSettingsStore: const ThemeSettingsStore(),
           lockService: AppLockService(FakeSecretStore()),
           downloadSettingsStore: const DownloadSettingsStore(),
+          updateSettingsStore: const UpdateSettingsStore(),
           displaySettingsStore: const DisplaySettingsStore(),
           settingsStore: settingsStore(),
           onThemeModeChanged: (_) {},
@@ -630,6 +680,7 @@ void main() {
           themeSettingsStore: const ThemeSettingsStore(),
           lockService: AppLockService(FakeSecretStore()),
           downloadSettingsStore: const DownloadSettingsStore(),
+          updateSettingsStore: const UpdateSettingsStore(),
           displaySettingsStore: const DisplaySettingsStore(),
           settingsStore: store,
           onThemeModeChanged: (_) {},
@@ -656,6 +707,7 @@ void main() {
           themeSettingsStore: const ThemeSettingsStore(),
           lockService: AppLockService(FakeSecretStore()),
           downloadSettingsStore: const DownloadSettingsStore(),
+          updateSettingsStore: const UpdateSettingsStore(),
           displaySettingsStore: const DisplaySettingsStore(),
           settingsStore: store,
           onThemeModeChanged: (_) {},
@@ -719,6 +771,7 @@ void main() {
           themeSettingsStore: const ThemeSettingsStore(),
           lockService: AppLockService(FakeSecretStore()),
           downloadSettingsStore: const DownloadSettingsStore(),
+          updateSettingsStore: const UpdateSettingsStore(),
           displaySettingsStore: const DisplaySettingsStore(),
           settingsStore: store,
           onThemeModeChanged: (_) {},

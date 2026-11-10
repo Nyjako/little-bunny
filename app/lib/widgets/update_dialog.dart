@@ -8,14 +8,19 @@ import '../services/update_check_service.dart';
 import '../util/byte_format.dart';
 
 /// Checks for an update and, if one's available, shows a confirmation
-/// dialog -- called once from [SearchesScreen]'s `initState` (M23).
-/// Injectable services for tests; both default to real instances.
-Future<void> checkForUpdateAndMaybePrompt(BuildContext context, {UpdateCheckService checkService = const UpdateCheckService(), UpdateApplyService applyService = const UpdateApplyService()}) async {
+/// dialog -- called once from [SearchesScreen]'s `initState` (M23), and also
+/// from [AboutScreen]'s manual "Check for app update" button. Returns
+/// whether an update was actually found (and the dialog shown), so the
+/// manual path can confirm it checked ("no update available") while the
+/// automatic path can keep ignoring the result and staying silent either
+/// way. Injectable services for tests; both default to real instances.
+Future<bool> checkForUpdateAndMaybePrompt(BuildContext context, {UpdateCheckService checkService = const UpdateCheckService(), UpdateApplyService applyService = const UpdateApplyService()}) async {
   final result = await checkService.check();
   if (!result.updateAvailable || !context.mounted) {
-    return;
+    return false;
   }
   await showDialog<void>(context: context, builder: (context) => _UpdateDialog(result: result, applyService: applyService));
+  return true;
 }
 
 class _UpdateDialog extends StatefulWidget {
