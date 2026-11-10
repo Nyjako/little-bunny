@@ -6,6 +6,7 @@ import '../bunny_repository_scope.dart';
 import '../l10n/app_localizations.dart';
 import '../repository/bunny_models.dart';
 import '../repository/bunny_repository.dart';
+import '../services/download_manager.dart';
 import '../services/download_queue_service.dart';
 import '../settings/app_lock_service.dart';
 import '../settings/display_settings_store.dart';
@@ -22,6 +23,7 @@ import 'download_queue_screen.dart';
 import 'edit_search_screen.dart';
 import 'post_grid_screen.dart';
 import 'settings_screen.dart';
+import 'slideshows_screen.dart';
 import 'tag_stats_screen.dart';
 
 /// The app's actual home screen (M8.2 promoted this over [AccountsScreen] --
@@ -121,7 +123,7 @@ class _SearchesScreenState extends State<SearchesScreen> with SingleTickerProvid
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 2, vsync: this)..addListener(() => setState(() {}));
+    _tabController = TabController(length: 3, vsync: this)..addListener(() => setState(() {}));
     _loadSortOrder();
     _pollSyncStatusOnce();
     _syncStatusPollTimer = Timer.periodic(const Duration(seconds: 2), (_) => _pollSyncStatusOnce());
@@ -951,6 +953,7 @@ class _SearchesScreenState extends State<SearchesScreen> with SingleTickerProvid
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
     final onPoolsTab = _tabController.index == 1;
+    final onSlideshowsTab = _tabController.index == 2;
     final wide = isWideScreen(context);
     return Scaffold(
       appBar: AppBar(
@@ -969,7 +972,7 @@ class _SearchesScreenState extends State<SearchesScreen> with SingleTickerProvid
         bottom: TabBar(
           controller: _tabController,
           labelPadding: wide ? const EdgeInsets.symmetric(horizontal: 16, vertical: 4) : null,
-          tabs: [Tab(text: l10n.searchesTabSearches), Tab(text: l10n.searchesTabPools)],
+          tabs: [Tab(text: l10n.searchesTabSearches), Tab(text: l10n.searchesTabPools), Tab(text: l10n.searchesTabSlideshows)],
         ),
       ),
       body: FutureBuilder<({List<BunnySearch> searches, List<BunnyGroup> groups})>(
@@ -989,18 +992,31 @@ class _SearchesScreenState extends State<SearchesScreen> with SingleTickerProvid
               Expanded(
                 child: TabBarView(
                   controller: _tabController,
-                  children: [_searchList(searches, l10n.searchesEmptyState), _searchList(pools, l10n.searchesPoolsEmptyState)],
+                  children: [
+                    _searchList(searches, l10n.searchesEmptyState),
+                    _searchList(pools, l10n.searchesPoolsEmptyState),
+                    SlideshowsScreen(
+                      repository: _repository!,
+                      downloadManager: const DownloadManager(),
+                      downloadSettingsStore: widget.downloadSettingsStore,
+                      downloadQueueService: widget.downloadQueueService,
+                    ),
+                  ],
                 ),
               ),
             ],
           );
         },
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: onPoolsTab ? _createPoolSearch : _createSearch,
-        tooltip: onPoolsTab ? l10n.searchesNewPoolTooltip : l10n.searchesNewSearchTooltip,
-        child: const Icon(Icons.add),
-      ),
+      // null on the Slideshows tab -- SlideshowsScreen owns its own FAB
+      // (creating a slideshow, not a search/pool).
+      floatingActionButton: onSlideshowsTab
+          ? null
+          : FloatingActionButton(
+              onPressed: onPoolsTab ? _createPoolSearch : _createSearch,
+              tooltip: onPoolsTab ? l10n.searchesNewPoolTooltip : l10n.searchesNewSearchTooltip,
+              child: const Icon(Icons.add),
+            ),
     );
   }
 }
