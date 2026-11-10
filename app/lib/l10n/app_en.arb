@@ -321,6 +321,8 @@
   "lockSetupPinLengthLabel": "PIN length",
   "lockSetupNewPinLabel": "New password",
   "lockSetupNewPinHeading": "Enter new PIN",
+  "lockSetupConfirmPinHeading": "Confirm new PIN",
+  "lockSetupBackToNewPin": "Back",
   "lockSetupConfirmLabel": "Confirm",
   "lockSetupEntriesDoNotMatch": "Entries do not match",
   "lockSetupEnableButton": "Enable app lock",

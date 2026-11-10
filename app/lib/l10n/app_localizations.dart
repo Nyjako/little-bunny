@@ -1304,6 +1304,18 @@ abstract class AppLocalizations {
   /// **'Enter new PIN'**
   String get lockSetupNewPinHeading;
 
+  /// No description provided for @lockSetupConfirmPinHeading.
+  ///
+  /// In en, this message translates to:
+  /// **'Confirm new PIN'**
+  String get lockSetupConfirmPinHeading;
+
+  /// No description provided for @lockSetupBackToNewPin.
+  ///
+  /// In en, this message translates to:
+  /// **'Back'**
+  String get lockSetupBackToNewPin;
+
   /// No description provided for @lockSetupConfirmLabel.
   ///
   /// In en, this message translates to:

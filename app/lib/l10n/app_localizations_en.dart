@@ -685,6 +685,12 @@ class AppLocalizationsEn extends AppLocalizations {
   String get lockSetupNewPinHeading => 'Enter new PIN';
 
   @override
+  String get lockSetupConfirmPinHeading => 'Confirm new PIN';
+
+  @override
+  String get lockSetupBackToNewPin => 'Back';
+
+  @override
   String get lockSetupConfirmLabel => 'Confirm';
 
   @override
