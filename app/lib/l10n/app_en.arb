@@ -8,6 +8,7 @@
   "commonCancel": "Cancel",
   "commonRemove": "Remove",
   "commonContinue": "Continue",
+  "commonMustBeANumber": "Enter a whole number",
 
   "setupScreenTitle": "Set up LittleBunny",
   "setupModeStandalone": "Standalone",
@@ -78,6 +79,7 @@
   },
   "searchesTabSearches": "Searches",
   "searchesTabPools": "Pools",
+  "searchesTabSlideshows": "Slideshows",
   "searchesPoolsEmptyState": "No saved pools yet. Tap + to add one.",
   "searchesFavoritesLabel": "Favorites",
   "searchesNewPoolTooltip": "Add pool",
@@ -511,5 +513,73 @@
   "wikiPageOtherNamesLabel": "Also known as: {names}",
   "@wikiPageOtherNamesLabel": {
     "placeholders": {"names": {"type": "String"}}
-  }
+  },
+
+  "slideshowsScreenEmptyState": "No slideshows yet. Tap + to create one.",
+  "slideshowsNewTooltip": "New slideshow",
+  "slideshowsNoLimitSubtitle": "No post limit",
+  "slideshowsMaxPostsSubtitle": "Up to {count} posts",
+  "@slideshowsMaxPostsSubtitle": {
+    "placeholders": {"count": {"type": "int"}}
+  },
+  "slideshowsDeleteDialogTitle": "Delete slideshow",
+  "slideshowsDeleteDialogContent": "Delete \"{label}\"? Already-downloaded files are kept unless you also choose to remove them.",
+  "@slideshowsDeleteDialogContent": {
+    "placeholders": {"label": {"type": "String"}}
+  },
+  "slideshowsDeleteAlsoFilesLabel": "Also delete downloaded files",
+
+  "slideshowEditCreateTitle": "New slideshow",
+  "slideshowEditEditTitle": "Edit slideshow",
+  "slideshowEditLabelField": "Label",
+  "slideshowEditDefaultCountField": "Default posts per search (blank = no limit)",
+  "slideshowEditMaxTotalField": "Maximum total posts (blank = no limit)",
+  "slideshowEditIntervalField": "Seconds per slide",
+  "slideshowEditSaveButton": "Save",
+  "slideshowEditSearchesHeading": "Searches",
+  "slideshowEditAddSearchTooltip": "Add search",
+  "slideshowEditAddSearchDialogTitle": "Add searches",
+  "slideshowEditAddSearchSubmit": "Add",
+  "slideshowEditNoMoreSearchesToAdd": "Every search is already added",
+  "slideshowEditSearchesEmptyState": "No searches added yet. Save the slideshow first, then add one.",
+  "slideshowEditOverrideCountDialogTitle": "Posts for \"{label}\"",
+  "@slideshowEditOverrideCountDialogTitle": {
+    "placeholders": {"label": {"type": "String"}}
+  },
+  "slideshowEditOverrideCountField": "Override count (blank = use the slideshow default)",
+  "slideshowEditOverrideCountSet": "{count} posts",
+  "@slideshowEditOverrideCountSet": {
+    "placeholders": {"count": {"type": "int"}}
+  },
+  "slideshowEditOverrideUsesDefault": "Uses the slideshow default",
+  "slideshowEditRerollSearchTooltip": "Reroll this search",
+  "slideshowEditRerollAllButton": "Reroll all",
+  "slideshowEditRemoveSearchTooltip": "Remove search",
+  "slideshowEditRemoveSearchDialogTitle": "Remove search",
+  "slideshowEditRemoveSearchDialogContent": "Remove \"{label}\" from this slideshow? Already-downloaded files are kept unless you also choose to remove them.",
+  "@slideshowEditRemoveSearchDialogContent": {
+    "placeholders": {"label": {"type": "String"}}
+  },
+  "slideshowEditPrepareHeading": "Prepare",
+  "slideshowEditPrepareButton": "Prepare",
+  "slideshowEditPrepareSummary": "{ready} ready, {inProgress} downloading, {replaced} replaced, {unreplaceable} couldn't be replaced",
+  "@slideshowEditPrepareSummary": {
+    "placeholders": {
+      "ready": {"type": "int"},
+      "inProgress": {"type": "int"},
+      "replaced": {"type": "int"},
+      "unreplaceable": {"type": "int"}
+    }
+  },
+  "slideshowEditUnreplaceableReason": "{label}: {reason}",
+  "@slideshowEditUnreplaceableReason": {
+    "placeholders": {
+      "label": {"type": "String"},
+      "reason": {"type": "String"}
+    }
+  },
+  "slideshowEditRetryButton": "Retry",
+  "slideshowEditWatchButton": "Watch",
+  "slideshowEditPrepareErrorMessage": "Couldn't prepare the slideshow",
+  "slideshowEditNoDestinationFolderMessage": "No download destination folder configured. Set one in Settings first."
 }

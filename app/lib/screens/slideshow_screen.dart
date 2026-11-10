@@ -1,27 +1,33 @@
 import 'dart:async';
 
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 
 import '../repository/bunny_models.dart';
 import '../repository/bunny_repository.dart';
-import '../util/image_headers.dart';
-import '../util/media_type.dart';
 import '../widgets/post_media_page.dart';
 
-/// Fullscreen, timer-driven slideshow over a fixed set of posts (M51) --
-/// fetched once by the caller (a server-side random sample, see
-/// `BunnyRepository.getSlideshowRandomPosts`), then cycled through locally
-/// forever until the user closes this screen. Unlike
-/// `FullScreenPostViewerScreen`, advancing is never manual (no swipe/pinch --
-/// just [PostMediaPage]'s bare media, one at a time) and never blocks on a
-/// video/gif finishing -- the interval ticks regardless of what's playing.
+/// Fullscreen, timer-driven slideshow over a fixed set of posts, played back
+/// from local files already on disk (M51 v2 -- superseding v1's live
+/// network streaming, see `SlideshowPrepareService`/`SlideshowEditScreen`
+/// for how [posts]/[localFilePaths] get resolved before this screen ever
+/// opens), cycled through locally forever until the user closes this
+/// screen. Unlike `FullScreenPostViewerScreen`, advancing is never manual
+/// (no swipe/pinch -- just [PostMediaPage]'s bare media, one at a time) and
+/// never blocks on a video/gif finishing -- the interval ticks regardless
+/// of what's playing.
 class SlideshowScreen extends StatefulWidget {
   final List<BunnyPost> posts;
+
+  /// Every entry in [posts] must have a matching key here (M51 v2 -- a
+  /// caller only ever passes the subset of a slideshow's committed posts
+  /// that [SlideshowPrepareReport.readyPosts] already confirmed are on
+  /// disk, so there's no network-fallback branch to fall back to if one's
+  /// missing).
+  final Map<int, String> localFilePaths;
   final Duration interval;
   final BunnyRepository repository;
 
-  const SlideshowScreen({super.key, required this.posts, required this.interval, required this.repository});
+  const SlideshowScreen({super.key, required this.posts, required this.localFilePaths, required this.interval, required this.repository});
 
   @override
   State<SlideshowScreen> createState() => _SlideshowScreenState();
@@ -31,7 +37,6 @@ class _SlideshowScreenState extends State<SlideshowScreen> {
   late List<int> _order;
   int _cursor = 0;
   Timer? _timer;
-  bool _preloaded = false;
 
   @override
   void initState() {
@@ -39,21 +44,6 @@ class _SlideshowScreenState extends State<SlideshowScreen> {
     _order = List.generate(widget.posts.length, (i) => i)..shuffle();
     _markSeen(_currentPost);
     _timer = Timer.periodic(widget.interval, (_) => _advance());
-  }
-
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    // precacheImage needs MediaQuery via context, not available yet during
-    // initState (same reason FullScreenPostViewerScreen's own preload call
-    // only ever runs after an async gap) -- didChangeDependencies is the
-    // framework's own recommended place for context-dependent init work.
-    // Guarded to run exactly once; this can otherwise fire again later if
-    // an ancestor InheritedWidget changes.
-    if (!_preloaded) {
-      _preloaded = true;
-      _preloadAll();
-    }
   }
 
   @override
@@ -65,23 +55,6 @@ class _SlideshowScreenState extends State<SlideshowScreen> {
   BunnyPost get _currentPost => widget.posts[_order[_cursor]];
 
   void _markSeen(BunnyPost post) => widget.repository.markPostSeen(post.id);
-
-  /// Every post's image/gif is precached up front (bounded by the user's
-  /// own chosen count, so eagerly warming all of them -- not just a window
-  /// around the current one, see `FullScreenPostViewerScreen._preloadAt` --
-  /// is fine). Videos stay lazily initialized per [PostMediaPage]: this
-  /// screen shows exactly one post at a time (a plain swap, not a
-  /// `PageView`), so the previous page's `VideoPlayerController` is already
-  /// disposed by the time the next one would be created -- never more than
-  /// one live decoder, with no extra bookkeeping needed here.
-  void _preloadAll() {
-    for (final post in widget.posts) {
-      if (isVideoExt(post.fileExt) || post.fileUrl == null) {
-        continue;
-      }
-      precacheImage(CachedNetworkImageProvider(post.fileUrl!, headers: imageHeadersFor(post.site)), context);
-    }
-  }
 
   /// Reshuffles and loops back to the start once every post in [_order] has
   /// been shown once -- "reshuffle and keep going until closed," per M51 --
@@ -103,7 +76,7 @@ class _SlideshowScreenState extends State<SlideshowScreen> {
       backgroundColor: Colors.black,
       body: Stack(
         children: [
-          Center(child: PostMediaPage(post: _currentPost)),
+          Center(child: PostMediaPage(post: _currentPost, localFilePath: widget.localFilePaths[_currentPost.id])),
           Positioned(
             top: 8,
             left: 8,
