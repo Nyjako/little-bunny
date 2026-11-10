@@ -2241,6 +2241,51 @@ void test_sync_search_forces_a_non_due_search_to_sync(void)
     free(fixture);
 }
 
+/* M69 -- last_updated_at is distinct from last_run_at: it's only touched
+ * when a sync actually finds a *new* post, not on every re-sync that just
+ * re-touches an already-known one. posts_upserted alone can't tell these
+ * apart (it counts every post a sync's pages touched, new or not) --
+ * new_posts_found is what actually distinguishes them. */
+void test_sync_search_only_touches_last_updated_at_when_a_new_post_is_found(void)
+{
+    char *fixture = read_fixture("e621_posts_search.json");
+    TEST_ASSERT_NOT_NULL(fixture);
+    g_e621_state.bodies[0] = fixture;
+    g_e621_state.bodies[1] = fixture; /* same post again -- nothing new on the second sync */
+    g_e621_state.body_count = 2;
+
+    int64_t search_id = 0;
+    bunny_core_search_create(g_core, BUNNY_DB_SITE_E621, "wolves", "wolf", 24, NULL, &search_id);
+
+    bunny_db_search_list_t list;
+    bunny_core_search_list(g_core, &list);
+    TEST_ASSERT_NULL(list.items[0].last_updated_at);
+    bunny_db_search_list_free(&list);
+
+    bunny_core_sync_stats_t stats;
+    bunny_core_sync_due_searches(g_core, &stats);
+    TEST_ASSERT_EQUAL(1, stats.new_posts_found);
+
+    bunny_core_search_list(g_core, &list);
+    TEST_ASSERT_NOT_NULL(list.items[0].last_updated_at);
+    char first_updated_at[64];
+    snprintf(first_updated_at, sizeof(first_updated_at), "%s", list.items[0].last_updated_at);
+    bunny_db_search_list_free(&list);
+
+    /* Forced re-sync of the same fixture (M13.2) -- same post, already
+     * linked, so nothing new this time. */
+    bunny_core_result_t result = bunny_core_sync_search(g_core, search_id, &stats);
+    TEST_ASSERT_EQUAL(BUNNY_CORE_OK, result);
+    TEST_ASSERT_EQUAL(0, stats.new_posts_found);
+    TEST_ASSERT_EQUAL(1, stats.posts_upserted); /* still counted as upserted -- just not new */
+
+    bunny_core_search_list(g_core, &list);
+    TEST_ASSERT_EQUAL_STRING(first_updated_at, list.items[0].last_updated_at);
+    bunny_db_search_list_free(&list);
+
+    free(fixture);
+}
+
 void test_sync_search_returns_not_found_for_unknown_id(void)
 {
     bunny_core_sync_stats_t stats;
@@ -2616,6 +2661,7 @@ int main(void)
     RUN_TEST(test_group_create_list_update_delete_round_trip);
     RUN_TEST(test_search_set_group_round_trips_and_ungroups);
     RUN_TEST(test_sync_search_forces_a_non_due_search_to_sync);
+    RUN_TEST(test_sync_search_only_touches_last_updated_at_when_a_new_post_is_found);
     RUN_TEST(test_sync_search_returns_not_found_for_unknown_id);
     RUN_TEST(test_verify_e621_accepts_valid_credentials);
     RUN_TEST(test_verify_e621_rejects_when_site_call_fails);
