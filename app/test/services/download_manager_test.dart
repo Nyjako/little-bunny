@@ -345,6 +345,24 @@ void main() {
     });
   });
 
+  group('localFilePathFor (same deterministic path as isDownloaded, returning it instead of a bool)', () {
+    test('is null when no file sits at the deterministic path yet', () async {
+      final manager = const DownloadManager();
+
+      expect(await manager.localFilePathFor(_post(artist: 'wolf'), tempDir.path), isNull);
+    });
+
+    test('returns the resolved path once downloadPost has written the file', () async {
+      const manager = DownloadManager();
+      final repository = FakeBunnyRepository();
+      repository.downloadFileFetchImpl = (_) async => http.Response.bytes([1, 2, 3], 200);
+
+      await manager.downloadPost(_post(artist: 'some/bad:artist'), repository, tempDir.path);
+
+      expect(await manager.localFilePathFor(_post(artist: 'some/bad:artist'), tempDir.path), '${tempDir.path}/some_bad_artist/42.png');
+    });
+  });
+
   group('SAF write path (Android content:// destination, M36)', () {
     late FakeSafUtilPlatform fakeSafUtil;
     late FakeSafStreamPlatform fakeSafStream;
