@@ -102,19 +102,65 @@ void main() {
     expect(await native.listSearchPosts(id, false, 15, 7, 1), isEmpty);
   });
 
-  test('slideshowPickRandomPosts round-trips a List<int> of search ids and is empty for freshly created searches (M51)', () async {
-    final id1 = await native.createSearch('e621', 'wolves', 'wolf', 24);
-    final id2 = await native.createSearch('e621', 'foxes', 'fox', 24);
+  test('slideshowPickPostsForSearch is empty for a freshly created search (M51 v2)', () async {
+    final id = await native.createSearch('e621', 'wolves', 'wolf', 24);
 
     // 15/7 == BUNNY_DB_RATING_MASK_ALL/BUNNY_DB_MEDIA_MASK_ALL (unfiltered).
-    expect(await native.slideshowPickRandomPosts([id1, id2], 15, 7, 10), isEmpty);
+    expect(await native.slideshowPickPostsForSearch(id, 10, [], 15, 7), isEmpty);
   });
 
-  test('slideshowPickRandomPosts rejects a search_ids set that resolves to nothing (M51)', () async {
-    // A stale/nonexistent id never resolves to a real search -- the whole
-    // call should throw, same as bunny_core_slideshow_pick_random_posts
-    // returning BUNNY_CORE_ERR_INVALID_ARG when every id is excluded.
-    await expectLater(native.slideshowPickRandomPosts([999999], 15, 7, 10), throwsA(isA<BunnyCoreNativeException>()));
+  test('slideshowPickPostsForSearch rejects a nonexistent search id (M51 v2)', () async {
+    await expectLater(native.slideshowPickPostsForSearch(999999, 10, [], 15, 7), throwsA(isA<BunnyCoreNativeException>()));
+  });
+
+  test('slideshowCreate/slideshowList/slideshowGet/slideshowUpdate/slideshowDelete round-trip (M51 v2)', () async {
+    final id = await native.slideshowCreate('my slideshow', 5, null);
+
+    var slideshows = await native.slideshowList();
+    expect(slideshows, hasLength(1));
+    expect(slideshows.single['id'], id);
+    expect(slideshows.single['label'], 'my slideshow');
+    expect(slideshows.single['defaultPostsPerSearch'], 5);
+    expect(slideshows.single['maxTotalPosts'], isNull);
+
+    await native.slideshowUpdate(id, 'renamed', null, 10);
+    final slideshow = await native.slideshowGet(id);
+    expect(slideshow['label'], 'renamed');
+    expect(slideshow['defaultPostsPerSearch'], isNull);
+    expect(slideshow['maxTotalPosts'], 10);
+
+    await native.slideshowDelete(id);
+    expect(await native.slideshowList(), isEmpty);
+  });
+
+  test('slideshowSearchAdd/slideshowSearchCommitPicks/slideshowPostsList/slideshowSearchRemove round-trip (M51 v2)', () async {
+    final searchId = await native.createSearch('e621', 'wolves', 'wolf', 24);
+    final slideshowId = await native.slideshowCreate('my slideshow', null, null);
+
+    await native.slideshowSearchAdd(slideshowId, searchId, 3);
+    var links = await native.slideshowSearchList(slideshowId);
+    expect(links, hasLength(1));
+    expect(links.single['searchId'], searchId);
+    expect(links.single['overrideCount'], 3);
+
+    // Nothing's actually been synced for this search, so there's nothing to
+    // commit -- this just proves the round trip doesn't throw.
+    await native.slideshowSearchCommitPicks(slideshowId, searchId);
+    expect(await native.slideshowPostsList(slideshowId, 0), isEmpty);
+
+    await native.slideshowRerollAll(slideshowId);
+    await native.slideshowRerollSearch(slideshowId, searchId);
+
+    await native.slideshowSearchRemove(slideshowId, searchId);
+    expect(await native.slideshowSearchList(slideshowId), isEmpty);
+  });
+
+  test('slideshowReplacePost throws when the search has nothing to replace with (M51 v2)', () async {
+    final searchId = await native.createSearch('e621', 'wolves', 'wolf', 24);
+    final slideshowId = await native.slideshowCreate('my slideshow', null, null);
+    await native.slideshowSearchAdd(slideshowId, searchId, null);
+
+    await expectLater(native.slideshowReplacePost(slideshowId, searchId, 1), throwsA(isA<BunnyCoreNativeException>()));
   });
 
   test('syncDueSearches with no searches is a no-op', () async {

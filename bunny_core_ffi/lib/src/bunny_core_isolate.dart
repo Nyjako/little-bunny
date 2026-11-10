@@ -132,6 +132,23 @@ Map<String, Object?> _postFileToMap(bunny_db_post_file_t file) => {
   'mimetype': _readNullableString(file.mimetype),
 };
 
+Map<String, Object?> _slideshowToMap(bunny_db_slideshow_t slideshow) => {
+  'id': slideshow.id,
+  'label': _readNullableString(slideshow.label),
+  'defaultPostsPerSearch': slideshow.has_default_posts_per_search ? slideshow.default_posts_per_search : null,
+  'maxTotalPosts': slideshow.has_max_total_posts ? slideshow.max_total_posts : null,
+  'createdAt': _readNullableString(slideshow.created_at),
+};
+
+Map<String, Object?> _slideshowSearchToMap(bunny_db_slideshow_search_t item) => {
+  'slideshowId': item.slideshow_id,
+  'searchId': item.search_id,
+  'overrideCount': item.has_override_count ? item.override_count : null,
+  'addedAt': _readNullableString(item.added_at),
+};
+
+Map<String, Object?> _slideshowPostToMap(bunny_db_slideshow_post_t item) => {'searchId': item.search_id, 'post': _postToMap(item.post)};
+
 Map<String, Object?> _syncStatsToMap(bunny_core_sync_stats_t stats) => {'searchesChecked': stats.searches_checked, 'searchesSynced': stats.searches_synced, 'postsUpserted': stats.posts_upserted};
 
 Map<String, Object?> _blacklistSyncStatsToMap(bunny_core_blacklist_sync_stats_t stats) => {'added': stats.added, 'alreadyPresent': stats.already_present, 'skippedInvalid': stats.skipped_invalid};
@@ -369,13 +386,103 @@ class _GetPostSourcesRequest extends _Request {
   const _GetPostSourcesRequest(this.postId);
 }
 
-class _SlideshowPickRandomPostsRequest extends _Request {
-  final List<int> searchIds;
+class _SlideshowCreateRequest extends _Request {
+  final String label;
+  final int? defaultPostsPerSearch;
+  final int? maxTotalPosts;
+
+  const _SlideshowCreateRequest(this.label, this.defaultPostsPerSearch, this.maxTotalPosts);
+}
+
+class _SlideshowUpdateRequest extends _Request {
+  final int slideshowId;
+  final String label;
+  final int? defaultPostsPerSearch;
+  final int? maxTotalPosts;
+
+  const _SlideshowUpdateRequest(this.slideshowId, this.label, this.defaultPostsPerSearch, this.maxTotalPosts);
+}
+
+class _SlideshowDeleteRequest extends _Request {
+  final int slideshowId;
+
+  const _SlideshowDeleteRequest(this.slideshowId);
+}
+
+class _SlideshowGetRequest extends _Request {
+  final int slideshowId;
+
+  const _SlideshowGetRequest(this.slideshowId);
+}
+
+class _SlideshowListRequest extends _Request {
+  const _SlideshowListRequest();
+}
+
+class _SlideshowSearchAddRequest extends _Request {
+  final int slideshowId;
+  final int searchId;
+  final int? overrideCount;
+
+  const _SlideshowSearchAddRequest(this.slideshowId, this.searchId, this.overrideCount);
+}
+
+class _SlideshowSearchRemoveRequest extends _Request {
+  final int slideshowId;
+  final int searchId;
+
+  const _SlideshowSearchRemoveRequest(this.slideshowId, this.searchId);
+}
+
+class _SlideshowSearchListRequest extends _Request {
+  final int slideshowId;
+
+  const _SlideshowSearchListRequest(this.slideshowId);
+}
+
+class _SlideshowPostsListRequest extends _Request {
+  final int slideshowId;
+  final int searchId;
+
+  const _SlideshowPostsListRequest(this.slideshowId, this.searchId);
+}
+
+class _SlideshowPickPostsForSearchRequest extends _Request {
+  final int searchId;
+  final int count;
+  final List<int> excludedPostIds;
   final int ratingMask;
   final int mediaMask;
-  final int count;
 
-  const _SlideshowPickRandomPostsRequest(this.searchIds, this.ratingMask, this.mediaMask, this.count);
+  const _SlideshowPickPostsForSearchRequest(this.searchId, this.count, this.excludedPostIds, this.ratingMask, this.mediaMask);
+}
+
+class _SlideshowSearchCommitPicksRequest extends _Request {
+  final int slideshowId;
+  final int searchId;
+
+  const _SlideshowSearchCommitPicksRequest(this.slideshowId, this.searchId);
+}
+
+class _SlideshowRerollSearchRequest extends _Request {
+  final int slideshowId;
+  final int searchId;
+
+  const _SlideshowRerollSearchRequest(this.slideshowId, this.searchId);
+}
+
+class _SlideshowRerollAllRequest extends _Request {
+  final int slideshowId;
+
+  const _SlideshowRerollAllRequest(this.slideshowId);
+}
+
+class _SlideshowReplacePostRequest extends _Request {
+  final int slideshowId;
+  final int searchId;
+  final int deadPostId;
+
+  const _SlideshowReplacePostRequest(this.slideshowId, this.searchId, this.deadPostId);
 }
 
 class _GetPostFilesRequest extends _Request {
@@ -846,19 +953,56 @@ List<Map<String, Object?>> _handlePreviewSearch(Pointer<bunny_core_t> core, _Pre
   });
 }
 
-/* M51 slideshow -- the first FFI call in this codebase to send an array as
- * an *input* (every other arena<...> use above is output-only). r.searchIds
- * is copied into a native Int64 array via the same arena every other
- * temporary native allocation in this function already uses, freed
- * automatically when `using` returns. */
-List<Map<String, Object?>> _handleSlideshowPickRandomPosts(Pointer<bunny_core_t> core, _SlideshowPickRandomPostsRequest r) {
+List<Map<String, Object?>> _handleSlideshowList(Pointer<bunny_core_t> core) {
   return using((arena) {
-    final idsPtr = arena<Int64>(r.searchIds.length);
-    for (var i = 0; i < r.searchIds.length; i++) {
-      idsPtr[i] = r.searchIds[i];
+    final out = arena<bunny_db_slideshow_list_t>();
+    _check(_bindings.bunny_core_slideshow_list(core, out));
+    final items = <Map<String, Object?>>[];
+    for (var i = 0; i < out.ref.count; i++) {
+      items.add(_slideshowToMap(out.ref.items[i]));
+    }
+    _bindings.bunny_db_slideshow_list_free(out);
+    return items;
+  });
+}
+
+List<Map<String, Object?>> _handleSlideshowSearchList(Pointer<bunny_core_t> core, _SlideshowSearchListRequest r) {
+  return using((arena) {
+    final out = arena<bunny_db_slideshow_search_list_t>();
+    _check(_bindings.bunny_core_slideshow_search_list(core, r.slideshowId, out));
+    final items = <Map<String, Object?>>[];
+    for (var i = 0; i < out.ref.count; i++) {
+      items.add(_slideshowSearchToMap(out.ref.items[i]));
+    }
+    _bindings.bunny_db_slideshow_search_list_free(out);
+    return items;
+  });
+}
+
+List<Map<String, Object?>> _handleSlideshowPostsList(Pointer<bunny_core_t> core, _SlideshowPostsListRequest r) {
+  return using((arena) {
+    final out = arena<bunny_db_slideshow_post_list_t>();
+    _check(_bindings.bunny_core_slideshow_posts_list(core, r.slideshowId, r.searchId, out));
+    final items = <Map<String, Object?>>[];
+    for (var i = 0; i < out.ref.count; i++) {
+      items.add(_slideshowPostToMap(out.ref.items[i]));
+    }
+    _bindings.bunny_db_slideshow_post_list_free(out);
+    return items;
+  });
+}
+
+/* r.excludedPostIds is copied into a native Int64 array via the same
+ * arena<Int64>(count) input-array pattern M51 v1 already established for
+ * the (now-removed) combined multi-search pick call. */
+List<Map<String, Object?>> _handleSlideshowPickPostsForSearch(Pointer<bunny_core_t> core, _SlideshowPickPostsForSearchRequest r) {
+  return using((arena) {
+    final excludedPtr = arena<Int64>(r.excludedPostIds.length);
+    for (var i = 0; i < r.excludedPostIds.length; i++) {
+      excludedPtr[i] = r.excludedPostIds[i];
     }
     final out = arena<bunny_db_post_list_t>();
-    _check(_bindings.bunny_core_slideshow_pick_random_posts(core, idsPtr, r.searchIds.length, r.ratingMask, r.mediaMask, r.count, out));
+    _check(_bindings.bunny_core_slideshow_pick_posts_for_search(core, r.searchId, r.count, excludedPtr, r.excludedPostIds.length, r.ratingMask, r.mediaMask, out));
     final items = <Map<String, Object?>>[];
     for (var i = 0; i < out.ref.count; i++) {
       items.add(_postToMap(out.ref.items[i]));
@@ -1199,8 +1343,48 @@ Object? _dispatch(Pointer<bunny_core_t>? core, _Request request, void Function(P
         return _handleGetPostTagsByCategory(c, r);
       case _GetPostSourcesRequest r:
         return _handleGetPostSources(c, r);
-      case _SlideshowPickRandomPostsRequest r:
-        return _handleSlideshowPickRandomPosts(c, r);
+      case _SlideshowCreateRequest r:
+        final outId = arena<Int64>();
+        _check(_bindings.bunny_core_slideshow_create(c, r.label.toNativeUtf8(allocator: arena).cast(), r.defaultPostsPerSearch != null, r.defaultPostsPerSearch ?? 0, r.maxTotalPosts != null, r.maxTotalPosts ?? 0, outId));
+        return outId.value;
+      case _SlideshowUpdateRequest r:
+        _check(
+          _bindings.bunny_core_slideshow_update(c, r.slideshowId, r.label.toNativeUtf8(allocator: arena).cast(), r.defaultPostsPerSearch != null, r.defaultPostsPerSearch ?? 0, r.maxTotalPosts != null, r.maxTotalPosts ?? 0),
+        );
+        return null;
+      case _SlideshowDeleteRequest r:
+        _check(_bindings.bunny_core_slideshow_delete(c, r.slideshowId));
+        return null;
+      case _SlideshowGetRequest r:
+        final out = arena<bunny_db_slideshow_t>();
+        _check(_bindings.bunny_core_slideshow_get(c, r.slideshowId, out));
+        return _slideshowToMap(out.ref);
+      case _SlideshowListRequest():
+        return _handleSlideshowList(c);
+      case _SlideshowSearchAddRequest r:
+        _check(_bindings.bunny_core_slideshow_search_add(c, r.slideshowId, r.searchId, r.overrideCount != null, r.overrideCount ?? 0));
+        return null;
+      case _SlideshowSearchRemoveRequest r:
+        _check(_bindings.bunny_core_slideshow_search_remove(c, r.slideshowId, r.searchId));
+        return null;
+      case _SlideshowSearchListRequest r:
+        return _handleSlideshowSearchList(c, r);
+      case _SlideshowPostsListRequest r:
+        return _handleSlideshowPostsList(c, r);
+      case _SlideshowPickPostsForSearchRequest r:
+        return _handleSlideshowPickPostsForSearch(c, r);
+      case _SlideshowSearchCommitPicksRequest r:
+        _check(_bindings.bunny_core_slideshow_search_commit_picks(c, r.slideshowId, r.searchId));
+        return null;
+      case _SlideshowRerollSearchRequest r:
+        _check(_bindings.bunny_core_slideshow_reroll_search(c, r.slideshowId, r.searchId));
+        return null;
+      case _SlideshowRerollAllRequest r:
+        _check(_bindings.bunny_core_slideshow_reroll_all(c, r.slideshowId));
+        return null;
+      case _SlideshowReplacePostRequest r:
+        _check(_bindings.bunny_core_slideshow_replace_post(c, r.slideshowId, r.searchId, r.deadPostId));
+        return null;
       case _GetPostFilesRequest r:
         return _handleGetPostFiles(c, r);
       case _GetPostRelationshipsRequest r:
@@ -1431,8 +1615,35 @@ class BunnyCoreNative {
 
   Future<List<String>> getPostSources(int postId) => _send<List<String>>(_GetPostSourcesRequest(postId));
 
-  Future<List<Map<String, Object?>>> slideshowPickRandomPosts(List<int> searchIds, int ratingMask, int mediaMask, int count) =>
-      _send<List<Map<String, Object?>>>(_SlideshowPickRandomPostsRequest(searchIds, ratingMask, mediaMask, count));
+  Future<int> slideshowCreate(String label, int? defaultPostsPerSearch, int? maxTotalPosts) => _send<int>(_SlideshowCreateRequest(label, defaultPostsPerSearch, maxTotalPosts));
+
+  Future<void> slideshowUpdate(int slideshowId, String label, int? defaultPostsPerSearch, int? maxTotalPosts) =>
+      _send<void>(_SlideshowUpdateRequest(slideshowId, label, defaultPostsPerSearch, maxTotalPosts));
+
+  Future<void> slideshowDelete(int slideshowId) => _send<void>(_SlideshowDeleteRequest(slideshowId));
+
+  Future<Map<String, Object?>> slideshowGet(int slideshowId) => _send<Map<String, Object?>>(_SlideshowGetRequest(slideshowId));
+
+  Future<List<Map<String, Object?>>> slideshowList() => _send<List<Map<String, Object?>>>(const _SlideshowListRequest());
+
+  Future<void> slideshowSearchAdd(int slideshowId, int searchId, int? overrideCount) => _send<void>(_SlideshowSearchAddRequest(slideshowId, searchId, overrideCount));
+
+  Future<void> slideshowSearchRemove(int slideshowId, int searchId) => _send<void>(_SlideshowSearchRemoveRequest(slideshowId, searchId));
+
+  Future<List<Map<String, Object?>>> slideshowSearchList(int slideshowId) => _send<List<Map<String, Object?>>>(_SlideshowSearchListRequest(slideshowId));
+
+  Future<List<Map<String, Object?>>> slideshowPostsList(int slideshowId, int searchId) => _send<List<Map<String, Object?>>>(_SlideshowPostsListRequest(slideshowId, searchId));
+
+  Future<List<Map<String, Object?>>> slideshowPickPostsForSearch(int searchId, int count, List<int> excludedPostIds, int ratingMask, int mediaMask) =>
+      _send<List<Map<String, Object?>>>(_SlideshowPickPostsForSearchRequest(searchId, count, excludedPostIds, ratingMask, mediaMask));
+
+  Future<void> slideshowSearchCommitPicks(int slideshowId, int searchId) => _send<void>(_SlideshowSearchCommitPicksRequest(slideshowId, searchId));
+
+  Future<void> slideshowRerollSearch(int slideshowId, int searchId) => _send<void>(_SlideshowRerollSearchRequest(slideshowId, searchId));
+
+  Future<void> slideshowRerollAll(int slideshowId) => _send<void>(_SlideshowRerollAllRequest(slideshowId));
+
+  Future<void> slideshowReplacePost(int slideshowId, int searchId, int deadPostId) => _send<void>(_SlideshowReplacePostRequest(slideshowId, searchId, deadPostId));
 
   Future<List<Map<String, Object?>>> getPostFiles(int postId) => _send<List<Map<String, Object?>>>(_GetPostFilesRequest(postId));
 
