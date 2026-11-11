@@ -248,6 +248,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   /// AppLocalizations.supportedLocales before this map catches up.
   String _languageLabel(Locale locale) => switch (locale.languageCode) {
     'en' => 'English',
+    'pl' => 'Polski',
     _ => locale.languageCode,
   };
 
