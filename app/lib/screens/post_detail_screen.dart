@@ -791,10 +791,10 @@ class _PostDetailPageState extends State<_PostDetailPage> {
   /// True only once [_files] has resolved with more than one entry that are
   /// *all* plain images -- the only shape the paging gallery below knows how
   /// to render. A video (never observed with more than one file in practice)
-  /// or a bonus audio track alongside the art pages (seen live on a real
-  /// Picture Series submission) falls back to [_buildSingleFileMedia]'s
-  /// existing single-primary-file rendering untouched, same as any other
-  /// post -- no gallery controls, no behavior change.
+  /// falls back to [_buildSingleFileMedia]'s existing single-primary-file
+  /// rendering untouched, same as any other post -- no gallery controls, no
+  /// behavior change. A mix that includes audio is handled by
+  /// [_mixedAudioTracks] instead, not here.
   bool get _hasImageGallery {
     final files = _files;
     return files != null && files.length > 1 && files.every((f) => _imageExtensions.contains(f.fileExt?.toLowerCase()));
@@ -808,6 +808,24 @@ class _PostDetailPageState extends State<_PostDetailPage> {
     return files != null && files.length > 1 && files.every((f) => isAudioExt(f.fileExt));
   }
 
+  /// Audio files mixed in alongside non-audio ones on the same submission --
+  /// e.g. a Music - Single Track submission whose first (primary) file is
+  /// cover art, with the actual track(s) as additional files (confirmed live
+  /// against a real submission, M28 submission-type coverage follow-up).
+  /// [_hasAudioAlbum] only covers an *all-audio* multi-file submission
+  /// (Music - Album); without this, [_buildSingleFileMedia] would render
+  /// just the cover and the only audio on the post would be unreachable.
+  /// Only called once both [_hasImageGallery] and [_hasAudioAlbum] are known
+  /// false, so a non-empty result here always means a genuine mix, never an
+  /// all-audio submission counted twice.
+  List<BunnyPostFile> get _mixedAudioTracks {
+    final files = _files;
+    if (files == null || files.length <= 1) {
+      return const [];
+    }
+    return files.where((f) => isAudioExt(f.fileExt)).toList();
+  }
+
   Widget _buildMedia(AppLocalizations l10n) {
     if (_hasImageGallery) {
       return _buildImageGallery(_files!);
@@ -815,7 +833,12 @@ class _PostDetailPageState extends State<_PostDetailPage> {
     if (_hasAudioAlbum) {
       return _buildAudioAlbum(_files!);
     }
-    return _buildSingleFileMedia(l10n);
+    final primary = _buildSingleFileMedia(l10n);
+    final mixedAudioTracks = _mixedAudioTracks;
+    if (mixedAudioTracks.isEmpty) {
+      return primary;
+    }
+    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [primary, const SizedBox(height: 12), _buildAudioAlbum(mixedAudioTracks)]);
   }
 
   Widget _buildSingleFileMedia(AppLocalizations l10n) {

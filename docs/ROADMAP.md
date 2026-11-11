@@ -1906,7 +1906,7 @@ this file is the single source of truth for "what's done" across sessions.
     code (+ raw JSON fallback for manual copy-paste) encoding `server_url`/`bearer_token`/
     `cert_sha256`, for the app's "Networked" setup screen to scan instead of typing all
     three in by hand. Vendors nayuki/QR-Code-generator (MIT, single C file) via CPM
-    `DOWNLOAD_ONLY`. Android-side QR *scanning* UI is still backlog (see M28).
+    `DOWNLOAD_ONLY`. Android-side QR *scanning* UI landed later (see M58).
   - **Fix: missing images on Inkbunny posts** (PR #115): `upsert_inkbunny_submission`
     never populated `file_ext` (Inkbunny's API has no bare `ext` field like e621's) --
     the Flutter media widget treats a null `fileExt` as "nothing to render," hiding an
@@ -1940,7 +1940,7 @@ this file is the single source of truth for "what's done" across sessions.
     counted separately rather than silently dropped or misinterpreted as one literal
     (space-containing) tag; full AND-group support is backlog (see M28).
 
-- [ ] **M28 — Search filters, Inkbunny type coverage, and diagnostics (in progress)**
+- [x] **M28 — Search filters, Inkbunny type coverage, and diagnostics**
   Backlog from the same round of feedback that produced M27, roughly in the order the
   user asked to tackle them.
   - [x] **Rating + media-type filters.** Post-grid filtering by rating (safe/
@@ -1955,34 +1955,54 @@ this file is the single source of truth for "what's done" across sessions.
     downloading it); a post with an unrecognized rating always stays visible regardless
     of which rating chips are toggled, via a permanently-set "unknown" bit the UI never
     exposes a control for.
-  - [ ] **Inkbunny submission-type coverage.** `inkbunny_submission_t.submission_type_id`/
+  - [x] **Inkbunny submission-type coverage.** `inkbunny_submission_t.submission_type_id`/
     `.type_name` are still parsed by the Inkbunny client but discarded before reaching the
     database (confirmed again this pass: `upsert_inkbunny_submission`, `libs/core/src/
     sync.c`, never copies either field into `bunny_db_post_upsert_t`) -- same shape of gap
-    M27's `file_ext` fix addressed. Code-level audit of all 14 real submission types
+    M27's `file_ext` fix addressed. Audit of all 14 real submission types
     (`docs/API - Inkbunny.pdf`, gitignored) against this app's actual file-extension-
     driven dispatch (deliberately not type-id-driven -- `is_unsupported_inkbunny_file`'s
     own comment explains why: a "Shockwave/Flash - Animation" submission can legitimately
-    BE a plain renderable .gif). 13 of the 14 types are provably covered already, no code
-    change needed: Picture/Pinup, Sketch, Character Sheet, and Photography/Fursuit/
-    Sculpture/Jewelry/etc (ids 1, 2, 13, 14) are single images, handled by the ordinary
-    image viewer; Picture Series/Comic/Portfolio (3/4/5) are multi-file submissions,
-    handled by the multi-file image gallery (M28); Video - Feature Length/Animation-3D-CGI
-    (8/9) play through Chewie; Music - Single Track/Album (10/11) play through
-    `AudioPlayerWidget`/the multi-track album UI (M28 Phase 4); Shockwave/Flash -
-    Animation/Interactive (6/7) are permanently filtered out by design (confirmed live:
-    type 6 can legitimately be a real, non-Flash file underneath, so it's filtered by
-    actual mimetype/extension, not this id; type 7 was confirmed always a genuine
-    unplayable .swf). The one real gap is **Writing - Document** (id 12): no dedicated
-    renderer exists, so it falls back to the same generic "this file format isn't
-    supported yet" message (`postDetailUnsupportedFormat`) any unknown extension already
-    gets -- no crash, but no inline viewing either. Whether that fallback is acceptable
-    as-is or needs an actual in-app viewer/download-link affordance is a product decision
-    still open. This whole audit is code-level only, not live-verified against real
-    submissions (no account/submission ids available in this pass) -- same caveat as
-    M8.5.2's "requires the user present" treatment, so this stays unchecked until either
-    confirmed live against a real post of each type, or the Writing-Document decision
-    above is made and (if needed) implemented.
+    BE a plain renderable .gif), **confirmed live** this pass against 3 real submission ids
+    per type (42 total, supplied by the user, kept locally only -- `docs/
+    inkbunny_posts.txt`, gitignored) via Inkbunny's own `api_submissions.php`, including the
+    3 that were guest-blocked and needed the real configured account to fetch (same
+    "requires the user present" pattern as M8.5.2/M28's earlier private-submission check).
+    13 of the 14 types confirmed working as designed, no code change needed: Picture/
+    Pinup, Sketch, Character Sheet, and Photography/Fursuit/Sculpture/Jewelry/etc (ids 1,
+    2, 13, 14) render through the ordinary image viewer; Picture Series/Comic/Portfolio
+    (3/4/5) through the multi-file image gallery; Video - Feature Length/Animation-3D-CGI
+    (8/9) through Chewie; Music - Single Track/Album (10/11) through `AudioPlayerWidget`/
+    the multi-track album UI; Shockwave/Flash - Animation/Interactive (6/7) confirmed live
+    exactly as the code already assumed -- a real "Animation" (6) submission can legitimately
+    be an all-.gif submission with zero .swf files, correctly left unfiltered; every
+    "Interactive" (7) sample was a genuine unplayable .swf (one with a .swf-first,
+    .png-second file list, correctly dropped by `is_unsupported_inkbunny_file` checking only
+    the first file). **Writing - Document** (id 12) was already closed out in an earlier,
+    smaller pass that this entry's text hadn't caught up with: `TextDocumentViewer` renders
+    `.txt`/`.md` inline (`isTextDocumentExt`, deliberately narrow -- not `.pdf`/`.doc`/
+    `.docx`/`.rtf`, which aren't plain UTF-8 text), with the generic "unsupported format"
+    fallback plus an "open externally" link for anything else; live data confirmed real
+    `.txt`/image-as-"Document" samples both render correctly as-is.
+    Live verification did surface one genuine, previously-unhandled gap: `_buildMedia`
+    only treats a multi-file submission as a gallery when *every* file is the same class
+    (`_hasImageGallery`/`_hasAudioAlbum`), so a submission mixing classes fell all the way
+    back to single-primary-file rendering -- harmless for a bonus audio track tacked onto a
+    Picture Series (just the art pages show, already noted and accepted in
+    `_hasImageGallery`'s own comment), but a real problem for a Music - Single Track
+    submission whose primary file is cover art: the track itself was completely
+    unreachable, confirmed live on a real submission (first file an image, music in the
+    remaining files). Fixed via `_mixedAudioTracks`
+    (`app/lib/screens/post_detail_screen.dart`) -- any audio files mixed in with non-audio
+    ones now render as a track list below the primary media, reusing the existing
+    `_buildAudioAlbum` list rather than a new widget. One narrower case stays deliberately
+    unhandled: a submission mixing two *non-audio* classes (confirmed live: a Video -
+    Animation/3D/CGI submission with a .gif file before an .mp4 file, same base filename --
+    Inkbunny's own auto-generated preview-plus-source pattern for old Flash conversions, not
+    independent content) still only shows the first file; building a true mixed-type visual
+    gallery (each page swapping between the image and video dispatch, with its own player
+    lifecycle) is real additional work left for if it ever turns out to matter beyond this
+    one redundant-content pattern.
   - [x] **Bulk Inkbunny submission detail fetch (background job).** The user pointed out
     `api_submissions.php` (see `docs/API - Inkbunny.pdf`, gitignored -- Inkbunny's
     official docs, kept locally): takes up to 100 comma-separated submission ids per
