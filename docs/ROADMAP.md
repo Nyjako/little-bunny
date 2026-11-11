@@ -3168,7 +3168,7 @@ this file is the single source of truth for "what's done" across sessions.
   option) via a small `_lastUpdatedSubtitle` helper reusing `formatDurationCompact`,
   shown only when the field is actually set.
 
-- [ ] **M70 — Android: downloads stop after some time in the background/locked**
+- [x] **M70 — Android: downloads stop after some time in the background/locked**
   Reported by the user alongside a separate, now-fixed UI bug (the download queue
   screen's per-item rows had no `Key`, so `Column`'s default position-based
   reconciliation could mis-associate a row's state with the wrong post once items
@@ -3206,6 +3206,13 @@ this file is the single source of truth for "what's done" across sessions.
   since Android treats this permission as sensitive and Play Store review scrutinizes
   its use). Needs a real device (ideally more than one OEM) to actually reproduce and
   confirm a fix before landing anything here.
+  Closed out: the user ran a real-device batch download of roughly 12k posts
+  end-to-end without the queue stalling, so whatever OEM/Android-14-budget risk this
+  entry worried about isn't actually biting in practice on their device. The
+  `ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS` button noted above as the next
+  concrete step is still worth adding as a proactive safeguard for other OEMs/devices,
+  but is no longer blocking on an unconfirmed bug -- tracked separately now that this
+  milestone's own question (does it actually work?) has a real-world yes.
 
 - [x] **M71 — Update remaining Flutter packages needing a major-version bump**
   `flutter pub upgrade` (no `--major-versions`) had already picked up everything
