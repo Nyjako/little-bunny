@@ -1,7 +1,5 @@
 #include "bunny_common/md5.h"
 
-#include <goblin/hex.h>
-
 #include <string.h>
 
 /* Standard RFC 1321 per-round auxiliary functions/shifts/step macros --
@@ -158,6 +156,7 @@ void bunny_md5_update(bunny_md5_ctx_t *ctx, const void *data, size_t len)
 
 void bunny_md5_final(bunny_md5_ctx_t *ctx, char out_hex[33])
 {
+    static const char hex_digits[] = "0123456789abcdef";
     uint64_t bit_len = ctx->total_len * 8; /* captured before further updates below grow total_len */
     unsigned char pad_byte = 0x80;
     unsigned char zero_byte = 0;
@@ -178,15 +177,16 @@ void bunny_md5_final(bunny_md5_ctx_t *ctx, char out_hex[33])
     }
     bunny_md5_update(ctx, length_bytes, 8);
 
-    unsigned char digest[16];
     for (i = 0; i < 4; i++) {
         uint32_t word = ctx->state[i];
         size_t byte_index;
         for (byte_index = 0; byte_index < 4; byte_index++) {
-            digest[i * 4 + byte_index] = (unsigned char)(word >> (8 * byte_index));
+            unsigned char byte_value = (unsigned char)(word >> (8 * byte_index));
+            out_hex[(i * 4 + byte_index) * 2] = hex_digits[(byte_value >> 4) & 0xf];
+            out_hex[(i * 4 + byte_index) * 2 + 1] = hex_digits[byte_value & 0xf];
         }
     }
-    goblin_bytes_to_hex(digest, sizeof(digest), out_hex);
+    out_hex[32] = '\0';
 }
 
 void bunny_md5(const void *data, size_t len, char out_hex[33])

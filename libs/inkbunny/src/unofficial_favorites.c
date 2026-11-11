@@ -171,9 +171,9 @@ inkbunny_result_t inkbunny_website_login(inkbunny_client_t *client, const char *
     }
     buffer_free(&page);
 
-    encoded_user = goblin_url_encode(username);
-    encoded_pass = goblin_url_encode(password);
-    encoded_login_token = goblin_url_encode(login_token);
+    encoded_user = inkbunny_url_encode(username);
+    encoded_pass = inkbunny_url_encode(password);
+    encoded_login_token = inkbunny_url_encode(login_token);
     if (!encoded_user || !encoded_pass || !encoded_login_token) {
         result = INKBUNNY_ERR_UNKNOWN;
         goto cleanup;
@@ -245,7 +245,7 @@ static inkbunny_result_t favorite_process(inkbunny_client_t *client, int64_t sub
     }
     buffer_free(&page);
 
-    encoded_global_token = goblin_url_encode(global_token);
+    encoded_global_token = inkbunny_url_encode(global_token);
     if (!encoded_global_token) {
         result = INKBUNNY_ERR_UNKNOWN;
         goto cleanup;

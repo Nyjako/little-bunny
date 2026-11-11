@@ -5,8 +5,8 @@
 #include <bunny_common/json.h>
 #include <bunny_common/rate_limit.h>
 #include <goblin/cstr.h>
-#include <goblin/url.h>
 
+#include <ctype.h>
 #include <curl/curl.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -78,6 +78,32 @@ static inline bool inkbunny_field_bool_tf(const cJSON *object, const char *key, 
         return false;
     }
     return default_value;
+}
+
+/* Shared between client.c (official API query strings) and
+ * unofficial_favorites.c (website form bodies). */
+static inline char *inkbunny_url_encode(const char *value)
+{
+    if (!value) {
+        return goblin_copy_cstr("");
+    }
+    size_t len = strlen(value);
+    char *out = malloc(len * 3 + 1);
+    if (!out) {
+        return NULL;
+    }
+    size_t j = 0;
+    for (size_t i = 0; i < len; i++) {
+        unsigned char c = (unsigned char)value[i];
+        if (isalnum(c) || c == '-' || c == '_' || c == '.' || c == '~') {
+            out[j++] = (char)c;
+        } else {
+            snprintf(out + j, 4, "%%%02X", c);
+            j += 3;
+        }
+    }
+    out[j] = '\0';
+    return out;
 }
 
 #endif /* INKBUNNY_INTERNAL_H */

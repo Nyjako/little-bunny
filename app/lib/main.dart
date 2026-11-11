@@ -17,7 +17,6 @@ import 'services/android_foreground_service_queue_notifier.dart';
 import 'services/download_manager.dart';
 import 'services/download_queue_service.dart';
 import 'services/flutter_local_notifications_queue_notifier.dart';
-import 'services/preview_cache_service.dart';
 import 'settings/app_lock_service.dart';
 import 'settings/display_settings_store.dart';
 import 'settings/download_settings_store.dart';
@@ -134,13 +133,6 @@ class _LittleBunnyAppState extends State<LittleBunnyApp> {
   bool _amoled = false;
   String? _languageCode;
 
-  /// Needs no settings/notifier wiring (unlike [DownloadQueueService] above),
-  /// so this is just a plain field rather than something [main] has to
-  /// create before [runApp] -- shared app-wide purely so a preview warmed
-  /// from the stats screen's recommendations is still warm by the time
-  /// [TagBrowseScreen] actually opens it.
-  final _previewCacheService = PreviewCacheService();
-
   @override
   void initState() {
     super.initState();
@@ -225,7 +217,6 @@ class _LittleBunnyAppState extends State<LittleBunnyApp> {
         displaySettingsStore: widget.displaySettingsStore,
         downloadSettingsStore: widget.downloadSettingsStore,
         downloadQueueService: widget.downloadQueueService,
-        previewCacheService: _previewCacheService,
         settingsStore: widget.settingsStore,
         updateSettingsStore: widget.updateSettingsStore,
         onThemeModeChanged: (mode) => setState(() => _themeMode = mode),

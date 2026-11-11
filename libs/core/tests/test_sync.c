@@ -2622,34 +2622,6 @@ void test_stats_report_top_favorited_tags_only_counts_favorited_posts(void)
     bunny_core_stats_report_free(&report);
 }
 
-void test_stats_report_top_tag_pairs_merges_both_sites_with_a_site_prefix(void)
-{
-    const char *fixture = "{\"posts\":["
-                          "{\"id\":1,\"created_at\":\"2024-01-01T00:00:00.000-05:00\","
-                          "\"file\":{\"width\":100,\"height\":100,\"ext\":\"png\",\"size\":1000,\"md5\":\"aaa\",\"url\":\"https://static1.e621.net/data/1.png\"},"
-                          "\"preview\":{\"width\":50,\"height\":50,\"url\":\"https://static1.e621.net/data/preview/1.png\"},"
-                          "\"score\":{\"up\":1,\"down\":0,\"total\":1},"
-                          "\"tags\":{\"general\":[\"wolf\",\"forest\"],\"species\":[],\"character\":[],\"copyright\":[],\"artist\":[],\"invalid\":[],\"lore\":[],\"meta\":[]},"
-                          "\"rating\":\"s\",\"fav_count\":1,\"sources\":[],\"description\":\"\",\"comment_count\":0,\"is_favorited\":true,\"pools\":[]}"
-                          "]}";
-    g_e621_state.bodies[0] = fixture;
-    g_e621_state.body_count = 1;
-
-    int64_t search_id = 0;
-    bunny_core_search_create(g_core, BUNNY_DB_SITE_E621, "wolves", "wolf", 24, NULL, &search_id);
-    bunny_core_sync_due_searches(g_core, NULL);
-
-    bunny_core_stats_report_t report;
-    bunny_core_result_t result = bunny_core_refresh_stats_report(g_core, &report);
-    TEST_ASSERT_EQUAL(BUNNY_CORE_OK, result);
-
-    bunny_db_tag_stat_t *pair = find_stat(&report.top_tag_pairs, "e621: forest + wolf");
-    TEST_ASSERT_NOT_NULL(pair);
-    TEST_ASSERT_EQUAL(1, pair->count);
-
-    bunny_core_stats_report_free(&report);
-}
-
 void test_stats_report_top_pools_ranks_by_favorited_post_count(void)
 {
     const char *fixture = "{\"posts\":["
@@ -2851,7 +2823,6 @@ int main(void)
     RUN_TEST(test_sync_e621_blacklist_imports_multi_tag_lines_and_skips_invalid_ones);
     RUN_TEST(test_stats_report_top_used_tags_merges_both_sites_with_a_site_prefix);
     RUN_TEST(test_stats_report_top_favorited_tags_only_counts_favorited_posts);
-    RUN_TEST(test_stats_report_top_tag_pairs_merges_both_sites_with_a_site_prefix);
     RUN_TEST(test_stats_report_top_pools_ranks_by_favorited_post_count);
     RUN_TEST(test_stats_report_top_viewed_searches_reflects_view_count);
     RUN_TEST(test_get_cached_stats_report_returns_no_cache_before_anything_is_built);

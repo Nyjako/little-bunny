@@ -75,7 +75,6 @@ static int respond_with_stats_report(struct mg_connection *conn, const bunny_cor
     cJSON_AddItemToObject(response, "top_used_tags", tag_stat_list_to_json(&report->top_used_tags));
     cJSON_AddItemToObject(response, "top_pools", tag_stat_list_to_json(&report->top_pools));
     cJSON_AddItemToObject(response, "top_viewed_searches", tag_stat_list_to_json(&report->top_viewed_searches));
-    cJSON_AddItemToObject(response, "top_tag_pairs", tag_stat_list_to_json(&report->top_tag_pairs));
 
     int status = server_json_respond(conn, 200, response);
     cJSON_Delete(response);

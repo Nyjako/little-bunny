@@ -298,20 +298,12 @@ class BunnyStatsReport {
   final List<BunnyTagStat> topPools;
   final List<BunnyTagStat> topViewedSearches;
 
-  /// Pairs of tags that co-occur on favorited posts, ranked by how often --
-  /// each `name` is `"<tagA> + <tagB>"` (site-prefixed like every other
-  /// section here), not a single tag. Feeds the "recommended searches"
-  /// section, which is the only place this should ever need parsing back
-  /// into a real query string (see `search_recommendations.dart`).
-  final List<BunnyTagStat> topTagPairs;
-
   const BunnyStatsReport({
     required this.computedAt,
     required this.topFavoritedTags,
     required this.topUsedTags,
     required this.topPools,
     required this.topViewedSearches,
-    required this.topTagPairs,
   });
 }
 

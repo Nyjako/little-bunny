@@ -4,7 +4,6 @@
 #include <cJSON.h>
 #include <goblin/appdirs.h>
 #include <goblin/cstr.h>
-#include <goblin/hex.h>
 #include <openssl/evp.h>
 #include <openssl/pem.h>
 #include <openssl/x509.h>
@@ -105,7 +104,9 @@ char *compute_cert_sha256(const char *data_dir)
     if (!hex) {
         return NULL;
     }
-    goblin_bytes_to_hex(digest, digest_len, hex);
+    for (unsigned int i = 0; i < digest_len; i++) {
+        snprintf(hex + i * 2, 3, "%02X", digest[i]);
+    }
     return hex;
 }
 

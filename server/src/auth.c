@@ -1,9 +1,6 @@
 #include "auth.h"
 
 #include <goblin/appdirs.h>
-#include <goblin/fileio.h>
-#include <goblin/hex.h>
-#include <goblin/secure_compare.h>
 #include <openssl/rand.h>
 
 #include <stdio.h>
@@ -18,15 +15,30 @@
 
 static char *read_file_contents(const char *path)
 {
-    size_t len = 0;
-    char *buf = goblin_read_file(path, &len);
-    if (!buf) {
+    FILE *f = fopen(path, "rb");
+    if (!f) {
+        return NULL;
+    }
+    fseek(f, 0, SEEK_END);
+    long size = ftell(f);
+    fseek(f, 0, SEEK_SET);
+    if (size <= 0) {
+        fclose(f);
         return NULL;
     }
 
+    char *buf = malloc((size_t)size + 1);
+    if (!buf) {
+        fclose(f);
+        return NULL;
+    }
+    size_t read = fread(buf, 1, (size_t)size, f);
+    fclose(f);
+    buf[read] = '\0';
+
     /* trim trailing newline, in case the file was hand-edited */
-    while (len > 0 && (buf[len - 1] == '\n' || buf[len - 1] == '\r')) {
-        buf[--len] = '\0';
+    while (read > 0 && (buf[read - 1] == '\n' || buf[read - 1] == '\r')) {
+        buf[--read] = '\0';
     }
     return buf;
 }
@@ -42,7 +54,9 @@ static char *generate_hex_token(void)
     if (!hex) {
         return NULL;
     }
-    goblin_bytes_to_hex(raw, sizeof(raw), hex);
+    for (size_t i = 0; i < sizeof(raw); i++) {
+        snprintf(hex + i * 2, 3, "%02x", raw[i]);
+    }
     return hex;
 }
 
@@ -117,10 +131,20 @@ void server_auth_free(server_auth_t *auth)
 
 bool server_auth_verify(const server_auth_t *auth, const char *presented_token)
 {
-    if (!auth || !auth->token) {
+    if (!auth || !auth->token || !presented_token) {
         return false;
     }
-    return goblin_secure_streq(auth->token, presented_token);
+    size_t expected_len = strlen(auth->token);
+    size_t presented_len = strlen(presented_token);
+    if (expected_len != presented_len) {
+        return false;
+    }
+
+    unsigned char diff = 0;
+    for (size_t i = 0; i < expected_len; i++) {
+        diff |= (unsigned char)(auth->token[i] ^ presented_token[i]);
+    }
+    return diff == 0;
 }
 
 #define SERVER_AUTH_BEARER_PREFIX "Bearer "

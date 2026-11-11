@@ -608,9 +608,6 @@ void main() {
           'top_viewed_searches': [
             {'name': 'e621: My search', 'count': 4},
           ],
-          'top_tag_pairs': [
-            {'name': 'e621: forest + wolf', 'count': 2},
-          ],
         }),
         200,
       );
@@ -624,19 +621,11 @@ void main() {
       expect(report.topUsedTags.single.count, 2);
       expect(report.topPools.single.name, 'pool:5');
       expect(report.topViewedSearches.single.count, 4);
-      expect(report.topTagPairs.single.name, 'e621: forest + wolf');
     });
 
     test('refreshStatsReport sends POST and maps the unified report (M40)', () async {
       respond = (_) => http.Response(
-        jsonEncode({
-          'computed_at': '2026-01-02T00:00:00Z',
-          'top_favorited_tags': [],
-          'top_used_tags': [],
-          'top_pools': [],
-          'top_viewed_searches': [],
-          'top_tag_pairs': [],
-        }),
+        jsonEncode({'computed_at': '2026-01-02T00:00:00Z', 'top_favorited_tags': [], 'top_used_tags': [], 'top_pools': [], 'top_viewed_searches': []}),
         200,
       );
 
@@ -649,14 +638,7 @@ void main() {
 
     test('getStatsReport maps a null computed_at to null, not a cast error (M55)', () async {
       respond = (_) => http.Response(
-        jsonEncode({
-          'computed_at': null,
-          'top_favorited_tags': [],
-          'top_used_tags': [],
-          'top_pools': [],
-          'top_viewed_searches': [],
-          'top_tag_pairs': [],
-        }),
+        jsonEncode({'computed_at': null, 'top_favorited_tags': [], 'top_used_tags': [], 'top_pools': [], 'top_viewed_searches': []}),
         200,
       );
 

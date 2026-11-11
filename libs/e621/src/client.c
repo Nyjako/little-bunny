@@ -1,10 +1,9 @@
 #include "e621/client.h"
 
 #include <bunny_common/rate_limit.h>
-#include <goblin/base64.h>
 #include <goblin/cstr.h>
-#include <goblin/url.h>
 
+#include <ctype.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -22,6 +21,63 @@ struct e621_client
     bunny_rate_limiter_t rate_limiter;
 };
 
+static char *url_encode(const char *value)
+{
+    if (!value) {
+        return goblin_copy_cstr("");
+    }
+    size_t len = strlen(value);
+    char *out = malloc(len * 3 + 1);
+    if (!out) {
+        return NULL;
+    }
+    size_t j = 0;
+    for (size_t i = 0; i < len; i++) {
+        unsigned char c = (unsigned char)value[i];
+        if (isalnum(c) || c == '-' || c == '_' || c == '.' || c == '~') {
+            out[j++] = (char)c;
+        } else {
+            snprintf(out + j, 4, "%%%02X", c);
+            j += 3;
+        }
+    }
+    out[j] = '\0';
+    return out;
+}
+
+static char *base64_encode(const unsigned char *data, size_t len)
+{
+    static const char table[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    size_t out_len = 4 * ((len + 2) / 3);
+    char *out = malloc(out_len + 1);
+    if (!out) {
+        return NULL;
+    }
+
+    size_t i = 0, j = 0;
+    while (i < len) {
+        uint32_t octet_a = i < len ? (unsigned char)data[i++] : 0;
+        uint32_t octet_b = i < len ? (unsigned char)data[i++] : 0;
+        uint32_t octet_c = i < len ? (unsigned char)data[i++] : 0;
+        uint32_t triple = (octet_a << 16) + (octet_b << 8) + octet_c;
+
+        out[j++] = table[(triple >> 18) & 0x3F];
+        out[j++] = table[(triple >> 12) & 0x3F];
+        out[j++] = table[(triple >> 6) & 0x3F];
+        out[j++] = table[triple & 0x3F];
+    }
+
+    size_t mod = len % 3;
+    if (mod == 1) {
+        out[out_len - 1] = '=';
+        out[out_len - 2] = '=';
+    } else if (mod == 2) {
+        out[out_len - 1] = '=';
+    }
+    out[out_len] = '\0';
+    return out;
+}
+
 static char *build_basic_auth_header(const char *username, const char *api_key)
 {
     size_t combined_len = strlen(username) + 1 + strlen(api_key);
@@ -31,7 +87,7 @@ static char *build_basic_auth_header(const char *username, const char *api_key)
     }
     snprintf(combined, combined_len + 1, "%s:%s", username, api_key);
 
-    char *encoded = goblin_base64_encode((unsigned char *)combined, combined_len);
+    char *encoded = base64_encode((unsigned char *)combined, combined_len);
     free(combined);
     if (!encoded) {
         return NULL;
@@ -192,7 +248,7 @@ static e621_result_t search_posts_with_page_param(e621_client_t *client, const c
         return E621_ERR_INVALID_ARG;
     }
 
-    char *encoded_tags = goblin_url_encode(tags ? tags : "");
+    char *encoded_tags = url_encode(tags ? tags : "");
     if (!encoded_tags) {
         return E621_ERR_UNKNOWN;
     }
@@ -355,7 +411,7 @@ e621_result_t e621_comment_create(e621_client_t *client, int64_t post_id, const 
         return E621_ERR_AUTH;
     }
 
-    char *encoded_body = goblin_url_encode(body);
+    char *encoded_body = url_encode(body);
     if (!encoded_body) {
         return E621_ERR_UNKNOWN;
     }
@@ -439,7 +495,7 @@ e621_result_t e621_search_tags(e621_client_t *client, const char *name_matches, 
         return E621_ERR_INVALID_ARG;
     }
 
-    char *encoded = goblin_url_encode(name_matches ? name_matches : "");
+    char *encoded = url_encode(name_matches ? name_matches : "");
     if (!encoded) {
         return E621_ERR_UNKNOWN;
     }
@@ -465,7 +521,7 @@ e621_result_t e621_get_wiki_page(e621_client_t *client, const char *title, e621_
         return E621_ERR_INVALID_ARG;
     }
 
-    char *encoded = goblin_url_encode(title);
+    char *encoded = url_encode(title);
     if (!encoded) {
         return E621_ERR_UNKNOWN;
     }
@@ -496,7 +552,7 @@ e621_result_t e621_search_tag_aliases(e621_client_t *client, const char *name_ma
         return E621_ERR_INVALID_ARG;
     }
 
-    char *encoded = goblin_url_encode(name_matches ? name_matches : "");
+    char *encoded = url_encode(name_matches ? name_matches : "");
     if (!encoded) {
         return E621_ERR_UNKNOWN;
     }
@@ -522,7 +578,7 @@ e621_result_t e621_search_tag_implications(e621_client_t *client, const char *na
         return E621_ERR_INVALID_ARG;
     }
 
-    char *encoded = goblin_url_encode(name_matches ? name_matches : "");
+    char *encoded = url_encode(name_matches ? name_matches : "");
     if (!encoded) {
         return E621_ERR_UNKNOWN;
     }

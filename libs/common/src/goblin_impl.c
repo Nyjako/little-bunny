@@ -18,15 +18,3 @@
 
 #define GOBLIN_ENV_IMPLEMENTATION
 #include <goblin/env.h>
-
-#define GOBLIN_HEX_IMPLEMENTATION
-#include <goblin/hex.h>
-
-#define GOBLIN_URL_IMPLEMENTATION
-#include <goblin/url.h>
-
-#define GOBLIN_BASE64_IMPLEMENTATION
-#include <goblin/base64.h>
-
-#define GOBLIN_SECURE_COMPARE_IMPLEMENTATION
-#include <goblin/secure_compare.h>

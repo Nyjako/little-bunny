@@ -4115,10 +4115,7 @@ final class bunny_core_config_t extends ffi.Struct {
 /// (Inkbunny has no pool concept), the other three sections merge both
 /// sites' own rankings into one combined top-N, each `name` prefixed with
 /// its site ("e621: ", "inkbunny: ") since the same tag/label text can
-/// legitimately exist on both. top_tag_pairs follows the same merge/prefix
-/// convention; each entry's `name` is "<tagA> + <tagB>" (see
-/// bunny_db_top_favorited_tag_pairs' own doc comment), feeding a
-/// recommended-search suggestion beyond a single tag.
+/// legitimately exist on both.
 final class bunny_core_stats_report_t extends ffi.Struct {
   external bunny_db_tag_stat_list_t top_favorited_tags;
 
@@ -4127,8 +4124,6 @@ final class bunny_core_stats_report_t extends ffi.Struct {
   external bunny_db_tag_stat_list_t top_pools;
 
   external bunny_db_tag_stat_list_t top_viewed_searches;
-
-  external bunny_db_tag_stat_list_t top_tag_pairs;
 
   /// ISO 8601 UTC; NULL if no report has ever been built yet
   external ffi.Pointer<ffi.Char> computed_at;

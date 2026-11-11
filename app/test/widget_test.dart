@@ -7,7 +7,6 @@ import 'package:little_bunny/main.dart';
 import 'package:little_bunny/screens/searches_screen.dart';
 import 'package:little_bunny/services/download_manager.dart';
 import 'package:little_bunny/services/download_queue_service.dart';
-import 'package:little_bunny/services/preview_cache_service.dart';
 import 'package:little_bunny/settings/app_lock_service.dart';
 import 'package:little_bunny/settings/display_settings_store.dart';
 import 'package:little_bunny/settings/repository_settings_store.dart';
@@ -114,7 +113,6 @@ void main() {
               displaySettingsStore: const DisplaySettingsStore(),
               downloadSettingsStore: const DownloadSettingsStore(),
               downloadQueueService: downloadQueueService,
-              previewCacheService: PreviewCacheService(),
               settingsStore: RepositorySettingsStore(FakeSecretStore()),
               updateSettingsStore: const UpdateSettingsStore(),
               onThemeModeChanged: (_) {},

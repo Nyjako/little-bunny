@@ -29,12 +29,6 @@
  * top_pools (e621-only, no merge) uses it directly as its db-layer limit. */
 #define BUNNY_CORE_STATS_REPORT_SECTION_LIMIT 20
 
-/* How many of the most-favorited tags are eligible to appear in a pair --
- * see bunny_db_top_favorited_tag_pairs' own doc comment for why this bound
- * exists at all (an unbounded self-join over every favorited post's tags
- * is the exact class of hang M40/M55 already fixed once). */
-#define BUNNY_CORE_STATS_REPORT_TAG_PAIR_CANDIDATE_LIMIT 50
-
 #ifdef _WIN32
 #define bunny_stats_timegm _mkgmtime
 #else
@@ -107,7 +101,6 @@ void bunny_core_stats_report_free(bunny_core_stats_report_t *report)
     bunny_db_tag_stat_list_free(&report->top_used_tags);
     bunny_db_tag_stat_list_free(&report->top_pools);
     bunny_db_tag_stat_list_free(&report->top_viewed_searches);
-    bunny_db_tag_stat_list_free(&report->top_tag_pairs);
     free(report->computed_at);
     memset(report, 0, sizeof(*report));
 }
@@ -131,7 +124,6 @@ static char *serialize_report(const bunny_core_stats_report_t *report)
     cJSON_AddItemToObject(root, "top_used_tags", tag_stat_list_to_json(&report->top_used_tags));
     cJSON_AddItemToObject(root, "top_pools", tag_stat_list_to_json(&report->top_pools));
     cJSON_AddItemToObject(root, "top_viewed_searches", tag_stat_list_to_json(&report->top_viewed_searches));
-    cJSON_AddItemToObject(root, "top_tag_pairs", tag_stat_list_to_json(&report->top_tag_pairs));
     char *json = cJSON_PrintUnformatted(root);
     cJSON_Delete(root);
     return json;
@@ -175,7 +167,6 @@ static void deserialize_report(const char *json, bunny_core_stats_report_t *out_
     tag_stat_list_from_json(cJSON_GetObjectItemCaseSensitive(root, "top_used_tags"), &out_report->top_used_tags);
     tag_stat_list_from_json(cJSON_GetObjectItemCaseSensitive(root, "top_pools"), &out_report->top_pools);
     tag_stat_list_from_json(cJSON_GetObjectItemCaseSensitive(root, "top_viewed_searches"), &out_report->top_viewed_searches);
-    tag_stat_list_from_json(cJSON_GetObjectItemCaseSensitive(root, "top_tag_pairs"), &out_report->top_tag_pairs);
     cJSON_Delete(root);
 }
 
@@ -244,11 +235,6 @@ bunny_core_result_t bunny_core_refresh_stats_report(bunny_core_t *core, bunny_co
     bunny_db_top_viewed_searches(read_db, BUNNY_DB_SITE_E621, BUNNY_CORE_STATS_REPORT_SECTION_LIMIT, &e621_viewed);
     bunny_db_top_viewed_searches(read_db, BUNNY_DB_SITE_INKBUNNY, BUNNY_CORE_STATS_REPORT_SECTION_LIMIT, &inkbunny_viewed);
     merge_site_scoped_stats(&e621_viewed, &inkbunny_viewed, BUNNY_CORE_STATS_REPORT_SECTION_LIMIT, &out_report->top_viewed_searches);
-
-    bunny_db_tag_stat_list_t e621_pairs, inkbunny_pairs;
-    bunny_db_top_favorited_tag_pairs(read_db, BUNNY_DB_SITE_E621, BUNNY_CORE_STATS_REPORT_TAG_PAIR_CANDIDATE_LIMIT, BUNNY_CORE_STATS_REPORT_SECTION_LIMIT, &e621_pairs);
-    bunny_db_top_favorited_tag_pairs(read_db, BUNNY_DB_SITE_INKBUNNY, BUNNY_CORE_STATS_REPORT_TAG_PAIR_CANDIDATE_LIMIT, BUNNY_CORE_STATS_REPORT_SECTION_LIMIT, &inkbunny_pairs);
-    merge_site_scoped_stats(&e621_pairs, &inkbunny_pairs, BUNNY_CORE_STATS_REPORT_SECTION_LIMIT, &out_report->top_tag_pairs);
 
     bunny_core_db_read_unlock(core, slot);
 
