@@ -3207,22 +3207,37 @@ this file is the single source of truth for "what's done" across sessions.
   its use). Needs a real device (ideally more than one OEM) to actually reproduce and
   confirm a fix before landing anything here.
 
-- [ ] **M71 — Update remaining Flutter packages needing a major-version bump**
-  `flutter pub upgrade` (no `--major-versions`) already picked up everything resolvable
-  under `pubspec.yaml`'s existing constraints -- this is the rest, each needing a
-  `pubspec.yaml` version bump and its own look for breaking changes before landing:
-  `flutter_local_notifications` 22.3.3 -> 23.0.0 (worth the most care here -- this app
-  leans on it heavily for download progress/summary notifications, M43/M57/M62),
-  `fvp` 0.38.1 -> 0.40.0 (video playback), `cached_network_image` 3.4.1 -> 4.0.x,
-  `cupertino_icons` 1.0.9 -> 2.0.0, `intl` 0.20.2 -> 0.20.3, `meta` 1.18.0 -> 1.19.0,
-  plus whatever transitive majors come along for the ride (`mobile_scanner`,
-  `file_picker`, `jni`, etc. were already picked up by the safe upgrade and don't need
-  revisiting). `archive` 4.5.2 -> 4.6.0 was *not* left for this milestone -- it landed
-  in the safe upgrade already, but is worth remembering as a precedent: it was a
-  breaking change disguised as a minor-looking bump (every decoder stopped throwing on
-  damaged input by default), caught by `UpdateApplyService`'s own test suite, not by
-  the version number. Expect the same kind of surprise from `flutter_local_notifications`
-  23's migration guide in particular.
+- [x] **M71 — Update remaining Flutter packages needing a major-version bump**
+  `flutter pub upgrade` (no `--major-versions`) had already picked up everything
+  resolvable under the old `pubspec.yaml` constraints -- this tackled the rest, one
+  package at a time, each verified with `flutter analyze` + `flutter test` +
+  `flutter build linux --debug` before moving to the next (and `flutter build apk
+  --debug` for the one with Android-specific fallout, below).
+  `intl` 0.20.2 and `meta` 1.18.0 turned out not to be independently bumpable at all --
+  both are pinned by the Flutter SDK itself (`flutter_localizations`/`flutter_test`
+  respectively), not by this app's own constraints. They only moved once the user
+  installed Flutter 3.47.9 via fvm and had the app switched onto it (`app/.fvmrc`),
+  which happened mid-milestone specifically to unblock this; both then resolved to
+  their latest (0.20.3/1.19.0) automatically, no `pubspec.yaml` edit needed.
+  `cupertino_icons` 1.0.9 -> 2.0.0 stayed blocked throughout -- `chewie` (even at its
+  own latest, 1.17.4) still constrains it to `^1.0.9`; `cupertino_icons` 2.0.0 is only
+  about six weeks old as of this writing, and chewie hasn't caught up yet. Left at
+  1.0.8 pending an upstream chewie release.
+  Landed: `cached_network_image` 3.4.1 -> 4.0.3 (then -> 4.0.7 via the safe upgrade),
+  `fvp` 0.38.1 -> 0.40.0 (internal fixes only, `registerWith`'s signature unchanged),
+  and `flutter_local_notifications` 22.3.3 -> 23.0.1 -- the one that actually needed
+  the Flutter SDK bump's help: its transitive `androidx.core` 1.19.0 floor requires
+  `compileSdk` 37, but Flutter 3.47.9's own `flutter.compileSdkVersion` default is
+  still 36, so `android/app/build.gradle.kts` now hardcodes `compileSdk = 37` past it.
+  That in turn needed AGP bumped 9.0.1 -> 9.1.1 (`android/settings.gradle.kts`,
+  matching the version flutter_local_notifications' own changelog migrated its example
+  app to), which in turn needed Gradle 9.1.0 -> 9.3.1
+  (`android/gradle/wrapper/gradle-wrapper.properties`) -- confirmed by actually running
+  `flutter build apk --debug` to completion, not just `flutter analyze`, since none of
+  this Android-toolchain fallout shows up any other way. `archive` 4.5.2 -> 4.6.0 was
+  already noted as a precedent from before this milestone (landed in an earlier safe
+  upgrade, not here) -- worth remembering again: minor-looking version bumps in this
+  ecosystem can still carry real breaking changes.
 
 - [x] **M72 — Stats page: charts and recommended searches, with preview-before-add**
   The user's ask: the stats page was "just a bunch of random numbers" -- wanted actual
