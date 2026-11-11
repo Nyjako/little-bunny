@@ -648,8 +648,27 @@ class _QueueCommentRequest extends _Request {
   const _QueueCommentRequest(this.postId, this.body, this.anonymous);
 }
 
-class _ProcessQueueRequest extends _Request {
-  const _ProcessQueueRequest();
+/// Async variant (bunny_core_process_queue_start/_poll/_release, see that
+/// native doc comment) -- [BunnyCoreNative.processQueue] drives these three
+/// itself and polls to completion, same shape as [BunnyCoreNative.
+/// downloadStart]/[downloadPoll]/[downloadRelease] already do for
+/// downloads, and for the same reason: the real work is network-bound and
+/// must not block this isolate's single dispatch pipe for every other
+/// concurrent call (most importantly a download's own poll) while it runs.
+class _ProcessQueueStartRequest extends _Request {
+  const _ProcessQueueStartRequest();
+}
+
+class _ProcessQueuePollRequest extends _Request {
+  final int handle;
+
+  const _ProcessQueuePollRequest(this.handle);
+}
+
+class _ProcessQueueReleaseRequest extends _Request {
+  final int handle;
+
+  const _ProcessQueueReleaseRequest(this.handle);
 }
 
 class _DownloadQueueAddRequest extends _Request {
@@ -1480,10 +1499,18 @@ Object? _dispatch(Pointer<bunny_core_t>? core, _Request request, void Function(P
       case _QueueCommentRequest r:
         _check(_bindings.bunny_core_queue_comment(c, r.postId, r.body.toNativeUtf8(allocator: arena).cast(), r.anonymous));
         return null;
-      case _ProcessQueueRequest():
+      case _ProcessQueueStartRequest():
+        final outHandle = arena<Int64>();
+        _check(_bindings.bunny_core_process_queue_start(c, outHandle));
+        return outHandle.value;
+      case _ProcessQueuePollRequest r:
+        final outDone = arena<Bool>();
         final outStats = arena<bunny_core_queue_stats_t>();
-        _check(_bindings.bunny_core_process_queue(c, outStats));
-        return _queueStatsToMap(outStats.ref);
+        _check(_bindings.bunny_core_process_queue_poll(r.handle, outDone, outStats));
+        return {'done': outDone.value, 'stats': outDone.value ? _queueStatsToMap(outStats.ref) : null};
+      case _ProcessQueueReleaseRequest r:
+        _bindings.bunny_core_process_queue_release(r.handle);
+        return null;
       case _GetDefaultSyncIntervalHoursRequest():
         final outHours = arena<Int>();
         _check(_bindings.bunny_core_get_default_sync_interval_hours(c, outHours));
@@ -1738,7 +1765,30 @@ class BunnyCoreNative {
 
   Future<void> queueComment(int postId, String body, bool anonymous) => _send<void>(_QueueCommentRequest(postId, body, anonymous));
 
-  Future<Map<String, Object?>> processQueue() => _send<Map<String, Object?>>(const _ProcessQueueRequest());
+  /// Drains the action queue (favorite/vote/comment) -- the real work is
+  /// per-action network I/O (bunny_core_process_queue's own doc comment),
+  /// so this drives the start/poll/release trio itself and polls to
+  /// completion rather than making one blocking call, the same reasoning
+  /// as [downloadStart]/[downloadPoll]/[downloadRelease]: a call that
+  /// blocks this isolate's one dispatch pipe for however long it takes
+  /// would stall every other concurrent call routed through it too, most
+  /// importantly a download's own poll calls. Callers see the exact same
+  /// one-call, stats-returning shape as before -- this is purely an
+  /// internal implementation change.
+  Future<Map<String, Object?>> processQueue() async {
+    final handle = await _send<int>(const _ProcessQueueStartRequest());
+    try {
+      while (true) {
+        final poll = await _send<Map<String, Object?>>(_ProcessQueuePollRequest(handle));
+        if (poll['done'] as bool) {
+          return poll['stats'] as Map<String, Object?>;
+        }
+        await Future<void>.delayed(const Duration(milliseconds: 100));
+      }
+    } finally {
+      await _send<void>(_ProcessQueueReleaseRequest(handle));
+    }
+  }
 
   Future<int> downloadQueueAdd(int postId, {int poolId = 0, String? poolName, int poolPage = 0}) => _send<int>(_DownloadQueueAddRequest(postId, poolId, poolName, poolPage));
 
