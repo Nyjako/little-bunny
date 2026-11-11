@@ -9,7 +9,7 @@ on:
     branches: [master]
 
 env:
-  FLUTTER_VERSION: "3.44.0" # keep in sync with app/.fvmrc
+  FLUTTER_VERSION: "3.47.9" # keep in sync with app/.fvmrc
 
 permissions:
   contents: write # needed to create the Release
