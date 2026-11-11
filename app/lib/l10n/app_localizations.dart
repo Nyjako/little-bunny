@@ -2298,6 +2298,24 @@ abstract class AppLocalizations {
   /// **'No searches added yet. Save the slideshow first, then add one.'**
   String get slideshowEditSearchesEmptyState;
 
+  /// No description provided for @slideshowEditBlacklistHeading.
+  ///
+  /// In en, this message translates to:
+  /// **'Blacklist'**
+  String get slideshowEditBlacklistHeading;
+
+  /// No description provided for @slideshowEditBlacklistEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'No tags excluded from this slideshow yet.'**
+  String get slideshowEditBlacklistEmpty;
+
+  /// No description provided for @slideshowEditBlacklistAddLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Exclude tag'**
+  String get slideshowEditBlacklistAddLabel;
+
   /// No description provided for @slideshowEditOverrideCountDialogTitle.
   ///
   /// In en, this message translates to:

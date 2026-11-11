@@ -563,6 +563,9 @@
   "slideshowEditNoMoreSearchesToAdd": "Every search is already added",
   "slideshowEditNoMorePoolsToAdd": "Every pool is already added",
   "slideshowEditSearchesEmptyState": "No searches added yet. Save the slideshow first, then add one.",
+  "slideshowEditBlacklistHeading": "Blacklist",
+  "slideshowEditBlacklistEmpty": "No tags excluded from this slideshow yet.",
+  "slideshowEditBlacklistAddLabel": "Exclude tag",
   "slideshowEditOverrideCountDialogTitle": "Posts for \"{label}\"",
   "@slideshowEditOverrideCountDialogTitle": {
     "placeholders": {"label": {"type": "String"}}

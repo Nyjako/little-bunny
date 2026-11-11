@@ -11,6 +11,7 @@ import '../services/download_queue_service.dart';
 import '../services/slideshow_prepare_service.dart';
 import '../settings/download_settings_store.dart';
 import '../util/create_pool_search_dialog.dart';
+import '../util/tag_query.dart';
 import '../widgets/post_grid_tile.dart';
 import 'create_search_screen.dart';
 import 'slideshow_screen.dart';
@@ -66,6 +67,18 @@ class _SlideshowEditScreenState extends State<SlideshowEditScreen> {
   SlideshowPrepareReport? _prepareReport;
   String? _prepareError;
 
+  /// Per-slideshow tag exclusion (additive to the global per-site blacklist,
+  /// see [BunnyRepository.getSlideshowBlacklist]'s own doc comment) --
+  /// mirrors `SettingsScreen`'s own blacklist editor state, minus the site
+  /// selector and e621-sync button (neither applies to a per-slideshow,
+  /// site-agnostic list; rules always validate under e621's dialect).
+  List<String> _slideshowBlacklistTags = [];
+  final _slideshowBlacklistTagController = TextEditingController();
+  int? _slideshowBlacklistQueryError;
+  Timer? _slideshowBlacklistValidateDebounce;
+  List<BunnyTagStat> _slideshowBlacklistSuggestions = [];
+  Timer? _slideshowBlacklistAutocompleteDebounce;
+
   @override
   void initState() {
     super.initState();
@@ -76,7 +89,10 @@ class _SlideshowEditScreenState extends State<SlideshowEditScreen> {
       _defaultCountController.text = slideshow.defaultPostsPerSearch?.toString() ?? '';
       _maxTotalController.text = slideshow.maxTotalPosts?.toString() ?? '';
       unawaited(_loadLinks());
+      unawaited(_loadSlideshowBlacklist());
     }
+    _slideshowBlacklistTagController.addListener(_onSlideshowBlacklistTagChanged);
+    _slideshowBlacklistTagController.addListener(_onSlideshowBlacklistTagChangedAutocomplete);
   }
 
   @override
@@ -85,7 +101,78 @@ class _SlideshowEditScreenState extends State<SlideshowEditScreen> {
     _defaultCountController.dispose();
     _maxTotalController.dispose();
     _intervalController.dispose();
+    _slideshowBlacklistValidateDebounce?.cancel();
+    _slideshowBlacklistAutocompleteDebounce?.cancel();
+    _slideshowBlacklistTagController.removeListener(_onSlideshowBlacklistTagChanged);
+    _slideshowBlacklistTagController.removeListener(_onSlideshowBlacklistTagChangedAutocomplete);
+    _slideshowBlacklistTagController.dispose();
     super.dispose();
+  }
+
+  void _onSlideshowBlacklistTagChanged() {
+    _slideshowBlacklistValidateDebounce?.cancel();
+    final text = _slideshowBlacklistTagController.text;
+    _slideshowBlacklistValidateDebounce = Timer(const Duration(milliseconds: 300), () async {
+      final errorPos = await widget.repository.validateTagQuery(BunnySite.e621, text);
+      if (mounted) {
+        setState(() => _slideshowBlacklistQueryError = errorPos);
+      }
+    });
+  }
+
+  int get _slideshowBlacklistCursorOffset {
+    final selectionOffset = _slideshowBlacklistTagController.selection.baseOffset;
+    return selectionOffset >= 0 ? selectionOffset : _slideshowBlacklistTagController.text.length;
+  }
+
+  void _onSlideshowBlacklistTagChangedAutocomplete() {
+    _slideshowBlacklistAutocompleteDebounce?.cancel();
+    final text = _slideshowBlacklistTagController.text;
+    final (start, end) = tagTokenRangeAt(text, _slideshowBlacklistCursorOffset);
+    final tag = text.substring(start, end);
+    if (tag.isEmpty) {
+      setState(() => _slideshowBlacklistSuggestions = []);
+      return;
+    }
+    _slideshowBlacklistAutocompleteDebounce = Timer(const Duration(seconds: 3), () async {
+      final suggestions = await widget.repository.tagAutocomplete(BunnySite.e621, tag);
+      if (mounted) {
+        setState(() => _slideshowBlacklistSuggestions = suggestions);
+      }
+    });
+  }
+
+  void _applySlideshowBlacklistSuggestion(String tag) {
+    final (newText, newCursor) = applyTagSuggestion(_slideshowBlacklistTagController.text, _slideshowBlacklistCursorOffset, tag);
+    _slideshowBlacklistTagController.value = TextEditingValue(text: newText, selection: TextSelection.collapsed(offset: newCursor));
+    setState(() => _slideshowBlacklistSuggestions = []);
+  }
+
+  Future<void> _loadSlideshowBlacklist() async {
+    final id = _slideshowId;
+    if (id == null) {
+      return;
+    }
+    final tags = await widget.repository.getSlideshowBlacklist(id);
+    if (mounted) {
+      setState(() => _slideshowBlacklistTags = tags);
+    }
+  }
+
+  Future<void> _addSlideshowBlacklistTag() async {
+    final tag = _slideshowBlacklistTagController.text.trim();
+    if (tag.isEmpty || _slideshowBlacklistQueryError != null) {
+      return;
+    }
+    await widget.repository.addSlideshowBlacklistTag(_slideshowId!, tag);
+    _slideshowBlacklistTagController.clear();
+    setState(() => _slideshowBlacklistQueryError = null);
+    await _loadSlideshowBlacklist();
+  }
+
+  Future<void> _removeSlideshowBlacklistTag(String tag) async {
+    await widget.repository.removeSlideshowBlacklistTag(_slideshowId!, tag);
+    await _loadSlideshowBlacklist();
   }
 
   bool get _isCreated => _slideshowId != null;
@@ -147,6 +234,7 @@ class _SlideshowEditScreenState extends State<SlideshowEditScreen> {
         _submitting = false;
       });
       await _loadLinks();
+      await _loadSlideshowBlacklist();
     } else {
       await widget.repository.slideshowUpdate(id, label, defaultPostsPerSearch: defaultCount, maxTotalPosts: maxTotal);
       if (mounted) {
@@ -368,6 +456,40 @@ class _SlideshowEditScreenState extends State<SlideshowEditScreen> {
     );
   }
 
+  Widget _slideshowBlacklistSection(AppLocalizations l10n) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(l10n.slideshowEditBlacklistHeading, style: Theme.of(context).textTheme.titleMedium),
+        const SizedBox(height: 8),
+        if (_slideshowBlacklistTags.isEmpty)
+          Padding(padding: const EdgeInsets.symmetric(vertical: 4), child: Text(l10n.slideshowEditBlacklistEmpty))
+        else
+          Wrap(spacing: 8, runSpacing: 4, children: _slideshowBlacklistTags.map((tag) => Chip(label: Text(tag), onDeleted: () => _removeSlideshowBlacklistTag(tag))).toList()),
+        const SizedBox(height: 8),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: TextField(
+                key: const Key('slideshowEditBlacklistAddField'),
+                controller: _slideshowBlacklistTagController,
+                decoration: InputDecoration(labelText: l10n.slideshowEditBlacklistAddLabel, errorText: _slideshowBlacklistQueryError != null ? l10n.tagQueryInvalidSyntax : null),
+                onSubmitted: (_) => _addSlideshowBlacklistTag(),
+              ),
+            ),
+            IconButton(icon: const Icon(Icons.add), onPressed: _slideshowBlacklistQueryError != null ? null : _addSlideshowBlacklistTag),
+          ],
+        ),
+        if (_slideshowBlacklistSuggestions.isNotEmpty)
+          Wrap(
+            spacing: 8,
+            children: _slideshowBlacklistSuggestions.map((stat) => ActionChip(label: Text('${stat.name} (${stat.count})'), onPressed: () => _applySlideshowBlacklistSuggestion(stat.name))).toList(),
+          ),
+      ],
+    );
+  }
+
   Widget _prepareSection(AppLocalizations l10n) {
     final report = _prepareReport;
     return Padding(
@@ -468,6 +590,8 @@ class _SlideshowEditScreenState extends State<SlideshowEditScreen> {
                   Padding(padding: const EdgeInsets.all(16), child: Text(l10n.slideshowEditSearchesEmptyState))
                 else
                   ..._links.map((link) => _searchLinkTile(l10n, link)),
+                const Divider(height: 32),
+                _slideshowBlacklistSection(l10n),
                 const Divider(height: 32),
                 _prepareSection(l10n),
               ],

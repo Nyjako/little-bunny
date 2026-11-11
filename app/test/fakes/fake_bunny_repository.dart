@@ -28,6 +28,10 @@ class FakeBunnyRepository implements BunnyRepository {
   /// Per-site tag blacklist (M13.3), as a set so add/remove stay idempotent
   /// the same way the real `bunny_db_blacklist_*` functions are.
   final Map<BunnySite, Set<String>> blacklistBySite = {};
+
+  /// Per-slideshow tag exclusion -- additive to, independent of,
+  /// [blacklistBySite] above, same shape/idempotency.
+  final Map<int, Set<String>> slideshowBlacklistBySlideshowId = {};
   final Map<int, List<BunnyComment>> commentsByPostId = {};
 
   /// Keyed by `'${site.toWireString()}:$externalId'` -- the post id
@@ -978,6 +982,19 @@ class FakeBunnyRepository implements BunnyRepository {
       throw const BunnyRepositoryException('post not committed to this search');
     }
     committed[deadIndex] = BunnySlideshowPost(searchId: searchId, post: replacement);
+  }
+
+  @override
+  Future<List<String>> getSlideshowBlacklist(int slideshowId) async => (slideshowBlacklistBySlideshowId[slideshowId] ?? const <String>{}).toList()..sort();
+
+  @override
+  Future<void> addSlideshowBlacklistTag(int slideshowId, String tag) async {
+    (slideshowBlacklistBySlideshowId[slideshowId] ??= {}).add(tag);
+  }
+
+  @override
+  Future<void> removeSlideshowBlacklistTag(int slideshowId, String tag) async {
+    slideshowBlacklistBySlideshowId[slideshowId]?.remove(tag);
   }
 
   @override

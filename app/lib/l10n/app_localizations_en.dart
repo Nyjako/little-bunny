@@ -1244,6 +1244,16 @@ class AppLocalizationsEn extends AppLocalizations {
       'No searches added yet. Save the slideshow first, then add one.';
 
   @override
+  String get slideshowEditBlacklistHeading => 'Blacklist';
+
+  @override
+  String get slideshowEditBlacklistEmpty =>
+      'No tags excluded from this slideshow yet.';
+
+  @override
+  String get slideshowEditBlacklistAddLabel => 'Exclude tag';
+
+  @override
   String slideshowEditOverrideCountDialogTitle(String label) {
     return 'Posts for \"$label\"';
   }

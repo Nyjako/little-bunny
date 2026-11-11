@@ -313,4 +313,47 @@ void main() {
     final watchButton = tester.widget<OutlinedButton>(find.widgetWithText(OutlinedButton, 'Watch'));
     expect(watchButton.onPressed, isNull);
   });
+
+  testWidgets('blacklist section renders tags from the repository and round-trips add/remove', (tester) async {
+    final id = await repository.slideshowCreate('my slideshow');
+    repository.slideshowBlacklistBySlideshowId[id] = {'comic'};
+    final slideshow = (await repository.slideshowList()).single;
+
+    await pumpScreen(tester, slideshow: slideshow);
+    await tester.pump();
+
+    expect(find.text('comic'), findsOneWidget);
+
+    await tester.enterText(find.byKey(const Key('slideshowEditBlacklistAddField')), 'gore');
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithIcon(IconButton, Icons.add).last);
+    await tester.pumpAndSettle();
+
+    expect(repository.slideshowBlacklistBySlideshowId[id], {'comic', 'gore'});
+    expect(find.text('gore'), findsOneWidget);
+
+    await tester.tap(find.descendant(of: find.widgetWithText(Chip, 'comic'), matching: find.byIcon(Icons.cancel)));
+    await tester.pumpAndSettle();
+
+    expect(repository.slideshowBlacklistBySlideshowId[id], {'gore'});
+    expect(find.text('comic'), findsNothing);
+  });
+
+  testWidgets('blacklist section shows a validation error for invalid syntax and disables Add', (tester) async {
+    final id = await repository.slideshowCreate('my slideshow');
+    final slideshow = (await repository.slideshowList()).single;
+
+    await pumpScreen(tester, slideshow: slideshow);
+    await tester.pump();
+
+    repository.validateTagQueryResult = 0;
+    await tester.enterText(find.byKey(const Key('slideshowEditBlacklistAddField')), '( unbalanced');
+    await tester.pump(const Duration(milliseconds: 300));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Invalid syntax'), findsOneWidget);
+    expect(tester.widget<IconButton>(find.widgetWithIcon(IconButton, Icons.add).last).onPressed, isNull);
+    expect(await repository.getSlideshowBlacklist(id), isEmpty);
+  });
 }
