@@ -3206,3 +3206,20 @@ this file is the single source of truth for "what's done" across sessions.
   since Android treats this permission as sensitive and Play Store review scrutinizes
   its use). Needs a real device (ideally more than one OEM) to actually reproduce and
   confirm a fix before landing anything here.
+
+- [ ] **M71 — Update remaining Flutter packages needing a major-version bump**
+  `flutter pub upgrade` (no `--major-versions`) already picked up everything resolvable
+  under `pubspec.yaml`'s existing constraints -- this is the rest, each needing a
+  `pubspec.yaml` version bump and its own look for breaking changes before landing:
+  `flutter_local_notifications` 22.3.3 -> 23.0.0 (worth the most care here -- this app
+  leans on it heavily for download progress/summary notifications, M43/M57/M62),
+  `fvp` 0.38.1 -> 0.40.0 (video playback), `cached_network_image` 3.4.1 -> 4.0.x,
+  `cupertino_icons` 1.0.9 -> 2.0.0, `intl` 0.20.2 -> 0.20.3, `meta` 1.18.0 -> 1.19.0,
+  plus whatever transitive majors come along for the ride (`mobile_scanner`,
+  `file_picker`, `jni`, etc. were already picked up by the safe upgrade and don't need
+  revisiting). `archive` 4.5.2 -> 4.6.0 was *not* left for this milestone -- it landed
+  in the safe upgrade already, but is worth remembering as a precedent: it was a
+  breaking change disguised as a minor-looking bump (every decoder stopped throwing on
+  damaged input by default), caught by `UpdateApplyService`'s own test suite, not by
+  the version number. Expect the same kind of surprise from `flutter_local_notifications`
+  23's migration guide in particular.
