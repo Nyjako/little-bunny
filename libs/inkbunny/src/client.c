@@ -121,8 +121,8 @@ inkbunny_result_t inkbunny_login(inkbunny_client_t *client, const char *username
         return INKBUNNY_ERR_INVALID_ARG;
     }
 
-    char *encoded_user = inkbunny_url_encode(username);
-    char *encoded_pass = inkbunny_url_encode(password ? password : "");
+    char *encoded_user = goblin_url_encode(username);
+    char *encoded_pass = goblin_url_encode(password ? password : "");
     if (!encoded_user || !encoded_pass) {
         free(encoded_user);
         free(encoded_pass);
@@ -201,7 +201,7 @@ inkbunny_result_t inkbunny_search(inkbunny_client_t *client, const inkbunny_sear
 
     if (params) {
         if (params->text && params->text[0]) {
-            char *encoded_text = inkbunny_url_encode(params->text);
+            char *encoded_text = goblin_url_encode(params->text);
             if (!encoded_text) {
                 return INKBUNNY_ERR_UNKNOWN;
             }

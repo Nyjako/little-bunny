@@ -1,5 +1,7 @@
 #include "unity.h"
 
+#include <goblin/fileio.h>
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -43,23 +45,6 @@ static void poll_until_done(int64_t handle, int64_t *out_received, int64_t *out_
     TEST_FAIL_MESSAGE("download never finished");
 }
 
-static char *read_whole_file(const char *path, long *out_len)
-{
-    FILE *f = fopen(path, "rb");
-    if (!f) {
-        return NULL;
-    }
-    fseek(f, 0, SEEK_END);
-    long len = ftell(f);
-    fseek(f, 0, SEEK_SET);
-    char *buf = malloc((size_t)len + 1);
-    fread(buf, 1, (size_t)len, f);
-    buf[len] = '\0';
-    fclose(f);
-    *out_len = len;
-    return buf;
-}
-
 void test_downloads_and_verifies_a_matching_checksum(void)
 {
     const char *body = "the quick brown fox jumps over the lazy dog";
@@ -83,11 +68,11 @@ void test_downloads_and_verifies_a_matching_checksum(void)
 
     char path[400];
     snprintf(path, sizeof(path), "%s/42.png", g_dest_dir);
-    long len = 0;
-    char *contents = read_whole_file(path, &len);
+    size_t len = 0;
+    char *contents = goblin_read_file(path, &len);
     TEST_ASSERT_NOT_NULL(contents);
-    TEST_ASSERT_EQUAL((long)strlen(body), len);
-    TEST_ASSERT_EQUAL_STRING_LEN(body, contents, (size_t)len);
+    TEST_ASSERT_EQUAL(strlen(body), len);
+    TEST_ASSERT_EQUAL_STRING_LEN(body, contents, len);
 
     free(contents);
     free(url);
@@ -113,10 +98,10 @@ void test_reports_checksum_mismatch_but_still_writes_the_file(void)
 
     char path[400];
     snprintf(path, sizeof(path), "%s/42.png", g_dest_dir);
-    long len = 0;
-    char *contents = read_whole_file(path, &len);
+    size_t len = 0;
+    char *contents = goblin_read_file(path, &len);
     TEST_ASSERT_NOT_NULL(contents);
-    TEST_ASSERT_EQUAL((long)strlen(body), len);
+    TEST_ASSERT_EQUAL(strlen(body), len);
 
     free(contents);
     free(url);
@@ -219,10 +204,10 @@ void test_several_concurrent_downloads_each_land_correctly(void)
 
         char path[400];
         snprintf(path, sizeof(path), "%s/file%d.bin", g_dest_dir, i);
-        long len = 0;
-        char *contents = read_whole_file(path, &len);
+        size_t len = 0;
+        char *contents = goblin_read_file(path, &len);
         TEST_ASSERT_NOT_NULL(contents);
-        TEST_ASSERT_EQUAL_STRING_LEN(bodies[i], contents, (size_t)len);
+        TEST_ASSERT_EQUAL_STRING_LEN(bodies[i], contents, len);
         free(contents);
         free(urls[i]);
     }
