@@ -606,11 +606,13 @@ void main() {
 
     // Real shape live-checked on a Picture Series submission (M28): 9 png +
     // 1 jpg art pages plus a bonus mp3 track mixed into the same files list.
-    // Mixed file types fall back to the single-primary-file rendering rather
+    // The image side falls back to the single-primary-file rendering rather
     // than paging a non-image file through the image gallery -- there's
     // nothing in `_buildMedia`'s image dispatch that could render the mp3
-    // entry anyway.
-    testWidgets('a Picture Series post with a mixed image+audio file list shows no gallery controls', (WidgetTester tester) async {
+    // entry that way -- but the bonus track itself is still surfaced via
+    // `_mixedAudioTracks` (M28 submission-type coverage follow-up), not
+    // silently dropped.
+    testWidgets('a Picture Series post with a mixed image+audio file list shows the primary image plus the bonus track', (WidgetTester tester) async {
       final repository = FakeBunnyRepository();
       final post = _post(site: BunnySite.inkbunny, fileExt: 'png');
       repository.filesByPostId[1] = [
@@ -619,12 +621,40 @@ void main() {
         const BunnyPostFile(fileUrl: 'https://example.invalid/bonus.mp3', fileExt: 'mp3', width: 0, height: 0),
       ];
 
-      await tester.pumpWidget(wrapWithLocalization(PostDetailScreen(post: post, repository: repository, displaySettingsStore: const DisplaySettingsStore(), downloadSettingsStore: const DownloadSettingsStore(), downloadQueueService: _downloadQueueService())));
-      await tester.pumpAndSettle();
+      await tester.runAsync(() async {
+        await tester.pumpWidget(wrapWithLocalization(PostDetailScreen(post: post, repository: repository, displaySettingsStore: const DisplaySettingsStore(), downloadSettingsStore: const DownloadSettingsStore(), downloadQueueService: _downloadQueueService())));
+        await Future<void>.delayed(const Duration(milliseconds: 300));
+      });
+      await tester.pump();
 
       expect(find.byKey(const Key('postDetailGalleryPrevButton')), findsNothing);
       expect(find.byKey(const Key('postDetailGalleryNextButton')), findsNothing);
       expect(_findCachedNetworkImage(), findsOneWidget);
+      expect(find.byKey(const Key('postDetailAudioAlbumList')), findsOneWidget);
+      expect(find.text('1. bonus.mp3'), findsOneWidget);
+    });
+
+    // Real shape live-checked on a Music - Single Track submission (M28):
+    // cover art as the primary file, with the actual track(s) as additional
+    // files -- without `_mixedAudioTracks`, the cover would show and the
+    // only audio on the post would be completely unreachable.
+    testWidgets('a Music - Single Track post with cover art as the primary file still surfaces its track', (WidgetTester tester) async {
+      final repository = FakeBunnyRepository();
+      final post = _post(site: BunnySite.inkbunny, fileExt: 'jpg');
+      repository.filesByPostId[1] = const [
+        BunnyPostFile(fileUrl: 'https://example.invalid/cover.jpg', fileExt: 'jpg', width: 1200, height: 900),
+        BunnyPostFile(fileUrl: 'https://example.invalid/track.mp3', fileExt: 'mp3', width: 0, height: 0),
+      ];
+
+      await tester.runAsync(() async {
+        await tester.pumpWidget(wrapWithLocalization(PostDetailScreen(post: post, repository: repository, displaySettingsStore: const DisplaySettingsStore(), downloadSettingsStore: const DownloadSettingsStore(), downloadQueueService: _downloadQueueService())));
+        await Future<void>.delayed(const Duration(milliseconds: 300));
+      });
+      await tester.pump();
+
+      expect(_findCachedNetworkImage(), findsOneWidget);
+      expect(find.byKey(const Key('postDetailAudioAlbumList')), findsOneWidget);
+      expect(find.text('1. track.mp3'), findsOneWidget);
     });
   });
 
