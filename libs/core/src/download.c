@@ -175,8 +175,18 @@ typedef struct
     FILE *file;
     bunny_md5_ctx_t md5;
     download_slot_t *slot;
+    int64_t received; /* cumulative bytes written so far -- see on_chunk's own doc comment */
 } download_write_ctx_t;
 
+/* Also updates slot->received itself (under progress_lock), not just via
+ * on_progress below -- curl only calls its xferinfo callback once it
+ * decides enough time/data has passed (internally throttled, roughly a few
+ * hundred ms), which a small/fast file can finish well within, meaning
+ * on_progress might never fire at all for it. Without this, such a
+ * download's progress stayed stuck at the slot's initial 0 for its entire
+ * (short) lifetime -- not just coarse, but genuinely never updated -- which
+ * is what the download queue screen's progress bar showing "0 B" for every
+ * item actually was. */
 static int on_chunk(void *user_data, const void *data, size_t len)
 {
     download_write_ctx_t *ctx = (download_write_ctx_t *)user_data;
@@ -184,6 +194,10 @@ static int on_chunk(void *user_data, const void *data, size_t len)
     if (len > 0 && fwrite(data, 1, len, ctx->file) != len) {
         return 1;
     }
+    ctx->received += (int64_t)len;
+    bunny_mutex_lock(&ctx->slot->progress_lock);
+    ctx->slot->received = ctx->received;
+    bunny_mutex_unlock(&ctx->slot->progress_lock);
     return 0;
 }
 
@@ -265,6 +279,7 @@ static void *download_thread_main(void *arg)
     download_write_ctx_t write_ctx;
     write_ctx.file = tmp_file;
     write_ctx.slot = slot;
+    write_ctx.received = 0;
     bunny_md5_init(&write_ctx.md5);
 
     bunny_download_sink_t sink = {on_chunk, on_progress, &write_ctx};
