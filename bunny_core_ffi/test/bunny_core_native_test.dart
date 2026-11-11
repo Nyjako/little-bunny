@@ -158,6 +158,19 @@ void main() {
     expect(await native.slideshowSearchList(slideshowId), isEmpty);
   });
 
+  test('slideshowBlacklistAdd/slideshowBlacklistList/slideshowBlacklistRemove round-trip', () async {
+    final slideshowId = await native.slideshowCreate('my slideshow', null, null);
+
+    expect(await native.slideshowBlacklistList(slideshowId), isEmpty);
+
+    await native.slideshowBlacklistAdd(slideshowId, 'comic');
+    await native.slideshowBlacklistAdd(slideshowId, 'gore');
+    expect(await native.slideshowBlacklistList(slideshowId), ['comic', 'gore']); // alphabetical
+
+    await native.slideshowBlacklistRemove(slideshowId, 'comic');
+    expect(await native.slideshowBlacklistList(slideshowId), ['gore']);
+  });
+
   test('slideshowReplacePost throws when the search has nothing to replace with (M51 v2)', () async {
     final searchId = await native.createSearch('e621', 'wolves', 'wolf', 24);
     final slideshowId = await native.slideshowCreate('my slideshow', null, null);

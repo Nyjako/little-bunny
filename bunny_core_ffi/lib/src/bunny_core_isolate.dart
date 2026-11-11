@@ -522,6 +522,26 @@ class _SyncE621BlacklistRequest extends _Request {
   const _SyncE621BlacklistRequest();
 }
 
+class _SlideshowBlacklistListRequest extends _Request {
+  final int slideshowId;
+
+  const _SlideshowBlacklistListRequest(this.slideshowId);
+}
+
+class _SlideshowBlacklistAddRequest extends _Request {
+  final int slideshowId;
+  final String tag;
+
+  const _SlideshowBlacklistAddRequest(this.slideshowId, this.tag);
+}
+
+class _SlideshowBlacklistRemoveRequest extends _Request {
+  final int slideshowId;
+  final String tag;
+
+  const _SlideshowBlacklistRemoveRequest(this.slideshowId, this.tag);
+}
+
 /// Syntax-only validation (M28/M54), not blacklist-specific -- also used by
 /// the search query editor (Phase 4). Lives near the blacklist requests
 /// since that's its first/primary caller.
@@ -877,6 +897,19 @@ List<String> _handleBlacklistList(Pointer<bunny_core_t> core, _BlacklistListRequ
   return using((arena) {
     final out = arena<bunny_db_string_list_t>();
     _check(_bindings.bunny_core_blacklist_list(core, _siteFromWire(r.site), out));
+    final items = <String>[];
+    for (var i = 0; i < out.ref.count; i++) {
+      items.add(out.ref.items[i].cast<Utf8>().toDartString());
+    }
+    _bindings.bunny_db_string_list_free(out);
+    return items;
+  });
+}
+
+List<String> _handleSlideshowBlacklistList(Pointer<bunny_core_t> core, _SlideshowBlacklistListRequest r) {
+  return using((arena) {
+    final out = arena<bunny_db_string_list_t>();
+    _check(_bindings.bunny_core_slideshow_blacklist_list(core, r.slideshowId, out));
     final items = <String>[];
     for (var i = 0; i < out.ref.count; i++) {
       items.add(out.ref.items[i].cast<Utf8>().toDartString());
@@ -1398,6 +1431,14 @@ Object? _dispatch(Pointer<bunny_core_t>? core, _Request request, void Function(P
       case _BlacklistRemoveRequest r:
         _check(_bindings.bunny_core_blacklist_remove(c, _siteFromWire(r.site), r.tag.toNativeUtf8(allocator: arena).cast()));
         return null;
+      case _SlideshowBlacklistListRequest r:
+        return _handleSlideshowBlacklistList(c, r);
+      case _SlideshowBlacklistAddRequest r:
+        _check(_bindings.bunny_core_slideshow_blacklist_add(c, r.slideshowId, r.tag.toNativeUtf8(allocator: arena).cast()));
+        return null;
+      case _SlideshowBlacklistRemoveRequest r:
+        _check(_bindings.bunny_core_slideshow_blacklist_remove(c, r.slideshowId, r.tag.toNativeUtf8(allocator: arena).cast()));
+        return null;
       case _SyncE621BlacklistRequest():
         final outStats = arena<bunny_core_blacklist_sync_stats_t>();
         _check(_bindings.bunny_core_sync_e621_blacklist(c, outStats));
@@ -1653,6 +1694,12 @@ class BunnyCoreNative {
   Future<void> blacklistAdd(String site, String tag) => _send<void>(_BlacklistAddRequest(site, tag));
 
   Future<void> blacklistRemove(String site, String tag) => _send<void>(_BlacklistRemoveRequest(site, tag));
+
+  Future<List<String>> slideshowBlacklistList(int slideshowId) => _send<List<String>>(_SlideshowBlacklistListRequest(slideshowId));
+
+  Future<void> slideshowBlacklistAdd(int slideshowId, String tag) => _send<void>(_SlideshowBlacklistAddRequest(slideshowId, tag));
+
+  Future<void> slideshowBlacklistRemove(int slideshowId, String tag) => _send<void>(_SlideshowBlacklistRemoveRequest(slideshowId, tag));
 
   Future<Map<String, Object?>> syncE621Blacklist() => _send<Map<String, Object?>>(const _SyncE621BlacklistRequest());
 
