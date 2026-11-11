@@ -35,7 +35,7 @@ void main() {
 
   testWidgets('shows a "building" message instead of a timestamp when nothing has been computed yet (M55)', (WidgetTester tester) async {
     final repository = FakeBunnyRepository();
-    repository.statsReport = const BunnyStatsReport(computedAt: null, topFavoritedTags: [], topUsedTags: [], topPools: [], topViewedSearches: []);
+    repository.statsReport = const BunnyStatsReport(computedAt: null, topFavoritedTags: [], topUsedTags: [], topPools: [], topViewedSearches: [], topTagPairs: []);
 
     await tester.pumpWidget(wrap(repository));
     await tester.pumpAndSettle();
@@ -52,6 +52,7 @@ void main() {
       topUsedTags: [BunnyTagStat(name: 'inkbunny: fox', count: 3)],
       topPools: [BunnyTagStat(name: 'pool:5', count: 2)],
       topViewedSearches: [BunnyTagStat(name: 'e621: My search', count: 9)],
+      topTagPairs: [],
     );
 
     await tester.pumpWidget(wrap(repository));
@@ -76,6 +77,7 @@ void main() {
       topUsedTags: [],
       topPools: [],
       topViewedSearches: [],
+      topTagPairs: [],
     );
 
     await tester.pumpWidget(wrap(repository));
@@ -91,7 +93,7 @@ void main() {
 
   testWidgets('tapping a pool entry opens TagBrowseScreen for the pool: query on e621', (WidgetTester tester) async {
     final repository = FakeBunnyRepository();
-    repository.statsReport = const BunnyStatsReport(computedAt: '2026-01-01T00:00:00Z', topFavoritedTags: [], topUsedTags: [], topPools: [BunnyTagStat(name: 'pool:42', count: 1)], topViewedSearches: []);
+    repository.statsReport = const BunnyStatsReport(computedAt: '2026-01-01T00:00:00Z', topFavoritedTags: [], topUsedTags: [], topPools: [BunnyTagStat(name: 'pool:42', count: 1)], topViewedSearches: [], topTagPairs: []);
 
     await tester.pumpWidget(wrap(repository));
     await tester.pumpAndSettle();
@@ -112,6 +114,7 @@ void main() {
       topUsedTags: [],
       topPools: [],
       topViewedSearches: [BunnyTagStat(name: 'e621: My search', count: 9)],
+      topTagPairs: [],
     );
 
     await tester.pumpWidget(wrap(repository));
@@ -123,12 +126,12 @@ void main() {
 
   testWidgets('the refresh action calls refreshStatsReport and reloads the report (M40)', (WidgetTester tester) async {
     final repository = FakeBunnyRepository();
-    repository.statsReport = const BunnyStatsReport(computedAt: '2026-01-01T00:00:00Z', topFavoritedTags: [BunnyTagStat(name: 'e621: wolf', count: 1)], topUsedTags: [], topPools: [], topViewedSearches: []);
+    repository.statsReport = const BunnyStatsReport(computedAt: '2026-01-01T00:00:00Z', topFavoritedTags: [BunnyTagStat(name: 'e621: wolf', count: 1)], topUsedTags: [], topPools: [], topViewedSearches: [], topTagPairs: []);
 
     await tester.pumpWidget(wrap(repository));
     await tester.pumpAndSettle();
 
-    repository.statsReport = const BunnyStatsReport(computedAt: '2026-02-01T00:00:00Z', topFavoritedTags: [BunnyTagStat(name: 'e621: fox', count: 2)], topUsedTags: [], topPools: [], topViewedSearches: []);
+    repository.statsReport = const BunnyStatsReport(computedAt: '2026-02-01T00:00:00Z', topFavoritedTags: [BunnyTagStat(name: 'e621: fox', count: 2)], topUsedTags: [], topPools: [], topViewedSearches: [], topTagPairs: []);
 
     // Not pumpAndSettle -- the refresh action shows an indeterminate
     // CircularProgressIndicator while in flight, which never "settles" on

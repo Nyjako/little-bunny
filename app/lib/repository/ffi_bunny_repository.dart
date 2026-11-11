@@ -84,6 +84,7 @@ BunnyStatsReport _statsReportFromMap(Map<String, Object?> m) => BunnyStatsReport
   topUsedTags: _tagStatListFromMaps(m['topUsedTags']),
   topPools: _tagStatListFromMaps(m['topPools']),
   topViewedSearches: _tagStatListFromMaps(m['topViewedSearches']),
+  topTagPairs: _tagStatListFromMaps(m['topTagPairs']),
 );
 
 BunnyPostTag _postTagFromMap(Map<String, Object?> m) => BunnyPostTag(name: m['name'] as String, category: m['category'] as String?);

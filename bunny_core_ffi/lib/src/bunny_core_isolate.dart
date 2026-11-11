@@ -849,6 +849,7 @@ Map<String, Object?> _statsReportToMap(bunny_core_stats_report_t report) => {
   'topUsedTags': _tagStatListToMaps(report.top_used_tags),
   'topPools': _tagStatListToMaps(report.top_pools),
   'topViewedSearches': _tagStatListToMaps(report.top_viewed_searches),
+  'topTagPairs': _tagStatListToMaps(report.top_tag_pairs),
 };
 
 Map<String, Object?> _handleGetStatsReport(Pointer<bunny_core_t> core) {
