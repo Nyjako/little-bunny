@@ -51,7 +51,7 @@ dependencies:
   intl: ^0.20.2
   cached_network_image: ^4.0.3
   video_player: ^2.9.2
-  fvp: ^0.38.1
+  fvp: ^0.40.0
   url_launcher: ^6.3.1
   photo_view: ^0.15.0
   file_picker: ^13.1.0
