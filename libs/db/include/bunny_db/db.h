@@ -446,6 +446,21 @@ bunny_db_result_t bunny_db_top_used_tags(bunny_db_t *db, bunny_db_site_t site, i
  * literally, not treated as SQL LIKE wildcards. */
 bunny_db_result_t bunny_db_tag_autocomplete(bunny_db_t *db, bunny_db_site_t site, const char *prefix, int limit, bunny_db_tag_stat_list_t *out_list);
 
+/* Pairs of tags that co-occur on currently-favorited posts on `site`,
+ * ordered by how many favorited posts carry both, descending -- feeds
+ * "recommend a search combining tags you favorite together" (beyond
+ * bunny_db_top_favorited_tags's single-tag ranking). Reuses
+ * bunny_db_tag_stat_t's {name, count} shape: `name` is `"<tagA> + <tagB>"`
+ * (same sentinel-encoding spirit as bunny_db_top_favorited_pools's
+ * `pool:<id>`), alphabetically ordered within the pair so the same
+ * combination is never counted as two different rows.
+ * `candidate_tag_limit` bounds the self-join to only the N most-favorited
+ * tags first -- without it this is an unbounded per-post combinatorial
+ * join (a single post can carry dozens of tags), which previous sessions
+ * already learned the hard way not to let an aggregate query do (M40/M55).
+ * `limit` caps the final pair count, same as every other function here. */
+bunny_db_result_t bunny_db_top_favorited_tag_pairs(bunny_db_t *db, bunny_db_site_t site, int candidate_tag_limit, int limit, bunny_db_tag_stat_list_t *out_list);
+
 /* Pools on `site` ranked by how many of their posts are favorited, descending
  * (M40) -- reuses bunny_db_tag_stat_t's generic {name, count} shape: `name`
  * is the `pool:<id>` sentinel already used everywhere else a pool is
