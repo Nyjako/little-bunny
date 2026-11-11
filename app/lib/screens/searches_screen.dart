@@ -8,6 +8,7 @@ import '../repository/bunny_models.dart';
 import '../repository/bunny_repository.dart';
 import '../services/download_manager.dart';
 import '../services/download_queue_service.dart';
+import '../services/preview_cache_service.dart';
 import '../services/update_apply_service.dart';
 import '../services/update_check_service.dart';
 import '../settings/app_lock_service.dart';
@@ -44,6 +45,7 @@ class SearchesScreen extends StatefulWidget {
   final DisplaySettingsStore displaySettingsStore;
   final DownloadSettingsStore downloadSettingsStore;
   final DownloadQueueService downloadQueueService;
+  final PreviewCacheService previewCacheService;
   final RepositorySettingsStore settingsStore;
   final UpdateSettingsStore updateSettingsStore;
   final ValueChanged<ThemeMode> onThemeModeChanged;
@@ -64,6 +66,7 @@ class SearchesScreen extends StatefulWidget {
     required this.displaySettingsStore,
     required this.downloadSettingsStore,
     required this.downloadQueueService,
+    required this.previewCacheService,
     required this.settingsStore,
     required this.updateSettingsStore,
     required this.onThemeModeChanged,
@@ -956,8 +959,13 @@ class _SearchesScreenState extends State<SearchesScreen> with SingleTickerProvid
   void _openTagStats() => Navigator.push(
     context,
     MaterialPageRoute(
-      builder: (context) =>
-          TagStatsScreen(repository: _repository!, displaySettingsStore: widget.displaySettingsStore, downloadSettingsStore: widget.downloadSettingsStore, downloadQueueService: widget.downloadQueueService),
+      builder: (context) => TagStatsScreen(
+        repository: _repository!,
+        displaySettingsStore: widget.displaySettingsStore,
+        downloadSettingsStore: widget.downloadSettingsStore,
+        downloadQueueService: widget.downloadQueueService,
+        previewCacheService: widget.previewCacheService,
+      ),
     ),
   );
 

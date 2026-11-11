@@ -103,6 +103,7 @@ BunnyStatsReport _statsReportFromJson(Map<String, Object?> j) => BunnyStatsRepor
   topUsedTags: _tagStatListFromJson(j['top_used_tags']),
   topPools: _tagStatListFromJson(j['top_pools']),
   topViewedSearches: _tagStatListFromJson(j['top_viewed_searches']),
+  topTagPairs: _tagStatListFromJson(j['top_tag_pairs']),
 );
 
 BunnyPostTag _postTagFromJson(Map<String, Object?> j) => BunnyPostTag(name: j['name'] as String, category: j['category'] as String?);

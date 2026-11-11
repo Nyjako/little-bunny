@@ -2126,6 +2126,141 @@ void test_top_favorited_tags_is_scoped_per_site(void)
     bunny_db_tag_stat_list_free(&inkbunny_stats);
 }
 
+void test_top_favorited_tag_pairs_ranks_co_occurring_tags(void)
+{
+    const char *tags_a[] = {"wolf", "forest"};
+    const char *tags_b[] = {"wolf", "forest"};
+    const char *tags_c[] = {"wolf", "meadow"};
+
+    bunny_db_post_upsert_t post_a, post_b, post_c;
+    make_test_post(&post_a, 901, 1);
+    make_test_post(&post_b, 902, 1);
+    make_test_post(&post_c, 903, 1);
+    post_a.tags = tags_a;
+    post_a.tag_count = 2;
+    post_b.tags = tags_b;
+    post_b.tag_count = 2;
+    post_c.tags = tags_c;
+    post_c.tag_count = 2;
+
+    int64_t id_a = 0, id_b = 0, id_c = 0;
+    bunny_db_post_upsert(g_db, &post_a, &id_a);
+    bunny_db_post_upsert(g_db, &post_b, &id_b);
+    bunny_db_post_upsert(g_db, &post_c, &id_c);
+
+    bunny_db_favorite_add(g_db, id_a, -1);
+    bunny_db_favorite_add(g_db, id_b, -1);
+    bunny_db_favorite_add(g_db, id_c, -1);
+
+    bunny_db_tag_stat_list_t pairs;
+    bunny_db_result_t result = bunny_db_top_favorited_tag_pairs(g_db, BUNNY_DB_SITE_E621, 50, 10, &pairs);
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, result);
+    TEST_ASSERT_EQUAL(2, (int)pairs.count);                         /* "forest + wolf" and "meadow + wolf" */
+    TEST_ASSERT_EQUAL_STRING("forest + wolf", pairs.items[0].name); /* count 2, ranked first */
+    TEST_ASSERT_EQUAL(2, pairs.items[0].count);
+    TEST_ASSERT_EQUAL_STRING("meadow + wolf", pairs.items[1].name);
+    TEST_ASSERT_EQUAL(1, pairs.items[1].count);
+
+    bunny_db_tag_stat_list_free(&pairs);
+}
+
+void test_top_favorited_tag_pairs_is_scoped_per_site(void)
+{
+    const char *e621_tags[] = {"wolf", "forest"};
+    const char *inkbunny_tags[] = {"wolf", "forest"};
+
+    bunny_db_post_upsert_t e621_post;
+    make_test_post(&e621_post, 904, 1);
+    e621_post.tags = e621_tags;
+    e621_post.tag_count = 2;
+
+    bunny_db_post_upsert_t inkbunny_post;
+    memset(&inkbunny_post, 0, sizeof(inkbunny_post));
+    inkbunny_post.site = BUNNY_DB_SITE_INKBUNNY;
+    inkbunny_post.external_id = 905;
+    inkbunny_post.tags = inkbunny_tags;
+    inkbunny_post.tag_count = 2;
+
+    int64_t e621_id = 0, inkbunny_id = 0;
+    bunny_db_post_upsert(g_db, &e621_post, &e621_id);
+    bunny_db_post_upsert(g_db, &inkbunny_post, &inkbunny_id);
+
+    bunny_db_favorite_add(g_db, e621_id, -1);
+    bunny_db_favorite_add(g_db, inkbunny_id, 1);
+
+    bunny_db_tag_stat_list_t e621_pairs;
+    bunny_db_result_t result = bunny_db_top_favorited_tag_pairs(g_db, BUNNY_DB_SITE_E621, 50, 10, &e621_pairs);
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, result);
+    TEST_ASSERT_EQUAL(1, (int)e621_pairs.count);
+    TEST_ASSERT_EQUAL_STRING("forest + wolf", e621_pairs.items[0].name);
+    bunny_db_tag_stat_list_free(&e621_pairs);
+
+    bunny_db_tag_stat_list_t inkbunny_pairs;
+    result = bunny_db_top_favorited_tag_pairs(g_db, BUNNY_DB_SITE_INKBUNNY, 50, 10, &inkbunny_pairs);
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, result);
+    TEST_ASSERT_EQUAL(1, (int)inkbunny_pairs.count);
+    TEST_ASSERT_EQUAL_STRING("forest + wolf", inkbunny_pairs.items[0].name);
+    bunny_db_tag_stat_list_free(&inkbunny_pairs);
+}
+
+void test_top_favorited_tag_pairs_ignores_non_favorited_posts(void)
+{
+    const char *tags[] = {"wolf", "forest"};
+
+    bunny_db_post_upsert_t post;
+    make_test_post(&post, 906, 1);
+    post.tags = tags;
+    post.tag_count = 2;
+
+    int64_t id = 0;
+    bunny_db_post_upsert(g_db, &post, &id);
+    /* deliberately not favorited */
+
+    bunny_db_tag_stat_list_t pairs;
+    bunny_db_result_t result = bunny_db_top_favorited_tag_pairs(g_db, BUNNY_DB_SITE_E621, 50, 10, &pairs);
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, result);
+    TEST_ASSERT_EQUAL(0, (int)pairs.count);
+    bunny_db_tag_stat_list_free(&pairs);
+}
+
+void test_top_favorited_tag_pairs_candidate_tag_limit_bounds_the_self_join(void)
+{
+    /* wolf is favorited far more than forest/meadow, so with
+     * candidate_tag_limit=1 only wolf survives the pre-filter -- no pair
+     * can form from a single candidate tag, so the result must be empty
+     * even though "wolf + forest" and "wolf + meadow" both genuinely
+     * co-occur on a favorited post. */
+    const char *tags_a[] = {"wolf", "forest"};
+    const char *tags_b[] = {"wolf", "meadow"};
+    const char *tags_c[] = {"wolf"};
+
+    bunny_db_post_upsert_t post_a, post_b, post_c;
+    make_test_post(&post_a, 907, 1);
+    make_test_post(&post_b, 908, 1);
+    make_test_post(&post_c, 909, 1);
+    post_a.tags = tags_a;
+    post_a.tag_count = 2;
+    post_b.tags = tags_b;
+    post_b.tag_count = 2;
+    post_c.tags = tags_c;
+    post_c.tag_count = 1;
+
+    int64_t id_a = 0, id_b = 0, id_c = 0;
+    bunny_db_post_upsert(g_db, &post_a, &id_a);
+    bunny_db_post_upsert(g_db, &post_b, &id_b);
+    bunny_db_post_upsert(g_db, &post_c, &id_c);
+
+    bunny_db_favorite_add(g_db, id_a, -1);
+    bunny_db_favorite_add(g_db, id_b, -1);
+    bunny_db_favorite_add(g_db, id_c, -1);
+
+    bunny_db_tag_stat_list_t pairs;
+    bunny_db_result_t result = bunny_db_top_favorited_tag_pairs(g_db, BUNNY_DB_SITE_E621, 1, 10, &pairs);
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, result);
+    TEST_ASSERT_EQUAL(0, (int)pairs.count);
+    bunny_db_tag_stat_list_free(&pairs);
+}
+
 void test_top_used_tags_counts_non_favorited_posts(void)
 {
     const char *tags1[] = {"wolf", "forest"};
@@ -3652,6 +3787,10 @@ int main(void)
     RUN_TEST(test_download_queue_clear_finished_drops_terminal_rows_only);
     RUN_TEST(test_top_favorited_tags);
     RUN_TEST(test_top_favorited_tags_is_scoped_per_site);
+    RUN_TEST(test_top_favorited_tag_pairs_ranks_co_occurring_tags);
+    RUN_TEST(test_top_favorited_tag_pairs_is_scoped_per_site);
+    RUN_TEST(test_top_favorited_tag_pairs_ignores_non_favorited_posts);
+    RUN_TEST(test_top_favorited_tag_pairs_candidate_tag_limit_bounds_the_self_join);
     RUN_TEST(test_top_used_tags_counts_non_favorited_posts);
     RUN_TEST(test_top_used_tags_is_scoped_per_site);
     RUN_TEST(test_tag_autocomplete_prefix_match);

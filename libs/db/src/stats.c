@@ -186,6 +186,50 @@ static bunny_db_result_t collect_tag_stat_rows(sqlite3_stmt *stmt, bunny_db_tag_
     return BUNNY_DB_OK;
 }
 
+bunny_db_result_t bunny_db_top_favorited_tag_pairs(bunny_db_t *db, bunny_db_site_t site, int candidate_tag_limit, int limit, bunny_db_tag_stat_list_t *out_list)
+{
+    if (!db || !out_list) {
+        return BUNNY_DB_ERR_INVALID_ARG;
+    }
+    memset(out_list, 0, sizeof(*out_list));
+
+    /* top_tags bounds the self-join below to only the candidate_tag_limit
+     * most-favorited tags -- see this function's own doc comment in db.h
+     * for why that bound isn't optional. The CASE in the final SELECT
+     * orders each pair's two names alphabetically regardless of which tag
+     * happens to have the smaller rowid, so the same combination always
+     * produces the same "<tagA> + <tagB>" string. */
+    const char *sql = "WITH top_tags AS ("
+                      "  SELECT t.id FROM tags t "
+                      "  JOIN post_tags pt ON pt.tag_id = t.id "
+                      "  JOIN favorites f ON f.post_id = pt.post_id "
+                      "  WHERE t.site = ? "
+                      "  GROUP BY t.id "
+                      "  ORDER BY COUNT(*) DESC "
+                      "  LIMIT ? "
+                      ") "
+                      "SELECT CASE WHEN ta.name < tb.name THEN ta.name || ' + ' || tb.name ELSE tb.name || ' + ' || ta.name END, COUNT(*) AS n "
+                      "FROM post_tags pta "
+                      "JOIN post_tags ptb ON ptb.post_id = pta.post_id AND ptb.tag_id > pta.tag_id "
+                      "JOIN favorites f ON f.post_id = pta.post_id "
+                      "JOIN top_tags tta ON tta.id = pta.tag_id "
+                      "JOIN top_tags ttb ON ttb.id = ptb.tag_id "
+                      "JOIN tags ta ON ta.id = pta.tag_id "
+                      "JOIN tags tb ON tb.id = ptb.tag_id "
+                      "GROUP BY pta.tag_id, ptb.tag_id "
+                      "ORDER BY n DESC, 1 ASC "
+                      "LIMIT ?;";
+    sqlite3_stmt *stmt = NULL;
+    if (sqlite3_prepare_v2(db->handle, sql, -1, &stmt, NULL) != SQLITE_OK) {
+        return BUNNY_DB_ERR_QUERY_FAILED;
+    }
+    sqlite3_bind_text(stmt, 1, bunny_db_site_to_string(site), -1, SQLITE_STATIC);
+    sqlite3_bind_int(stmt, 2, candidate_tag_limit > 0 ? candidate_tag_limit : 50);
+    sqlite3_bind_int(stmt, 3, limit > 0 ? limit : 10);
+
+    return collect_tag_stat_rows(stmt, out_list);
+}
+
 bunny_db_result_t bunny_db_top_favorited_pools(bunny_db_t *db, bunny_db_site_t site, int limit, bunny_db_tag_stat_list_t *out_list)
 {
     if (!db || !out_list) {

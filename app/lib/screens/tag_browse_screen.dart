@@ -4,6 +4,7 @@ import '../l10n/app_localizations.dart';
 import '../repository/bunny_models.dart';
 import '../repository/bunny_repository.dart';
 import '../services/download_queue_service.dart';
+import '../services/preview_cache_service.dart';
 import '../settings/display_settings_store.dart';
 import '../settings/download_settings_store.dart';
 import '../util/post_navigation.dart';
@@ -47,6 +48,14 @@ class TagBrowseScreen extends StatefulWidget {
   /// [customFetch] is set.
   final String? title;
 
+  /// When set, page 1's fetch checks this cache first instead of always
+  /// calling [BunnyRepository.previewSearch] directly -- lets a caller (the
+  /// stats screen's recommended-searches section) warm the very first page
+  /// in the background before the user even opens this screen, so it can
+  /// feel instant. `null` everywhere else, which is every other call site
+  /// of this screen today: no behavior change for them.
+  final PreviewCacheService? previewCache;
+
   const TagBrowseScreen({
     super.key,
     required this.site,
@@ -58,6 +67,7 @@ class TagBrowseScreen extends StatefulWidget {
     this.initialLabel,
     this.customFetch,
     this.title,
+    this.previewCache,
   });
 
   @override
@@ -248,6 +258,13 @@ class _TagBrowseScreenState extends State<TagBrowseScreen> {
       return customFetch(page);
     }
     final query = widget.site == BunnySite.e621 && widget.query.startsWith('pool:') ? '${widget.query} order:id' : widget.query;
+    final previewCache = widget.previewCache;
+    // Only page 1 -- a recommendation's background warm-up ([PreviewCacheService.
+    // prefetch]) only ever fetches the first page, so there's nothing cached
+    // for page 2 onward anyway.
+    if (previewCache != null && page == 1) {
+      return previewCache.getOrFetch(widget.repository, widget.site, query, page: page);
+    }
     return widget.repository.previewSearch(widget.site, query, page: page);
   }
 

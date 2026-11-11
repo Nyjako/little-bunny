@@ -3238,3 +3238,33 @@ this file is the single source of truth for "what's done" across sessions.
   already noted as a precedent from before this milestone (landed in an earlier safe
   upgrade, not here) -- worth remembering again: minor-looking version bumps in this
   ecosystem can still carry real breaking changes.
+
+- [x] **M72 — Stats page: charts and recommended searches, with preview-before-add**
+  The user's ask: the stats page was "just a bunch of random numbers" -- wanted actual
+  graphs, plus search recommendations based on favorited tags, with a way to preview a
+  recommended search before committing to add it (preloaded in the background so it
+  opens fast). New native signal: `bunny_db_top_favorited_tag_pairs` (`libs/db/src/stats.c`)
+  -- a CTE-bounded self-join over `post_tags`/`favorites`, restricting to the
+  `candidate_tag_limit` most-favorited tags *before* the self-join, the same guard
+  M40/M55 already needed once for this report (an unbounded join over every tag on every
+  favorited post is a combinatorial hang waiting to happen). Wired through
+  `bunny_core_stats_report_t.top_tag_pairs` into the existing cached/background-rebuilt
+  report (never a live per-request query), FFI, and the HTTP server route, encoding each
+  pair as `"<tagA> + <tagB>"` the same sentinel-string way `top_pools` already encodes
+  `"pool:<id>"` -- no new wire/struct shape needed. Pure-Dart `buildSearchRecommendations`
+  (`search_recommendations.dart`) ranks tag-pair candidates ahead of single-tag ones,
+  filtering out anything already covered by an existing search via an order-independent
+  token-set fingerprint (so "wolf forest" correctly dedupes against a pair recommendation
+  of "forest + wolf"). This is a deliberate extension past M10.2's original "the tag
+  itself is the recommendation" stance, chosen over a simpler single-tag-only version
+  specifically for the cross-referencing the user asked for. New `PreviewCacheService`
+  (short-TTL, LRU-bounded) is the "preload them a bit" piece: `TagStatsScreen` prefetches
+  every shown recommendation's first page as soon as it's computed, and `TagBrowseScreen`
+  gained an optional `previewCache` param (defaults to `null`, every other call site
+  untouched) so a cache hit comes back instantly when the recommendation is actually
+  opened -- tapping one opens a live preview rather than saving outright, reusing
+  `TagBrowseScreen`'s existing "+" action to actually add it. The four existing sections
+  (top favorited tags, top used tags, top pools, top viewed searches) now render their
+  top 10 entries as an `fl_chart` bar chart, with entries 11-20 still available as a
+  plain ranked list underneath so no data disappears -- only the top slice gets the
+  visual treatment.
