@@ -6,7 +6,10 @@ plugins {
 
 android {
     namespace = "com.github.nyjako.little_bunny"
-    compileSdk = flutter.compileSdkVersion
+    // flutter_local_notifications 23 (via androidx.core 1.19.0) requires
+    // compiling against API 37 or later -- Flutter 3.47.9's own
+    // flutter.compileSdkVersion default is still 36, so this overrides it.
+    compileSdk = 37
     ndkVersion = flutter.ndkVersion
 
     compileOptions {
