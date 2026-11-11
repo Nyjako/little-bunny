@@ -30,3 +30,12 @@
 
 #define GOBLIN_SECURE_COMPARE_IMPLEMENTATION
 #include <goblin/secure_compare.h>
+
+#define GOBLIN_MD5_IMPLEMENTATION
+#include <goblin/md5.h>
+
+#define GOBLIN_RATE_LIMIT_IMPLEMENTATION
+#include <goblin/rate_limit.h>
+
+#define GOBLIN_THREAD_IMPLEMENTATION
+#include <goblin/thread.h>
