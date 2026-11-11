@@ -31,6 +31,13 @@ bunny_db_result_t bunny_db_blacklist_fetch_complex_rules(bunny_db_t *db, bunny_d
 
 void bunny_db_blacklist_free_rule_asts(bunny_db_tag_query_node_ptr_array *asts);
 
+/* Same shape as bunny_db_blacklist_fetch_complex_rules above, but for the
+ * per-slideshow blacklist (slideshow_blacklist.c) -- keyed by slideshow_id
+ * instead of site, with an explicit `dialect` param since a slideshow has no
+ * single site of its own. Shared here so bunny_db_search_list_posts_random
+ * (posts.c) can run the same second-pass filter. */
+bunny_db_result_t bunny_db_slideshow_blacklist_fetch_complex_rules(bunny_db_t *db, int64_t slideshow_id, bunny_tag_query_dialect_t dialect, bunny_db_tag_query_node_ptr_array *out_asts);
+
 struct bunny_db
 {
     sqlite3 *handle;

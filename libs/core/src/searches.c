@@ -328,8 +328,13 @@ bunny_core_result_t bunny_core_slideshow_posts_list(bunny_core_t *core, int64_t 
  * truncates to count. Oversamples the DB request by excluded_count so
  * filtering still has a reasonable shot at reaching `count`; may still
  * return fewer, same "can return fewer than requested" precedent every
- * random-pick function in this codebase already accepts. */
-static bunny_core_result_t bunny_core_slideshow_pick_posts_for_search_locked(bunny_db_t *db, int64_t search_id, int count, const int64_t *excluded_post_ids, size_t excluded_count, int rating_mask, int media_mask, bunny_db_post_list_t *out_list)
+ * random-pick function in this codebase already accepts. `slideshow_id` (0
+ * means "none") additionally excludes anything matching that slideshow's own
+ * per-slideshow blacklist -- applies regardless of is_pool/is_favorites,
+ * unlike the per-site blacklist just above (see
+ * bunny_db_search_list_posts_random/bunny_db_pool_search_list_posts_random's
+ * own doc comments on why). */
+static bunny_core_result_t bunny_core_slideshow_pick_posts_for_search_locked(bunny_db_t *db, int64_t search_id, int64_t slideshow_id, int count, const int64_t *excluded_post_ids, size_t excluded_count, int rating_mask, int media_mask, bunny_db_post_list_t *out_list)
 {
     memset(out_list, 0, sizeof(*out_list));
     if (count <= 0) {
@@ -369,12 +374,12 @@ static bunny_core_result_t bunny_core_slideshow_pick_posts_for_search_locked(bun
     bunny_db_post_list_t candidates;
     bunny_db_result_t result;
     if (is_pool) {
-        result = bunny_db_pool_search_list_posts_random(db, search_id, pool_id, (int)request_count, &candidates);
+        result = bunny_db_pool_search_list_posts_random(db, search_id, pool_id, slideshow_id, (int)request_count, &candidates);
     } else {
         int64_t ids[] = {search_id};
         bunny_db_site_t sites[] = {site};
         bool apply_blacklist[] = {!is_favorites};
-        result = bunny_db_search_list_posts_random(db, ids, sites, apply_blacklist, 1, rating_mask, media_mask, (int)request_count, &candidates);
+        result = bunny_db_search_list_posts_random(db, ids, sites, apply_blacklist, 1, slideshow_id, rating_mask, media_mask, (int)request_count, &candidates);
     }
     if (result != BUNNY_DB_OK) {
         return bunny_core_map_db_result(result);
@@ -404,6 +409,16 @@ static bunny_core_result_t bunny_core_slideshow_pick_posts_for_search_locked(bun
     return BUNNY_CORE_OK;
 }
 
+/* Has no slideshow_id of its own to scope a per-slideshow blacklist check
+ * against (it predates that feature, and picks for search_id in the
+ * abstract rather than for any one slideshow) -- passes 0 ("none") to
+ * `_locked` below, so a pick through THIS entry point is never filtered by
+ * any per-slideshow exclusion. Confirmed unreachable from any live Dart/
+ * server caller today (test-only + raw FFI); see
+ * test_slideshow_pick_posts_for_search_is_unaffected_by_any_slideshow_blacklist
+ * for a regression test documenting this explicitly. The real, live
+ * orchestration path is bunny_core_slideshow_search_commit_picks below,
+ * which DOES have a slideshow_id and passes it through. */
 bunny_core_result_t bunny_core_slideshow_pick_posts_for_search(bunny_core_t *core, int64_t search_id, int count, const int64_t *excluded_post_ids, size_t excluded_count, int rating_mask, int media_mask, bunny_db_post_list_t *out_list)
 {
     if (!core || !out_list) {
@@ -411,7 +426,7 @@ bunny_core_result_t bunny_core_slideshow_pick_posts_for_search(bunny_core_t *cor
     }
     size_t slot;
     bunny_db_t *read_db = bunny_core_db_read_lock(core, &slot);
-    bunny_core_result_t result = bunny_core_slideshow_pick_posts_for_search_locked(read_db, search_id, count, excluded_post_ids, excluded_count, rating_mask, media_mask, out_list);
+    bunny_core_result_t result = bunny_core_slideshow_pick_posts_for_search_locked(read_db, search_id, 0, count, excluded_post_ids, excluded_count, rating_mask, media_mask, out_list);
     bunny_core_db_read_unlock(core, slot);
     return result;
 }
@@ -505,7 +520,7 @@ bunny_core_result_t bunny_core_slideshow_search_commit_picks(bunny_core_t *core,
     bunny_db_post_list_t picked;
     memset(&picked, 0, sizeof(picked));
     if (request_count > 0) {
-        bunny_core_result_t pick_result = bunny_core_slideshow_pick_posts_for_search_locked(core->db, search_id, request_count, all_ids.items, all_ids.count, BUNNY_DB_RATING_MASK_ALL, BUNNY_DB_MEDIA_MASK_ALL, &picked);
+        bunny_core_result_t pick_result = bunny_core_slideshow_pick_posts_for_search_locked(core->db, search_id, slideshow_id, request_count, all_ids.items, all_ids.count, BUNNY_DB_RATING_MASK_ALL, BUNNY_DB_MEDIA_MASK_ALL, &picked);
         bunny_db_int64_list_free(&all_ids);
         if (pick_result != BUNNY_CORE_OK) {
             bunny_core_db_unlock(core);
@@ -602,7 +617,7 @@ bunny_core_result_t bunny_core_slideshow_replace_post(bunny_core_t *core, int64_
     }
 
     bunny_db_post_list_t picked;
-    bunny_core_result_t pick_result = bunny_core_slideshow_pick_posts_for_search_locked(core->db, search_id, 1, all_ids.items, all_ids.count, BUNNY_DB_RATING_MASK_ALL, BUNNY_DB_MEDIA_MASK_ALL, &picked);
+    bunny_core_result_t pick_result = bunny_core_slideshow_pick_posts_for_search_locked(core->db, search_id, slideshow_id, 1, all_ids.items, all_ids.count, BUNNY_DB_RATING_MASK_ALL, BUNNY_DB_MEDIA_MASK_ALL, &picked);
     bunny_db_int64_list_free(&all_ids);
     if (pick_result != BUNNY_CORE_OK) {
         bunny_core_db_unlock(core);
