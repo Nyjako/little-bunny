@@ -327,7 +327,14 @@ class FakeBunnyRepository implements BunnyRepository {
   /// -- tests that care about specific sections overwrite this wholesale
   /// rather than building it up field-by-field, since M40's report is a
   /// single opaque unit server-side too (no per-section fetch/refresh).
-  BunnyStatsReport statsReport = const BunnyStatsReport(computedAt: '2026-01-01T00:00:00Z', topFavoritedTags: [], topUsedTags: [], topPools: [], topViewedSearches: []);
+  BunnyStatsReport statsReport = const BunnyStatsReport(
+    computedAt: '2026-01-01T00:00:00Z',
+    topFavoritedTags: [],
+    topUsedTags: [],
+    topPools: [],
+    topViewedSearches: [],
+    topTagPairs: [],
+  );
 
   /// Set by [refreshStatsReport] -- lets a test assert a manual refresh
   /// actually happened (distinct from [getStatsReport], which never mutates

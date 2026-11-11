@@ -4,6 +4,7 @@
 #include <goblin/appdirs.h>
 #include <goblin/cstr.h>
 #include <goblin/fileio.h>
+#include <goblin/hex.h>
 #include <openssl/evp.h>
 
 #include <ctype.h>
@@ -253,9 +254,7 @@ bool bunny_updater_sha256_hex(const char *path, char out_hex[65])
     if (!ok) {
         return false;
     }
-    for (unsigned int i = 0; i < digest_len; i++) {
-        snprintf(out_hex + i * 2, 3, "%02x", digest[i]);
-    }
+    goblin_bytes_to_hex(digest, digest_len, out_hex);
     return true;
 }
 

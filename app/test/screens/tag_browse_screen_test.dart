@@ -5,6 +5,7 @@ import 'package:little_bunny/screens/post_detail_screen.dart';
 import 'package:little_bunny/screens/tag_browse_screen.dart';
 import 'package:little_bunny/services/download_manager.dart';
 import 'package:little_bunny/services/download_queue_service.dart';
+import 'package:little_bunny/services/preview_cache_service.dart';
 import 'package:little_bunny/settings/display_settings_store.dart';
 import 'package:little_bunny/settings/download_settings_store.dart';
 import 'package:little_bunny/widgets/post_grid_tile.dart';
@@ -92,6 +93,32 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byType(PostDetailScreen), findsOneWidget);
+  });
+
+  testWidgets('a warmed previewCache answers page 1 without calling previewSearch again', (WidgetTester tester) async {
+    final repository = FakeBunnyRepository();
+    final previewCache = PreviewCacheService();
+    repository.previewSearchResults['e621:someartist:1'] = [_post(1)];
+    await previewCache.getOrFetch(repository, BunnySite.e621, 'someartist');
+    repository.previewSearchCalls.clear();
+
+    await tester.pumpWidget(
+      wrapWithLocalization(
+        TagBrowseScreen(
+          site: BunnySite.e621,
+          query: 'someartist',
+          repository: repository,
+          displaySettingsStore: const DisplaySettingsStore(),
+          downloadSettingsStore: const DownloadSettingsStore(),
+          downloadQueueService: _downloadQueueService(),
+          previewCache: previewCache,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const ValueKey(1)), findsOneWidget);
+    expect(repository.previewSearchCalls, isEmpty); // served from the cache, not a fresh call
   });
 
   testWidgets('a post opened from a tag browse carries the current query into its tag menu (M54 partial)', (WidgetTester tester) async {

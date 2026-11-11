@@ -189,6 +189,11 @@
   "tagStatsTopPoolsLabel": "Najlepsze zbiory (wg ulubionych postów)",
   "tagStatsTopViewedSearchesLabel": "Najczęściej odwiedzane wyszukiwania",
   "tagStatsSectionEmptyState": "Na razie nic tu nie ma.",
+  "tagStatsRecommendedSearchesLabel": "Polecane wyszukiwania",
+  "tagStatsRecommendationCountLabel": "{count} ulubionych",
+  "@tagStatsRecommendationCountLabel": {
+    "placeholders": {"count": {"type": "int"}}
+  },
 
   "createSearchScreenTitle": "Nowe wyszukiwanie",
   "createSearchLabelField": "Etykieta",
