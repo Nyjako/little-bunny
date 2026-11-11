@@ -189,6 +189,11 @@
   "tagStatsTopPoolsLabel": "Top pools (by favorited posts)",
   "tagStatsTopViewedSearchesLabel": "Most-visited searches",
   "tagStatsSectionEmptyState": "Nothing here yet.",
+  "tagStatsRecommendedSearchesLabel": "Recommended searches",
+  "tagStatsRecommendationCountLabel": "{count} favorites",
+  "@tagStatsRecommendationCountLabel": {
+    "placeholders": {"count": {"type": "int"}}
+  },
 
   "createSearchScreenTitle": "New search",
   "createSearchLabelField": "Label",
