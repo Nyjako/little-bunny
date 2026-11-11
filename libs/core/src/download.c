@@ -144,13 +144,25 @@ static int make_directories_recursive(const char *path)
 }
 
 /* True if a file already sits at path and either expected_md5 is NULL/empty
- * (nothing to verify -- trust as-is) or its contents actually match. */
-static bool file_matches_checksum(const char *path, const char *expected_md5)
+ * (nothing to verify -- trust as-is) or its contents actually match.
+ * *out_size (if non-NULL) is always set to the file's size when it exists,
+ * regardless of the checksum outcome -- the skip-fetch fast path below
+ * needs it to report a real "received" byte count instead of leaving a
+ * verified-on-first-look file's progress sitting at the slot's initial 0
+ * forever (on_chunk/on_progress, this fast path's only other source of
+ * that count, never run at all here). */
+static bool file_matches_checksum(const char *path, const char *expected_md5, int64_t *out_size)
 {
     FILE *f = fopen(path, "rb");
     if (!f) {
         return false;
     }
+    fseek(f, 0, SEEK_END);
+    long size = ftell(f);
+    if (out_size) {
+        *out_size = size >= 0 ? (int64_t)size : 0;
+    }
+    fseek(f, 0, SEEK_SET);
     if (!expected_md5 || !expected_md5[0]) {
         fclose(f);
         return true;
@@ -240,7 +252,12 @@ static void *download_thread_main(void *arg)
         return NULL;
     }
 
-    if (file_matches_checksum(final_path, slot->expected_md5)) {
+    int64_t existing_size = 0;
+    if (file_matches_checksum(final_path, slot->expected_md5, &existing_size)) {
+        bunny_mutex_lock(&slot->progress_lock);
+        slot->received = existing_size;
+        slot->total = existing_size;
+        bunny_mutex_unlock(&slot->progress_lock);
         finish_slot(slot, BUNNY_CORE_DOWNLOAD_VERIFIED, NULL);
         free(final_path);
         return NULL;
