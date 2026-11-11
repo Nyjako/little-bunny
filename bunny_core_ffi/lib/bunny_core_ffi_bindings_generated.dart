@@ -2075,6 +2075,97 @@ class BunnyCoreFfiBindings {
         int Function(ffi.Pointer<bunny_core_t>, int, ffi.Pointer<ffi.Char>)
       >();
 
+  /// --- Per-slideshow tag exclusion (M51 v2 follow-up) -- thin pass-throughs
+  /// to bunny_db_slideshow_blacklist_*. Additive to, never a replacement for,
+  /// the per-site blacklist above (both apply at once), and -- unlike it --
+  /// not exempted for a favorites- or pool-sourced search; see
+  /// bunny_db_search_list_posts_random/bunny_db_pool_search_list_posts_random's
+  /// own doc comments for exactly where this applies.
+  /// bunny_core_slideshow_blacklist_add validates `tag` under e621's dialect
+  /// always (not per-site, since a slideshow has no single site of its own),
+  /// returning BUNNY_CORE_ERR_INVALID_ARG for anything that fails to parse.
+  bunny_core_result_t bunny_core_slideshow_blacklist_list(
+    ffi.Pointer<bunny_core_t> core,
+    int slideshow_id,
+    ffi.Pointer<bunny_db_string_list_t> out_list,
+  ) {
+    return bunny_core_result_t.fromValue(
+      _bunny_core_slideshow_blacklist_list(core, slideshow_id, out_list),
+    );
+  }
+
+  late final _bunny_core_slideshow_blacklist_listPtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.UnsignedInt Function(
+            ffi.Pointer<bunny_core_t>,
+            ffi.Int64,
+            ffi.Pointer<bunny_db_string_list_t>,
+          )
+        >
+      >('bunny_core_slideshow_blacklist_list');
+  late final _bunny_core_slideshow_blacklist_list =
+      _bunny_core_slideshow_blacklist_listPtr
+          .asFunction<
+            int Function(
+              ffi.Pointer<bunny_core_t>,
+              int,
+              ffi.Pointer<bunny_db_string_list_t>,
+            )
+          >();
+
+  bunny_core_result_t bunny_core_slideshow_blacklist_add(
+    ffi.Pointer<bunny_core_t> core,
+    int slideshow_id,
+    ffi.Pointer<ffi.Char> tag,
+  ) {
+    return bunny_core_result_t.fromValue(
+      _bunny_core_slideshow_blacklist_add(core, slideshow_id, tag),
+    );
+  }
+
+  late final _bunny_core_slideshow_blacklist_addPtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.UnsignedInt Function(
+            ffi.Pointer<bunny_core_t>,
+            ffi.Int64,
+            ffi.Pointer<ffi.Char>,
+          )
+        >
+      >('bunny_core_slideshow_blacklist_add');
+  late final _bunny_core_slideshow_blacklist_add =
+      _bunny_core_slideshow_blacklist_addPtr
+          .asFunction<
+            int Function(ffi.Pointer<bunny_core_t>, int, ffi.Pointer<ffi.Char>)
+          >();
+
+  bunny_core_result_t bunny_core_slideshow_blacklist_remove(
+    ffi.Pointer<bunny_core_t> core,
+    int slideshow_id,
+    ffi.Pointer<ffi.Char> tag,
+  ) {
+    return bunny_core_result_t.fromValue(
+      _bunny_core_slideshow_blacklist_remove(core, slideshow_id, tag),
+    );
+  }
+
+  late final _bunny_core_slideshow_blacklist_removePtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.UnsignedInt Function(
+            ffi.Pointer<bunny_core_t>,
+            ffi.Int64,
+            ffi.Pointer<ffi.Char>,
+          )
+        >
+      >('bunny_core_slideshow_blacklist_remove');
+  late final _bunny_core_slideshow_blacklist_remove =
+      _bunny_core_slideshow_blacklist_removePtr
+          .asFunction<
+            int Function(ffi.Pointer<bunny_core_t>, int, ffi.Pointer<ffi.Char>)
+          >();
+
   /// Pulls the e621 account's own blacklist (My Account -> Blacklisted Tags on
   /// e621.net, see tools/e621_blacklist_experiment/e621_blacklist.py for the
   /// API this mirrors) and imports every line that isn't already present

@@ -751,6 +751,36 @@ void main() {
       expect(capturedUri.queryParameters, {'site': 'e621', 'tag': 'young'});
     });
 
+    test('getSlideshowBlacklist sends GET to /slideshows/{id}/blacklist and returns a list of strings', () async {
+      respond = (_) => http.Response(jsonEncode(['comic']), 200);
+
+      final tags = await buildRepository().getSlideshowBlacklist(7);
+
+      expect(capturedMethod, 'GET');
+      expect(capturedUri.path, '/slideshows/7/blacklist');
+      expect(tags, ['comic']);
+    });
+
+    test('addSlideshowBlacklistTag posts just the tag as JSON, no site field', () async {
+      respond = (_) => http.Response(jsonEncode({'ok': true}), 200);
+
+      await buildRepository().addSlideshowBlacklistTag(7, 'comic');
+
+      expect(capturedMethod, 'POST');
+      expect(capturedUri.path, '/slideshows/7/blacklist');
+      expect(jsonDecode(capturedBody), {'tag': 'comic'});
+    });
+
+    test('removeSlideshowBlacklistTag sends DELETE with just a tag query param, no site', () async {
+      respond = (_) => http.Response(jsonEncode({'ok': true}), 200);
+
+      await buildRepository().removeSlideshowBlacklistTag(7, 'comic');
+
+      expect(capturedMethod, 'DELETE');
+      expect(capturedUri.path, '/slideshows/7/blacklist');
+      expect(capturedUri.queryParameters, {'tag': 'comic'});
+    });
+
     test('getPostRelationships sends GET to the right path and maps the response', () async {
       respond = (_) => http.Response(
         jsonEncode({'has_parent': true, 'parent_external_id': 999, 'has_active_children': true, 'children': [101, 102]}),

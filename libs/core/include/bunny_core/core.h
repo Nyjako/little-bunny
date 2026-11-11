@@ -314,6 +314,19 @@ bunny_core_result_t bunny_core_blacklist_list(bunny_core_t *core, bunny_db_site_
 bunny_core_result_t bunny_core_blacklist_add(bunny_core_t *core, bunny_db_site_t site, const char *tag);
 bunny_core_result_t bunny_core_blacklist_remove(bunny_core_t *core, bunny_db_site_t site, const char *tag);
 
+/* --- Per-slideshow tag exclusion (M51 v2 follow-up) -- thin pass-throughs
+ * to bunny_db_slideshow_blacklist_*. Additive to, never a replacement for,
+ * the per-site blacklist above (both apply at once), and -- unlike it --
+ * not exempted for a favorites- or pool-sourced search; see
+ * bunny_db_search_list_posts_random/bunny_db_pool_search_list_posts_random's
+ * own doc comments for exactly where this applies.
+ * bunny_core_slideshow_blacklist_add validates `tag` under e621's dialect
+ * always (not per-site, since a slideshow has no single site of its own),
+ * returning BUNNY_CORE_ERR_INVALID_ARG for anything that fails to parse. */
+bunny_core_result_t bunny_core_slideshow_blacklist_list(bunny_core_t *core, int64_t slideshow_id, bunny_db_string_list_t *out_list);
+bunny_core_result_t bunny_core_slideshow_blacklist_add(bunny_core_t *core, int64_t slideshow_id, const char *tag);
+bunny_core_result_t bunny_core_slideshow_blacklist_remove(bunny_core_t *core, int64_t slideshow_id, const char *tag);
+
 typedef struct
 {
     int added;           /* new rules imported (bare tags and, as of M28/M54, multi-tag/grammar lines alike) */

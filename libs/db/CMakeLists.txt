@@ -10,6 +10,7 @@ add_library(bunny_db STATIC
     src/favorites.c
     src/votes.c
     src/blacklist.c
+    src/slideshow_blacklist.c
     src/stats.c
     src/action_queue.c
     src/download_queue.c

@@ -727,9 +727,16 @@ static bool bunny_db_append_in_clause(char **sql, size_t *cap, size_t *offset, s
  * bunny_db_search_list_posts_random below -- same column/join shape
  * bunny_db_search_list_posts above uses, minus pagination (this is a
  * one-shot random pick, not a paginated listing) plus a dynamic
- * sr.search_id IN (...) in place of a single "= ?". Returns false on
- * allocation failure. */
-static bool bunny_db_build_random_subquery(char **sql, size_t *cap, size_t *offset, size_t id_count, bool apply_blacklist)
+ * sr.search_id IN (...) in place of a single "= ?". `slideshow_id` (0 means
+ * "none") appends a SECOND, independent NOT EXISTS clause against
+ * slideshow_blacklist_tags -- unlike `apply_blacklist`, this one is added to
+ * BOTH subqueries whenever it's set, since the per-slideshow exclusion is
+ * not favorites-exempt (see bunny_db_search_list_posts_random's own doc
+ * comment). Its one bound parameter must be supplied by the caller right
+ * after this subquery's own search_id IN-clause binds, before the
+ * rating/media mask binds -- matching this clause's position in the SQL
+ * text. Returns false on allocation failure. */
+static bool bunny_db_build_random_subquery(char **sql, size_t *cap, size_t *offset, size_t id_count, bool apply_blacklist, int64_t slideshow_id)
 {
     size_t needed = *offset + 1024;
     if (needed > *cap) {
@@ -770,11 +777,25 @@ static bool bunny_db_build_random_subquery(char **sql, size_t *cap, size_t *offs
                                     " AND NOT EXISTS (SELECT 1 FROM post_tags pt JOIN tags t ON t.id = pt.tag_id "
                                     "JOIN blacklist_tags bl ON bl.site = t.site AND bl.tag = t.name WHERE pt.post_id = p.id)");
     }
+    if (slideshow_id != 0) {
+        needed = *offset + 256;
+        if (needed > *cap) {
+            char *grown = realloc(*sql, needed);
+            if (!grown) {
+                return false;
+            }
+            *sql = grown;
+            *cap = needed;
+        }
+        *offset += (size_t)snprintf(*sql + *offset, *cap - *offset, "%s",
+                                    " AND NOT EXISTS (SELECT 1 FROM post_tags pt JOIN tags t ON t.id = pt.tag_id "
+                                    "JOIN slideshow_blacklist_tags sbl ON sbl.slideshow_id = ? AND sbl.tag = t.name WHERE pt.post_id = p.id)");
+    }
     *offset += (size_t)snprintf(*sql + *offset, *cap - *offset, "%s", " AND " BUNNY_DB_RATING_MASK_CASE " & ? != 0 AND " BUNNY_DB_MEDIA_MASK_CASE " & ? != 0");
     return true;
 }
 
-bunny_db_result_t bunny_db_search_list_posts_random(bunny_db_t *db, const int64_t *search_ids, const bunny_db_site_t *sites, const bool *apply_blacklist_flags, size_t search_id_count, int rating_mask, int media_mask, int count, bunny_db_post_list_t *out_list)
+bunny_db_result_t bunny_db_search_list_posts_random(bunny_db_t *db, const int64_t *search_ids, const bunny_db_site_t *sites, const bool *apply_blacklist_flags, size_t search_id_count, int64_t slideshow_id, int rating_mask, int media_mask, int count, bunny_db_post_list_t *out_list)
 {
     if (!db || !out_list || !search_ids || !sites || !apply_blacklist_flags || search_id_count == 0 || count <= 0) {
         return BUNNY_DB_ERR_INVALID_ARG;
@@ -811,7 +832,7 @@ bunny_db_result_t bunny_db_search_list_posts_random(bunny_db_t *db, const int64_
         offset += (size_t)snprintf(sql + offset, cap - offset, "%s", "SELECT * FROM (");
     }
     if (build_ok && filtered_count > 0) {
-        build_ok = bunny_db_build_random_subquery(&sql, &cap, &offset, filtered_count, true);
+        build_ok = bunny_db_build_random_subquery(&sql, &cap, &offset, filtered_count, true, slideshow_id);
     }
     if (build_ok && filtered_count > 0 && unfiltered_count > 0) {
         size_t needed = offset + 16;
@@ -828,7 +849,7 @@ bunny_db_result_t bunny_db_search_list_posts_random(bunny_db_t *db, const int64_
         }
     }
     if (build_ok && unfiltered_count > 0) {
-        build_ok = bunny_db_build_random_subquery(&sql, &cap, &offset, unfiltered_count, false);
+        build_ok = bunny_db_build_random_subquery(&sql, &cap, &offset, unfiltered_count, false, slideshow_id);
     }
     if (build_ok) {
         size_t needed = offset + 32;
@@ -865,12 +886,18 @@ bunny_db_result_t bunny_db_search_list_posts_random(bunny_db_t *db, const int64_
         for (size_t i = 0; i < filtered_count; i++) {
             sqlite3_bind_int64(stmt, bind_index++, filtered_ids[i]);
         }
+        if (slideshow_id != 0) {
+            sqlite3_bind_int64(stmt, bind_index++, slideshow_id);
+        }
         sqlite3_bind_int(stmt, bind_index++, rating_mask);
         sqlite3_bind_int(stmt, bind_index++, media_mask);
     }
     if (unfiltered_count > 0) {
         for (size_t i = 0; i < unfiltered_count; i++) {
             sqlite3_bind_int64(stmt, bind_index++, unfiltered_ids[i]);
+        }
+        if (slideshow_id != 0) {
+            sqlite3_bind_int64(stmt, bind_index++, slideshow_id);
         }
         sqlite3_bind_int(stmt, bind_index++, rating_mask);
         sqlite3_bind_int(stmt, bind_index++, media_mask);
@@ -937,6 +964,67 @@ bunny_db_result_t bunny_db_search_list_posts_random(bunny_db_t *db, const int64_
             }
             bunny_db_tag_query_node_ptr_array complex_asts;
             bunny_db_result_t complex_result = bunny_db_blacklist_fetch_complex_rules(db, site, &complex_asts);
+            if (complex_result != BUNNY_DB_OK) {
+                for (size_t i = 0; i < arr.count; i++) {
+                    bunny_db_post_free(&arr.items[i]);
+                }
+                bunny_db_post_array_free(&arr);
+                return complex_result;
+            }
+            if (complex_asts.count > 0) {
+                size_t write = 0;
+                for (size_t read = 0; read < arr.count; read++) {
+                    if (arr.items[read].site != site) {
+                        arr.items[write++] = arr.items[read];
+                        continue;
+                    }
+                    bunny_db_string_list_t tag_names;
+                    bunny_db_post_get_tag_names(db, arr.items[read].id, &tag_names);
+                    bool blacklisted = false;
+                    for (size_t i = 0; i < complex_asts.count && !blacklisted; i++) {
+                        blacklisted = bunny_tag_query_matches(complex_asts.items[i], (const char *const *)tag_names.items, tag_names.count);
+                    }
+                    bunny_db_string_list_free(&tag_names);
+                    if (blacklisted) {
+                        bunny_db_post_free(&arr.items[read]);
+                    } else {
+                        arr.items[write++] = arr.items[read];
+                    }
+                }
+                arr.count = write;
+            }
+            bunny_db_blacklist_free_rule_asts(&complex_asts);
+        }
+    }
+
+    /* Per-slideshow complex-blacklist second pass -- same per-distinct-site
+     * shape as the per-site pass above, but gated on `slideshow_id != 0`
+     * instead of `filtered_count > 0`: the per-slideshow exclusion is not
+     * favorites-exempt, so it has to run even when every selected search is
+     * a favorites search. Each site's rules are parsed under that SAME
+     * site's own dialect (dialect_for_site below) even though every rule was
+     * stored/validated once under e621's dialect at write time (see
+     * bunny_core_slideshow_blacklist_add) -- a rule using OR/wildcard/group
+     * syntax simply fails to parse under Inkbunny's stricter grammar and is
+     * silently skipped for Inkbunny-sourced rows, rather than ever matching
+     * them (same tolerance bunny_db_slideshow_blacklist_fetch_complex_rules
+     * itself documents). */
+    if (slideshow_id != 0 && arr.count > 0) {
+        for (int site_index = 0; site_index < 2; site_index++) {
+            bunny_db_site_t site = (bunny_db_site_t)site_index;
+            bool site_present = false;
+            for (size_t i = 0; i < arr.count; i++) {
+                if (arr.items[i].site == site) {
+                    site_present = true;
+                    break;
+                }
+            }
+            if (!site_present) {
+                continue;
+            }
+            bunny_tag_query_dialect_t dialect = site == BUNNY_DB_SITE_INKBUNNY ? BUNNY_TAG_QUERY_DIALECT_INKBUNNY : BUNNY_TAG_QUERY_DIALECT_E621;
+            bunny_db_tag_query_node_ptr_array complex_asts;
+            bunny_db_result_t complex_result = bunny_db_slideshow_blacklist_fetch_complex_rules(db, slideshow_id, dialect, &complex_asts);
             if (complex_result != BUNNY_DB_OK) {
                 for (size_t i = 0; i < arr.count; i++) {
                     bunny_db_post_free(&arr.items[i]);

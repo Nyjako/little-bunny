@@ -110,6 +110,8 @@ void main() {
 
     await tester.longPress(find.text('Foxes'));
     await tester.pumpAndSettle();
+    await tester.tap(find.text('Edit'));
+    await tester.pumpAndSettle();
     expect(find.text('Edit search'), findsOneWidget);
 
     await tester.enterText(find.widgetWithText(TextFormField, 'Label'), 'Renamed foxes');
@@ -128,6 +130,8 @@ void main() {
     await tester.pumpAndSettle();
 
     await tester.longPress(find.text('Foxes'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Edit'));
     await tester.pumpAndSettle();
     expect(find.text('Edit search'), findsOneWidget);
 
@@ -283,6 +287,72 @@ void main() {
     expect(downloadQueueService.totalCount, 3);
     expect(downloadQueueService.items.map((item) => item.post.id).toSet(), {1, 2, 3});
     // Exits selection mode and clears the selection once queued.
+    expect(find.text('Searches'), findsWidgets);
+  });
+
+  testWidgets('long-pressing a row and choosing Add to slideshow links it to the chosen slideshow', (WidgetTester tester) async {
+    final repository = FakeBunnyRepository();
+    await repository.createSearch(BunnySite.e621, 'Foxes', 'fox');
+    final slideshowId = await repository.slideshowCreate('My show');
+
+    await tester.pumpWidget(_wrap(repository));
+    await tester.pumpAndSettle();
+
+    await tester.longPress(find.text('Foxes'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Add to slideshow'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Add to slideshow'), findsWidgets);
+    await tester.tap(find.text('My show'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Added to "My show"'), findsOneWidget);
+    final links = await repository.slideshowSearchList(slideshowId);
+    expect(links.single.searchId, repository.searches.single.id);
+  });
+
+  testWidgets('Add to slideshow shows a snackbar instead of a picker when there are no slideshows yet', (WidgetTester tester) async {
+    final repository = FakeBunnyRepository();
+    await repository.createSearch(BunnySite.e621, 'Foxes', 'fox');
+
+    await tester.pumpWidget(_wrap(repository));
+    await tester.pumpAndSettle();
+
+    await tester.longPress(find.text('Foxes'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Add to slideshow'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('No slideshows yet -- create one first.'), findsOneWidget);
+  });
+
+  testWidgets('selection mode can bulk-add every selected search to a chosen slideshow', (WidgetTester tester) async {
+    final repository = FakeBunnyRepository();
+    await repository.createSearch(BunnySite.e621, 'Foxes', 'fox');
+    await repository.createSearch(BunnySite.e621, 'Wolves', 'wolf');
+    final slideshowId = await repository.slideshowCreate('My show');
+
+    await tester.pumpWidget(_wrap(repository));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byIcon(Icons.sort));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Select searches to download'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Foxes'));
+    await tester.tap(find.text('Wolves'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byTooltip('Add selected to slideshow'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('My show'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('2 added to "My show"'), findsOneWidget);
+    final links = await repository.slideshowSearchList(slideshowId);
+    expect(links.map((link) => link.searchId).toSet(), repository.searches.map((search) => search.id).toSet());
+    // Exits selection mode and clears the selection once added.
     expect(find.text('Searches'), findsWidgets);
   });
 
@@ -784,6 +854,8 @@ void main() {
     expect(find.text('Canines'), findsNothing);
 
     await tester.longPress(find.widgetWithText(ListTile, 'Alpha'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Edit'));
     await tester.pumpAndSettle();
 
     await tester.tap(find.byType(DropdownButtonFormField<int>));

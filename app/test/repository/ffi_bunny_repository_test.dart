@@ -80,6 +80,21 @@ void main() {
     expect(await repository.getBlacklist(BunnySite.e621), isEmpty);
   });
 
+  test('addSlideshowBlacklistTag/getSlideshowBlacklist/removeSlideshowBlacklistTag round-trip per slideshow', () async {
+    final slideshowId = await repository.slideshowCreate('my slideshow');
+
+    expect(await repository.getSlideshowBlacklist(slideshowId), isEmpty);
+
+    await repository.addSlideshowBlacklistTag(slideshowId, 'comic');
+    expect(await repository.getSlideshowBlacklist(slideshowId), ['comic']);
+
+    final otherSlideshowId = await repository.slideshowCreate('other slideshow');
+    expect(await repository.getSlideshowBlacklist(otherSlideshowId), isEmpty);
+
+    await repository.removeSlideshowBlacklistTag(slideshowId, 'comic');
+    expect(await repository.getSlideshowBlacklist(slideshowId), isEmpty);
+  });
+
   test('validateTagQuery accepts valid syntax and rejects invalid syntax with an error position (M28/M54)', () async {
     expect(await repository.validateTagQuery(BunnySite.e621, 'cat ~dog -bird ( ~a ~b )'), isNull);
     expect(await repository.validateTagQuery(BunnySite.e621, '(  )'), 0);

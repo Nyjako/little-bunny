@@ -10,7 +10,10 @@ import '../services/download_manager.dart';
 import '../services/download_queue_service.dart';
 import '../services/slideshow_prepare_service.dart';
 import '../settings/download_settings_store.dart';
+import '../util/create_pool_search_dialog.dart';
+import '../util/tag_query.dart';
 import '../widgets/post_grid_tile.dart';
+import 'create_search_screen.dart';
 import 'slideshow_screen.dart';
 
 /// Create (when [slideshow] is null) or edit (otherwise) a persisted
@@ -64,6 +67,18 @@ class _SlideshowEditScreenState extends State<SlideshowEditScreen> {
   SlideshowPrepareReport? _prepareReport;
   String? _prepareError;
 
+  /// Per-slideshow tag exclusion (additive to the global per-site blacklist,
+  /// see [BunnyRepository.getSlideshowBlacklist]'s own doc comment) --
+  /// mirrors `SettingsScreen`'s own blacklist editor state, minus the site
+  /// selector and e621-sync button (neither applies to a per-slideshow,
+  /// site-agnostic list; rules always validate under e621's dialect).
+  List<String> _slideshowBlacklistTags = [];
+  final _slideshowBlacklistTagController = TextEditingController();
+  int? _slideshowBlacklistQueryError;
+  Timer? _slideshowBlacklistValidateDebounce;
+  List<BunnyTagStat> _slideshowBlacklistSuggestions = [];
+  Timer? _slideshowBlacklistAutocompleteDebounce;
+
   @override
   void initState() {
     super.initState();
@@ -74,7 +89,10 @@ class _SlideshowEditScreenState extends State<SlideshowEditScreen> {
       _defaultCountController.text = slideshow.defaultPostsPerSearch?.toString() ?? '';
       _maxTotalController.text = slideshow.maxTotalPosts?.toString() ?? '';
       unawaited(_loadLinks());
+      unawaited(_loadSlideshowBlacklist());
     }
+    _slideshowBlacklistTagController.addListener(_onSlideshowBlacklistTagChanged);
+    _slideshowBlacklistTagController.addListener(_onSlideshowBlacklistTagChangedAutocomplete);
   }
 
   @override
@@ -83,7 +101,78 @@ class _SlideshowEditScreenState extends State<SlideshowEditScreen> {
     _defaultCountController.dispose();
     _maxTotalController.dispose();
     _intervalController.dispose();
+    _slideshowBlacklistValidateDebounce?.cancel();
+    _slideshowBlacklistAutocompleteDebounce?.cancel();
+    _slideshowBlacklistTagController.removeListener(_onSlideshowBlacklistTagChanged);
+    _slideshowBlacklistTagController.removeListener(_onSlideshowBlacklistTagChangedAutocomplete);
+    _slideshowBlacklistTagController.dispose();
     super.dispose();
+  }
+
+  void _onSlideshowBlacklistTagChanged() {
+    _slideshowBlacklistValidateDebounce?.cancel();
+    final text = _slideshowBlacklistTagController.text;
+    _slideshowBlacklistValidateDebounce = Timer(const Duration(milliseconds: 300), () async {
+      final errorPos = await widget.repository.validateTagQuery(BunnySite.e621, text);
+      if (mounted) {
+        setState(() => _slideshowBlacklistQueryError = errorPos);
+      }
+    });
+  }
+
+  int get _slideshowBlacklistCursorOffset {
+    final selectionOffset = _slideshowBlacklistTagController.selection.baseOffset;
+    return selectionOffset >= 0 ? selectionOffset : _slideshowBlacklistTagController.text.length;
+  }
+
+  void _onSlideshowBlacklistTagChangedAutocomplete() {
+    _slideshowBlacklistAutocompleteDebounce?.cancel();
+    final text = _slideshowBlacklistTagController.text;
+    final (start, end) = tagTokenRangeAt(text, _slideshowBlacklistCursorOffset);
+    final tag = text.substring(start, end);
+    if (tag.isEmpty) {
+      setState(() => _slideshowBlacklistSuggestions = []);
+      return;
+    }
+    _slideshowBlacklistAutocompleteDebounce = Timer(const Duration(seconds: 3), () async {
+      final suggestions = await widget.repository.tagAutocomplete(BunnySite.e621, tag);
+      if (mounted) {
+        setState(() => _slideshowBlacklistSuggestions = suggestions);
+      }
+    });
+  }
+
+  void _applySlideshowBlacklistSuggestion(String tag) {
+    final (newText, newCursor) = applyTagSuggestion(_slideshowBlacklistTagController.text, _slideshowBlacklistCursorOffset, tag);
+    _slideshowBlacklistTagController.value = TextEditingValue(text: newText, selection: TextSelection.collapsed(offset: newCursor));
+    setState(() => _slideshowBlacklistSuggestions = []);
+  }
+
+  Future<void> _loadSlideshowBlacklist() async {
+    final id = _slideshowId;
+    if (id == null) {
+      return;
+    }
+    final tags = await widget.repository.getSlideshowBlacklist(id);
+    if (mounted) {
+      setState(() => _slideshowBlacklistTags = tags);
+    }
+  }
+
+  Future<void> _addSlideshowBlacklistTag() async {
+    final tag = _slideshowBlacklistTagController.text.trim();
+    if (tag.isEmpty || _slideshowBlacklistQueryError != null) {
+      return;
+    }
+    await widget.repository.addSlideshowBlacklistTag(_slideshowId!, tag);
+    _slideshowBlacklistTagController.clear();
+    setState(() => _slideshowBlacklistQueryError = null);
+    await _loadSlideshowBlacklist();
+  }
+
+  Future<void> _removeSlideshowBlacklistTag(String tag) async {
+    await widget.repository.removeSlideshowBlacklistTag(_slideshowId!, tag);
+    await _loadSlideshowBlacklist();
   }
 
   bool get _isCreated => _slideshowId != null;
@@ -145,6 +234,7 @@ class _SlideshowEditScreenState extends State<SlideshowEditScreen> {
         _submitting = false;
       });
       await _loadLinks();
+      await _loadSlideshowBlacklist();
     } else {
       await widget.repository.slideshowUpdate(id, label, defaultPostsPerSearch: defaultCount, maxTotalPosts: maxTotal);
       if (mounted) {
@@ -154,53 +244,8 @@ class _SlideshowEditScreenState extends State<SlideshowEditScreen> {
   }
 
   Future<void> _addSearches() async {
-    final l10n = AppLocalizations.of(context)!;
     final existingIds = _links.map((link) => link.searchId).toSet();
-    final candidates = _allSearches.where((search) => !existingIds.contains(search.id)).toList();
-    if (candidates.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(l10n.slideshowEditNoMoreSearchesToAdd)));
-      return;
-    }
-    final selected = <int>{};
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setDialogState) => AlertDialog(
-          title: Text(l10n.slideshowEditAddSearchDialogTitle),
-          content: SizedBox(
-            width: double.maxFinite,
-            child: ListView(
-              shrinkWrap: true,
-              children: candidates
-                  .map(
-                    (search) => CheckboxListTile(
-                      value: selected.contains(search.id),
-                      onChanged: (value) => setDialogState(() {
-                        if (value == true) {
-                          selected.add(search.id);
-                        } else {
-                          selected.remove(search.id);
-                        }
-                      }),
-                      title: Text(search.label),
-                    ),
-                  )
-                  .toList(),
-            ),
-          ),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(context, false), child: Text(l10n.commonCancel)),
-            TextButton(onPressed: selected.isEmpty ? null : () => Navigator.pop(context, true), child: Text(l10n.slideshowEditAddSearchSubmit)),
-          ],
-        ),
-      ),
-    );
-    if (confirmed != true) {
-      return;
-    }
-    for (final searchId in selected) {
-      await widget.repository.slideshowSearchAdd(_slideshowId!, searchId);
-    }
+    await showDialog<void>(context: context, builder: (context) => _AddSearchDialog(repository: widget.repository, slideshowId: _slideshowId!, existingSearchIds: existingIds));
     await _loadLinks();
   }
 
@@ -411,6 +456,40 @@ class _SlideshowEditScreenState extends State<SlideshowEditScreen> {
     );
   }
 
+  Widget _slideshowBlacklistSection(AppLocalizations l10n) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(l10n.slideshowEditBlacklistHeading, style: Theme.of(context).textTheme.titleMedium),
+        const SizedBox(height: 8),
+        if (_slideshowBlacklistTags.isEmpty)
+          Padding(padding: const EdgeInsets.symmetric(vertical: 4), child: Text(l10n.slideshowEditBlacklistEmpty))
+        else
+          Wrap(spacing: 8, runSpacing: 4, children: _slideshowBlacklistTags.map((tag) => Chip(label: Text(tag), onDeleted: () => _removeSlideshowBlacklistTag(tag))).toList()),
+        const SizedBox(height: 8),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: TextField(
+                key: const Key('slideshowEditBlacklistAddField'),
+                controller: _slideshowBlacklistTagController,
+                decoration: InputDecoration(labelText: l10n.slideshowEditBlacklistAddLabel, errorText: _slideshowBlacklistQueryError != null ? l10n.tagQueryInvalidSyntax : null),
+                onSubmitted: (_) => _addSlideshowBlacklistTag(),
+              ),
+            ),
+            IconButton(icon: const Icon(Icons.add), onPressed: _slideshowBlacklistQueryError != null ? null : _addSlideshowBlacklistTag),
+          ],
+        ),
+        if (_slideshowBlacklistSuggestions.isNotEmpty)
+          Wrap(
+            spacing: 8,
+            children: _slideshowBlacklistSuggestions.map((stat) => ActionChip(label: Text('${stat.name} (${stat.count})'), onPressed: () => _applySlideshowBlacklistSuggestion(stat.name))).toList(),
+          ),
+      ],
+    );
+  }
+
   Widget _prepareSection(AppLocalizations l10n) {
     final report = _prepareReport;
     return Padding(
@@ -512,12 +591,157 @@ class _SlideshowEditScreenState extends State<SlideshowEditScreen> {
                 else
                   ..._links.map((link) => _searchLinkTile(l10n, link)),
                 const Divider(height: 32),
+                _slideshowBlacklistSection(l10n),
+                const Divider(height: 32),
                 _prepareSection(l10n),
               ],
             ],
           ),
         ),
       ),
+    );
+  }
+}
+
+/// The slideshow editor's "add search" picker (M51 v2 follow-up): split into
+/// Searches/Pools tabs with pinned items first, same presentation
+/// [SearchesScreen] already uses, instead of one flat unsorted list. Each row
+/// is tap-to-add-immediately rather than check-several-then-confirm --
+/// bulk-adding several at once is now [SearchesScreen]'s own selection
+/// mode's job (its "Add to slideshow" bulk action), so this picker only
+/// needs to support picking one at a time, as many times in a row as the
+/// user likes before dismissing it. A "+ New search"/"+ New pool" entry at
+/// the top of each tab pushes/opens this app's existing create flow and,
+/// on success, links the newly created search/pool to this slideshow too.
+class _AddSearchDialog extends StatefulWidget {
+  final BunnyRepository repository;
+  final int slideshowId;
+  final Set<int> existingSearchIds;
+
+  const _AddSearchDialog({required this.repository, required this.slideshowId, required this.existingSearchIds});
+
+  @override
+  State<_AddSearchDialog> createState() => _AddSearchDialogState();
+}
+
+class _AddSearchDialogState extends State<_AddSearchDialog> {
+  bool _loading = true;
+  List<BunnySearch> _allSearches = [];
+
+  /// Added during this dialog's lifetime -- on top of [_AddSearchDialog.existingSearchIds]
+  /// (which only reflects links that existed when the dialog opened), so a
+  /// row disappears from its tab the moment it's tapped, without having to
+  /// reload the parent screen's own links mid-dialog.
+  final Set<int> _addedIds = {};
+
+  @override
+  void initState() {
+    super.initState();
+    unawaited(_reloadSearches());
+  }
+
+  Future<void> _reloadSearches() async {
+    final searches = await widget.repository.listSearches();
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      _allSearches = searches;
+      _loading = false;
+    });
+  }
+
+  List<BunnySearch> _candidatesOf(bool isPool) =>
+      _allSearches.where((search) => search.isPool == isPool && !widget.existingSearchIds.contains(search.id) && !_addedIds.contains(search.id)).toList()
+        ..sort((a, b) {
+          if (a.pinned == b.pinned) {
+            return 0;
+          }
+          return a.pinned ? -1 : 1;
+        });
+
+  Future<void> _addSearch(BunnySearch search) async {
+    await widget.repository.slideshowSearchAdd(widget.slideshowId, search.id);
+    if (!mounted) {
+      return;
+    }
+    setState(() => _addedIds.add(search.id));
+  }
+
+  /// Pushes [CreateSearchScreen], reloads the candidate list on success, and
+  /// immediately links whichever new id just appeared -- there's no
+  /// checkbox state to pre-check any more (Part 1), so "created" and "added
+  /// to this slideshow" happen together in one step.
+  Future<void> _createSearchAndAdd() async {
+    final created = await Navigator.push<bool>(context, MaterialPageRoute(builder: (context) => CreateSearchScreen(repository: widget.repository)));
+    if (created != true) {
+      return;
+    }
+    await _reloadAndAddNewest();
+  }
+
+  Future<void> _createPoolAndAdd() async {
+    final created = await showCreatePoolSearchDialog(context, widget.repository);
+    if (!created) {
+      return;
+    }
+    await _reloadAndAddNewest();
+  }
+
+  Future<void> _reloadAndAddNewest() async {
+    final beforeIds = _allSearches.map((search) => search.id).toSet();
+    final refreshed = await widget.repository.listSearches();
+    if (!mounted) {
+      return;
+    }
+    setState(() => _allSearches = refreshed);
+    final newlyCreated = refreshed.where((search) => !beforeIds.contains(search.id));
+    if (newlyCreated.isNotEmpty) {
+      await _addSearch(newlyCreated.first);
+    }
+  }
+
+  Widget _candidateTab(AppLocalizations l10n, {required bool isPool, required String createLabel, required VoidCallback onCreate, required String emptyLabel}) {
+    final candidates = _candidatesOf(isPool);
+    return ListView(
+      children: [
+        ListTile(leading: const Icon(Icons.add), title: Text(createLabel), onTap: onCreate),
+        if (candidates.isEmpty)
+          Padding(padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8), child: Text(emptyLabel, style: Theme.of(context).textTheme.bodySmall))
+        else
+          ...candidates.map((search) => ListTile(title: Text(search.label), onTap: () => _addSearch(search))),
+      ],
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
+    return AlertDialog(
+      title: Text(l10n.slideshowEditAddSearchDialogTitle),
+      content: SizedBox(
+        width: double.maxFinite,
+        height: 420,
+        child: _loading
+            ? const Center(child: CircularProgressIndicator())
+            : DefaultTabController(
+                length: 2,
+                child: Column(
+                  children: [
+                    TabBar(tabs: [Tab(text: l10n.searchesTabSearches), Tab(text: l10n.searchesTabPools)]),
+                    Expanded(
+                      child: TabBarView(
+                        children: [
+                          _candidateTab(l10n, isPool: false, createLabel: l10n.slideshowEditNewSearchOption, onCreate: _createSearchAndAdd, emptyLabel: l10n.slideshowEditNoMoreSearchesToAdd),
+                          _candidateTab(l10n, isPool: true, createLabel: l10n.slideshowEditNewPoolOption, onCreate: _createPoolAndAdd, emptyLabel: l10n.slideshowEditNoMorePoolsToAdd),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+      ),
+      actions: [TextButton(onPressed: () => Navigator.pop(context), child: Text(l10n.slideshowEditAddSearchDoneButton))],
     );
   }
 }

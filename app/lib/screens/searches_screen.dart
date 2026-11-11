@@ -16,6 +16,7 @@ import '../settings/download_settings_store.dart';
 import '../settings/repository_settings_store.dart';
 import '../settings/theme_settings_store.dart';
 import '../settings/update_settings_store.dart';
+import '../util/create_pool_search_dialog.dart';
 import '../util/duplicate_searches.dart';
 import '../util/duration_format.dart';
 import '../util/responsive.dart';
@@ -29,6 +30,9 @@ import 'post_grid_screen.dart';
 import 'settings_screen.dart';
 import 'slideshows_screen.dart';
 import 'tag_stats_screen.dart';
+
+/// A search/pool row's long-press menu actions -- see `_showSearchRowMenu`.
+enum _SearchRowAction { edit, addToSlideshow }
 
 /// The app's actual home screen (M8.2 promoted this over [AccountsScreen] --
 /// browse/search is the daily-use surface, site login is a one-time setup
@@ -340,79 +344,10 @@ class _SearchesScreenState extends State<SearchesScreen> with SingleTickerProvid
   }
 
   Future<void> _createPoolSearch() async {
-    final l10n = AppLocalizations.of(context)!;
-    final result = await showDialog<(BunnySite, String)>(
-      context: context,
-      builder: (context) {
-        final controller = TextEditingController();
-        var site = BunnySite.e621;
-        return StatefulBuilder(
-          builder: (context, setState) => AlertDialog(
-            title: Text(l10n.createPoolSearchDialogTitle),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                SegmentedButton<BunnySite>(
-                  segments: const [ButtonSegment(value: BunnySite.e621, label: Text('e621')), ButtonSegment(value: BunnySite.inkbunny, label: Text('Inkbunny'))],
-                  selected: {site},
-                  onSelectionChanged: (selection) => setState(() => site = selection.first),
-                ),
-                const SizedBox(height: 12),
-                TextField(controller: controller, keyboardType: TextInputType.number, decoration: InputDecoration(labelText: l10n.createPoolSearchIdLabel), autofocus: true),
-              ],
-            ),
-            actions: [
-              TextButton(onPressed: () => Navigator.pop(context), child: Text(l10n.commonCancel)),
-              TextButton(onPressed: () => Navigator.pop(context, (site, controller.text)), child: Text(l10n.createPoolSearchSubmit)),
-            ],
-          ),
-        );
-      },
-    );
-    if (result == null) {
-      return;
+    final created = await showCreatePoolSearchDialog(context, _repository!);
+    if (created) {
+      _refresh();
     }
-    final (site, poolIdText) = result;
-    final poolId = int.tryParse(poolIdText);
-    if (poolId == null) {
-      return;
-    }
-
-    // Same duplicate-prevention check TagBrowseScreen's own checkmark action
-    // applies (M38) -- a second pool search for the same (site, pool id)
-    // would be functionally identical to the first.
-    final existing = await _repository!.listSearches();
-    if (existing.any((search) => search.site == site && search.query == 'pool:$poolId')) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(l10n.createPoolSearchAlreadyExists)));
-      }
-      return;
-    }
-
-    // The pool's own name makes a far more useful label than the raw id, but
-    // this works purely as a nice-to-have -- a failed lookup (network error,
-    // deleted pool, etc.) still creates a perfectly functional pool search
-    // with a fallback label, rather than blocking the whole action on it.
-    // Inkbunny has no "fetch pool metadata" endpoint at all (M28) -- always
-    // falls back to the raw-id label there, no lookup attempted (pool ids
-    // aren't shared/comparable across sites, so trying e621's own lookup
-    // with an Inkbunny pool id would risk silently naming it after an
-    // unrelated e621 pool that happens to share the same numeric id).
-    String label = 'pool:$poolId';
-    if (site == BunnySite.e621) {
-      try {
-        final info = await _repository!.fetchPool(poolId);
-        if (info.name != null && info.name!.isNotEmpty) {
-          label = info.name!;
-        }
-      } catch (_) {
-        // Fall back to the default label above.
-      }
-    }
-
-    await _repository!.createSearch(site, label, 'pool:$poolId', usesDefaultInterval: true);
-    _refresh();
   }
 
   Future<void> _togglePin(BunnySearch search) async {
@@ -587,6 +522,105 @@ class _SearchesScreenState extends State<SearchesScreen> with SingleTickerProvid
     }
   }
 
+  /// Long-press's menu (below) for a single search/pool row -- mirrors
+  /// `PostDetailScreen._showTagMenu`'s own bottom-sheet-plus-enum pattern.
+  /// `edit` keeps today's exact destination (long-press used to jump
+  /// straight there); `addToSlideshow` is new.
+  Future<void> _showSearchRowMenu(AppLocalizations l10n, BunnySearch search) async {
+    final action = await showModalBottomSheet<_SearchRowAction>(
+      context: context,
+      builder: (context) => SafeArea(
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(leading: const Icon(Icons.edit_outlined), title: Text(l10n.searchesRowMenuEditLabel), onTap: () => Navigator.pop(context, _SearchRowAction.edit)),
+              ListTile(
+                leading: const Icon(Icons.slideshow_outlined),
+                title: Text(l10n.searchesRowMenuAddToSlideshowLabel),
+                onTap: () => Navigator.pop(context, _SearchRowAction.addToSlideshow),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+    if (!mounted || action == null) {
+      return;
+    }
+    switch (action) {
+      case _SearchRowAction.edit:
+        await _editSearch(search);
+      case _SearchRowAction.addToSlideshow:
+        await _addSearchToSlideshow(l10n, search);
+    }
+  }
+
+  /// Tap-to-pick slideshow dialog shared by the single-search path
+  /// ([_addSearchToSlideshow]) and the bulk path
+  /// ([_addSelectedSearchesToSlideshow]) -- `null` means there were no
+  /// slideshows to pick from (already snackbar'd here) or the user backed
+  /// out of the picker.
+  Future<BunnySlideshow?> _pickSlideshow(AppLocalizations l10n) async {
+    final slideshows = await _repository!.slideshowList();
+    if (slideshows.isEmpty) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(l10n.searchesNoSlideshowsYet)));
+      }
+      return null;
+    }
+    if (!mounted) {
+      return null;
+    }
+    return showDialog<BunnySlideshow>(
+      context: context,
+      builder: (context) => SimpleDialog(
+        title: Text(l10n.searchesAddToSlideshowDialogTitle),
+        children: [for (final slideshow in slideshows) SimpleDialogOption(onPressed: () => Navigator.pop(context, slideshow), child: Text(slideshow.label))],
+      ),
+    );
+  }
+
+  /// Individual "add to slideshow" (from the row's long-press menu) --
+  /// self-contained, no navigation into [SlideshowEditScreen] needed.
+  Future<void> _addSearchToSlideshow(AppLocalizations l10n, BunnySearch search) async {
+    final slideshow = await _pickSlideshow(l10n);
+    if (slideshow == null) {
+      return;
+    }
+    await _repository!.slideshowSearchAdd(slideshow.id, search.id);
+    if (!mounted) {
+      return;
+    }
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(l10n.searchesAddedToSlideshow(slideshow.label))));
+  }
+
+  /// Bulk "add to slideshow" from selection mode -- same iterate-then-one-
+  /// confirmation shape [_downloadSelectedSearches] already uses for its own
+  /// bulk action, just linking into a slideshow instead of enqueueing
+  /// downloads.
+  Future<void> _addSelectedSearchesToSlideshow(AppLocalizations l10n) async {
+    final selectedIds = _selectedSearchIds.toSet();
+    if (selectedIds.isEmpty) {
+      return;
+    }
+    final slideshow = await _pickSlideshow(l10n);
+    if (slideshow == null) {
+      return;
+    }
+    for (final searchId in selectedIds) {
+      await _repository!.slideshowSearchAdd(slideshow.id, searchId);
+    }
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      _selectionMode = false;
+      _selectedSearchIds.clear();
+    });
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(l10n.searchesAddedSelectedToSlideshow(selectedIds.length, slideshow.label))));
+  }
+
   Future<String?> _promptForGroupName({required String title, required String submitLabel, String? initialValue}) {
     final l10n = AppLocalizations.of(context)!;
     final controller = TextEditingController(text: initialValue);
@@ -708,7 +742,7 @@ class _SearchesScreenState extends State<SearchesScreen> with SingleTickerProvid
         ],
       ),
       onTap: () => _openSearch(search),
-      onLongPress: () => _editSearch(search),
+      onLongPress: () => _showSearchRowMenu(l10n, search),
     );
   }
 
@@ -884,6 +918,11 @@ class _SearchesScreenState extends State<SearchesScreen> with SingleTickerProvid
             tooltip: l10n.searchesDownloadSelectedTooltip,
             onPressed: _selectedSearchIds.isEmpty ? null : () => _downloadSelectedSearches(l10n),
           ),
+    IconButton(
+      icon: const Icon(Icons.slideshow_outlined),
+      tooltip: l10n.searchesAddSelectedToSlideshowTooltip,
+      onPressed: _selectedSearchIds.isEmpty ? null : () => _addSelectedSearchesToSlideshow(l10n),
+    ),
   ];
 
   Widget _syncIconButton(AppLocalizations l10n) => IconButton(

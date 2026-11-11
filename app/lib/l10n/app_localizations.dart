@@ -376,6 +376,48 @@ abstract class AppLocalizations {
   /// **'Sync now'**
   String get searchesSyncRowTooltip;
 
+  /// No description provided for @searchesRowMenuEditLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Edit'**
+  String get searchesRowMenuEditLabel;
+
+  /// No description provided for @searchesRowMenuAddToSlideshowLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Add to slideshow'**
+  String get searchesRowMenuAddToSlideshowLabel;
+
+  /// No description provided for @searchesAddToSlideshowDialogTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Add to slideshow'**
+  String get searchesAddToSlideshowDialogTitle;
+
+  /// No description provided for @searchesNoSlideshowsYet.
+  ///
+  /// In en, this message translates to:
+  /// **'No slideshows yet -- create one first.'**
+  String get searchesNoSlideshowsYet;
+
+  /// No description provided for @searchesAddedToSlideshow.
+  ///
+  /// In en, this message translates to:
+  /// **'Added to \"{label}\"'**
+  String searchesAddedToSlideshow(String label);
+
+  /// No description provided for @searchesAddSelectedToSlideshowTooltip.
+  ///
+  /// In en, this message translates to:
+  /// **'Add selected to slideshow'**
+  String get searchesAddSelectedToSlideshowTooltip;
+
+  /// No description provided for @searchesAddedSelectedToSlideshow.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} added to \"{label}\"'**
+  String searchesAddedSelectedToSlideshow(int count, String label);
+
   /// No description provided for @searchesRemoveDialogTitle.
   ///
   /// In en, this message translates to:
@@ -2220,11 +2262,23 @@ abstract class AppLocalizations {
   /// **'Add searches'**
   String get slideshowEditAddSearchDialogTitle;
 
-  /// No description provided for @slideshowEditAddSearchSubmit.
+  /// No description provided for @slideshowEditAddSearchDoneButton.
   ///
   /// In en, this message translates to:
-  /// **'Add'**
-  String get slideshowEditAddSearchSubmit;
+  /// **'Done'**
+  String get slideshowEditAddSearchDoneButton;
+
+  /// No description provided for @slideshowEditNewSearchOption.
+  ///
+  /// In en, this message translates to:
+  /// **'New search'**
+  String get slideshowEditNewSearchOption;
+
+  /// No description provided for @slideshowEditNewPoolOption.
+  ///
+  /// In en, this message translates to:
+  /// **'New pool'**
+  String get slideshowEditNewPoolOption;
 
   /// No description provided for @slideshowEditNoMoreSearchesToAdd.
   ///
@@ -2232,11 +2286,35 @@ abstract class AppLocalizations {
   /// **'Every search is already added'**
   String get slideshowEditNoMoreSearchesToAdd;
 
+  /// No description provided for @slideshowEditNoMorePoolsToAdd.
+  ///
+  /// In en, this message translates to:
+  /// **'Every pool is already added'**
+  String get slideshowEditNoMorePoolsToAdd;
+
   /// No description provided for @slideshowEditSearchesEmptyState.
   ///
   /// In en, this message translates to:
   /// **'No searches added yet. Save the slideshow first, then add one.'**
   String get slideshowEditSearchesEmptyState;
+
+  /// No description provided for @slideshowEditBlacklistHeading.
+  ///
+  /// In en, this message translates to:
+  /// **'Blacklist'**
+  String get slideshowEditBlacklistHeading;
+
+  /// No description provided for @slideshowEditBlacklistEmpty.
+  ///
+  /// In en, this message translates to:
+  /// **'No tags excluded from this slideshow yet.'**
+  String get slideshowEditBlacklistEmpty;
+
+  /// No description provided for @slideshowEditBlacklistAddLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Exclude tag'**
+  String get slideshowEditBlacklistAddLabel;
 
   /// No description provided for @slideshowEditOverrideCountDialogTitle.
   ///

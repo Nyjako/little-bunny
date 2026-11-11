@@ -253,14 +253,20 @@ bunny_db_result_t bunny_db_search_list_posts(bunny_db_t *db, int64_t search_id, 
  * arrays, not an array of structs -- each search_id carries its own site/
  * apply_blacklist (a multi-select can mix e621 and Inkbunny searches, and a
  * favorites search never applies blacklist, same as bunny_db_search_list_posts
- * above), which also keeps the FFI boundary to primitive arrays. May return
+ * above), which also keeps the FFI boundary to primitive arrays. `slideshow_id`
+ * (0 means "none") additionally excludes anything matching THAT slideshow's
+ * own per-slideshow blacklist (slideshow_blacklist_tags) -- additive to, not
+ * exempted by, the per-site apply_blacklist_flags above: it applies to every
+ * search_id here regardless of its own apply_blacklist_flags entry, since the
+ * per-slideshow exclusion is not favorites-exempt (see
+ * bunny_db_slideshow_blacklist_add's own doc comment on why). May return
  * fewer than `count` if the combined, blacklist-filtered pool across every
  * given search is smaller -- same "can return fewer than requested"
  * precedent bunny_db_search_list_posts's own complex-blacklist pass already
  * has. Pool searches have no `ORDER BY RANDOM()` story of their own (see
  * bunny_db_pool_search_list_posts) -- the caller (bunny_core) is expected to
  * exclude those search_ids before calling this. */
-bunny_db_result_t bunny_db_search_list_posts_random(bunny_db_t *db, const int64_t *search_ids, const bunny_db_site_t *sites, const bool *apply_blacklist_flags, size_t search_id_count, int rating_mask, int media_mask, int count, bunny_db_post_list_t *out_list);
+bunny_db_result_t bunny_db_search_list_posts_random(bunny_db_t *db, const int64_t *search_ids, const bunny_db_site_t *sites, const bool *apply_blacklist_flags, size_t search_id_count, int64_t slideshow_id, int rating_mask, int media_mask, int count, bunny_db_post_list_t *out_list);
 
 /* A post's tags with their categories, for a post detail view's sectioned
  * tag display (Artists/Characters/Copyrights/Species/General/Meta for e621;
@@ -399,6 +405,24 @@ bunny_db_result_t bunny_db_blacklist_remove(bunny_db_t *db, bunny_db_site_t site
  * with no complex rules (today, for every existing user) costs nothing
  * beyond today's one indexed query. */
 bunny_db_result_t bunny_db_post_is_blacklisted(bunny_db_t *db, bunny_db_site_t site, int64_t post_id, bool *out_is_blacklisted);
+
+/* --- Per-slideshow tag exclusion (M51 v2 follow-up) -------------------------
+ * A SECOND, independent blacklist mechanism, scoped by slideshow_id instead
+ * of site -- additive to, never a replacement for, the per-site
+ * blacklist_tags above (both apply at once; see
+ * bunny_db_search_list_posts_random's own doc comment on how). Unlike the
+ * per-site one, this is NOT exempted for a favorites- or pool-sourced search
+ * -- a slideshow auto-advances on a timer, so the user excluding a tag here
+ * (e.g. "no comics") means they want it gone from THIS slideshow regardless
+ * of which kind of search happened to surface it. Same simple-tag/complex-
+ * rule split as the per-site table (see libs/tag_query), but since a
+ * slideshow has no single site of its own, every rule is stored/validated
+ * once under e621's dialect (the strict superset) -- see
+ * bunny_core_slideshow_blacklist_add. */
+
+bunny_db_result_t bunny_db_slideshow_blacklist_list(bunny_db_t *db, int64_t slideshow_id, bunny_db_string_list_t *out_list);
+bunny_db_result_t bunny_db_slideshow_blacklist_add(bunny_db_t *db, int64_t slideshow_id, const char *tag);
+bunny_db_result_t bunny_db_slideshow_blacklist_remove(bunny_db_t *db, int64_t slideshow_id, const char *tag);
 
 /* --- Tag stats -------------------------------------------------------------- */
 
@@ -547,9 +571,15 @@ bunny_db_result_t bunny_db_slideshow_all_post_ids(bunny_db_t *db, int64_t slides
  * bounded (e621 caps one at 1000 posts), so this fetches every page of
  * bunny_db_pool_search_list_posts for (search_id, pool_id) -- unseen_only
  * always false, this is picking for a slideshow, not a browse -- into one
- * array, Fisher-Yates-shuffles it in place, then returns the first `count`.
- * May return fewer than `count` if the pool itself has fewer posts. */
-bunny_db_result_t bunny_db_pool_search_list_posts_random(bunny_db_t *db, int64_t search_id, int64_t pool_id, int count, bunny_db_post_list_t *out_list);
+ * array. `slideshow_id` (0 means "none") then filters that array against
+ * slideshow_id's own per-slideshow blacklist BEFORE shuffling -- unlike the
+ * per-site blacklist (which this function has always ignored for pools, see
+ * bunny_db_search_list_posts_random's own doc comment), the per-slideshow
+ * exclusion applies here too, since it's deliberately not exempt for
+ * anything. The result is then Fisher-Yates-shuffled in place and the first
+ * `count` returned. May return fewer than `count` if the pool itself (after
+ * any slideshow-blacklist filtering) has fewer posts. */
+bunny_db_result_t bunny_db_pool_search_list_posts_random(bunny_db_t *db, int64_t search_id, int64_t pool_id, int64_t slideshow_id, int count, bunny_db_post_list_t *out_list);
 
 #ifdef __cplusplus
 }

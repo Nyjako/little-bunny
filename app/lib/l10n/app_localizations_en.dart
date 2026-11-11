@@ -165,6 +165,33 @@ class AppLocalizationsEn extends AppLocalizations {
   String get searchesSyncRowTooltip => 'Sync now';
 
   @override
+  String get searchesRowMenuEditLabel => 'Edit';
+
+  @override
+  String get searchesRowMenuAddToSlideshowLabel => 'Add to slideshow';
+
+  @override
+  String get searchesAddToSlideshowDialogTitle => 'Add to slideshow';
+
+  @override
+  String get searchesNoSlideshowsYet =>
+      'No slideshows yet -- create one first.';
+
+  @override
+  String searchesAddedToSlideshow(String label) {
+    return 'Added to \"$label\"';
+  }
+
+  @override
+  String get searchesAddSelectedToSlideshowTooltip =>
+      'Add selected to slideshow';
+
+  @override
+  String searchesAddedSelectedToSlideshow(int count, String label) {
+    return '$count added to \"$label\"';
+  }
+
+  @override
   String get searchesRemoveDialogTitle => 'Remove search?';
 
   @override
@@ -1197,15 +1224,34 @@ class AppLocalizationsEn extends AppLocalizations {
   String get slideshowEditAddSearchDialogTitle => 'Add searches';
 
   @override
-  String get slideshowEditAddSearchSubmit => 'Add';
+  String get slideshowEditAddSearchDoneButton => 'Done';
+
+  @override
+  String get slideshowEditNewSearchOption => 'New search';
+
+  @override
+  String get slideshowEditNewPoolOption => 'New pool';
 
   @override
   String get slideshowEditNoMoreSearchesToAdd =>
       'Every search is already added';
 
   @override
+  String get slideshowEditNoMorePoolsToAdd => 'Every pool is already added';
+
+  @override
   String get slideshowEditSearchesEmptyState =>
       'No searches added yet. Save the slideshow first, then add one.';
+
+  @override
+  String get slideshowEditBlacklistHeading => 'Blacklist';
+
+  @override
+  String get slideshowEditBlacklistEmpty =>
+      'No tags excluded from this slideshow yet.';
+
+  @override
+  String get slideshowEditBlacklistAddLabel => 'Exclude tag';
 
   @override
   String slideshowEditOverrideCountDialogTitle(String label) {
