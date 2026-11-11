@@ -8,6 +8,7 @@ import 'package:flutter/material.dart';
 import 'package:saf_util/saf_util.dart';
 
 import '../l10n/app_localizations.dart';
+import '../l10n/translation_completeness.dart';
 import '../repository/bunny_models.dart';
 import '../repository/bunny_repository.dart';
 import '../repository/bunny_repository_factory.dart';
@@ -72,6 +73,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
   ThemeColorOption? _themeColor;
   bool _amoled = false;
   String? _languageCode;
+  /// Keyed by language code, English excluded -- see
+  /// [loadTranslationCompletenessPercent]'s own doc comment. Loaded by
+  /// [_loadTranslationCompleteness]; a code missing from this map (still
+  /// loading, or its ARB asset wasn't found) just shows no percentage.
+  Map<String, int> _translationCompletenessPercent = const {};
   PreviewQuality? _previewQuality;
   String? _downloadFolder;
   bool _autoFavoriteOnDownload = false;
@@ -114,6 +120,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   void initState() {
     super.initState();
     _load();
+    _loadTranslationCompleteness();
     _loadBlacklist();
     _blacklistTagController.addListener(_onBlacklistTagChanged);
     _blacklistTagController.addListener(_onBlacklistTagChangedAutocomplete);
@@ -205,6 +212,23 @@ class _SettingsScreenState extends State<SettingsScreen> {
     });
   }
 
+  /// Separate from [_load] (and its own `setState`), not one more awaited
+  /// step inside it -- this is purely decorative (a "(NN%)" suffix on the
+  /// language picker), reads a bundled asset rather than a settings store
+  /// like everything [_load] already awaits, and gating every other
+  /// setting's own load on it buys nothing. Best-effort: a locale missing
+  /// its bundled ARB asset just shows no percentage.
+  Future<void> _loadTranslationCompleteness() async {
+    try {
+      final percent = await loadTranslationCompletenessPercent(AppLocalizations.supportedLocales.map((locale) => locale.languageCode));
+      if (mounted) {
+        setState(() => _translationCompletenessPercent = percent);
+      }
+    } catch (_) {
+      // Ignored -- see above.
+    }
+  }
+
   Future<void> _setThemeMode(ThemeMode mode) async {
     setState(() => _themeMode = mode);
     await widget.themeSettingsStore.save(mode);
@@ -248,8 +272,22 @@ class _SettingsScreenState extends State<SettingsScreen> {
   /// AppLocalizations.supportedLocales before this map catches up.
   String _languageLabel(Locale locale) => switch (locale.languageCode) {
     'en' => 'English',
+    'pl' => 'Polski',
     _ => locale.languageCode,
   };
+
+  /// [_languageLabel] plus a "(NN%)" translation-completeness suffix for
+  /// anything that isn't English (the template itself, always complete by
+  /// definition -- see [loadTranslationCompletenessPercent]'s own doc
+  /// comment) and that a percentage has actually loaded for yet.
+  String _languageLabelWithCompleteness(Locale locale) {
+    final label = _languageLabel(locale);
+    if (locale.languageCode == 'en') {
+      return label;
+    }
+    final percent = _translationCompletenessPercent[locale.languageCode];
+    return percent == null ? label : '$label ($percent%)';
+  }
 
   Future<void> _setDefaultIntervalHours(String value) async {
     final hours = int.tryParse(value);
@@ -573,7 +611,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             items: [
               DropdownMenuItem(value: null, child: Text(l10n.settingsLanguageSystemDefault)),
               ...AppLocalizations.supportedLocales.map(
-                (locale) => DropdownMenuItem(value: locale.languageCode, child: Text(_languageLabel(locale))),
+                (locale) => DropdownMenuItem(value: locale.languageCode, child: Text(_languageLabelWithCompleteness(locale))),
               ),
             ],
             onChanged: (value) => _setLanguageCode(value),
