@@ -104,7 +104,16 @@ class UpdateApplyService {
   Future<void> _extractArchive(String archivePath, String destDir) async {
     await Directory(destDir).create(recursive: true);
     final bytes = await File(archivePath).readAsBytes();
-    final archive = archivePath.endsWith('.tar.gz') ? TarDecoder().decodeBytes(GZipDecoder().decodeBytes(bytes)) : ZipDecoder().decodeBytes(bytes);
+    // throwOnError: true -- the `archive` package's 4.6.0 upgrade made every
+    // decoder silently tolerate damaged/malformed input by default (a
+    // documented breaking change), where it used to throw. This is the
+    // last line of defense against a corrupted or non-archive download
+    // actually getting "applied" (SHA256SUMS verification above already
+    // catches most of that, but doesn't rule out e.g. a bad publish) --
+    // explicitly opting back into the old throwing behavior here.
+    final archive = archivePath.endsWith('.tar.gz')
+        ? TarDecoder().decodeBytes(GZipDecoder().decodeBytes(bytes, throwOnError: true), throwOnError: true)
+        : ZipDecoder().decodeBytes(bytes, throwOnError: true);
     for (final entry in archive) {
       final outPath = path.join(destDir, entry.name);
       if (entry.isFile) {
