@@ -1,5 +1,6 @@
 #include "bunny_core/core.h"
 
+#include <bunny_common/http.h>
 #include <goblin/cstr.h>
 
 #include <stdlib.h>
@@ -69,6 +70,14 @@ bunny_core_result_t bunny_core_open(const bunny_core_config_t *config, bunny_cor
     if (!config || !config->db_path || !config->user_agent || !out_core) {
         return BUNNY_CORE_ERR_INVALID_ARG;
     }
+
+    /* Exactly once per call, from this single-threaded window -- strictly
+     * before anything below could spawn a worker thread (a download
+     * thread, M66; the server's own scheduler/task-queue threads start
+     * later, against the already-open core this returns). See
+     * bunny_http_global_init's own doc comment for why this can't be left
+     * as a lazy per-call-site guard instead. */
+    bunny_http_global_init();
 
     bunny_core_t *core = calloc(1, sizeof(bunny_core_t));
     if (!core) {

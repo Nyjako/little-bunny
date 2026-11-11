@@ -429,6 +429,12 @@ void main() {
       final service = buildService(client: MockClient((_) async => http.Response.bytes([1, 2, 3], 200)));
       final posts = [_post(id: 1), _post(id: 2)];
 
+      // Paused so nothing claims (and so flips to "downloading") either of
+      // these items before the assertion below runs -- workers now claim
+      // synchronously, as part of the very same enqueueAll call that
+      // inserts the rows (see _ensureWorkersRunning's own doc comment), so
+      // there's no longer a timing window to race against.
+      service.pause();
       service.enqueueAll(posts, repository);
       // Each item's own insert is fire-and-forget (enqueueAll never blocks
       // its caller) -- wait for them before reading the persisted state back.
@@ -438,6 +444,7 @@ void main() {
       expect(rows.map((r) => r.postId).toSet(), {1, 2});
       expect(rows.every((r) => r.status == 'queued'), isTrue);
 
+      await service.resume(repository);
       await waitUntilIdle(service);
     });
 

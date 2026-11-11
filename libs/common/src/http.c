@@ -36,13 +36,9 @@ static size_t write_cb(char *ptr, size_t size, size_t nmemb, void *userdata)
     return add;
 }
 
-static void ensure_curl_global_init(void)
+void bunny_http_global_init(void)
 {
-    static int initialized = 0;
-    if (!initialized) {
-        curl_global_init(CURL_GLOBAL_DEFAULT);
-        initialized = 1;
-    }
+    curl_global_init(CURL_GLOBAL_DEFAULT);
 }
 
 static struct curl_slist *build_header_list(const bunny_http_request_t *request)
@@ -69,8 +65,6 @@ static bunny_http_result_t curl_send(void *user_data, const bunny_http_request_t
     if (!request || !request->url || !out_response) {
         return BUNNY_HTTP_ERR_INVALID_ARG;
     }
-
-    ensure_curl_global_init();
 
     CURL *curl = curl_easy_init();
     if (!curl) {

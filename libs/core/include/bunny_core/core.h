@@ -568,6 +568,34 @@ typedef struct
  * scheduling -- a failed action stays failed. */
 bunny_core_result_t bunny_core_process_queue(bunny_core_t *core, bunny_core_queue_stats_t *out_stats);
 
+/* Async variant of bunny_core_process_queue, for the exact reason
+ * bunny_core_download_start/_poll/_release (below) exist instead of one
+ * blocking call: bunny_core_process_queue does real per-action network
+ * I/O, so calling it directly from bunny_core_ffi's one serialized dispatch
+ * pipe blocked every other call routed through that same pipe -- including
+ * every in-flight download's own poll calls -- for however long the drain
+ * took (DownloadQueueService calls this every few completed items, M62
+ * follow-up, so this wasn't rare). Spawns a background thread and returns
+ * almost immediately with a handle; safe to call concurrently with
+ * downloads/other core calls since bunny_core_process_queue itself already
+ * serializes against a concurrent sync via sync_mutex internally (see its
+ * own doc comment) -- this wrapper doesn't change that, just moves the
+ * waiting off the caller. */
+bunny_core_result_t bunny_core_process_queue_start(bunny_core_t *core, int64_t *out_handle);
+
+/* Cheap, lock-guarded read -- safe to poll frequently while a handle from
+ * bunny_core_process_queue_start is in flight. *out_stats is only
+ * meaningful once *out_done is true. Returns BUNNY_CORE_ERR_NOT_FOUND for a
+ * handle that was never returned by bunny_core_process_queue_start, or
+ * already released. */
+bunny_core_result_t bunny_core_process_queue_poll(int64_t handle, bool *out_done, bunny_core_queue_stats_t *out_stats);
+
+/* Joins the background thread (instant if a prior poll already reported
+ * done) and frees the handle's resources. Must be called exactly once for
+ * every handle bunny_core_process_queue_start returned successfully -- a
+ * no-op for an already-released or never-valid handle. */
+void bunny_core_process_queue_release(int64_t handle);
+
 /* --- Download queue --------------------------------------------------------------
  * Tracks DownloadManager's own file fetches through to completion, so a
  * killed/restarted process doesn't lose track of what was queued/

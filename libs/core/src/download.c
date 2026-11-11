@@ -144,13 +144,25 @@ static int make_directories_recursive(const char *path)
 }
 
 /* True if a file already sits at path and either expected_md5 is NULL/empty
- * (nothing to verify -- trust as-is) or its contents actually match. */
-static bool file_matches_checksum(const char *path, const char *expected_md5)
+ * (nothing to verify -- trust as-is) or its contents actually match.
+ * *out_size (if non-NULL) is always set to the file's size when it exists,
+ * regardless of the checksum outcome -- the skip-fetch fast path below
+ * needs it to report a real "received" byte count instead of leaving a
+ * verified-on-first-look file's progress sitting at the slot's initial 0
+ * forever (on_chunk/on_progress, this fast path's only other source of
+ * that count, never run at all here). */
+static bool file_matches_checksum(const char *path, const char *expected_md5, int64_t *out_size)
 {
     FILE *f = fopen(path, "rb");
     if (!f) {
         return false;
     }
+    fseek(f, 0, SEEK_END);
+    long size = ftell(f);
+    if (out_size) {
+        *out_size = size >= 0 ? (int64_t)size : 0;
+    }
+    fseek(f, 0, SEEK_SET);
     if (!expected_md5 || !expected_md5[0]) {
         fclose(f);
         return true;
@@ -175,8 +187,18 @@ typedef struct
     FILE *file;
     bunny_md5_ctx_t md5;
     download_slot_t *slot;
+    int64_t received; /* cumulative bytes written so far -- see on_chunk's own doc comment */
 } download_write_ctx_t;
 
+/* Also updates slot->received itself (under progress_lock), not just via
+ * on_progress below -- curl only calls its xferinfo callback once it
+ * decides enough time/data has passed (internally throttled, roughly a few
+ * hundred ms), which a small/fast file can finish well within, meaning
+ * on_progress might never fire at all for it. Without this, such a
+ * download's progress stayed stuck at the slot's initial 0 for its entire
+ * (short) lifetime -- not just coarse, but genuinely never updated -- which
+ * is what the download queue screen's progress bar showing "0 B" for every
+ * item actually was. */
 static int on_chunk(void *user_data, const void *data, size_t len)
 {
     download_write_ctx_t *ctx = (download_write_ctx_t *)user_data;
@@ -184,6 +206,10 @@ static int on_chunk(void *user_data, const void *data, size_t len)
     if (len > 0 && fwrite(data, 1, len, ctx->file) != len) {
         return 1;
     }
+    ctx->received += (int64_t)len;
+    bunny_mutex_lock(&ctx->slot->progress_lock);
+    ctx->slot->received = ctx->received;
+    bunny_mutex_unlock(&ctx->slot->progress_lock);
     return 0;
 }
 
@@ -226,7 +252,12 @@ static void *download_thread_main(void *arg)
         return NULL;
     }
 
-    if (file_matches_checksum(final_path, slot->expected_md5)) {
+    int64_t existing_size = 0;
+    if (file_matches_checksum(final_path, slot->expected_md5, &existing_size)) {
+        bunny_mutex_lock(&slot->progress_lock);
+        slot->received = existing_size;
+        slot->total = existing_size;
+        bunny_mutex_unlock(&slot->progress_lock);
         finish_slot(slot, BUNNY_CORE_DOWNLOAD_VERIFIED, NULL);
         free(final_path);
         return NULL;
@@ -265,6 +296,7 @@ static void *download_thread_main(void *arg)
     download_write_ctx_t write_ctx;
     write_ctx.file = tmp_file;
     write_ctx.slot = slot;
+    write_ctx.received = 0;
     bunny_md5_init(&write_ctx.md5);
 
     bunny_download_sink_t sink = {on_chunk, on_progress, &write_ctx};
@@ -426,6 +458,47 @@ bunny_core_result_t bunny_core_download_poll(int64_t handle, int64_t *out_receiv
     return BUNNY_CORE_OK;
 }
 
+static void free_slot(download_slot_t *slot)
+{
+    free_slot_owned_strings(slot);
+    bunny_mutex_destroy(&slot->progress_lock);
+    ensure_slots_lock();
+    bunny_mutex_lock(&g_slots_lock);
+    slot->in_use = false;
+    bunny_mutex_unlock(&g_slots_lock);
+}
+
+/* Joins the just-finished download thread, then frees its slot -- the
+ * actual work bunny_core_download_release used to do synchronously itself.
+ * Run on its own throwaway thread (never joined -- see
+ * bunny_core_download_release below) so joining a thread that, in the
+ * common case, has already finished (or is about to, with nothing left to
+ * do but return -- see download_thread_main's own doc comment) never costs
+ * the caller anything, however long it actually ends up taking. */
+static void *reap_thread_main(void *arg)
+{
+    download_slot_t *slot = (download_slot_t *)arg;
+    bunny_thread_join(slot->thread);
+    free_slot(slot);
+    return NULL;
+}
+
+/* Deliberately does not block on bunny_thread_join itself -- every call
+ * into bunny_core_download_start/_poll/_release goes through the single
+ * dispatch pipe bunny_core_ffi routes every bunny_core_* call through (see
+ * ensure_slots_lock's own doc comment), shared across EVERY concurrently
+ * downloading item (DownloadQueueService's own 3-at-a-time cap, M62) -- if
+ * this joined synchronously, one item finishing would stall every other
+ * still-downloading item's own poll calls for however long that join
+ * took, visible as several downloads appearing to freeze together right
+ * when one of them completes. Hands the join off to a short-lived,
+ * detached reaper thread instead, so this returns (and the dispatch pipe
+ * frees up for the next message, from any worker) immediately regardless
+ * of how long the real join takes. The slot itself stays `in_use` until
+ * the reaper actually finishes -- harmless: BUNNY_CORE_DOWNLOAD_SLOT_COUNT
+ * (8) comfortably exceeds the 3 that are ever concurrently needed, so a
+ * fresh bunny_core_download_start always finds a different free slot
+ * rather than needing this exact one back immediately. */
 void bunny_core_download_release(int64_t handle)
 {
     if (handle < 0 || handle >= BUNNY_CORE_DOWNLOAD_SLOT_COUNT) {
@@ -435,14 +508,19 @@ void bunny_core_download_release(int64_t handle)
     if (!slot->in_use) {
         return;
     }
-    if (slot->started) {
-        bunny_thread_join(slot->thread);
+    if (!slot->started) {
+        /* bunny_thread_create itself never succeeded -- nothing to join. */
+        free_slot(slot);
+        return;
     }
-    free_slot_owned_strings(slot);
-    bunny_mutex_destroy(&slot->progress_lock);
 
-    ensure_slots_lock();
-    bunny_mutex_lock(&g_slots_lock);
-    slot->in_use = false;
-    bunny_mutex_unlock(&g_slots_lock);
+    bunny_thread_t reaper;
+    if (bunny_thread_create(&reaper, reap_thread_main, slot) != 0) {
+        /* Reaper spawn failed (extremely unlikely) -- fall back to the old
+         * blocking behavior rather than leaking this slot forever. */
+        bunny_thread_join(slot->thread);
+        free_slot(slot);
+        return;
+    }
+    bunny_thread_detach(reaper);
 }

@@ -105,15 +105,19 @@ class DownloadQueueItem {
 /// just 403'd.
 ///
 /// Up to [_maxConcurrentDownloads] items download in parallel (M62 --
-/// previously strictly one at a time) via a small fixed-size worker pool:
-/// [_processQueue] starts that many `worker()` loops, each repeatedly
-/// claiming the next still-queued item and running it through
-/// [_processItem] until none are left. Claiming an item (reading
-/// [queuedItems] and flipping its status to [DownloadQueueItemStatus.downloading])
-/// never has an `await` between those two steps, so two workers can never
-/// claim the same item -- Dart's single-threaded, cooperative scheduling
-/// means that synchronous pair always runs as one atomic step relative to
-/// every other worker.
+/// previously strictly one at a time) via a self-topping-up worker pool:
+/// [_ensureWorkersRunning] spawns [_runWorkerSlot] instances up to that
+/// cap, and is called again by every site that adds new work, so a slot
+/// that found nothing to claim earlier gets replaced rather than the pool
+/// only ever shrinking (M62 follow-up -- see [_ensureWorkersRunning]'s own
+/// doc comment for the startup race this fixes). Each slot repeatedly
+/// claims the next still-queued item and runs it through [_processItem]
+/// until none are left. Claiming an item (reading [queuedItems] and
+/// flipping its status to [DownloadQueueItemStatus.downloading]) never has
+/// an `await` between those two steps, so two slots can never claim the
+/// same item -- Dart's single-threaded, cooperative scheduling means that
+/// synchronous pair always runs as one atomic step relative to every other
+/// slot.
 class DownloadQueueService extends ChangeNotifier {
   final DownloadManager downloadManager;
   final DownloadSettingsStore downloadSettingsStore;
@@ -147,7 +151,38 @@ class DownloadQueueService extends ChangeNotifier {
   /// check and tests can inspect the full picture.
   List<DownloadQueueItem> get items => List.unmodifiable(_items);
   final List<DownloadQueueItem> _items = [];
-  bool _processing = false;
+
+  /// How many worker slots are currently live, 0..[_maxConcurrentDownloads]
+  /// -- NOT the same as "a batch is in progress" (the single `bool
+  /// _processing` this replaced): [restore] adds its thousands of rows into
+  /// [_items] one at a time, asynchronously, as each row's post metadata
+  /// resolves -- the very first row to land could trigger topping workers
+  /// up while only that one item is visible, so spawning a fixed batch of
+  /// [_maxConcurrentDownloads] right then would hand 1-2 of them an empty
+  /// [queuedItems] and lose them for the rest of the session (a `bool`
+  /// has no way to tell "0 running, top up" apart from "1 or 2 running,
+  /// already topped up as far as it'll ever go"). [_ensureWorkersRunning]
+  /// is the only place this grows, spawning exactly as many workers as
+  /// [queuedItems] can currently feed, up to the cap -- called again by
+  /// every site that adds new work, so a worker that found nothing earlier
+  /// gets replaced the moment there's something for it again, rather than
+  /// the pool only ever shrinking.
+  int _activeWorkers = 0;
+
+  /// The current session's "acquire the wake lock, tell the notifier a
+  /// batch is starting" setup -- created once, by whichever worker slot
+  /// takes [_activeWorkers] from 0 to 1, and awaited by *every* slot
+  /// (including that first one) before it claims its own first item, not
+  /// just the one that happened to create it. Without that, a second/third
+  /// slot spawned in the same [_ensureWorkersRunning] burst would start
+  /// fetching immediately while the first slot is still mid-setup -- the
+  /// Android foreground service (M57) needs a chance to call
+  /// startForeground() before *any* HTTP fetch starts, not just the first
+  /// slot's. Reset to null once the session ends (`_activeWorkers` back to
+  /// 0) so the next one creates its own fresh setup.
+  Future<void>? _sessionStartFuture;
+  Stopwatch? _sessionStopwatch;
+  int _itemsSinceSync = 0;
 
   /// Set by [pause], cleared by [resume] -- lets the user hold off on new
   /// downloads starting (e.g. right before disconnecting from wifi, to
@@ -181,7 +216,7 @@ class DownloadQueueService extends ChangeNotifier {
   int _failed = 0;
 
   /// Set by [_processItem] whenever a download actually queues a
-  /// favorite/upvote action -- lets [_processQueue] skip [_drainActionQueue]
+  /// favorite/upvote action -- lets [_runWorkerSlot] skip [_drainActionQueue]
   /// entirely (not just skip it cheaply) when auto-favorite/auto-upvote are
   /// both off, the common case, instead of firing an empty-queue network
   /// round trip every [_syncEveryNItems] items for nothing.
@@ -322,9 +357,7 @@ class DownloadQueueService extends ChangeNotifier {
     _items.addAll(newItems);
     _sessionTotal += newPosts.length;
     notifyListeners();
-    if (!_processing && !_paused) {
-      unawaited(_processQueue());
-    }
+    _ensureWorkersRunning();
     // See this method's own doc comment -- the actual durability guarantee.
     // Best-effort, same as every other persistence call in this class: a
     // single insert failing here doesn't invalidate the rest of the batch,
@@ -351,9 +384,7 @@ class DownloadQueueService extends ChangeNotifier {
     _sessionTotal += 1;
     unawaited(_persistStatus(item));
     notifyListeners();
-    if (!_processing && !_paused) {
-      unawaited(_processQueue());
-    }
+    _ensureWorkersRunning();
   }
 
   /// Same as [retryFailed], batched over every currently-failed/mismatched
@@ -370,9 +401,7 @@ class DownloadQueueService extends ChangeNotifier {
     }
     _sessionTotal += toRetry.length;
     notifyListeners();
-    if (!_processing && !_paused) {
-      unawaited(_processQueue());
-    }
+    _ensureWorkersRunning();
   }
 
   /// Drops every item in a terminal state (succeeded/mismatched/failed),
@@ -398,18 +427,41 @@ class DownloadQueueService extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> _processQueue() async {
-    _processing = true;
-    // Both best-effort, same reasoning as every other notifier/wakelock call
-    // in this method -- but called *before* the workers below start, not
-    // just after each item, so the Android foreground service (M57) gets a
+  /// Tops [_activeWorkers] up to [_maxConcurrentDownloads], spawning exactly
+  /// as many new worker slots as [queuedItems] can feed right now -- never
+  /// more than that, so a worker never starts just to immediately find
+  /// nothing and exit (the original bug this replaced). Called by every
+  /// site that adds new work ([_enqueueAll]/[retryFailed]/[retryAllFailed]/
+  /// each row [restore] adds/[resume]), so a worker slot that exited
+  /// earlier for lack of anything to claim gets replaced the moment there's
+  /// something for it again, rather than the pool only ever shrinking.
+  /// Incrementing [_activeWorkers] then calling [_runWorkerSlot] has no
+  /// `await` in between (same race-free reasoning as claiming an item
+  /// itself, see this class's own doc comment), so two calls to this
+  /// method can never both decide there's room for the same slot.
+  void _ensureWorkersRunning() {
+    if (_paused) {
+      return;
+    }
+    while (_activeWorkers < _maxConcurrentDownloads && queuedItems.isNotEmpty) {
+      _activeWorkers++;
+      if (_activeWorkers == 1) {
+        _sessionStartFuture = _startSession();
+      }
+      unawaited(_runWorkerSlot());
+    }
+  }
+
+  /// Runs once per session, started by whichever slot takes
+  /// [_activeWorkers] from 0 to 1 -- see [_sessionStartFuture]'s own doc
+  /// comment for why every slot (that one included) awaits this same
+  /// Future rather than just the first slot doing it inline.
+  Future<void> _startSession() async {
+    // Both best-effort, same reasoning as every other notifier/wakelock
+    // call in this method -- but run before any item below starts, not
+    // just after each one, so the Android foreground service (M57) gets a
     // chance to call startForeground() before the first HTTP fetch starts,
-    // not after it finishes. Without this ordering, locking the screen right
-    // after enqueueing could let Android kill the process before anything
-    // ever told the service to start. (A much smaller residual race -- the
-    // gap between enqueueAll() returning to its caller and this method's
-    // first await actually running -- is a single event-loop tick and not
-    // worth chasing further.) AppWakelock is reference-counted (see its own
+    // not after it finishes. AppWakelock is reference-counted (see its own
     // doc comment) so this can't turn off a wakelock PostDetailScreen (M47)
     // is still holding for an unrelated reason.
     await AppWakelock.acquire();
@@ -423,97 +475,112 @@ class DownloadQueueService extends ChangeNotifier {
     // from any one item's own byte progress, since a single slow or
     // unusually large file shouldn't skew the whole batch's estimate), used
     // to estimate an ETA once at least one item has actually finished.
-    // Shared across every worker (M62) -- same race-free reasoning as
-    // _syncEveryNItems itself.
-    final sessionStopwatch = Stopwatch()..start();
-    var itemsSinceSync = 0;
+    _sessionStopwatch = Stopwatch()..start();
+  }
 
-    // One worker loop, up to _maxConcurrentDownloads of these run at once
-    // (see this class's own doc comment for why claiming an item below is
-    // race-free). Declared inside _processQueue (a closure, not a separate
-    // method) so it can freely read/write sessionStopwatch/itemsSinceSync
-    // without needing to thread them through as parameters.
-    Future<void> worker() async {
-      while (true) {
-        // Checked before claiming, not instead of draining what's already
-        // in flight -- pause() only stops *new* items from starting (see
-        // its own doc comment); an item already past this check keeps
-        // running to completion.
-        if (_paused) {
-          return;
-        }
-        final item = queuedItems.firstOrNull;
-        if (item == null) {
-          return;
-        }
-        item.status = DownloadQueueItemStatus.downloading;
-        item.bytesReceived = null;
-        item.bytesTotal = null;
-        // Fire-and-forget -- restore() already resets a still-"downloading"
-        // row back to "queued" unconditionally, so losing this specific
-        // write to a kill lands exactly where restore() would've put it
-        // anyway. Nothing here is worth blocking the actual fetch on.
-        unawaited(_persistStatus(item));
-        notifyListeners();
-        try {
-          await _processItem(item);
-        } catch (_) {
-          // One item throwing (e.g. a settings read failing) must not stop
-          // every other item (this worker's next one, or another worker's
-          // current one) from being attempted.
-          item.status = DownloadQueueItemStatus.failed;
-          item.failureReason ??= 'Unexpected error';
-          _failed++;
-          await _persistStatus(item);
-        }
-        _sessionDone++;
-        itemsSinceSync++;
-        // The reset happens in the same synchronous step as the check
-        // (nothing awaited in between), so two workers finishing an item
-        // around the same time can never both see the threshold crossed
-        // and both trigger a sync.
-        final shouldSync = itemsSinceSync >= _syncEveryNItems;
-        if (shouldSync) {
-          itemsSinceSync = 0;
-        }
-        if (shouldSync && _actionsQueuedSinceSync) {
-          await _drainActionQueue(item.repository);
-          _actionsQueuedSinceSync = false;
-        }
-        // A broken notifier (any implementation, not just the real one, which
-        // already swallows its own exceptions -- this is the queue's own
-        // backstop) must never stop subsequent items from being processed.
-        // This keeps firing every item -- it's neither an expensive disk
-        // write nor a network round trip, so there's no reason to reduce
-        // how often the UI/notification sees progress.
-        // _sessionDone > 1 (not > 0): on the very first completed item
-        // there's only one data point, not a rate yet -- eta stays null for
-        // that call, non-null from the second call onward.
-        Duration? eta;
-        if (_sessionDone > 1) {
-          final avgPerItem = sessionStopwatch.elapsed ~/ _sessionDone;
-          eta = avgPerItem * (_sessionTotal - _sessionDone);
-        }
-        try {
-          await notifier.showProgress(done: _sessionDone, total: _sessionTotal, failed: _failed, eta: eta);
-        } catch (_) {
-          // Best-effort.
-        }
-        notifyListeners();
+  /// One worker slot's lifetime: claims and runs items until there's
+  /// nothing left for it (or it's paused), then exits -- [_ensureWorkersRunning]
+  /// is what starts a replacement later, this never loops back on its own.
+  /// Bookets the whole *session* (not just this one slot) in the two edge
+  /// transitions: every slot awaits [_sessionStartFuture] before actually
+  /// fetching its own first item; the slot that takes [_activeWorkers] back
+  /// down to 0 runs the "the whole batch just finished" teardown after its
+  /// own loop ends. That second check reads [_activeWorkers] right after it
+  /// was changed with no `await` in between, so it's exactly as race-free
+  /// as every other check in this class.
+  Future<void> _runWorkerSlot() async {
+    // Claiming (below) happens on *every* iteration before this slot's
+    // first real `await`; [_sessionStartFuture] is only awaited once, right
+    // after that first claim -- awaiting it *before* claiming would let
+    // [_ensureWorkersRunning]'s spawn loop run ahead of this slot without
+    // seeing [queuedItems] shrink yet, so it could spawn more slots than
+    // there's actually work for (the same bug this class's doc comment
+    // describes, just reintroduced one level up).
+    var awaitedSessionStart = false;
+
+    while (true) {
+      // Checked before claiming, not instead of draining what's already in
+      // flight -- pause() only stops *new* items from starting (see its
+      // own doc comment); an item already past this check keeps running to
+      // completion.
+      if (_paused) {
+        break;
       }
+      final item = queuedItems.firstOrNull;
+      if (item == null) {
+        break;
+      }
+      item.status = DownloadQueueItemStatus.downloading;
+      item.bytesReceived = null;
+      item.bytesTotal = null;
+      // Fire-and-forget -- restore() already resets a still-"downloading"
+      // row back to "queued" unconditionally, so losing this specific
+      // write to a kill lands exactly where restore() would've put it
+      // anyway. Nothing here is worth blocking the actual fetch on.
+      unawaited(_persistStatus(item));
+      notifyListeners();
+      if (!awaitedSessionStart) {
+        awaitedSessionStart = true;
+        await _sessionStartFuture;
+      }
+      try {
+        await _processItem(item);
+      } catch (_) {
+        // One item throwing (e.g. a settings read failing) must not stop
+        // every other item (this slot's next one, or another slot's
+        // current one) from being attempted.
+        item.status = DownloadQueueItemStatus.failed;
+        item.failureReason ??= 'Unexpected error';
+        _failed++;
+        await _persistStatus(item);
+      }
+      _sessionDone++;
+      _itemsSinceSync++;
+      // The reset happens in the same synchronous step as the check
+      // (nothing awaited in between), so two slots finishing an item
+      // around the same time can never both see the threshold crossed and
+      // both trigger a sync.
+      final shouldSync = _itemsSinceSync >= _syncEveryNItems;
+      if (shouldSync) {
+        _itemsSinceSync = 0;
+      }
+      if (shouldSync && _actionsQueuedSinceSync) {
+        await _drainActionQueue(item.repository);
+        _actionsQueuedSinceSync = false;
+      }
+      // A broken notifier (any implementation, not just the real one, which
+      // already swallows its own exceptions -- this is the queue's own
+      // backstop) must never stop subsequent items from being processed.
+      // This keeps firing every item -- it's neither an expensive disk
+      // write nor a network round trip, so there's no reason to reduce how
+      // often the UI/notification sees progress.
+      // _sessionDone > 1 (not > 0): on the very first completed item
+      // there's only one data point, not a rate yet -- eta stays null for
+      // that call, non-null from the second call onward.
+      Duration? eta;
+      if (_sessionDone > 1) {
+        final avgPerItem = _sessionStopwatch!.elapsed ~/ _sessionDone;
+        eta = avgPerItem * (_sessionTotal - _sessionDone);
+      }
+      try {
+        await notifier.showProgress(done: _sessionDone, total: _sessionTotal, failed: _failed, eta: eta);
+      } catch (_) {
+        // Best-effort.
+      }
+      notifyListeners();
     }
 
-    try {
-      await Future.wait(List.generate(_maxConcurrentDownloads, (_) => worker()));
+    _activeWorkers--;
+    if (_activeWorkers == 0) {
       // Unconditional final drain -- covers both a batch smaller than the
-      // threshold above (today's common case: a single download, or a small
-      // mass-selection, which never reaches _syncEveryNItems) and the tail of
-      // a large batch that didn't land exactly on a multiple of it. Any
-      // item's own repository works here -- there's exactly one live
-      // BunnyRepository instance app-wide at any moment (this class's own
-      // doc comment), and _items is guaranteed non-empty here (everything
-      // that was ever enqueued this run is still sitting in it, just no
-      // longer queued/downloading).
+      // threshold above (today's common case: a single download, or a
+      // small mass-selection, which never reaches _syncEveryNItems) and the
+      // tail of a large batch that didn't land exactly on a multiple of
+      // it. Any item's own repository works here -- there's exactly one
+      // live BunnyRepository instance app-wide at any moment (this class's
+      // own doc comment), and _items is guaranteed non-empty here
+      // (everything that was ever enqueued this run is still sitting in
+      // it, just no longer queued/downloading).
       if (_sessionDone > 0 && _actionsQueuedSinceSync) {
         await _drainActionQueue(_items.first.repository);
         _actionsQueuedSinceSync = false;
@@ -523,15 +590,15 @@ class DownloadQueueService extends ChangeNotifier {
       } catch (_) {
         // Best-effort.
       }
-    } finally {
       await AppWakelock.release();
+      _sessionDone = 0;
+      _sessionTotal = 0;
+      _succeeded = 0;
+      _mismatched = 0;
+      _failed = 0;
+      _sessionStopwatch = null;
+      _sessionStartFuture = null;
     }
-    _sessionDone = 0;
-    _sessionTotal = 0;
-    _succeeded = 0;
-    _mismatched = 0;
-    _failed = 0;
-    _processing = false;
     notifyListeners();
   }
 
@@ -655,7 +722,7 @@ class DownloadQueueService extends ChangeNotifier {
   }
 
   /// Rows are resolved this many at a time (M67) -- same bounded-worker-pool
-  /// shape as [_processQueue]'s download workers, just for [_getPostWithRetry]
+  /// shape as [_runWorkerSlot]'s download workers, just for [_getPostWithRetry]
   /// calls instead of fetches. [restore] used to walk every row strictly
   /// one at a time and only touch [_items]/[notifyListeners] once the
   /// *entire* list had finished -- for a large backlog in networked mode,
@@ -715,7 +782,7 @@ class DownloadQueueService extends ChangeNotifier {
       final claimedPostIds = _items.map((item) => item.post.id).toSet();
       // Claiming the next row (reading nextIndex, then incrementing) never
       // has an await between those two steps, so this is race-free the
-      // same way claiming a queued item in _processQueue's own workers is
+      // same way claiming a queued item in _runWorkerSlot's own workers is
       // (see that method's doc comment) -- two restore workers can never
       // claim the same row.
       Future<void> worker() async {
@@ -768,12 +835,7 @@ class DownloadQueueService extends ChangeNotifier {
               );
               _sessionTotal += 1;
               notifyListeners();
-              // Same race-free reasoning as every other "is anything
-              // already running" check in this class -- see _enqueueAll's
-              // own equivalent.
-              if (!_processing && !_paused) {
-                unawaited(_processQueue());
-              }
+              _ensureWorkersRunning();
             }
           } catch (_) {
             // Still not resolvable after retrying -- leave it out of
@@ -812,14 +874,12 @@ class DownloadQueueService extends ChangeNotifier {
   /// whenever [pause] left queued items sitting idle: [restore] alone
   /// wouldn't restart those (every row still persisted from this session is
   /// already in [_restoredRowIds], so [restore] finds nothing new to add),
-  /// so this also kicks [_processQueue] directly whenever there's anything
-  /// left in [queuedItems] and nothing's currently processing.
+  /// so this also tops workers back up directly whenever there's anything
+  /// left in [queuedItems].
   Future<void> resume(BunnyRepository repository) async {
     _paused = false;
     await restore(repository);
-    if (!_processing && queuedItems.isNotEmpty) {
-      unawaited(_processQueue());
-    }
+    _ensureWorkersRunning();
     notifyListeners();
   }
 }

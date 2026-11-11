@@ -5,15 +5,6 @@
 #include <stdlib.h>
 #include <string.h>
 
-static void ensure_curl_global_init(void)
-{
-    static int initialized = 0;
-    if (!initialized) {
-        curl_global_init(CURL_GLOBAL_DEFAULT);
-        initialized = 1;
-    }
-}
-
 static struct curl_slist *build_header_list(const bunny_http_header_t *headers, size_t header_count)
 {
     struct curl_slist *list = NULL;
@@ -61,7 +52,15 @@ bunny_http_result_t bunny_download_fetch(const char *url, const bunny_http_heade
     }
     *out_status = 0;
 
-    ensure_curl_global_init();
+    /* No lazy curl_global_init() call here on purpose -- this runs on a
+     * dedicated download-worker thread (M66), and up to 3 of these can be
+     * concurrent (DownloadQueueService's own cap). libcurl explicitly
+     * forbids calling curl_global_init while any other thread in the
+     * program is running, so a lazy per-thread guard here would race the
+     * very first time 2+ downloads start together. bunny_core_open already
+     * calls bunny_http_global_init() once, synchronously, before any
+     * worker thread (this one included) can possibly exist -- see that
+     * function's own doc comment. */
 
     CURL *curl = curl_easy_init();
     if (!curl) {
