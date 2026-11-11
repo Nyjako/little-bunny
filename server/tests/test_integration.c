@@ -1018,6 +1018,73 @@ void test_slideshow_routes_404_for_a_nonexistent_slideshow(void)
     memset(&response, 0, sizeof(response));
 }
 
+/* Mirrors test_blacklist_add_list_remove above, but re-keyed by a created
+ * slideshow's id -- no "site" field/param anywhere here, unlike the
+ * per-site /blacklist route, since a slideshow has no single site of its
+ * own. */
+void test_slideshow_blacklist_add_list_remove(void)
+{
+    response_buffer_t response = {0};
+
+    long status = do_request("POST", "/slideshows", "{\"label\":\"my slideshow\"}", &response, true, NULL);
+    TEST_ASSERT_EQUAL(201, status);
+    free(response.data);
+    memset(&response, 0, sizeof(response));
+
+    status = do_request("GET", "/slideshows/1/blacklist", NULL, &response, true, NULL);
+    TEST_ASSERT_EQUAL(200, status);
+    TEST_ASSERT_EQUAL_STRING("[]", response.data);
+    free(response.data);
+    memset(&response, 0, sizeof(response));
+
+    status = do_request("POST", "/slideshows/1/blacklist", "{\"tag\":\"comic\"}", &response, true, NULL);
+    TEST_ASSERT_EQUAL(200, status);
+    TEST_ASSERT_NOT_NULL(strstr(response.data, "\"ok\":true"));
+    free(response.data);
+    memset(&response, 0, sizeof(response));
+
+    status = do_request("GET", "/slideshows/1/blacklist", NULL, &response, true, NULL);
+    TEST_ASSERT_EQUAL(200, status);
+    TEST_ASSERT_NOT_NULL(strstr(response.data, "\"comic\""));
+    free(response.data);
+    memset(&response, 0, sizeof(response));
+
+    status = do_request("DELETE", "/slideshows/1/blacklist?tag=comic", NULL, &response, true, NULL);
+    TEST_ASSERT_EQUAL(200, status);
+    free(response.data);
+    memset(&response, 0, sizeof(response));
+
+    status = do_request("GET", "/slideshows/1/blacklist", NULL, &response, true, NULL);
+    TEST_ASSERT_EQUAL(200, status);
+    TEST_ASSERT_EQUAL_STRING("[]", response.data);
+    free(response.data);
+}
+
+void test_slideshow_blacklist_is_isolated_per_slideshow(void)
+{
+    response_buffer_t response = {0};
+
+    long status = do_request("POST", "/slideshows", "{\"label\":\"first\"}", &response, true, NULL);
+    TEST_ASSERT_EQUAL(201, status);
+    free(response.data);
+    memset(&response, 0, sizeof(response));
+
+    status = do_request("POST", "/slideshows", "{\"label\":\"second\"}", &response, true, NULL);
+    TEST_ASSERT_EQUAL(201, status);
+    free(response.data);
+    memset(&response, 0, sizeof(response));
+
+    status = do_request("POST", "/slideshows/1/blacklist", "{\"tag\":\"comic\"}", &response, true, NULL);
+    TEST_ASSERT_EQUAL(200, status);
+    free(response.data);
+    memset(&response, 0, sizeof(response));
+
+    status = do_request("GET", "/slideshows/2/blacklist", NULL, &response, true, NULL);
+    TEST_ASSERT_EQUAL(200, status);
+    TEST_ASSERT_EQUAL_STRING("[]", response.data);
+    free(response.data);
+}
+
 void test_group_crud_and_assign_search(void)
 {
     response_buffer_t response = {0};
@@ -1659,6 +1726,8 @@ int main(void)
     RUN_TEST(test_slideshow_crud);
     RUN_TEST(test_slideshow_search_add_commits_picks_and_remove_clears_them);
     RUN_TEST(test_slideshow_routes_404_for_a_nonexistent_slideshow);
+    RUN_TEST(test_slideshow_blacklist_add_list_remove);
+    RUN_TEST(test_slideshow_blacklist_is_isolated_per_slideshow);
     RUN_TEST(test_search_touch_viewed);
     RUN_TEST(test_search_auto_favorite_create_and_update);
     RUN_TEST(test_my_inkbunny_favorites_searches_and_caches_with_favorite_marked);

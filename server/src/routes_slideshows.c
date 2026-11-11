@@ -264,6 +264,68 @@ static int handle_delete_slideshow_search(struct mg_connection *conn, server_con
     return status;
 }
 
+/* Per-slideshow tag exclusion (additive to, not a replacement for, the
+ * global per-site /blacklist route) -- no `site` field/param anywhere here,
+ * unlike routes_blacklist.c's own GET/POST/DELETE handlers, since a
+ * slideshow has no single site of its own. */
+static int handle_get_slideshow_blacklist(struct mg_connection *conn, server_context_t *ctx, int64_t slideshow_id)
+{
+    bunny_db_string_list_t list;
+    bunny_core_result_t result = bunny_core_slideshow_blacklist_list(ctx->core, slideshow_id, &list);
+    if (result != BUNNY_CORE_OK) {
+        return server_json_respond_error(conn, result);
+    }
+    cJSON *response = cJSON_CreateArray();
+    for (size_t i = 0; i < list.count; i++) {
+        cJSON_AddItemToArray(response, cJSON_CreateString(list.items[i]));
+    }
+    bunny_db_string_list_free(&list);
+    int status = server_json_respond(conn, 200, response);
+    cJSON_Delete(response);
+    return status;
+}
+
+static int handle_post_slideshow_blacklist(struct mg_connection *conn, server_context_t *ctx, int64_t slideshow_id)
+{
+    cJSON *body = server_json_read_request_body(conn);
+    if (!body) {
+        return server_json_respond_error(conn, BUNNY_CORE_ERR_INVALID_ARG);
+    }
+    const char *tag = NULL;
+    if (bunny_json_get_string(body, "tag", &tag) != BUNNY_JSON_OK) {
+        cJSON_Delete(body);
+        return server_json_respond_error(conn, BUNNY_CORE_ERR_INVALID_ARG);
+    }
+    bunny_core_result_t result = bunny_core_slideshow_blacklist_add(ctx->core, slideshow_id, tag);
+    cJSON_Delete(body);
+    if (result != BUNNY_CORE_OK) {
+        return server_json_respond_error(conn, result);
+    }
+    cJSON *response = cJSON_CreateObject();
+    cJSON_AddBoolToObject(response, "ok", true);
+    int status = server_json_respond(conn, 200, response);
+    cJSON_Delete(response);
+    return status;
+}
+
+static int handle_delete_slideshow_blacklist(struct mg_connection *conn, server_context_t *ctx, int64_t slideshow_id, const char *query_string)
+{
+    char tag_value[256];
+    bool has_tag = query_string && mg_get_var(query_string, strlen(query_string), "tag", tag_value, sizeof(tag_value)) > 0;
+    if (!has_tag) {
+        return server_json_respond_error(conn, BUNNY_CORE_ERR_INVALID_ARG);
+    }
+    bunny_core_result_t result = bunny_core_slideshow_blacklist_remove(ctx->core, slideshow_id, tag_value);
+    if (result != BUNNY_CORE_OK) {
+        return server_json_respond_error(conn, result);
+    }
+    cJSON *response = cJSON_CreateObject();
+    cJSON_AddBoolToObject(response, "ok", true);
+    int status = server_json_respond(conn, 200, response);
+    cJSON_Delete(response);
+    return status;
+}
+
 static int handle_get_slideshow_posts(struct mg_connection *conn, server_context_t *ctx, int64_t slideshow_id, const char *query_string)
 {
     int64_t search_id = 0;
@@ -409,6 +471,16 @@ static int slideshows_handler(struct mg_connection *conn, void *cbdata)
         return handle_post_slideshow_reroll_all(conn, ctx, slideshow_id);
     } else if (segment_count == 2 && strcmp(segments[1], "posts") == 0 && strcmp(method, "GET") == 0) {
         return handle_get_slideshow_posts(conn, ctx, slideshow_id, info->query_string);
+    } else if (segment_count == 2 && strcmp(segments[1], "blacklist") == 0) {
+        if (strcmp(method, "GET") == 0) {
+            return handle_get_slideshow_blacklist(conn, ctx, slideshow_id);
+        }
+        if (strcmp(method, "POST") == 0) {
+            return handle_post_slideshow_blacklist(conn, ctx, slideshow_id);
+        }
+        if (strcmp(method, "DELETE") == 0) {
+            return handle_delete_slideshow_blacklist(conn, ctx, slideshow_id, info->query_string);
+        }
     } else if (segment_count == 2 && strcmp(segments[1], "searches") == 0) {
         if (strcmp(method, "GET") == 0) {
             return handle_get_slideshow_searches(conn, ctx, slideshow_id);
