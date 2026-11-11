@@ -9,6 +9,7 @@ import 'package:little_bunny/repository/bunny_models.dart';
 import 'package:little_bunny/screens/searches_screen.dart';
 import 'package:little_bunny/services/download_manager.dart';
 import 'package:little_bunny/services/download_queue_service.dart';
+import 'package:little_bunny/services/preview_cache_service.dart';
 import 'package:little_bunny/services/update_check_service.dart';
 import 'package:little_bunny/settings/app_lock_service.dart';
 import 'package:little_bunny/settings/display_settings_store.dart';
@@ -33,6 +34,7 @@ Widget _wrap(FakeBunnyRepository repository, {DownloadQueueService? downloadQueu
       displaySettingsStore: const DisplaySettingsStore(),
       downloadSettingsStore: const DownloadSettingsStore(),
       downloadQueueService: downloadQueueService ?? DownloadQueueService(downloadManager: const DownloadManager(), downloadSettingsStore: const DownloadSettingsStore()),
+      previewCacheService: PreviewCacheService(),
       settingsStore: RepositorySettingsStore(FakeSecretStore()),
       updateSettingsStore: updateSettingsStore ?? const UpdateSettingsStore(),
       updateCheckService: updateCheckService ?? const UpdateCheckService(),
