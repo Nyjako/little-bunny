@@ -165,7 +165,10 @@ class _CustomSearchScreenState extends State<CustomSearchScreen> {
 
   void _search() {
     final query = _queryController.text.trim();
-    if (query.isEmpty || _queryError != null) {
+    // An empty query is intentionally allowed -- see bunny_tag_query.h's own
+    // doc comment: it's syntactically valid on both sites and just means
+    // "everything" (the newest uploads, same as browsing with no filter).
+    if (_queryError != null) {
       return;
     }
     Navigator.push(
@@ -215,7 +218,7 @@ class _CustomSearchScreenState extends State<CustomSearchScreen> {
             const SizedBox(height: 16),
             ValueListenableBuilder<TextEditingValue>(
               valueListenable: _queryController,
-              builder: (context, value, child) => FilledButton(onPressed: value.text.trim().isNotEmpty && _queryError == null ? _search : null, child: Text(l10n.customSearchSubmit)),
+              builder: (context, value, child) => FilledButton(onPressed: _queryError == null ? _search : null, child: Text(l10n.customSearchSubmit)),
             ),
           ],
         ),

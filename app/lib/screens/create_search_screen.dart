@@ -326,11 +326,14 @@ class _CreateSearchScreenState extends State<CreateSearchScreen> {
               ),
               const SizedBox(height: 16),
               TextFormField(controller: _labelController, enabled: !_submitting, decoration: InputDecoration(labelText: l10n.createSearchLabelField), validator: (value) => (value == null || value.trim().isEmpty) ? l10n.commonRequired : null),
+              // No required-field validator here -- an empty/whitespace query is
+              // syntactically valid on both sites and just means "everything"
+              // (bunny_tag_query.h's own doc comment), e.g. a plain "newest
+              // uploads" saved search with no filtering at all.
               TextFormField(
                 controller: _queryController,
                 enabled: !_submitting,
                 decoration: InputDecoration(labelText: l10n.createSearchQueryField, errorText: _queryError != null ? l10n.tagQueryInvalidSyntax : null),
-                validator: (value) => (value == null || value.trim().isEmpty) ? l10n.commonRequired : null,
               ),
               if (_aliasHint != null) Padding(padding: const EdgeInsets.only(top: 4), child: Text(l10n.tagAliasHint(_aliasHint!.$1, _aliasHint!.$2), style: Theme.of(context).textTheme.bodySmall)),
               if (_implicationChain.isNotEmpty) Padding(padding: const EdgeInsets.only(top: 4), child: Text(_implicationChain.join(' → '), style: Theme.of(context).textTheme.bodySmall)),

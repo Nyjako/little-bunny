@@ -23,6 +23,9 @@ void main() {
     SharedPreferences.setMockInitialValues({});
   });
 
+  // Only the label is a required field -- the query intentionally has no
+  // required-field validator (an empty query is valid on both sites and
+  // just means "everything", see the field's own comment in the screen).
   testWidgets('validates required fields before submitting', (WidgetTester tester) async {
     final repository = FakeBunnyRepository();
     await tester.pumpWidget(_wrap(repository));
@@ -31,8 +34,22 @@ void main() {
     await _tapCreate(tester);
     await tester.pumpAndSettle();
 
-    expect(find.text('Required'), findsNWidgets(2));
+    expect(find.text('Required'), findsNWidgets(1));
     expect(repository.searches, isEmpty);
+  });
+
+  testWidgets('a label with an empty query creates a search with an empty query', (WidgetTester tester) async {
+    final repository = FakeBunnyRepository();
+    await tester.pumpWidget(_wrap(repository));
+    await tester.pumpAndSettle();
+
+    await tester.enterText(find.widgetWithText(TextFormField, 'Label'), 'Everything new');
+    await _tapCreate(tester);
+    await tester.pumpAndSettle();
+
+    expect(repository.searches, hasLength(1));
+    expect(repository.searches.single.label, 'Everything new');
+    expect(repository.searches.single.query, '');
   });
 
   testWidgets('submitting a filled form creates the search and pops true', (WidgetTester tester) async {

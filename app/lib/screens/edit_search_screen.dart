@@ -236,11 +236,13 @@ class _EditSearchScreenState extends State<EditSearchScreen> {
               Text(l10n.editSearchSiteLabel(widget.search.site.toWireString())),
               const SizedBox(height: 16),
               TextFormField(controller: _labelController, enabled: !_submitting, decoration: InputDecoration(labelText: l10n.createSearchLabelField), validator: (value) => (value == null || value.trim().isEmpty) ? l10n.commonRequired : null),
+              // No required-field validator here -- see CreateSearchScreen's
+              // own comment on this same field: an empty/whitespace query is
+              // intentionally valid and means "everything".
               TextFormField(
                 controller: _queryController,
                 enabled: !_submitting,
                 decoration: InputDecoration(labelText: l10n.createSearchQueryField, errorText: _queryError != null ? l10n.tagQueryInvalidSyntax : null),
-                validator: (value) => (value == null || value.trim().isEmpty) ? l10n.commonRequired : null,
               ),
               if (_aliasHint != null) Padding(padding: const EdgeInsets.only(top: 4), child: Text(l10n.tagAliasHint(_aliasHint!.$1, _aliasHint!.$2), style: Theme.of(context).textTheme.bodySmall)),
               if (_implicationChain.isNotEmpty) Padding(padding: const EdgeInsets.only(top: 4), child: Text(_implicationChain.join(' → '), style: Theme.of(context).textTheme.bodySmall)),

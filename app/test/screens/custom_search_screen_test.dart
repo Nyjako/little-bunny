@@ -28,12 +28,23 @@ void main() {
     SharedPreferences.setMockInitialValues({});
   });
 
-  testWidgets('the Search button is disabled for an empty query', (WidgetTester tester) async {
+  // An empty query is intentionally allowed on both sites (bunny_tag_query.h's
+  // own doc comment) -- it means "everything", the same as browsing with no
+  // filter, so the button stays enabled and pushes an empty-query preview.
+  testWidgets('the Search button is enabled for an empty query and previews everything', (WidgetTester tester) async {
     final repository = FakeBunnyRepository();
+    repository.previewSearchResults['e621::1'] = [];
+
     await tester.pumpWidget(_wrap(repository));
     await tester.pumpAndSettle();
 
-    expect(tester.widget<FilledButton>(find.widgetWithText(FilledButton, 'Search')).onPressed, isNull);
+    expect(tester.widget<FilledButton>(find.widgetWithText(FilledButton, 'Search')).onPressed, isNotNull);
+
+    await tester.tap(find.widgetWithText(FilledButton, 'Search'));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(TagBrowseScreen), findsOneWidget);
+    expect(repository.previewSearchCalls, contains((BunnySite.e621, '', 1)));
   });
 
   testWidgets('typing a query enables the Search button, which pushes a live preview', (WidgetTester tester) async {
