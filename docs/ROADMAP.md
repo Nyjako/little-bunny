@@ -3295,3 +3295,29 @@ this file is the single source of truth for "what's done" across sessions.
   top 10 entries as an `fl_chart` bar chart, with entries 11-20 still available as a
   plain ranked list underneath so no data disappears -- only the top slice gets the
   visual treatment.
+
+- [x] **M73 — Bump GOBLIN, replace hand-rolled MD5/rate-limiter/thread code with it**
+  GOBLIN (pinned via CPM, `CMakeLists.txt`) pushed a new commit adding `md5.h`,
+  `rate_limit.h`, and `thread.h` -- all three originated as a proposal sketched in this
+  project (`GOBLIN_proposal/`, git-ignored locally, never committed here) directly from
+  this project's own existing hand-rolled code, then committed upstream by the user into
+  their own GOBLIN repo. Bumped the pin (`534faac` -> `ba55d3b`) and replaced each:
+  `libs/common/src/md5.c`'s hand-rolled RFC 1321 transform is gone entirely --
+  `bunny_md5_ctx_t` is now a direct alias for `goblin_md5_ctx`, and all four
+  `bunny_md5_*` functions are one-line forwards to `goblin_md5_*` (hex-encoding the
+  final digest via the already-vendored `goblin_bytes_to_hex`, same as before).
+  `libs/common/src/rate_limit.c`'s hand-rolled Win32 `Sleep`/POSIX `nanosleep` pacing
+  logic is gone the same way -- `bunny_rate_limiter_t` aliases `goblin_rate_limiter`,
+  which now owns both the timing *and* the sleep internally (previously this file still
+  hand-rolled the sleep half even though it already borrowed `goblin_timer` for the
+  elapsed-time half). `bunny_common/thread.h`'s ~160-line `#ifdef _WIN32`/pthread
+  double implementation is gone -- it's now `static inline` one-line forwards to
+  `goblin_thread_*`/`goblin_mutex_*`/`goblin_cond_*`, with the one real implementation
+  per platform living in `goblin_impl.c` via a new `GOBLIN_THREAD_IMPLEMENTATION`
+  instantiation (joining the existing cstr/appdirs/high_res_timer/fileio/env/hex/url/
+  base64/secure_compare ones already there) -- every existing call site across
+  `bunny_core`/the server (`db_mutex`/`sync_mutex`, the scheduler/sync_worker threads,
+  `sync_status`, the log ring buffer) needed zero changes, since the type names and
+  function signatures are unchanged. Net ~310 lines removed. `make test-c`/
+  `flutter test` both confirmed green afterward, including the RFC 1321 test vectors
+  in `bunny_common_test_md5` passing unchanged through the new delegation.
