@@ -314,6 +314,19 @@ bunny_core_result_t bunny_core_blacklist_list(bunny_core_t *core, bunny_db_site_
 bunny_core_result_t bunny_core_blacklist_add(bunny_core_t *core, bunny_db_site_t site, const char *tag);
 bunny_core_result_t bunny_core_blacklist_remove(bunny_core_t *core, bunny_db_site_t site, const char *tag);
 
+/* --- Per-slideshow tag exclusion (M51 v2 follow-up) -- thin pass-throughs
+ * to bunny_db_slideshow_blacklist_*. Additive to, never a replacement for,
+ * the per-site blacklist above (both apply at once), and -- unlike it --
+ * not exempted for a favorites- or pool-sourced search; see
+ * bunny_db_search_list_posts_random/bunny_db_pool_search_list_posts_random's
+ * own doc comments for exactly where this applies.
+ * bunny_core_slideshow_blacklist_add validates `tag` under e621's dialect
+ * always (not per-site, since a slideshow has no single site of its own),
+ * returning BUNNY_CORE_ERR_INVALID_ARG for anything that fails to parse. */
+bunny_core_result_t bunny_core_slideshow_blacklist_list(bunny_core_t *core, int64_t slideshow_id, bunny_db_string_list_t *out_list);
+bunny_core_result_t bunny_core_slideshow_blacklist_add(bunny_core_t *core, int64_t slideshow_id, const char *tag);
+bunny_core_result_t bunny_core_slideshow_blacklist_remove(bunny_core_t *core, int64_t slideshow_id, const char *tag);
+
 typedef struct
 {
     int added;           /* new rules imported (bare tags and, as of M28/M54, multi-tag/grammar lines alike) */
@@ -554,6 +567,34 @@ typedef struct
  * itself or listing pending actions fails; out_stats may be NULL. No retry
  * scheduling -- a failed action stays failed. */
 bunny_core_result_t bunny_core_process_queue(bunny_core_t *core, bunny_core_queue_stats_t *out_stats);
+
+/* Async variant of bunny_core_process_queue, for the exact reason
+ * bunny_core_download_start/_poll/_release (below) exist instead of one
+ * blocking call: bunny_core_process_queue does real per-action network
+ * I/O, so calling it directly from bunny_core_ffi's one serialized dispatch
+ * pipe blocked every other call routed through that same pipe -- including
+ * every in-flight download's own poll calls -- for however long the drain
+ * took (DownloadQueueService calls this every few completed items, M62
+ * follow-up, so this wasn't rare). Spawns a background thread and returns
+ * almost immediately with a handle; safe to call concurrently with
+ * downloads/other core calls since bunny_core_process_queue itself already
+ * serializes against a concurrent sync via sync_mutex internally (see its
+ * own doc comment) -- this wrapper doesn't change that, just moves the
+ * waiting off the caller. */
+bunny_core_result_t bunny_core_process_queue_start(bunny_core_t *core, int64_t *out_handle);
+
+/* Cheap, lock-guarded read -- safe to poll frequently while a handle from
+ * bunny_core_process_queue_start is in flight. *out_stats is only
+ * meaningful once *out_done is true. Returns BUNNY_CORE_ERR_NOT_FOUND for a
+ * handle that was never returned by bunny_core_process_queue_start, or
+ * already released. */
+bunny_core_result_t bunny_core_process_queue_poll(int64_t handle, bool *out_done, bunny_core_queue_stats_t *out_stats);
+
+/* Joins the background thread (instant if a prior poll already reported
+ * done) and frees the handle's resources. Must be called exactly once for
+ * every handle bunny_core_process_queue_start returned successfully -- a
+ * no-op for an already-released or never-valid handle. */
+void bunny_core_process_queue_release(int64_t handle);
 
 /* --- Download queue --------------------------------------------------------------
  * Tracks DownloadManager's own file fetches through to completion, so a

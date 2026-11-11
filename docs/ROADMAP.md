@@ -2633,13 +2633,20 @@ this file is the single source of truth for "what's done" across sessions.
     rendered through the same `RichMarkupText`, so wiki bodies get the same in-app
     post/pool link capture too.
 
-- [ ] **M51 — Add a slideshow mode**
+- [x] **M51 — Add a slideshow mode**
   User picks one or more saved searches, an interval (how often the post changes), and
   how many posts to pull; the server selects that many posts at random with no
   repeats, sends them to the device, which preloads all of them and opens fullscreen,
   advancing on the configured timer. On reaching the end, reshuffle and keep going
   until the user closes the slideshow. Videos/gifs are included and still switch on
-  the same timer as everything else (not "play to completion first").
+  the same timer as everything else (not "play to completion first"). Delivered as a
+  persisted, download-backed feature ("M51 v2" in code/commit history): a slideshow
+  owns which searches feed it, each with its own optional override count, a
+  "Prepare"/self-healing download step, and "Watch" playback. Later follow-ups built on
+  top of this: a tabbed/pinned-first/inline-create redesign of the add-search picker, a
+  long-press "add to slideshow" action (plus a bulk one from selection mode) on the main
+  Searches screen, and a per-slideshow tag exclusion additive to the existing per-site
+  blacklist.
 
 - [x] **M52 — Add a tag long-press context menu**
   Long-pressing a tag while viewing a post should open a small menu: Search / Add to
@@ -3071,27 +3078,6 @@ this file is the single source of truth for "what's done" across sessions.
      into native C, each download running on its own OS thread, so hashing was never a
      Dart-isolate concern again rather than being moved to a `compute()` worker isolate.
 
-- [ ] **M63 — Linux download notification: no progress bar, and a new bubble per file**
-  The user's report: on Linux, the download notification shows no progress bar at all,
-  and a new notification bubble appears for every file instead of the Android behavior
-  (one notification, updated in place). Investigated this pass: `_details()`
-  (`flutter_local_notifications_queue_notifier.dart`) only ever builds an
-  `AndroidNotificationDetails` (with `showProgress`/`maxProgress`/`progress`) -- no
-  `linux: LinuxNotificationDetails(...)` is passed at all, so Linux gets the plugin's
-  defaults with no progress hint of any kind; `LinuxNotificationDetails` itself has no
-  dedicated progress field, though its `customHints` could carry the Desktop
-  Notification Spec's own `value` int32 hint (0-100), which some desktop environments
-  render as a progress affordance and others simply ignore (not a universal feature the
-  way Android's notification-channel progress bar is). Separately, the "new bubble every
-  time" symptom is less clear: the same fixed `_notificationId` is reused on every call
-  already (needed for Android's in-place update too), and the Linux plugin
-  (`flutter_local_notifications_linux`) does track a previous call's system-assigned id
-  and pass it back as `replaces_id` on the next `Notify` D-Bus call -- which should
-  already replace in place. Whether that mechanism is actually failing (a daemon that
-  ignores `replaces_id`, a timing/caching issue in the plugin, or something else) needs
-  live testing against the user's real desktop environment/notification daemon, which
-  this pass had no way to reproduce.
-
 - [x] **M64 — Persist the download queue in SQLite, not a Dart-owned JSON file**
   Reported by the user: downloads still weren't resuming reliably on Android/Linux
   after a kill, especially M43's `pending_downloads.json` (`getApplicationSupportDirectory()`)
@@ -3220,3 +3206,20 @@ this file is the single source of truth for "what's done" across sessions.
   since Android treats this permission as sensitive and Play Store review scrutinizes
   its use). Needs a real device (ideally more than one OEM) to actually reproduce and
   confirm a fix before landing anything here.
+
+- [ ] **M71 — Update remaining Flutter packages needing a major-version bump**
+  `flutter pub upgrade` (no `--major-versions`) already picked up everything resolvable
+  under `pubspec.yaml`'s existing constraints -- this is the rest, each needing a
+  `pubspec.yaml` version bump and its own look for breaking changes before landing:
+  `flutter_local_notifications` 22.3.3 -> 23.0.0 (worth the most care here -- this app
+  leans on it heavily for download progress/summary notifications, M43/M57/M62),
+  `fvp` 0.38.1 -> 0.40.0 (video playback), `cached_network_image` 3.4.1 -> 4.0.x,
+  `cupertino_icons` 1.0.9 -> 2.0.0, `intl` 0.20.2 -> 0.20.3, `meta` 1.18.0 -> 1.19.0,
+  plus whatever transitive majors come along for the ride (`mobile_scanner`,
+  `file_picker`, `jni`, etc. were already picked up by the safe upgrade and don't need
+  revisiting). `archive` 4.5.2 -> 4.6.0 was *not* left for this milestone -- it landed
+  in the safe upgrade already, but is worth remembering as a precedent: it was a
+  breaking change disguised as a minor-looking bump (every decoder stopped throwing on
+  damaged input by default), caught by `UpdateApplyService`'s own test suite, not by
+  the version number. Expect the same kind of surprise from `flutter_local_notifications`
+  23's migration guide in particular.

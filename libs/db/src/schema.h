@@ -253,11 +253,28 @@ static const char *const BUNNY_DB_SCHEMA_SQL = "PRAGMA foreign_keys = ON;"
                                                "    post_id INTEGER NOT NULL REFERENCES posts(id) ON DELETE CASCADE,"
                                                "    PRIMARY KEY (slideshow_id, post_id)"
                                                ");"
+                                               /* Per-slideshow tag exclusion -- additive to, not a replacement for,
+                                                * blacklist_tags above. Unlike that per-site table, this is NOT
+                                                * exempted for a favorites- or pool-sourced search (a slideshow
+                                                * auto-advances on a timer, so content that needs to be read, like a
+                                                * comic, can't be consumed in time regardless of where it came
+                                                * from). Same simple/complex tag-query split as blacklist_tags, just
+                                                * keyed by slideshow_id instead of site; since a slideshow can mix
+                                                * e621 and Inkbunny searches, rules are always stored/validated under
+                                                * e621's dialect (the strict superset) -- see
+                                                * bunny_core_slideshow_blacklist_add. */
+                                               "CREATE TABLE IF NOT EXISTS slideshow_blacklist_tags ("
+                                               "    id INTEGER PRIMARY KEY,"
+                                               "    slideshow_id INTEGER NOT NULL REFERENCES slideshows(id) ON DELETE CASCADE,"
+                                               "    tag TEXT NOT NULL,"
+                                               "    UNIQUE (slideshow_id, tag)"
+                                               ");"
                                                "CREATE INDEX IF NOT EXISTS idx_post_tags_tag_id ON post_tags(tag_id);"
                                                "CREATE INDEX IF NOT EXISTS idx_search_results_search_id ON search_results(search_id);"
                                                "CREATE INDEX IF NOT EXISTS idx_action_queue_status ON action_queue(status);"
                                                "CREATE INDEX IF NOT EXISTS idx_download_queue_status ON download_queue(status);"
                                                "CREATE INDEX IF NOT EXISTS idx_slideshow_searches_slideshow_id ON slideshow_searches(slideshow_id);"
-                                               "CREATE INDEX IF NOT EXISTS idx_slideshow_posts_slideshow_search ON slideshow_posts(slideshow_id, search_id);";
+                                               "CREATE INDEX IF NOT EXISTS idx_slideshow_posts_slideshow_search ON slideshow_posts(slideshow_id, search_id);"
+                                               "CREATE INDEX IF NOT EXISTS idx_slideshow_blacklist_tags_slideshow_id ON slideshow_blacklist_tags(slideshow_id);";
 
 #endif /* BUNNY_DB_SCHEMA_H */

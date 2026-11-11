@@ -558,4 +558,13 @@ class FfiBunnyRepository implements BunnyRepository {
 
   @override
   Future<void> slideshowReplacePost(int slideshowId, int searchId, int deadPostId) => _wrapped(() => _native.slideshowReplacePost(slideshowId, searchId, deadPostId));
+
+  @override
+  Future<List<String>> getSlideshowBlacklist(int slideshowId) => _wrapped(() => _native.slideshowBlacklistList(slideshowId));
+
+  @override
+  Future<void> addSlideshowBlacklistTag(int slideshowId, String tag) => _wrapped(() => _native.slideshowBlacklistAdd(slideshowId, tag));
+
+  @override
+  Future<void> removeSlideshowBlacklistTag(int slideshowId, String tag) => _wrapped(() => _native.slideshowBlacklistRemove(slideshowId, tag));
 }

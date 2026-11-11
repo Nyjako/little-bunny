@@ -316,3 +316,156 @@ bunny_core_result_t bunny_core_process_queue(bunny_core_t *core, bunny_core_queu
     bunny_core_sync_unlock(core);
     return BUNNY_CORE_OK;
 }
+
+/* --- Async process-queue wrapper -------------------------------------------
+ * Same fixed-size slot table shape as bunny_core_download_start/_poll/
+ * _release (libs/core/src/download.c) -- see bunny_core_process_queue_start's
+ * own doc comment in core.h for why this exists. Only ever 1-2 of these
+ * are realistically in flight at once (DownloadQueueService's own periodic
+ * drain, plus the one unconditional final drain after a batch), so a small
+ * table is enough headroom. */
+
+#define BUNNY_CORE_PROCESS_QUEUE_SLOT_COUNT 4
+
+typedef struct
+{
+    bool in_use;
+    bool started;
+    bunny_thread_t thread;
+    bunny_mutex_t lock; /* guards done/stats below */
+    bool done;
+    bunny_core_queue_stats_t stats;
+    bunny_core_t *core;
+} process_queue_slot_t;
+
+static process_queue_slot_t g_queue_slots[BUNNY_CORE_PROCESS_QUEUE_SLOT_COUNT];
+static bunny_mutex_t g_queue_slots_lock;
+static bool g_queue_slots_lock_initialized = false;
+
+/* Same not-itself-race-free-but-fine reasoning as download.c's own
+ * ensure_slots_lock -- every call into bunny_core_process_queue_start/
+ * _poll/_release happens through bunny_core_ffi's single serialized
+ * dispatch pipe, same as the download slot table. */
+static void ensure_queue_slots_lock(void)
+{
+    if (!g_queue_slots_lock_initialized) {
+        bunny_mutex_init(&g_queue_slots_lock);
+        g_queue_slots_lock_initialized = true;
+    }
+}
+
+static void *process_queue_thread_main(void *arg)
+{
+    process_queue_slot_t *slot = (process_queue_slot_t *)arg;
+    bunny_core_queue_stats_t stats;
+    memset(&stats, 0, sizeof(stats));
+    bunny_core_process_queue(slot->core, &stats);
+
+    bunny_mutex_lock(&slot->lock);
+    slot->stats = stats;
+    slot->done = true;
+    bunny_mutex_unlock(&slot->lock);
+    return NULL;
+}
+
+bunny_core_result_t bunny_core_process_queue_start(bunny_core_t *core, int64_t *out_handle)
+{
+    if (!core || !out_handle) {
+        return BUNNY_CORE_ERR_INVALID_ARG;
+    }
+
+    ensure_queue_slots_lock();
+    bunny_mutex_lock(&g_queue_slots_lock);
+    int found = -1;
+    for (int i = 0; i < BUNNY_CORE_PROCESS_QUEUE_SLOT_COUNT; i++) {
+        if (!g_queue_slots[i].in_use) {
+            found = i;
+            break;
+        }
+    }
+    if (found < 0) {
+        bunny_mutex_unlock(&g_queue_slots_lock);
+        return BUNNY_CORE_ERR_UNKNOWN;
+    }
+    process_queue_slot_t *slot = &g_queue_slots[found];
+    memset(slot, 0, sizeof(*slot));
+    slot->in_use = true;
+    bunny_mutex_init(&slot->lock);
+    slot->core = core;
+    bunny_mutex_unlock(&g_queue_slots_lock);
+
+    if (bunny_thread_create(&slot->thread, process_queue_thread_main, slot) != 0) {
+        bunny_mutex_destroy(&slot->lock);
+        bunny_mutex_lock(&g_queue_slots_lock);
+        slot->in_use = false;
+        bunny_mutex_unlock(&g_queue_slots_lock);
+        return BUNNY_CORE_ERR_UNKNOWN;
+    }
+    slot->started = true;
+
+    *out_handle = (int64_t)found;
+    return BUNNY_CORE_OK;
+}
+
+bunny_core_result_t bunny_core_process_queue_poll(int64_t handle, bool *out_done, bunny_core_queue_stats_t *out_stats)
+{
+    if (!out_done) {
+        return BUNNY_CORE_ERR_INVALID_ARG;
+    }
+    if (handle < 0 || handle >= BUNNY_CORE_PROCESS_QUEUE_SLOT_COUNT || !g_queue_slots[handle].in_use) {
+        return BUNNY_CORE_ERR_NOT_FOUND;
+    }
+    process_queue_slot_t *slot = &g_queue_slots[handle];
+
+    bunny_mutex_lock(&slot->lock);
+    *out_done = slot->done;
+    if (slot->done && out_stats) {
+        *out_stats = slot->stats;
+    }
+    bunny_mutex_unlock(&slot->lock);
+
+    return BUNNY_CORE_OK;
+}
+
+static void free_queue_slot(process_queue_slot_t *slot)
+{
+    bunny_mutex_destroy(&slot->lock);
+    ensure_queue_slots_lock();
+    bunny_mutex_lock(&g_queue_slots_lock);
+    slot->in_use = false;
+    bunny_mutex_unlock(&g_queue_slots_lock);
+}
+
+/* Same detached-reaper-thread reasoning as bunny_core_download_release --
+ * joining synchronously here would stall the dispatch pipe for however
+ * long the drain takes, exactly the problem this whole wrapper exists to
+ * avoid. */
+static void *queue_reap_thread_main(void *arg)
+{
+    process_queue_slot_t *slot = (process_queue_slot_t *)arg;
+    bunny_thread_join(slot->thread);
+    free_queue_slot(slot);
+    return NULL;
+}
+
+void bunny_core_process_queue_release(int64_t handle)
+{
+    if (handle < 0 || handle >= BUNNY_CORE_PROCESS_QUEUE_SLOT_COUNT) {
+        return;
+    }
+    process_queue_slot_t *slot = &g_queue_slots[handle];
+    if (!slot->in_use) {
+        return;
+    }
+    if (!slot->started) {
+        free_queue_slot(slot);
+        return;
+    }
+    bunny_thread_t reaper;
+    if (bunny_thread_create(&reaper, queue_reap_thread_main, slot) != 0) {
+        bunny_thread_join(slot->thread);
+        free_queue_slot(slot);
+        return;
+    }
+    bunny_thread_detach(reaper);
+}

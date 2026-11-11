@@ -421,4 +421,18 @@ abstract interface class BunnyRepository {
   /// other post left to pick -- the caller should report that as
   /// "couldn't be replaced" rather than retrying forever.
   Future<void> slideshowReplacePost(int slideshowId, int searchId, int deadPostId);
+
+  /// A SECOND, independent tag exclusion scoped to one slideshow -- additive
+  /// to, never a replacement for, [getBlacklist] above (both apply at
+  /// once), and -- unlike it -- not exempted for a favorites- or pool-
+  /// sourced search: a slideshow auto-advances on a timer, so a user
+  /// excluding a tag here means "not in THIS slideshow," regardless of
+  /// where the post came from. A rule is validated under e621's grammar
+  /// always (not per-site, since a slideshow has no single site of its own
+  /// -- it can mix e621 and Inkbunny searches); see [validateTagQuery].
+  Future<List<String>> getSlideshowBlacklist(int slideshowId);
+
+  Future<void> addSlideshowBlacklistTag(int slideshowId, String tag);
+
+  Future<void> removeSlideshowBlacklistTag(int slideshowId, String tag);
 }

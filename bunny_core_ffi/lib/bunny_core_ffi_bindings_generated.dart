@@ -2075,6 +2075,97 @@ class BunnyCoreFfiBindings {
         int Function(ffi.Pointer<bunny_core_t>, int, ffi.Pointer<ffi.Char>)
       >();
 
+  /// --- Per-slideshow tag exclusion (M51 v2 follow-up) -- thin pass-throughs
+  /// to bunny_db_slideshow_blacklist_*. Additive to, never a replacement for,
+  /// the per-site blacklist above (both apply at once), and -- unlike it --
+  /// not exempted for a favorites- or pool-sourced search; see
+  /// bunny_db_search_list_posts_random/bunny_db_pool_search_list_posts_random's
+  /// own doc comments for exactly where this applies.
+  /// bunny_core_slideshow_blacklist_add validates `tag` under e621's dialect
+  /// always (not per-site, since a slideshow has no single site of its own),
+  /// returning BUNNY_CORE_ERR_INVALID_ARG for anything that fails to parse.
+  bunny_core_result_t bunny_core_slideshow_blacklist_list(
+    ffi.Pointer<bunny_core_t> core,
+    int slideshow_id,
+    ffi.Pointer<bunny_db_string_list_t> out_list,
+  ) {
+    return bunny_core_result_t.fromValue(
+      _bunny_core_slideshow_blacklist_list(core, slideshow_id, out_list),
+    );
+  }
+
+  late final _bunny_core_slideshow_blacklist_listPtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.UnsignedInt Function(
+            ffi.Pointer<bunny_core_t>,
+            ffi.Int64,
+            ffi.Pointer<bunny_db_string_list_t>,
+          )
+        >
+      >('bunny_core_slideshow_blacklist_list');
+  late final _bunny_core_slideshow_blacklist_list =
+      _bunny_core_slideshow_blacklist_listPtr
+          .asFunction<
+            int Function(
+              ffi.Pointer<bunny_core_t>,
+              int,
+              ffi.Pointer<bunny_db_string_list_t>,
+            )
+          >();
+
+  bunny_core_result_t bunny_core_slideshow_blacklist_add(
+    ffi.Pointer<bunny_core_t> core,
+    int slideshow_id,
+    ffi.Pointer<ffi.Char> tag,
+  ) {
+    return bunny_core_result_t.fromValue(
+      _bunny_core_slideshow_blacklist_add(core, slideshow_id, tag),
+    );
+  }
+
+  late final _bunny_core_slideshow_blacklist_addPtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.UnsignedInt Function(
+            ffi.Pointer<bunny_core_t>,
+            ffi.Int64,
+            ffi.Pointer<ffi.Char>,
+          )
+        >
+      >('bunny_core_slideshow_blacklist_add');
+  late final _bunny_core_slideshow_blacklist_add =
+      _bunny_core_slideshow_blacklist_addPtr
+          .asFunction<
+            int Function(ffi.Pointer<bunny_core_t>, int, ffi.Pointer<ffi.Char>)
+          >();
+
+  bunny_core_result_t bunny_core_slideshow_blacklist_remove(
+    ffi.Pointer<bunny_core_t> core,
+    int slideshow_id,
+    ffi.Pointer<ffi.Char> tag,
+  ) {
+    return bunny_core_result_t.fromValue(
+      _bunny_core_slideshow_blacklist_remove(core, slideshow_id, tag),
+    );
+  }
+
+  late final _bunny_core_slideshow_blacklist_removePtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.UnsignedInt Function(
+            ffi.Pointer<bunny_core_t>,
+            ffi.Int64,
+            ffi.Pointer<ffi.Char>,
+          )
+        >
+      >('bunny_core_slideshow_blacklist_remove');
+  late final _bunny_core_slideshow_blacklist_remove =
+      _bunny_core_slideshow_blacklist_removePtr
+          .asFunction<
+            int Function(ffi.Pointer<bunny_core_t>, int, ffi.Pointer<ffi.Char>)
+          >();
+
   /// Pulls the e621 account's own blacklist (My Account -> Blacklisted Tags on
   /// e621.net, see tools/e621_blacklist_experiment/e621_blacklist.py for the
   /// API this mirrors) and imports every line that isn't already present
@@ -2689,6 +2780,92 @@ class BunnyCoreFfiBindings {
           ffi.Pointer<bunny_core_queue_stats_t>,
         )
       >();
+
+  /// Async variant of bunny_core_process_queue, for the exact reason
+  /// bunny_core_download_start/_poll/_release (below) exist instead of one
+  /// blocking call: bunny_core_process_queue does real per-action network
+  /// I/O, so calling it directly from bunny_core_ffi's one serialized dispatch
+  /// pipe blocked every other call routed through that same pipe -- including
+  /// every in-flight download's own poll calls -- for however long the drain
+  /// took (DownloadQueueService calls this every few completed items, M62
+  /// follow-up, so this wasn't rare). Spawns a background thread and returns
+  /// almost immediately with a handle; safe to call concurrently with
+  /// downloads/other core calls since bunny_core_process_queue itself already
+  /// serializes against a concurrent sync via sync_mutex internally (see its
+  /// own doc comment) -- this wrapper doesn't change that, just moves the
+  /// waiting off the caller.
+  bunny_core_result_t bunny_core_process_queue_start(
+    ffi.Pointer<bunny_core_t> core,
+    ffi.Pointer<ffi.Int64> out_handle,
+  ) {
+    return bunny_core_result_t.fromValue(
+      _bunny_core_process_queue_start(core, out_handle),
+    );
+  }
+
+  late final _bunny_core_process_queue_startPtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.UnsignedInt Function(
+            ffi.Pointer<bunny_core_t>,
+            ffi.Pointer<ffi.Int64>,
+          )
+        >
+      >('bunny_core_process_queue_start');
+  late final _bunny_core_process_queue_start =
+      _bunny_core_process_queue_startPtr
+          .asFunction<
+            int Function(ffi.Pointer<bunny_core_t>, ffi.Pointer<ffi.Int64>)
+          >();
+
+  /// Cheap, lock-guarded read -- safe to poll frequently while a handle from
+  /// bunny_core_process_queue_start is in flight. *out_stats is only
+  /// meaningful once *out_done is true. Returns BUNNY_CORE_ERR_NOT_FOUND for a
+  /// handle that was never returned by bunny_core_process_queue_start, or
+  /// already released.
+  bunny_core_result_t bunny_core_process_queue_poll(
+    int handle,
+    ffi.Pointer<ffi.Bool> out_done,
+    ffi.Pointer<bunny_core_queue_stats_t> out_stats,
+  ) {
+    return bunny_core_result_t.fromValue(
+      _bunny_core_process_queue_poll(handle, out_done, out_stats),
+    );
+  }
+
+  late final _bunny_core_process_queue_pollPtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.UnsignedInt Function(
+            ffi.Int64,
+            ffi.Pointer<ffi.Bool>,
+            ffi.Pointer<bunny_core_queue_stats_t>,
+          )
+        >
+      >('bunny_core_process_queue_poll');
+  late final _bunny_core_process_queue_poll = _bunny_core_process_queue_pollPtr
+      .asFunction<
+        int Function(
+          int,
+          ffi.Pointer<ffi.Bool>,
+          ffi.Pointer<bunny_core_queue_stats_t>,
+        )
+      >();
+
+  /// Joins the background thread (instant if a prior poll already reported
+  /// done) and frees the handle's resources. Must be called exactly once for
+  /// every handle bunny_core_process_queue_start returned successfully -- a
+  /// no-op for an already-released or never-valid handle.
+  void bunny_core_process_queue_release(int handle) {
+    return _bunny_core_process_queue_release(handle);
+  }
+
+  late final _bunny_core_process_queue_releasePtr =
+      _lookup<ffi.NativeFunction<ffi.Void Function(ffi.Int64)>>(
+        'bunny_core_process_queue_release',
+      );
+  late final _bunny_core_process_queue_release =
+      _bunny_core_process_queue_releasePtr.asFunction<void Function(int)>();
 
   /// pool_id 0/pool_name NULL for a regular (non-pool) download.
   bunny_core_result_t bunny_core_download_queue_add(

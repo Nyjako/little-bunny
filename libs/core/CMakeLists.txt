@@ -10,6 +10,7 @@ add_library(bunny_core STATIC
     src/download.c
     src/verify.c
     src/blacklist.c
+    src/slideshow_blacklist.c
     src/backup.c
     src/stats_report.c
     src/diagnostics.c

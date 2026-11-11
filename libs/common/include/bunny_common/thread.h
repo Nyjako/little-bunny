@@ -105,6 +105,15 @@ static inline int bunny_thread_join(bunny_thread_t thread)
     return 0;
 }
 
+/* Releases the handle without waiting for the thread -- the thread itself
+ * keeps running to completion regardless; this just gives up the ability
+ * to later join/query it, which a detached thread's caller never needs to
+ * do again. */
+static inline void bunny_thread_detach(bunny_thread_t thread)
+{
+    CloseHandle(thread);
+}
+
 #else
 
 #include <pthread.h>
@@ -158,6 +167,12 @@ static inline int bunny_thread_create(bunny_thread_t *thread, void *(*fn)(void *
 static inline int bunny_thread_join(bunny_thread_t thread)
 {
     return pthread_join(thread, NULL);
+}
+
+/* See the Windows branch's own doc comment above -- same contract. */
+static inline void bunny_thread_detach(bunny_thread_t thread)
+{
+    pthread_detach(thread);
 }
 
 #endif

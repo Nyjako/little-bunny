@@ -414,7 +414,82 @@ bunny_db_result_t bunny_db_slideshow_all_post_ids(bunny_db_t *db, int64_t slides
     return BUNNY_DB_OK;
 }
 
-bunny_db_result_t bunny_db_pool_search_list_posts_random(bunny_db_t *db, int64_t search_id, int64_t pool_id, int count, bunny_db_post_list_t *out_list)
+/* Filters `arr` in place against slideshow_id's own per-slideshow blacklist
+ * (additive to, independent of, the per-site blacklist_tags table -- pool
+ * searches are exempt from THAT one, see bunny_db_search_list_posts_random's
+ * own doc comment, but the per-slideshow exclusion is deliberately not
+ * exempt for anything, pools included). Unlike
+ * bunny_db_search_list_posts_random's own SQL-level NOT EXISTS fast path,
+ * there's no listing query here to attach one to (this function already
+ * pages the WHOLE pool into memory via bunny_db_pool_search_list_posts
+ * before picking at random) -- every rule, simple or complex, is parsed and
+ * matched the same way via bunny_tag_query_matches, which costs nothing
+ * extra at the expected scale of a few dozen manually-curated rules against
+ * one pool's worth of posts. */
+static void bunny_db_filter_slideshow_blacklist(bunny_db_t *db, int64_t slideshow_id, bunny_db_post_array *arr)
+{
+    for (int site_index = 0; site_index < 2; site_index++) {
+        bunny_db_site_t site = (bunny_db_site_t)site_index;
+        bool site_present = false;
+        for (size_t i = 0; i < arr->count; i++) {
+            if (arr->items[i].site == site) {
+                site_present = true;
+                break;
+            }
+        }
+        if (!site_present) {
+            continue;
+        }
+
+        bunny_db_string_list_t rules;
+        if (bunny_db_slideshow_blacklist_list(db, slideshow_id, &rules) != BUNNY_DB_OK || rules.count == 0) {
+            continue;
+        }
+        bunny_tag_query_dialect_t dialect = site == BUNNY_DB_SITE_INKBUNNY ? BUNNY_TAG_QUERY_DIALECT_INKBUNNY : BUNNY_TAG_QUERY_DIALECT_E621;
+        bunny_db_tag_query_node_ptr_array asts;
+        bunny_db_tag_query_node_ptr_array_init(&asts);
+        for (size_t i = 0; i < rules.count; i++) {
+            bunny_tag_query_node_t *ast = NULL;
+            if (bunny_tag_query_parse(rules.items[i], dialect, &ast, NULL)) {
+                if (!bunny_db_tag_query_node_ptr_array_push(&asts, ast)) {
+                    bunny_tag_query_free(ast);
+                }
+            }
+        }
+        bunny_db_string_list_free(&rules);
+        if (asts.count == 0) {
+            bunny_db_tag_query_node_ptr_array_free(&asts);
+            continue;
+        }
+
+        size_t write = 0;
+        for (size_t read = 0; read < arr->count; read++) {
+            if (arr->items[read].site != site) {
+                arr->items[write++] = arr->items[read];
+                continue;
+            }
+            bunny_db_string_list_t tag_names;
+            bunny_db_post_get_tag_names(db, arr->items[read].id, &tag_names);
+            bool blacklisted = false;
+            for (size_t i = 0; i < asts.count && !blacklisted; i++) {
+                blacklisted = bunny_tag_query_matches(asts.items[i], (const char *const *)tag_names.items, tag_names.count);
+            }
+            bunny_db_string_list_free(&tag_names);
+            if (blacklisted) {
+                bunny_db_post_free(&arr->items[read]);
+            } else {
+                arr->items[write++] = arr->items[read];
+            }
+        }
+        arr->count = write;
+        for (size_t i = 0; i < asts.count; i++) {
+            bunny_tag_query_free(asts.items[i]);
+        }
+        bunny_db_tag_query_node_ptr_array_free(&asts);
+    }
+}
+
+bunny_db_result_t bunny_db_pool_search_list_posts_random(bunny_db_t *db, int64_t search_id, int64_t pool_id, int64_t slideshow_id, int count, bunny_db_post_list_t *out_list)
 {
     if (!db || !out_list || count <= 0) {
         return BUNNY_DB_ERR_INVALID_ARG;
@@ -453,6 +528,10 @@ bunny_db_result_t bunny_db_pool_search_list_posts_random(bunny_db_t *db, int64_t
         if (last_page) {
             break;
         }
+    }
+
+    if (slideshow_id != 0 && arr.count > 0) {
+        bunny_db_filter_slideshow_blacklist(db, slideshow_id, &arr);
     }
 
     /* Fisher-Yates, in place -- seeded once at process start is fine here,

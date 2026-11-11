@@ -1009,6 +1009,31 @@ class HttpBunnyRepository implements BunnyRepository {
     }
   }
 
+  @override
+  Future<List<String>> getSlideshowBlacklist(int slideshowId) async {
+    final response = await _client.get(_uri('/slideshows/$slideshowId/blacklist'), headers: _headers);
+    if (response.statusCode != 200) {
+      _throwError(response);
+    }
+    return (jsonDecode(response.body) as List).cast<String>();
+  }
+
+  @override
+  Future<void> addSlideshowBlacklistTag(int slideshowId, String tag) async {
+    final response = await _client.post(_uri('/slideshows/$slideshowId/blacklist'), headers: _headers, body: jsonEncode({'tag': tag}));
+    if (response.statusCode != 200) {
+      _throwError(response);
+    }
+  }
+
+  @override
+  Future<void> removeSlideshowBlacklistTag(int slideshowId, String tag) async {
+    final response = await _client.delete(_uri('/slideshows/$slideshowId/blacklist', {'tag': tag}), headers: _headers);
+    if (response.statusCode != 200) {
+      _throwError(response);
+    }
+  }
+
   /// Recent server log lines (oldest-first), for diagnosing a stuck/slow
   /// server without SSH access to the box -- see `server/src/log.c`. Not a
   /// [BunnyRepository] interface method, same reasoning as

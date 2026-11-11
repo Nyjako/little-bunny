@@ -112,6 +112,39 @@ static char *build_e621_posts_page_json(int count, int first_id)
     return buf;
 }
 
+/* Same shape as build_e621_posts_page_json above, but post index 0 within
+ * the page carries one additional general tag -- gives a per-slideshow
+ * blacklist test exactly one post to exclude among otherwise-identical
+ * posts. */
+static char *build_e621_posts_page_json_with_one_tagged(int count, int first_id, const char *extra_tag)
+{
+    size_t capacity = 1024 + (size_t)count * 700 + strlen(extra_tag);
+    char *buf = malloc(capacity);
+    if (!buf) {
+        return NULL;
+    }
+    size_t len = (size_t)snprintf(buf, capacity, "{\"posts\":[");
+    for (int i = 0; i < count; i++) {
+        int id = first_id + i;
+        char general_tags[256];
+        if (i == 0) {
+            snprintf(general_tags, sizeof(general_tags), "\"one\",\"%s\"", extra_tag);
+        } else {
+            snprintf(general_tags, sizeof(general_tags), "\"one\"");
+        }
+        len += (size_t)snprintf(buf + len, capacity - len,
+                                "%s{\"id\":%d,\"created_at\":\"2024-01-01T00:00:00.000-05:00\","
+                                "\"file\":{\"width\":100,\"height\":100,\"ext\":\"png\",\"size\":1000,\"md5\":\"aaa\",\"url\":\"https://static1.e621.net/data/%d.png\"},"
+                                "\"preview\":{\"width\":50,\"height\":50,\"url\":\"https://static1.e621.net/data/preview/%d.png\"},"
+                                "\"sample\":{\"has\":false},\"score\":{\"up\":1,\"down\":0,\"total\":1},"
+                                "\"tags\":{\"general\":[%s],\"species\":[],\"character\":[],\"copyright\":[],\"artist\":[\"someartist\"],\"invalid\":[],\"lore\":[],\"meta\":[]},"
+                                "\"rating\":\"s\",\"fav_count\":1,\"sources\":[],\"description\":\"a test post\",\"comment_count\":0,\"is_favorited\":false,\"pools\":[]}",
+                                i == 0 ? "" : ",", id, id, id, general_tags);
+    }
+    len += (size_t)snprintf(buf + len, capacity - len, "]}");
+    return buf;
+}
+
 void setUp(void)
 {
     memset(&g_e621_state, 0, sizeof(g_e621_state));
@@ -1080,6 +1113,121 @@ void test_slideshow_pick_posts_for_search_favorites_search_is_unaffected_by_the_
     TEST_ASSERT_EQUAL(BUNNY_CORE_OK, result);
     TEST_ASSERT_EQUAL(1, (int)posts.count);
     bunny_db_post_list_free(&posts);
+
+    free(fixture);
+}
+
+void test_slideshow_blacklist_add_rejects_invalid_syntax(void)
+{
+    int64_t slideshow_id = 0;
+    bunny_core_slideshow_create(g_core, "Show", false, 0, false, 0, &slideshow_id);
+
+    bunny_core_result_t result = bunny_core_slideshow_blacklist_add(g_core, slideshow_id, "( unbalanced");
+    TEST_ASSERT_EQUAL(BUNNY_CORE_ERR_INVALID_ARG, result);
+
+    bunny_db_string_list_t blacklist;
+    result = bunny_core_slideshow_blacklist_list(g_core, slideshow_id, &blacklist);
+    TEST_ASSERT_EQUAL(BUNNY_CORE_OK, result);
+    TEST_ASSERT_EQUAL(0, (int)blacklist.count);
+    bunny_db_string_list_free(&blacklist);
+}
+
+/* The real, live orchestration path -- unlike the older favorites-exemption
+ * test below (which calls the id-less public wrapper, which has no
+ * slideshow_id to apply a per-slideshow rule against), this proves the
+ * end-to-end wiring from slideshow_id through
+ * bunny_core_slideshow_search_commit_picks actually works. */
+void test_slideshow_search_commit_picks_excludes_slideshow_blacklisted_tags(void)
+{
+    char *fixture = build_e621_posts_page_json_with_one_tagged(5, 7500, "comic");
+    TEST_ASSERT_NOT_NULL(fixture);
+    g_e621_state.bodies[0] = fixture;
+    g_e621_state.body_count = 1;
+
+    int64_t search_id = 0;
+    bunny_core_search_create(g_core, BUNNY_DB_SITE_E621, "wolves", "wolf", 24, NULL, &search_id);
+    bunny_core_sync_stats_t stats;
+    bunny_core_sync_due_searches(g_core, &stats);
+    TEST_ASSERT_EQUAL(5, stats.posts_upserted);
+
+    int64_t slideshow_id = 0;
+    bunny_core_slideshow_create(g_core, "Show", true, 5, false, 0, &slideshow_id); /* request every post */
+    bunny_core_slideshow_search_add(g_core, slideshow_id, search_id, false, 0);
+    bunny_core_slideshow_blacklist_add(g_core, slideshow_id, "comic");
+
+    TEST_ASSERT_EQUAL(BUNNY_CORE_OK, bunny_core_slideshow_search_commit_picks(g_core, slideshow_id, search_id));
+
+    bunny_db_slideshow_post_list_t committed;
+    bunny_core_slideshow_posts_list(g_core, slideshow_id, search_id, &committed);
+    /* Of the 5 available, only the one carrying "comic" is excluded -- the
+     * default (5) can't be fully satisfied, same "can return fewer than
+     * requested" precedent every random-pick function here accepts. */
+    TEST_ASSERT_EQUAL(4, (int)committed.count);
+    bunny_db_slideshow_post_list_free(&committed);
+
+    free(fixture);
+}
+
+/* Documents the 4.0 design decision explicitly, rather than leaving it as an
+ * implicit gap: bunny_core_slideshow_pick_posts_for_search (the public,
+ * slideshow-id-less wrapper, confirmed dead outside C tests/raw FFI) has no
+ * way to specify a slideshow_id, so it stays unaffected by a per-slideshow
+ * rule even when one exists for some OTHER slideshow that happens to link
+ * this exact search. */
+void test_slideshow_pick_posts_for_search_is_unaffected_by_any_slideshow_blacklist(void)
+{
+    char *fixture = build_e621_posts_page_json_with_one_tagged(5, 7600, "comic");
+    TEST_ASSERT_NOT_NULL(fixture);
+    g_e621_state.bodies[0] = fixture;
+    g_e621_state.body_count = 1;
+
+    int64_t search_id = 0;
+    bunny_core_search_create(g_core, BUNNY_DB_SITE_E621, "wolves", "wolf", 24, NULL, &search_id);
+    bunny_core_sync_stats_t stats;
+    bunny_core_sync_due_searches(g_core, &stats);
+    TEST_ASSERT_EQUAL(5, stats.posts_upserted);
+
+    int64_t slideshow_id = 0;
+    bunny_core_slideshow_create(g_core, "Show", false, 0, false, 0, &slideshow_id);
+    bunny_core_slideshow_blacklist_add(g_core, slideshow_id, "comic");
+
+    bunny_db_post_list_t posts;
+    bunny_core_result_t result = bunny_core_slideshow_pick_posts_for_search(g_core, search_id, 5, NULL, 0, BUNNY_DB_RATING_MASK_ALL, BUNNY_DB_MEDIA_MASK_ALL, &posts);
+    TEST_ASSERT_EQUAL(BUNNY_CORE_OK, result);
+    TEST_ASSERT_EQUAL(5, (int)posts.count); /* every post, "comic"-tagged one included */
+    bunny_db_post_list_free(&posts);
+
+    free(fixture);
+}
+
+/* The opposite outcome of test_slideshow_pick_posts_for_search_favorites_search_is_unaffected_by_the_tag_blacklist
+ * above -- that test proves the per-SITE blacklist is favorites-exempt; this
+ * one proves the per-SLIDESHOW blacklist is deliberately NOT, making the
+ * asymmetry explicit to a future reader rather than an implicit gap. */
+void test_slideshow_search_commit_picks_favorites_search_is_still_affected_by_the_slideshow_blacklist(void)
+{
+    char *fixture = build_e621_posts_page_json_with_one_tagged(5, 7700, "comic");
+    TEST_ASSERT_NOT_NULL(fixture);
+    g_e621_state.bodies[0] = fixture;
+    g_e621_state.body_count = 1;
+
+    int64_t search_id = 0;
+    bunny_core_search_create(g_core, BUNNY_DB_SITE_E621, "Favorites", "fav:someuser", 24, NULL, &search_id);
+    bunny_core_sync_stats_t stats;
+    bunny_core_sync_due_searches(g_core, &stats);
+    TEST_ASSERT_EQUAL(5, stats.posts_upserted);
+
+    int64_t slideshow_id = 0;
+    bunny_core_slideshow_create(g_core, "Show", true, 5, false, 0, &slideshow_id);
+    bunny_core_slideshow_search_add(g_core, slideshow_id, search_id, false, 0);
+    bunny_core_slideshow_blacklist_add(g_core, slideshow_id, "comic");
+
+    TEST_ASSERT_EQUAL(BUNNY_CORE_OK, bunny_core_slideshow_search_commit_picks(g_core, slideshow_id, search_id));
+
+    bunny_db_slideshow_post_list_t committed;
+    bunny_core_slideshow_posts_list(g_core, slideshow_id, search_id, &committed);
+    TEST_ASSERT_EQUAL(4, (int)committed.count); /* unlike the per-site blacklist, favorites gets no exemption here */
+    bunny_db_slideshow_post_list_free(&committed);
 
     free(fixture);
 }
@@ -2621,6 +2769,10 @@ int main(void)
     RUN_TEST(test_slideshow_pick_posts_for_search_rejects_a_nonexistent_search);
     RUN_TEST(test_slideshow_pick_posts_for_search_excludes_given_post_ids);
     RUN_TEST(test_slideshow_pick_posts_for_search_favorites_search_is_unaffected_by_the_tag_blacklist);
+    RUN_TEST(test_slideshow_blacklist_add_rejects_invalid_syntax);
+    RUN_TEST(test_slideshow_search_commit_picks_excludes_slideshow_blacklisted_tags);
+    RUN_TEST(test_slideshow_pick_posts_for_search_is_unaffected_by_any_slideshow_blacklist);
+    RUN_TEST(test_slideshow_search_commit_picks_favorites_search_is_still_affected_by_the_slideshow_blacklist);
     RUN_TEST(test_slideshow_crud_round_trips_through_core);
     RUN_TEST(test_slideshow_search_commit_picks_uses_override_count_over_default);
     RUN_TEST(test_slideshow_search_commit_picks_falls_back_to_slideshow_default_when_no_override);

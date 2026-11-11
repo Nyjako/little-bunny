@@ -76,6 +76,19 @@
   "searchesPinTooltip": "Pin",
   "searchesUnpinTooltip": "Unpin",
   "searchesSyncRowTooltip": "Sync now",
+  "searchesRowMenuEditLabel": "Edit",
+  "searchesRowMenuAddToSlideshowLabel": "Add to slideshow",
+  "searchesAddToSlideshowDialogTitle": "Add to slideshow",
+  "searchesNoSlideshowsYet": "No slideshows yet -- create one first.",
+  "searchesAddedToSlideshow": "Added to \"{label}\"",
+  "@searchesAddedToSlideshow": {
+    "placeholders": {"label": {"type": "String"}}
+  },
+  "searchesAddSelectedToSlideshowTooltip": "Add selected to slideshow",
+  "searchesAddedSelectedToSlideshow": "{count} added to \"{label}\"",
+  "@searchesAddedSelectedToSlideshow": {
+    "placeholders": {"count": {"type": "int"}, "label": {"type": "String"}}
+  },
   "searchesRemoveDialogTitle": "Remove search?",
   "searchesRemoveDialogContent": "This removes the saved search \"{label}\" from this app.",
   "@searchesRemoveDialogContent": {
@@ -544,9 +557,15 @@
   "slideshowEditSearchesHeading": "Searches",
   "slideshowEditAddSearchTooltip": "Add search",
   "slideshowEditAddSearchDialogTitle": "Add searches",
-  "slideshowEditAddSearchSubmit": "Add",
+  "slideshowEditAddSearchDoneButton": "Done",
+  "slideshowEditNewSearchOption": "New search",
+  "slideshowEditNewPoolOption": "New pool",
   "slideshowEditNoMoreSearchesToAdd": "Every search is already added",
+  "slideshowEditNoMorePoolsToAdd": "Every pool is already added",
   "slideshowEditSearchesEmptyState": "No searches added yet. Save the slideshow first, then add one.",
+  "slideshowEditBlacklistHeading": "Blacklist",
+  "slideshowEditBlacklistEmpty": "No tags excluded from this slideshow yet.",
+  "slideshowEditBlacklistAddLabel": "Exclude tag",
   "slideshowEditOverrideCountDialogTitle": "Posts for \"{label}\"",
   "@slideshowEditOverrideCountDialogTitle": {
     "placeholders": {"label": {"type": "String"}}
