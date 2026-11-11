@@ -1,0 +1,609 @@
+{
+  "@@locale": "pl",
+
+  "appTitle": "LittleBunny",
+  "@appTitle": {"description": "The app's title, used as MaterialApp.title."},
+
+  "commonRequired": "Wymagane",
+  "commonCancel": "Anuluj",
+  "commonRemove": "Usuń",
+  "commonContinue": "Kontynuuj",
+  "commonMustBeANumber": "Wprowadź liczbę całkowitą",
+
+  "setupScreenTitle": "Konfiguracja LittleBunny",
+  "setupModeStandalone": "Samodzielny",
+  "setupModeNetworked": "Sieciowy",
+  "setupStandaloneDescription": "Przechowuje wszystko lokalnie na tym urządzeniu. Serwer nie jest wymagany.",
+  "setupServerUrlLabel": "Adres URL serwera",
+  "setupServerUrlHint": "https://192.168.1.10:8443",
+  "setupServerUrlInvalid": "Wprowadź poprawny adres URL",
+  "setupBearerTokenLabel": "Token Bearer",
+  "setupCertFingerprintLabel": "Odcisk SHA-256 certyfikatu",
+  "setupPasteConnectionInfo": "Wklej informacje o połączeniu",
+  "setupScanQrCode": "Skanuj kod QR",
+  "setupConnectionQrInvalid": "Nie udało się odczytać informacji o połączeniu",
+  "setupReconfigureTitle": "Zmień tryb połączenia",
+  "setupSwitchWarningTitle": "Zmienić źródło danych?",
+  "setupSwitchWarningMessage": "Tryby samodzielny i sieciowy używają osobnych magazynów danych — Twoje obecne wyszukiwania i konta nie przeniosą się automatycznie. Użyj Ustawienia → Kopia zapasowa, aby wyeksportować/zaimportować wyszukiwania, jeśli chcesz je przenieść.",
+  "setupSwitchConfirm": "Zmień",
+
+  "loginScreenTitle": "Zaloguj się do {site}",
+  "@loginScreenTitle": {
+    "placeholders": {"site": {"type": "String"}}
+  },
+  "loginUsernameLabel": "Nazwa użytkownika",
+  "loginApiKeyLabel": "Klucz API",
+  "loginPasswordLabel": "Hasło",
+  "loginSubmit": "Zaloguj się",
+
+  "accountsScreenTitle": "Konta",
+  "accountsRemoveDialogTitle": "Usunąć konto?",
+  "accountsRemoveDialogContent": "To usunie zapisane konto {site} z tej aplikacji. Możesz zalogować się ponownie później.",
+  "@accountsRemoveDialogContent": {
+    "placeholders": {"site": {"type": "String"}}
+  },
+  "accountsLoggedInAs": "Zalogowano jako {username}",
+  "@accountsLoggedInAs": {
+    "placeholders": {"username": {"type": "String"}}
+  },
+  "accountsNotConnected": "Nie połączono",
+  "accountsMyFavoritesTooltip": "Pokaż moje ulubione",
+  "accountsMyFavoritesTitle": "Moje ulubione",
+  "accountsFavoritesCount": "{count} ulubionych",
+  "@accountsFavoritesCount": {
+    "placeholders": {"count": {"type": "int"}}
+  },
+  "accountsSyncFavoritesTooltip": "Synchronizuj ulubione teraz",
+
+  "searchesScreenTitle": "Wyszukiwania",
+  "searchesAccountsTooltip": "Konta",
+  "searchesSettingsTooltip": "Ustawienia",
+  "searchesTagStatsTooltip": "Statystyki tagów",
+  "searchesNewSearchTooltip": "Nowe wyszukiwanie",
+  "searchesEmptyState": "Brak zapisanych wyszukiwań. Naciśnij +, aby dodać.",
+  "searchesIntervalSubtitle": "{site} • co {hours}h • {total} postów",
+  "@searchesIntervalSubtitle": {
+    "placeholders": {
+      "site": {"type": "String"},
+      "hours": {"type": "int"},
+      "total": {"type": "int"}
+    }
+  },
+  "searchesLastUpdatedSubtitle": "Zaktualizowano {duration} temu",
+  "@searchesLastUpdatedSubtitle": {
+    "placeholders": {"duration": {"type": "String"}}
+  },
+  "searchesPinTooltip": "Przypnij",
+  "searchesUnpinTooltip": "Odepnij",
+  "searchesSyncRowTooltip": "Synchronizuj teraz",
+  "searchesRowMenuEditLabel": "Edytuj",
+  "searchesRowMenuAddToSlideshowLabel": "Dodaj do pokazu slajdów",
+  "searchesAddToSlideshowDialogTitle": "Dodaj do pokazu slajdów",
+  "searchesNoSlideshowsYet": "Brak pokazów slajdów — najpierw utwórz jakiś.",
+  "searchesAddedToSlideshow": "Dodano do „{label}”",
+  "@searchesAddedToSlideshow": {
+    "placeholders": {"label": {"type": "String"}}
+  },
+  "searchesAddSelectedToSlideshowTooltip": "Dodaj wybrane do pokazu slajdów",
+  "searchesAddedSelectedToSlideshow": "Dodano {count} do „{label}”",
+  "@searchesAddedSelectedToSlideshow": {
+    "placeholders": {"count": {"type": "int"}, "label": {"type": "String"}}
+  },
+  "searchesRemoveDialogTitle": "Usunąć wyszukiwanie?",
+  "searchesRemoveDialogContent": "To usunie zapisane wyszukiwanie „{label}” z tej aplikacji.",
+  "@searchesRemoveDialogContent": {
+    "placeholders": {"label": {"type": "String"}}
+  },
+  "searchesTabSearches": "Wyszukiwania",
+  "searchesTabPools": "Zbiory",
+  "searchesTabSlideshows": "Pokazy slajdów",
+  "searchesPoolsEmptyState": "Brak zapisanych zbiorów. Naciśnij +, aby dodać.",
+  "searchesFavoritesLabel": "Ulubione",
+  "searchesNewPoolTooltip": "Dodaj zbiór",
+  "searchesSortTooltip": "Sortuj",
+  "searchesMoreActionsTooltip": "Więcej",
+  "searchesSortMostUnseen": "Najwięcej niewidzianych",
+  "searchesSortLabel": "Nazwa (A–Z)",
+  "searchesSortRecentlyCreated": "Ostatnio utworzone",
+  "searchesSortLastViewed": "Ostatnio wyświetlane",
+  "searchesSortLastUpdated": "Ostatnio zaktualizowane",
+  "searchesCheckForUpdatesTooltip": "Sprawdź aktualizacje",
+  "searchesSelectForDownloadTooltip": "Wybierz wyszukiwania do pobrania",
+  "searchesSelectedCount": "Wybrano {count}",
+  "@searchesSelectedCount": {
+    "placeholders": {"count": {"type": "int"}}
+  },
+  "searchesDownloadSelectedTooltip": "Pobierz wybrane",
+  "searchesMassDownloadQueued": "{count} zakolejkowano do pobrania",
+  "@searchesMassDownloadQueued": {
+    "placeholders": {"count": {"type": "int"}}
+  },
+  "searchesMassDownloadError": "Nie udało się załadować wszystkich postów dla jednego lub więcej wybranych wyszukiwań. Spróbuj ponownie.",
+  "searchesLoadingPostsDialogTitle": "Wczytywanie postów {index}/{count}",
+  "@searchesLoadingPostsDialogTitle": {
+    "placeholders": {"index": {"type": "int"}, "count": {"type": "int"}}
+  },
+  "searchesLoadingPostsSearchProgress": "{label} {loaded}/{total}",
+  "@searchesLoadingPostsSearchProgress": {
+    "placeholders": {"label": {"type": "String"}, "loaded": {"type": "int"}, "total": {"type": "int"}}
+  },
+  "searchesDownloadQueueTooltip": "Pobieranie",
+  "searchesSyncAllProgress": "{done}/{total} sprawdzonych",
+  "@searchesSyncAllProgress": {
+    "placeholders": {
+      "done": {"type": "int"},
+      "total": {"type": "int"}
+    }
+  },
+  "searchesSyncInProgress": "Synchronizacja…",
+  "searchesNewGroupTooltip": "Nowa grupa",
+  "searchesGroupNameLabel": "Nazwa",
+  "searchesCreateGroupDialogTitle": "Nowa grupa",
+  "searchesCreateGroupSubmit": "Utwórz",
+  "searchesRenameGroupDialogTitle": "Zmień nazwę grupy",
+  "searchesRenameGroupSubmit": "Zapisz",
+  "searchesRenameGroupMenuItem": "Zmień nazwę",
+  "searchesDeleteGroupMenuItem": "Usuń grupę",
+  "searchesDeleteGroupDialogTitle": "Usunąć grupę?",
+  "searchesDeleteGroupDialogContent": "Wyszukiwania w „{name}” zostaną rozgrupowane, a nie usunięte.",
+  "@searchesDeleteGroupDialogContent": {
+    "placeholders": {"name": {"type": "String"}}
+  },
+  "searchesGroupSubtitle": "{total} postów",
+  "@searchesGroupSubtitle": {
+    "placeholders": {"total": {"type": "int"}}
+  },
+
+  "searchesDuplicatesBannerMessage": "Znaleziono {count} zduplikowanych wyszukiwań.",
+  "@searchesDuplicatesBannerMessage": {
+    "placeholders": {"count": {"type": "int"}}
+  },
+  "searchesDuplicatesBannerReviewAction": "Przejrzyj",
+  "searchesDuplicatesBannerDismissTooltip": "Odrzuć",
+  "searchesResolveDuplicatesDialogTitle": "Zduplikowane wyszukiwania",
+  "searchesResolveDuplicatesGroupHeading": "{site}: {query}",
+  "@searchesResolveDuplicatesGroupHeading": {
+    "placeholders": {"site": {"type": "String"}, "query": {"type": "String"}}
+  },
+  "searchesResolveDuplicatesKeepButton": "Zachowaj to",
+  "searchesResolveDuplicatesIntervalLabel": "Co {hours}h",
+  "@searchesResolveDuplicatesIntervalLabel": {
+    "placeholders": {"hours": {"type": "int"}}
+  },
+  "searchesResolveDuplicatesPinnedLabel": "Przypięte",
+  "searchesResolveDuplicatesGroupLabel": "Grupa: {name}",
+  "@searchesResolveDuplicatesGroupLabel": {
+    "placeholders": {"name": {"type": "String"}}
+  },
+  "searchesResolveDuplicatesDoneButton": "Zamknij",
+
+  "tagStatsScreenTitle": "Statystyki tagów",
+  "tagStatsRefreshTooltip": "Odśwież teraz",
+  "tagStatsLastUpdatedLabel": "Zaktualizowano {time}",
+  "@tagStatsLastUpdatedLabel": {
+    "placeholders": {"time": {"type": "String"}}
+  },
+  "tagStatsBuildingLabel": "Budowanie raportu po raz pierwszy — zajrzyj wkrótce.",
+  "tagStatsTopFavoritedTagsLabel": "Najczęściej dodawane do ulubionych tagi",
+  "tagStatsTopUsedTagsLabel": "Najczęściej używane tagi",
+  "tagStatsTopPoolsLabel": "Najlepsze zbiory (wg ulubionych postów)",
+  "tagStatsTopViewedSearchesLabel": "Najczęściej odwiedzane wyszukiwania",
+  "tagStatsSectionEmptyState": "Na razie nic tu nie ma.",
+
+  "createSearchScreenTitle": "Nowe wyszukiwanie",
+  "createSearchLabelField": "Etykieta",
+  "createSearchQueryField": "Zapytanie",
+  "tagQueryInvalidSyntax": "Nieprawidłowa składnia",
+  "tagAliasHint": "„{tag}” jest aliasem „{canonical}”",
+  "@tagAliasHint": {
+    "placeholders": {"tag": {"type": "String"}, "canonical": {"type": "String"}}
+  },
+  "createSearchIntervalLabel": "Interwał synchronizacji (godziny)",
+  "createSearchUsesDefaultIntervalLabel": "Użyj domyślnego interwału",
+  "createSearchGroupLabel": "Grupa",
+  "createSearchGroupNone": "Bez grupy",
+  "createSearchAutoFavoriteLabel": "Automatycznie dodawaj nowe posty do ulubionych",
+  "createSearchAutoUpvoteLabel": "Automatycznie głosuj w górę na nowe posty",
+  "createSearchSubmit": "Utwórz",
+
+  "createPoolSearchDialogTitle": "Dodaj zbiór",
+  "createPoolSearchIdLabel": "ID zbioru",
+  "createPoolSearchSubmit": "Dodaj",
+  "createPoolSearchAlreadyExists": "Ten zbiór jest już zapisany.",
+
+  "editSearchScreenTitle": "Edytuj wyszukiwanie",
+  "editSearchSiteLabel": "Strona: {site}",
+  "@editSearchSiteLabel": {
+    "placeholders": {"site": {"type": "String"}}
+  },
+  "editSearchStarsLabel": "Poziom ulubionych",
+  "editSearchSubmit": "Zapisz",
+  "editSearchDeleteTooltip": "Usuń wyszukiwanie",
+
+  "postGridUnseenOnlyTooltip": "Pokaż tylko niewidziane",
+  "postGridFilterTooltip": "Filtruj wg ratingu / typu mediów",
+  "postGridFilterRatingLabel": "Rating",
+  "postGridFilterRatingSafe": "Safe",
+  "postGridFilterRatingQuestionable": "Questionable",
+  "postGridFilterRatingExplicit": "Explicit",
+  "postGridFilterMediaLabel": "Typ mediów",
+  "postGridFilterMediaImage": "Obraz",
+  "postGridFilterMediaVideo": "Wideo",
+  "postGridFilterMediaGif": "GIF",
+  "postGridRefreshTooltip": "Odśwież",
+  "postGridEmptyState": "Brak zbuforowanych postów. Naciśnij odśwież, aby zsynchronizować.",
+  "postGridMarkAllSeen": "Oznacz wszystkie jako widziane",
+  "postGridSelectAll": "Zaznacz wszystkie",
+  "postGridSelectionCount": "Wybrano {count}",
+  "@postGridSelectionCount": {
+    "placeholders": {"count": {"type": "int"}}
+  },
+  "postGridExitSelectionTooltip": "Anuluj zaznaczenie",
+  "postGridMassFavoriteTooltip": "Dodaj wybrane do ulubionych",
+  "postGridMassUpvoteTooltip": "Głosuj w górę na wybrane",
+  "postGridMassDownvoteTooltip": "Głosuj w dół na wybrane",
+  "postGridMassDownloadTooltip": "Pobierz wybrane",
+  "postGridMassDownloadQueued": "{count} zakolejkowano do pobrania",
+  "@postGridMassDownloadQueued": {
+    "placeholders": {
+      "count": {"type": "int"}
+    }
+  },
+  "postGridSelectEntireSearch": "Zaznacz całe wyszukiwanie ({count})",
+  "@postGridSelectEntireSearch": {
+    "placeholders": {"count": {"type": "int"}}
+  },
+  "postGridSelectEntireSearchDialogTitle": "Zaznaczanie całego wyszukiwania…",
+  "postGridSelectEntireSearchProgress": "{count} z {total}",
+  "@postGridSelectEntireSearchProgress": {
+    "placeholders": {
+      "count": {"type": "int"},
+      "total": {"type": "int"}
+    }
+  },
+  "postGridSelectEntireSearchError": "Nie udało się załadować całego wyszukiwania. Spróbuj ponownie.",
+
+  "tagBrowseEmptyState": "Nie znaleziono postów dla tego wyszukiwania.",
+  "tagBrowseAddToSearchesTooltip": "Zapisz jako wyszukiwanie",
+  "tagBrowseAlreadySavedTooltip": "Już zapisane — naciśnij, aby usunąć",
+  "tagBrowseRelatedPoolChip": "Zbiór #{poolId}",
+  "@tagBrowseRelatedPoolChip": {
+    "placeholders": {"poolId": {"type": "int"}}
+  },
+
+  "postGridPoolInfoTooltip": "Informacje o zbiorze",
+  "postGridPoolInfoTitle": "Informacje o zbiorze",
+  "postGridPoolInfoPostCount": "{count} postów",
+  "@postGridPoolInfoPostCount": {
+    "placeholders": {"count": {"type": "int"}}
+  },
+  "postGridPoolInfoNoDescription": "Brak opisu.",
+  "postGridPoolInfoCloseButton": "Zamknij",
+
+  "postDetailScreenTitle": "Post",
+  "postDetailUnsupportedFormat": "Ten format pliku ({extension}) nie jest jeszcze obsługiwany",
+  "@postDetailUnsupportedFormat": {
+    "placeholders": {"extension": {"type": "String"}}
+  },
+  "postDetailOpenExternally": "Otwórz zewnętrznie",
+  "postDetailAudioTrackLabel": "Ścieżka {position}",
+  "@postDetailAudioTrackLabel": {
+    "placeholders": {"position": {"type": "int"}}
+  },
+  "postDetailTitleLabel": "Tytuł",
+  "postDetailDescriptionLabel": "Opis",
+  "postDetailCommentsLabel": "Komentarze",
+  "postDetailDimensionsLabel": "Wymiary",
+  "postDetailCreatedLabel": "Opublikowano",
+  "postDetailUnknownValue": "Nieznane",
+  "postDetailIdLabel": "ID posta",
+  "postDetailIdCopied": "ID posta skopiowane do schowka",
+  "postDetailTagsLabel": "Tagi",
+  "postDetailSourcesLabel": "Źródła",
+  "postDetailParentLabel": "Rodzic",
+  "postDetailChildrenLabel": "Dzieci",
+  "postDetailPoolsLabel": "Zbiory",
+  "postDetailOpenPostFailed": "Nie udało się otworzyć tego posta",
+  "postDetailBlacklistedDialogTitle": "Tag na czarnej liście",
+  "postDetailBlacklistedDialogContent": "Ten post ma tag na czarnej liście: {tags}",
+  "@postDetailBlacklistedDialogContent": {
+    "placeholders": {"tags": {"type": "String"}}
+  },
+  "postDetailBlacklistedViewAnyway": "Pokaż mimo to",
+  "postDetailActionFailed": "Nie udało się wykonać tej akcji — nie została zapisana",
+  "postDetailFavoriteAddTooltip": "Dodaj do ulubionych",
+  "postDetailFavoriteRemoveTooltip": "Usuń z ulubionych",
+  "postDetailUpvoteTooltip": "Głos w górę",
+  "postDetailDownvoteTooltip": "Głos w dół",
+  "postDetailFavoriteStarsTooltip": "Ulubione ({stars}/3 serca)",
+  "@postDetailFavoriteStarsTooltip": {
+    "placeholders": {"stars": {"type": "int"}}
+  },
+  "postDetailFavoriteStarsRemoveTooltip": "Usuń z ulubionych",
+  "postDetailCommentsSectionLabel": "Dyskusja",
+  "postDetailNoCommentsYet": "Brak komentarzy.",
+  "postDetailCommentFieldLabel": "Dodaj komentarz",
+  "postDetailCommentAnonymousLabel": "Opublikuj anonimowo",
+  "postDetailCommentSubmit": "Opublikuj",
+  "postDetailCommentPostFailed": "Nie udało się opublikować komentarza",
+
+  "lockScreenMessage": "LittleBunny jest zablokowane",
+  "lockScreenBiometricReason": "Odblokuj LittleBunny",
+  "lockScreenPinLabel": "Hasło",
+  "lockScreenUnlock": "Odblokuj",
+  "lockScreenTryFingerprintAgain": "Spróbuj odcisku palca ponownie",
+  "lockScreenIncorrectPin": "Nieprawidłowy PIN lub hasło",
+  "lockScreenEnterPinHeading": "Wprowadź PIN",
+
+  "lockSetupScreenTitle": "Blokada aplikacji",
+  "lockSetupDescription": "Ustaw PIN lub hasło, aby blokować aplikację przy starcie.",
+  "lockSetupModePin": "PIN",
+  "lockSetupModePassword": "Hasło",
+  "lockSetupPinLengthLabel": "Długość PIN-u",
+  "lockSetupNewPinLabel": "Nowe hasło",
+  "lockSetupNewPinHeading": "Wprowadź nowy PIN",
+  "lockSetupConfirmPinHeading": "Potwierdź nowy PIN",
+  "lockSetupBackToNewPin": "Wstecz",
+  "lockSetupConfirmLabel": "Potwierdź",
+  "lockSetupEntriesDoNotMatch": "Wpisy się nie zgadzają",
+  "lockSetupEnableButton": "Włącz blokadę aplikacji",
+  "lockSetupCurrentlyOn": "Blokada aplikacji jest obecnie włączona.",
+  "lockSetupCurrentPinLabel": "Wprowadź bieżące hasło, aby wyłączyć",
+  "lockSetupCurrentPinHeading": "Wprowadź bieżący PIN, aby wyłączyć",
+  "lockSetupDisableButton": "Wyłącz blokadę aplikacji",
+
+  "settingsScreenTitle": "Ustawienia",
+  "settingsConnectionSection": "Połączenie",
+  "settingsConnectionEntry": "Zmień tryb połączenia",
+  "settingsConnectionStandalone": "Samodzielny",
+  "settingsConnectionNetworked": "Sieciowy ({serverUrl})",
+  "@settingsConnectionNetworked": {
+    "placeholders": {"serverUrl": {"type": "String"}}
+  },
+  "settingsServerLogsEntry": "Logi serwera",
+  "serverLogsScreenTitle": "Logi serwera",
+  "serverLogsEmptyState": "Brak linii logów.",
+  "serverLogsRefreshTooltip": "Odśwież",
+  "settingsTaskQueueEntry": "Kolejka zadań",
+  "settingsShareConnectionQr": "Udostępnij kod QR połączenia",
+  "connectionQrScreenTitle": "Kod QR połączenia",
+  "connectionQrLoadError": "Nie udało się wczytać kodu QR połączenia: {error}",
+  "@connectionQrLoadError": {
+    "placeholders": {"error": {"type": "String"}}
+  },
+  "taskQueueScreenTitle": "Kolejka zadań",
+  "taskQueueEmptyState": "Nic nie jest teraz w kolejce.",
+  "taskQueuePriorityHigh": "Wysoki",
+  "taskQueuePriorityMedium": "Średni",
+  "taskQueuePriorityLow": "Niski",
+  "taskQueueStatusRunning": "W trakcie",
+  "taskQueueStatusPending": "Oczekuje",
+  "taskQueueRecentSection": "Ostatnie",
+  "taskQueueFinishedAgo": "Zakończono {duration} temu",
+  "@taskQueueFinishedAgo": {
+    "placeholders": {"duration": {"type": "String"}}
+  },
+  "taskQueueSucceeded": "Powodzenie",
+  "taskQueueFailed": "Niepowodzenie",
+  "settingsAppearanceSection": "Wygląd",
+  "settingsThemeLight": "Jasny",
+  "settingsThemeDark": "Ciemny",
+  "settingsThemeSystem": "Systemowy",
+  "settingsThemeColorLabel": "Kolor",
+  "settingsThemeColorPurple": "Fioletowy",
+  "settingsThemeColorBlue": "Niebieski",
+  "settingsThemeColorGreen": "Zielony",
+  "settingsThemeColorOrange": "Pomarańczowy",
+  "settingsThemeColorRed": "Czerwony",
+  "settingsThemeColorTeal": "Turkusowy",
+  "settingsThemeColorPink": "Różowy",
+  "settingsAmoledLabel": "AMOLED (prawdziwa czerń) w trybie ciemnym",
+  "settingsLanguageSection": "Język",
+  "settingsLanguageLabel": "Język",
+  "settingsLanguageSystemDefault": "Domyślny systemowy",
+  "settingsUpdatesSection": "Aktualizacje",
+  "settingsAutoCheckForUpdatesLabel": "Automatycznie sprawdzaj aktualizacje",
+  "settingsAppLockSection": "Blokada aplikacji",
+  "settingsAppLockEntry": "Zarządzaj blokadą aplikacji",
+  "settingsAboutSection": "O aplikacji",
+  "settingsAboutEntry": "O LittleBunny",
+
+  "aboutScreenTitle": "O aplikacji",
+  "aboutAppDescription": "Przeglądarka i menedżer e621 + Inkbunny: zapisane wyszukiwania aktualizowane według harmonogramu, oznaczanie niewidzianych postów, masowe polubienia/ulubione/pobieranie, komentowanie oraz synchronizacja między urządzeniami — z pełnym trybem offline.",
+  "aboutBuildNumber": "Kompilacja {buildNumber}",
+  "@aboutBuildNumber": {
+    "placeholders": {"buildNumber": {"type": "int"}}
+  },
+  "aboutLocalBuild": "Kompilacja lokalna",
+  "aboutSourceLink": "Zobacz źródła na GitHubie",
+  "aboutLicensesEntry": "Licencje open source",
+  "aboutCheckForUpdateButton": "Sprawdź aktualizację aplikacji",
+  "aboutNoUpdateAvailable": "Brak dostępnej aktualizacji",
+  "aboutViewChangelogEntry": "Zobacz listę zmian",
+  "changelogScreenTitle": "Lista zmian",
+  "changelogEmptyState": "Brak historii wydań.",
+  "changelogLoadError": "Nie udało się wczytać listy zmian: {error}",
+  "@changelogLoadError": {
+    "placeholders": {"error": {"type": "String"}}
+  },
+  "settingsSyncSection": "Synchronizacja",
+  "settingsDefaultIntervalLabel": "Domyślny interwał synchronizacji (godziny)",
+  "settingsDisplaySection": "Wyświetlanie",
+  "settingsPreviewQualityThumbnail": "Miniatura",
+  "settingsPreviewQualityMedium": "Średnia",
+  "settingsGridColumnsLabel": "Kolumny siatki",
+  "settingsImagePreloadCountLabel": "Obrazy do wstępnego wczytania (w każdym kierunku)",
+  "settingsDownloadsSection": "Pobieranie",
+  "settingsDownloadsFolderLabel": "Folder docelowy",
+  "settingsDownloadsFolderUnset": "Nie ustawiono",
+  "settingsDownloadsChooseFolderButton": "Wybierz folder",
+  "settingsAutoFavoriteOnDownloadLabel": "Automatycznie dodawaj do ulubionych przy pobieraniu",
+  "settingsAutoUpvoteOnDownloadLabel": "Automatycznie głosuj w górę przy pobieraniu",
+  "settingsBackupSection": "Kopia zapasowa",
+  "settingsBackupExportLabel": "Eksportuj wyszukiwania",
+  "settingsBackupExportButton": "Eksportuj",
+  "settingsBackupImportLabel": "Importuj wyszukiwania",
+  "settingsBackupImportButton": "Importuj",
+  "settingsBackupImportProgress": "Zaimportowano {done}/{total}",
+  "@settingsBackupImportProgress": {
+    "placeholders": {
+      "done": {"type": "int"},
+      "total": {"type": "int"}
+    }
+  },
+  "settingsBackupExportSuccess": "Wyeksportowano {count} wyszukiwań",
+  "@settingsBackupExportSuccess": {
+    "placeholders": {"count": {"type": "int"}}
+  },
+  "settingsBackupImportSummary": "Zaimportowano {imported}, już zapisanych {duplicates}, nieprawidłowych {invalid}",
+  "@settingsBackupImportSummary": {
+    "placeholders": {
+      "imported": {"type": "int"},
+      "duplicates": {"type": "int"},
+      "invalid": {"type": "int"}
+    }
+  },
+  "settingsBackupImportUnrecognizedFormat": "Nierozpoznany format pliku",
+  "settingsBlacklistSection": "Czarna lista",
+  "settingsBlacklistEmpty": "Brak tagów na czarnej liście.",
+  "settingsBlacklistAddLabel": "Dodaj tag",
+  "settingsBlacklistSyncE621Button": "Synchronizuj z e621",
+  "settingsBlacklistSyncE621Result": "Dodano {added}, już obecnych {alreadyPresent}, pominięto {skippedInvalid} nieprawidłowych reguł",
+  "@settingsBlacklistSyncE621Result": {
+    "placeholders": {"added": {"type": "int"}, "alreadyPresent": {"type": "int"}, "skippedInvalid": {"type": "int"}}
+  },
+  "settingsBlacklistSyncE621Failed": "Nie udało się zsynchronizować z e621 — sprawdź, czy konto e621 jest skonfigurowane",
+
+  "postDetailDownloadTooltip": "Pobierz",
+  "postDetailDownloadQueued": "Zakolejkowano do pobrania",
+
+  "tagMenuSearchLabel": "Szukaj",
+  "tagMenuAddToSearchesLabel": "Dodaj do zapisanych wyszukiwań",
+  "tagMenuAddToBlacklistLabel": "Dodaj do czarnej listy",
+  "tagMenuShowWikiLabel": "Pokaż wiki",
+  "tagMenuCopyLabel": "Kopiuj do schowka",
+  "tagMenuAddedToBlacklist": "Dodano „{tag}” do czarnej listy",
+  "@tagMenuAddedToBlacklist": {
+    "placeholders": {"tag": {"type": "String"}}
+  },
+  "tagMenuCopied": "Skopiowano „{tag}” do schowka",
+  "@tagMenuCopied": {
+    "placeholders": {"tag": {"type": "String"}}
+  },
+  "tagMenuAddToCurrentSearchLabel": "Dodaj do bieżącego wyszukiwania",
+  "tagMenuExcludeFromCurrentSearchLabel": "Wyklucz z bieżącego wyszukiwania",
+  "tagMenuRemoveFromCurrentSearchLabel": "Usuń z bieżącego wyszukiwania",
+
+  "customSearchScreenTitle": "Własne wyszukiwanie",
+  "customSearchSubmit": "Szukaj",
+  "searchesCustomSearchTooltip": "Własne wyszukiwanie",
+
+  "downloadQueueScreenTitle": "Pobieranie",
+  "downloadQueueDownloadingLabel": "Pobieranie",
+  "downloadQueueFailedLabel": "Niepowodzenie",
+  "downloadQueueEmptyState": "Na razie nic tu nie ma.",
+  "downloadQueueRetryTooltip": "Ponów",
+  "downloadQueueRetryAllTooltip": "Ponów wszystkie",
+  "downloadQueueClearFinishedTooltip": "Wyczyść zakończone",
+  "downloadQueueResumeTooltip": "Wznów pobieranie",
+  "downloadQueuePauseTooltip": "Wstrzymaj pobieranie",
+  "downloadQueueChecksumMismatchReason": "Pobrano, ale suma kontrolna się nie zgadza",
+  "downloadQueueQueuedCount": "{count} w kolejce",
+  "@downloadQueueQueuedCount": {
+    "placeholders": {"count": {"type": "int"}}
+  },
+  "downloadQueueDoneCount": "{count} ukończonych",
+  "@downloadQueueDoneCount": {
+    "placeholders": {"count": {"type": "int"}}
+  },
+
+  "updateAvailableTitle": "Dostępna aktualizacja ({tagName})",
+  "@updateAvailableTitle": {
+    "placeholders": {"tagName": {"type": "String"}}
+  },
+  "updateDownloadingMessage": "Pobieranie aktualizacji…",
+  "updateFailedMessage": "Aktualizacja nie powiodła się. Spróbuj później lub zaktualizuj ręcznie ze strony wydań projektu na GitHubie.",
+  "updateLaterAction": "Później",
+  "updateNowAction": "Aktualizuj",
+
+  "wikiPageNotFoundMessage": "Brak strony wiki dla tego tagu.",
+  "wikiPageLoadFailedMessage": "Nie udało się wczytać strony wiki.",
+  "wikiPageOtherNamesLabel": "Znane też jako: {names}",
+  "@wikiPageOtherNamesLabel": {
+    "placeholders": {"names": {"type": "String"}}
+  },
+
+  "slideshowsScreenEmptyState": "Brak pokazów slajdów. Naciśnij +, aby utworzyć.",
+  "slideshowsNewTooltip": "Nowy pokaz slajdów",
+  "slideshowsNoLimitSubtitle": "Bez limitu postów",
+  "slideshowsMaxPostsSubtitle": "Do {count} postów",
+  "@slideshowsMaxPostsSubtitle": {
+    "placeholders": {"count": {"type": "int"}}
+  },
+  "slideshowsDeleteDialogTitle": "Usuń pokaz slajdów",
+  "slideshowsDeleteDialogContent": "Usunąć „{label}”? Już pobrane pliki zostaną zachowane, chyba że również zdecydujesz się je usunąć.",
+  "@slideshowsDeleteDialogContent": {
+    "placeholders": {"label": {"type": "String"}}
+  },
+  "slideshowsDeleteAlsoFilesLabel": "Usuń też pobrane pliki",
+
+  "slideshowEditCreateTitle": "Nowy pokaz slajdów",
+  "slideshowEditEditTitle": "Edytuj pokaz slajdów",
+  "slideshowEditLabelField": "Etykieta",
+  "slideshowEditDefaultCountField": "Domyślna liczba postów na wyszukiwanie (puste = bez limitu)",
+  "slideshowEditMaxTotalField": "Maksymalna łączna liczba postów (puste = bez limitu)",
+  "slideshowEditIntervalField": "Sekundy na slajd",
+  "slideshowEditSaveButton": "Zapisz",
+  "slideshowEditSearchesHeading": "Wyszukiwania",
+  "slideshowEditAddSearchTooltip": "Dodaj wyszukiwanie",
+  "slideshowEditAddSearchDialogTitle": "Dodaj wyszukiwania",
+  "slideshowEditAddSearchDoneButton": "Gotowe",
+  "slideshowEditNewSearchOption": "Nowe wyszukiwanie",
+  "slideshowEditNewPoolOption": "Nowy zbiór",
+  "slideshowEditNoMoreSearchesToAdd": "Wszystkie wyszukiwania są już dodane",
+  "slideshowEditNoMorePoolsToAdd": "Wszystkie zbiory są już dodane",
+  "slideshowEditSearchesEmptyState": "Nie dodano jeszcze wyszukiwań. Najpierw zapisz pokaz slajdów, potem dodaj.",
+  "slideshowEditBlacklistHeading": "Czarna lista",
+  "slideshowEditBlacklistEmpty": "Brak tagów wykluczonych z tego pokazu slajdów.",
+  "slideshowEditBlacklistAddLabel": "Wyklucz tag",
+  "slideshowEditOverrideCountDialogTitle": "Posty dla „{label}”",
+  "@slideshowEditOverrideCountDialogTitle": {
+    "placeholders": {"label": {"type": "String"}}
+  },
+  "slideshowEditOverrideCountField": "Nadpisz liczbę (puste = użyj domyślnej z pokazu)",
+  "slideshowEditOverrideCountSet": "{count} postów",
+  "@slideshowEditOverrideCountSet": {
+    "placeholders": {"count": {"type": "int"}}
+  },
+  "slideshowEditOverrideUsesDefault": "Używa domyślnej z pokazu",
+  "slideshowEditRerollSearchTooltip": "Wylosuj ponownie to wyszukiwanie",
+  "slideshowEditRerollAllButton": "Wylosuj wszystkie ponownie",
+  "slideshowEditRemoveSearchTooltip": "Usuń wyszukiwanie",
+  "slideshowEditRemoveSearchDialogTitle": "Usuń wyszukiwanie",
+  "slideshowEditRemoveSearchDialogContent": "Usunąć „{label}” z tego pokazu slajdów? Już pobrane pliki zostaną zachowane, chyba że również zdecydujesz się je usunąć.",
+  "@slideshowEditRemoveSearchDialogContent": {
+    "placeholders": {"label": {"type": "String"}}
+  },
+  "slideshowEditPrepareHeading": "Przygotuj",
+  "slideshowEditPrepareButton": "Przygotuj",
+  "slideshowEditPrepareSummary": "{ready} gotowych, {inProgress} pobieranych, {replaced} zastąpionych, {unreplaceable} nie udało się zastąpić",
+  "@slideshowEditPrepareSummary": {
+    "placeholders": {
+      "ready": {"type": "int"},
+      "inProgress": {"type": "int"},
+      "replaced": {"type": "int"},
+      "unreplaceable": {"type": "int"}
+    }
+  },
+  "slideshowEditUnreplaceableReason": "{label}: {reason}",
+  "@slideshowEditUnreplaceableReason": {
+    "placeholders": {
+      "label": {"type": "String"},
+      "reason": {"type": "String"}
+    }
+  },
+  "slideshowEditRetryButton": "Ponów",
+  "slideshowEditWatchButton": "Oglądaj",
+  "slideshowEditPrepareErrorMessage": "Nie udało się przygotować pokazu slajdów",
+  "slideshowEditNoDestinationFolderMessage": "Nie skonfigurowano folderu docelowego pobierania. Ustaw go najpierw w Ustawieniach."
+}
