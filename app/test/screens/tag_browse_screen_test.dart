@@ -344,6 +344,14 @@ void main() {
       // CreateSearchScreen is reached via a push (as opposed to being the
       // route's own home) -- same nested-overlay flakiness as elsewhere in
       // this codebase, invoked directly instead.
+      // The pushed CreateSearchScreen's e621 metatags panel pushes the
+      // Create button below the test surface's default Sliver layout-cache
+      // extent (same offstage trap as create_search_screen_test.dart) --
+      // enlarge the viewport first so ensureVisible can actually find it.
+      tester.view.physicalSize = const Size(800, 2000);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+      await tester.pumpAndSettle();
       await tester.ensureVisible(find.widgetWithText(FilledButton, 'Create'));
       tester.widget<FilledButton>(find.widgetWithText(FilledButton, 'Create')).onPressed!();
       await tester.pumpAndSettle();
