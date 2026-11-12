@@ -3321,3 +3321,50 @@ this file is the single source of truth for "what's done" across sessions.
   function signatures are unchanged. Net ~310 lines removed. `make test-c`/
   `flutter test` both confirmed green afterward, including the RFC 1321 test vectors
   in `bunny_common_test_md5` passing unchanged through the new delegation.
+
+- [x] **M74 — Empty searches, e621 metatags, and Inkbunny's full advanced search form**
+  Three asks from the same round of feedback, each a different size.
+  **Empty query allowed**: `bunny_tag_query.h`'s own doc comment already specified that
+  an empty/whitespace query is syntactically valid and matches everything on both
+  sites -- the only actual blocker was three Flutter form validators requiring
+  non-empty text. Removed from `CreateSearchScreen`/`EditSearchScreen`'s query field
+  and `CustomSearchScreen`'s Search-button gate; the C grammar, the sync path, and
+  both sites' real search APIs already handled it correctly with zero further changes.
+  **e621 metatags** (`id:100`, `score:>=100`, `rating:s`, `date:year..month`, etc.)
+  turned out to already work end-to-end with no code change at all: traced the whole
+  path and confirmed `bunny_tag_query`'s tokenizer only treats whitespace/`(`/`)` as
+  delimiters (its own doc comment uses `rating:e` as the example of ordinary tag-body
+  text), the search's query string is passed byte-for-byte to e621's API rather than
+  reconstructed from the parsed AST, and a post's stored tags always come from that
+  post's own API response, never from the query text -- so a metatag can never leak
+  into the local tag database the way the user specifically asked it not to.
+  **Inkbunny's advanced search form** (the real remaining work): `api_search.php`
+  supports a lot more than this app exposed (`inkbunny_search_params_t` previously
+  covered only `text`/`favorited_by_user_id`/`pool_id`/`page`) -- added
+  `search_in_mask` (keywords/title/description/md5 -- api_search.php's own `keywords`/
+  `title`/`description`/`md5` params), `field_join`/`string_join` (its `field_join_type`/
+  `string_join_type`), `username` (artist filter), `submission_type_mask` (bit
+  `(type_id - 1)`, its `type`), `days_limit` (`dayslimit`), `order_by` (`orderby`,
+  passed through verbatim), `random`, and `scraps`. (The form's "Allowed Ratings"
+  checkboxes are actually an account-wide setting, `api_userrating.php`, not a
+  per-search filter -- confirmed from the docs, so no rating field was added here.)
+  Threaded all the way through: a new migration (20) adds nine `inkbunny_*` columns
+  to `searches` (ignored entirely by e621 rows, mirroring `inkbunny_search_params_t`'s
+  own field shapes/defaults 1:1 rather than inventing a second encoding);
+  `bunny_core_preview_search` gained an optional `inkbunny_filters` parameter (nullable,
+  e621 ignores it) so an *unsaved* preview can use the same filters as a saved search;
+  FFI bindings regenerated and the isolate layer extended; the HTTP routes (`POST
+  /searches`, `PUT /searches/{id}`, `POST /search/preview`) carry the same fields as
+  JSON body fields / `ib_*`-prefixed query params respectively. New shared
+  `InkbunnySearchFilters` value type + `InkbunnyAdvancedFiltersPanel` widget (a
+  collapsed-by-default `ExpansionTile`, shown only when the site is Inkbunny) used
+  identically by `CreateSearchScreen`/`EditSearchScreen`/`CustomSearchScreen` --
+  `TagBrowseScreen` also carries filters through from a preview into its "save as
+  search" action, so a query previewed with filters applied saves with the same
+  filters already set. One test-infra quirk hit along the way: the expanded panel is
+  tall enough that, on the default test surface, a field further down could fall
+  outside `ListView`'s layout cache extent entirely (not just scrolled off -- never
+  laid out at all, so even `ensureVisible` has nothing to find) -- fixed the same way
+  `slideshow_edit_screen_test.dart` already had to for a different long Inkbunny-only
+  form, by enlarging the test surface (`tester.view.physicalSize`) for those specific
+  tests.

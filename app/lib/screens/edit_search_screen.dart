@@ -6,6 +6,7 @@ import '../l10n/app_localizations.dart';
 import '../repository/bunny_models.dart';
 import '../repository/bunny_repository.dart';
 import '../util/tag_query.dart';
+import '../widgets/inkbunny_advanced_filters_panel.dart';
 
 /// Edits an existing saved search -- opened via long-press on its
 /// [SearchesScreen] row (M9.7.2), replacing the old quick heart-toggle icon.
@@ -55,6 +56,7 @@ class _EditSearchScreenState extends State<EditSearchScreen> {
   late bool _usesDefaultInterval = widget.search.usesDefaultInterval;
   late int _groupId = widget.search.groupId;
   List<BunnyGroup> _groups = [];
+  late InkbunnySearchFilters _inkbunnyFilters = InkbunnySearchFilters.fromSearch(widget.search);
 
   @override
   void initState() {
@@ -184,6 +186,15 @@ class _EditSearchScreenState extends State<EditSearchScreen> {
       autoFavoriteStars: _autoFavoriteStars,
       autoUpvote: widget.search.site == BunnySite.e621 && _autoUpvote,
       usesDefaultInterval: _usesDefaultInterval,
+      inkbunnySearchInMask: _inkbunnyFilters.searchInMask,
+      inkbunnyFieldJoinType: _inkbunnyFilters.fieldJoinType,
+      inkbunnyStringJoinType: _inkbunnyFilters.stringJoinType,
+      inkbunnyUsername: _inkbunnyFilters.username,
+      inkbunnySubmissionTypeMask: _inkbunnyFilters.submissionTypeMask,
+      inkbunnyDaysLimit: _inkbunnyFilters.daysLimit,
+      inkbunnyOrderBy: _inkbunnyFilters.orderBy,
+      inkbunnyRandom: _inkbunnyFilters.random,
+      inkbunnyScraps: _inkbunnyFilters.scraps,
     );
     if (_groupId != widget.search.groupId) {
       await widget.repository.setSearchGroup(widget.search.id, _groupId);
@@ -236,16 +247,19 @@ class _EditSearchScreenState extends State<EditSearchScreen> {
               Text(l10n.editSearchSiteLabel(widget.search.site.toWireString())),
               const SizedBox(height: 16),
               TextFormField(controller: _labelController, enabled: !_submitting, decoration: InputDecoration(labelText: l10n.createSearchLabelField), validator: (value) => (value == null || value.trim().isEmpty) ? l10n.commonRequired : null),
+              // No required-field validator here -- see CreateSearchScreen's
+              // own comment on this same field: an empty/whitespace query is
+              // intentionally valid and means "everything".
               TextFormField(
                 controller: _queryController,
                 enabled: !_submitting,
                 decoration: InputDecoration(labelText: l10n.createSearchQueryField, errorText: _queryError != null ? l10n.tagQueryInvalidSyntax : null),
-                validator: (value) => (value == null || value.trim().isEmpty) ? l10n.commonRequired : null,
               ),
               if (_aliasHint != null) Padding(padding: const EdgeInsets.only(top: 4), child: Text(l10n.tagAliasHint(_aliasHint!.$1, _aliasHint!.$2), style: Theme.of(context).textTheme.bodySmall)),
               if (_implicationChain.isNotEmpty) Padding(padding: const EdgeInsets.only(top: 4), child: Text(_implicationChain.join(' → '), style: Theme.of(context).textTheme.bodySmall)),
               if (_suggestions.isNotEmpty)
                 Wrap(spacing: 8, children: _suggestions.map((stat) => ActionChip(label: Text('${stat.name} (${stat.count})'), onPressed: () => _applySuggestion(stat.name))).toList()),
+              if (widget.search.site == BunnySite.inkbunny) InkbunnyAdvancedFiltersPanel(value: _inkbunnyFilters, enabled: !_submitting, onChanged: (filters) => setState(() => _inkbunnyFilters = filters)),
               TextFormField(
                 controller: _intervalController,
                 enabled: !_submitting && !_usesDefaultInterval,

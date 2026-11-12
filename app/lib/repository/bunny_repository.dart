@@ -44,6 +44,26 @@ abstract interface class BunnyRepository {
   /// next sync pass; [autoFavoriteStars] is Inkbunny's 1-3 favorite level
   /// (ignored by e621); [autoUpvote] (M9.7.2, e621 only) queues an upvote the
   /// same way. All three are editable afterward too, via [updateSearch].
+  ///
+  /// The `inkbunny*` params (M74) are Inkbunny's own advanced search filters
+  /// (api_search.php), ignored entirely for an e621 search:
+  /// [inkbunnySearchInMask] -- bitwise-OR of [kInkbunnySearchInKeywords]/
+  /// [kInkbunnySearchInTitle]/[kInkbunnySearchInDescription]/
+  /// [kInkbunnySearchInMd5], which of the submission's own fields [query] is
+  /// matched against (0 defaults to keywords only, matching api_search.php's
+  /// own default); [inkbunnyFieldJoinType] -- 0 ("or", the default) matches
+  /// text found in any chosen field, 1 ("and") requires every chosen field to
+  /// match; [inkbunnyStringJoinType] -- 0 ("and", the default) requires every
+  /// word in [query], 1 ("or") matches any word, 2 ("exact") matches the
+  /// whole phrase; [inkbunnyUsername] -- limits results to this exact
+  /// uploader; [inkbunnySubmissionTypeMask] -- bitwise-OR of
+  /// [kInkbunnySubmissionType] bits, 0 for every type; [inkbunnyDaysLimit] --
+  /// limits results to the last N days, 0 for no limit; [inkbunnyOrderBy] --
+  /// one of api_search.php's own `orderby` values (e.g. "create_datetime",
+  /// "views"), null for its default; [inkbunnyRandom] -- shuffles results
+  /// after every other filter/sort is applied; [inkbunnyScraps] -- 0 ("both",
+  /// the default) includes Scraps alongside the main gallery, 1 excludes
+  /// Scraps, 2 returns Scraps only.
   Future<int> createSearch(
     BunnySite site,
     String label,
@@ -53,6 +73,15 @@ abstract interface class BunnyRepository {
     int autoFavoriteStars = 1,
     bool autoUpvote = false,
     bool usesDefaultInterval = false,
+    int inkbunnySearchInMask = 0,
+    int inkbunnyFieldJoinType = 0,
+    int inkbunnyStringJoinType = 0,
+    String? inkbunnyUsername,
+    int inkbunnySubmissionTypeMask = 0,
+    int inkbunnyDaysLimit = 0,
+    String? inkbunnyOrderBy,
+    bool inkbunnyRandom = false,
+    int inkbunnyScraps = 0,
   });
 
   Future<List<BunnySearch>> listSearches();
@@ -102,6 +131,15 @@ abstract interface class BunnyRepository {
     int autoFavoriteStars = 1,
     bool autoUpvote = false,
     bool usesDefaultInterval = false,
+    int inkbunnySearchInMask = 0,
+    int inkbunnyFieldJoinType = 0,
+    int inkbunnyStringJoinType = 0,
+    String? inkbunnyUsername,
+    int inkbunnySubmissionTypeMask = 0,
+    int inkbunnyDaysLimit = 0,
+    String? inkbunnyOrderBy,
+    bool inkbunnyRandom = false,
+    int inkbunnyScraps = 0,
   });
 
   /// The server-wide default interval (hours) a search follows when its own
@@ -240,7 +278,24 @@ abstract interface class BunnyRepository {
   /// creating a saved search -- used by the tag/artist click-through browse
   /// screen, which shows results for a query the user hasn't (yet) chosen to
   /// save. [page] beyond 1 drives that screen's infinite scroll (M9.6.2).
-  Future<List<BunnyPost>> previewSearch(BunnySite site, String query, {int page = 1});
+  ///
+  /// The `inkbunny*` params (M74) are the same advanced search filters
+  /// [createSearch] documents, applied to this one-off preview instead of a
+  /// saved search; ignored entirely for an e621 [site].
+  Future<List<BunnyPost>> previewSearch(
+    BunnySite site,
+    String query, {
+    int page = 1,
+    int inkbunnySearchInMask = 0,
+    int inkbunnyFieldJoinType = 0,
+    int inkbunnyStringJoinType = 0,
+    String? inkbunnyUsername,
+    int inkbunnySubmissionTypeMask = 0,
+    int inkbunnyDaysLimit = 0,
+    String? inkbunnyOrderBy,
+    bool inkbunnyRandom = false,
+    int inkbunnyScraps = 0,
+  });
 
   /// Inkbunny only -- the equivalent for e621 is just passing `fav:username`
   /// to [previewSearch], since e621's own tag search already supports that

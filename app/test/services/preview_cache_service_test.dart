@@ -116,5 +116,18 @@ void main() {
 /// throws, for [PreviewCacheService.prefetch]'s best-effort error handling.
 class FakeThrowingRepository extends FakeBunnyRepository {
   @override
-  Future<List<BunnyPost>> previewSearch(BunnySite site, String query, {int page = 1}) => Future.error(Exception('boom'));
+  Future<List<BunnyPost>> previewSearch(
+    BunnySite site,
+    String query, {
+    int page = 1,
+    int inkbunnySearchInMask = 0,
+    int inkbunnyFieldJoinType = 0,
+    int inkbunnyStringJoinType = 0,
+    String? inkbunnyUsername,
+    int inkbunnySubmissionTypeMask = 0,
+    int inkbunnyDaysLimit = 0,
+    String? inkbunnyOrderBy,
+    bool inkbunnyRandom = false,
+    int inkbunnyScraps = 0,
+  }) => Future.error(Exception('boom'));
 }

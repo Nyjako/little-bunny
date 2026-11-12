@@ -909,7 +909,7 @@ void test_preview_search_upserts_posts_without_creating_a_search(void)
     g_e621_state.body_count = 1;
 
     bunny_db_post_list_t posts;
-    bunny_core_result_t result = bunny_core_preview_search(g_core, BUNNY_DB_SITE_E621, "wolf", 1, &posts);
+    bunny_core_result_t result = bunny_core_preview_search(g_core, BUNNY_DB_SITE_E621, "wolf", 1, NULL, &posts);
     TEST_ASSERT_EQUAL(BUNNY_CORE_OK, result);
     TEST_ASSERT_EQUAL(1, (int)posts.count);
     TEST_ASSERT_EQUAL(1, posts.items[0].external_id);
@@ -940,7 +940,7 @@ void test_preview_search_applies_the_tag_blacklist_for_a_plain_query(void)
     bunny_core_blacklist_add(g_core, BUNNY_DB_SITE_E621, "one");
 
     bunny_db_post_list_t posts;
-    bunny_core_result_t result = bunny_core_preview_search(g_core, BUNNY_DB_SITE_E621, "wolf", 1, &posts);
+    bunny_core_result_t result = bunny_core_preview_search(g_core, BUNNY_DB_SITE_E621, "wolf", 1, NULL, &posts);
     TEST_ASSERT_EQUAL(BUNNY_CORE_OK, result);
     TEST_ASSERT_EQUAL(0, (int)posts.count);
     bunny_db_post_list_free(&posts);
@@ -963,7 +963,7 @@ void test_preview_search_applies_a_complex_multi_tag_blacklist_rule(void)
     bunny_core_blacklist_add(g_core, BUNNY_DB_SITE_E621, "one someartist");
 
     bunny_db_post_list_t posts;
-    bunny_core_result_t result = bunny_core_preview_search(g_core, BUNNY_DB_SITE_E621, "wolf", 1, &posts);
+    bunny_core_result_t result = bunny_core_preview_search(g_core, BUNNY_DB_SITE_E621, "wolf", 1, NULL, &posts);
     TEST_ASSERT_EQUAL(BUNNY_CORE_OK, result);
     TEST_ASSERT_EQUAL(0, (int)posts.count);
     bunny_db_post_list_free(&posts);
@@ -1467,7 +1467,7 @@ void test_preview_search_pool_browse_is_unaffected_by_the_tag_blacklist(void)
     bunny_core_blacklist_add(g_core, BUNNY_DB_SITE_E621, "one");
 
     bunny_db_post_list_t posts;
-    bunny_core_result_t result = bunny_core_preview_search(g_core, BUNNY_DB_SITE_E621, "pool:5", 1, &posts);
+    bunny_core_result_t result = bunny_core_preview_search(g_core, BUNNY_DB_SITE_E621, "pool:5", 1, NULL, &posts);
     TEST_ASSERT_EQUAL(BUNNY_CORE_OK, result);
     TEST_ASSERT_EQUAL(1, (int)posts.count);
     bunny_db_post_list_free(&posts);
@@ -1487,7 +1487,7 @@ void test_preview_search_favorites_browse_is_unaffected_by_the_tag_blacklist(voi
     bunny_core_blacklist_add(g_core, BUNNY_DB_SITE_E621, "one");
 
     bunny_db_post_list_t posts;
-    bunny_core_result_t result = bunny_core_preview_search(g_core, BUNNY_DB_SITE_E621, "fav:someuser", 1, &posts);
+    bunny_core_result_t result = bunny_core_preview_search(g_core, BUNNY_DB_SITE_E621, "fav:someuser", 1, NULL, &posts);
     TEST_ASSERT_EQUAL(BUNNY_CORE_OK, result);
     TEST_ASSERT_EQUAL(1, (int)posts.count);
     bunny_db_post_list_free(&posts);
@@ -1505,7 +1505,7 @@ void test_preview_search_requests_the_given_e621_page(void)
     g_e621_state.body_count = 1;
 
     bunny_db_post_list_t posts;
-    bunny_core_result_t result = bunny_core_preview_search(g_core, BUNNY_DB_SITE_E621, "wolf", 3, &posts);
+    bunny_core_result_t result = bunny_core_preview_search(g_core, BUNNY_DB_SITE_E621, "wolf", 3, NULL, &posts);
     TEST_ASSERT_EQUAL(BUNNY_CORE_OK, result);
     bunny_db_post_list_free(&posts);
     free(fixture);
@@ -1526,7 +1526,7 @@ void test_preview_search_requests_the_given_inkbunny_page(void)
     g_inkbunny_state.body_count = 2;
 
     bunny_db_post_list_t posts;
-    bunny_core_result_t result = bunny_core_preview_search(g_core, BUNNY_DB_SITE_INKBUNNY, "tribute", 2, &posts);
+    bunny_core_result_t result = bunny_core_preview_search(g_core, BUNNY_DB_SITE_INKBUNNY, "tribute", 2, NULL, &posts);
     TEST_ASSERT_EQUAL(BUNNY_CORE_OK, result);
     bunny_db_post_list_free(&posts);
     free(login_fixture);
@@ -1552,7 +1552,7 @@ void test_preview_search_inkbunny_pool_sends_pool_id_not_literal_text(void)
     g_inkbunny_state.body_count = 2;
 
     bunny_db_post_list_t posts;
-    bunny_core_result_t result = bunny_core_preview_search(g_core, BUNNY_DB_SITE_INKBUNNY, "pool:108216", 1, &posts);
+    bunny_core_result_t result = bunny_core_preview_search(g_core, BUNNY_DB_SITE_INKBUNNY, "pool:108216", 1, NULL, &posts);
     TEST_ASSERT_EQUAL(BUNNY_CORE_OK, result);
     bunny_db_post_list_free(&posts);
     free(login_fixture);
@@ -1594,7 +1594,7 @@ void test_list_my_inkbunny_favorites_rejects_a_page_below_one(void)
 void test_preview_search_rejects_a_page_below_one(void)
 {
     bunny_db_post_list_t posts;
-    bunny_core_result_t result = bunny_core_preview_search(g_core, BUNNY_DB_SITE_E621, "wolf", 0, &posts);
+    bunny_core_result_t result = bunny_core_preview_search(g_core, BUNNY_DB_SITE_E621, "wolf", 0, NULL, &posts);
     TEST_ASSERT_EQUAL(BUNNY_CORE_ERR_INVALID_ARG, result);
 }
 
@@ -1609,7 +1609,7 @@ void test_e621_requests_use_the_bare_user_agent_without_an_account(void)
     g_e621_state.body_count = 1;
 
     bunny_db_post_list_t posts;
-    bunny_core_result_t result = bunny_core_preview_search(g_core, BUNNY_DB_SITE_E621, "wolf", 1, &posts);
+    bunny_core_result_t result = bunny_core_preview_search(g_core, BUNNY_DB_SITE_E621, "wolf", 1, NULL, &posts);
     TEST_ASSERT_EQUAL(BUNNY_CORE_OK, result);
     bunny_db_post_list_free(&posts);
     free(fixture);
@@ -1630,7 +1630,7 @@ void test_e621_requests_include_the_configured_username_in_the_user_agent(void)
     g_e621_state.body_count = 1;
 
     bunny_db_post_list_t posts;
-    bunny_core_result_t result = bunny_core_preview_search(g_core, BUNNY_DB_SITE_E621, "wolf", 1, &posts);
+    bunny_core_result_t result = bunny_core_preview_search(g_core, BUNNY_DB_SITE_E621, "wolf", 1, NULL, &posts);
     TEST_ASSERT_EQUAL(BUNNY_CORE_OK, result);
     bunny_db_post_list_free(&posts);
     free(fixture);

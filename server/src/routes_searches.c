@@ -40,6 +40,15 @@ static cJSON *search_to_json(const bunny_db_search_t *search)
     cJSON_AddBoolToObject(json, "uses_default_interval", search->uses_default_interval);
     cJSON_AddNumberToObject(json, "group_id", (double)search->group_id);
     add_optional_string(json, "last_updated_at", search->last_updated_at);
+    cJSON_AddNumberToObject(json, "inkbunny_search_in_mask", search->inkbunny_search_in_mask);
+    cJSON_AddNumberToObject(json, "inkbunny_field_join_type", search->inkbunny_field_join_type);
+    cJSON_AddNumberToObject(json, "inkbunny_string_join_type", search->inkbunny_string_join_type);
+    add_optional_string(json, "inkbunny_username", search->inkbunny_username);
+    cJSON_AddNumberToObject(json, "inkbunny_submission_type_mask", search->inkbunny_submission_type_mask);
+    cJSON_AddNumberToObject(json, "inkbunny_days_limit", search->inkbunny_days_limit);
+    add_optional_string(json, "inkbunny_order_by", search->inkbunny_order_by);
+    cJSON_AddBoolToObject(json, "inkbunny_random", search->inkbunny_random);
+    cJSON_AddNumberToObject(json, "inkbunny_scraps", search->inkbunny_scraps);
     return json;
 }
 
@@ -74,6 +83,21 @@ static cJSON *post_to_json(const bunny_db_post_t *post)
     return json;
 }
 
+/* Shared by handle_post_searches/handle_put_search -- same field set, same
+ * JSON keys, both parsed the same way. */
+static void parse_inkbunny_options(const cJSON *body, bunny_db_search_options_t *options)
+{
+    options->inkbunny_search_in_mask = bunny_json_get_int_or(body, "inkbunny_search_in_mask", 0);
+    options->inkbunny_field_join_type = bunny_json_get_int_or(body, "inkbunny_field_join_type", 0);
+    options->inkbunny_string_join_type = bunny_json_get_int_or(body, "inkbunny_string_join_type", 0);
+    options->inkbunny_username = bunny_json_get_string_or(body, "inkbunny_username", NULL);
+    options->inkbunny_submission_type_mask = bunny_json_get_int_or(body, "inkbunny_submission_type_mask", 0);
+    options->inkbunny_days_limit = bunny_json_get_int_or(body, "inkbunny_days_limit", 0);
+    options->inkbunny_order_by = bunny_json_get_string_or(body, "inkbunny_order_by", NULL);
+    options->inkbunny_random = bunny_json_get_bool_or(body, "inkbunny_random", false);
+    options->inkbunny_scraps = bunny_json_get_int_or(body, "inkbunny_scraps", 0);
+}
+
 static int handle_post_searches(struct mg_connection *conn, server_context_t *ctx)
 {
     cJSON *body = server_json_read_request_body(conn);
@@ -92,6 +116,7 @@ static int handle_post_searches(struct mg_connection *conn, server_context_t *ct
     options.auto_favorite_stars = bunny_json_get_int_or(body, "auto_favorite_stars", 1);
     options.auto_upvote = bunny_json_get_bool_or(body, "auto_upvote", false);
     options.uses_default_interval = bunny_json_get_bool_or(body, "uses_default_interval", false);
+    parse_inkbunny_options(body, &options);
     if (!valid) {
         cJSON_Delete(body);
         return server_json_respond_error(conn, BUNNY_CORE_ERR_INVALID_ARG);
@@ -328,6 +353,7 @@ static int handle_put_search(struct mg_connection *conn, server_context_t *ctx, 
     options.auto_favorite_stars = bunny_json_get_int_or(body, "auto_favorite_stars", 1);
     options.auto_upvote = bunny_json_get_bool_or(body, "auto_upvote", false);
     options.uses_default_interval = bunny_json_get_bool_or(body, "uses_default_interval", false);
+    parse_inkbunny_options(body, &options);
     if (!valid) {
         cJSON_Delete(body);
         return server_json_respond_error(conn, BUNNY_CORE_ERR_INVALID_ARG);

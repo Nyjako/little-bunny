@@ -56,6 +56,14 @@ class TagBrowseScreen extends StatefulWidget {
   /// of this screen today: no behavior change for them.
   final PreviewCacheService? previewCache;
 
+  /// Inkbunny's advanced search filters (M74) to apply to every page fetch
+  /// -- `null` (every call site but [CustomSearchScreen]'s own) behaves
+  /// exactly like the all-defaults value, since every field in
+  /// [InkbunnySearchFilters] already defaults to "no filter". Also carried
+  /// along into the "save as search" app bar action, so a query previewed
+  /// with filters applied saves with the same filters already set.
+  final InkbunnySearchFilters? inkbunnyFilters;
+
   const TagBrowseScreen({
     super.key,
     required this.site,
@@ -68,6 +76,7 @@ class TagBrowseScreen extends StatefulWidget {
     this.customFetch,
     this.title,
     this.previewCache,
+    this.inkbunnyFilters,
   });
 
   @override
@@ -265,7 +274,21 @@ class _TagBrowseScreenState extends State<TagBrowseScreen> {
     if (previewCache != null && page == 1) {
       return previewCache.getOrFetch(widget.repository, widget.site, query, page: page);
     }
-    return widget.repository.previewSearch(widget.site, query, page: page);
+    final filters = widget.inkbunnyFilters ?? const InkbunnySearchFilters();
+    return widget.repository.previewSearch(
+      widget.site,
+      query,
+      page: page,
+      inkbunnySearchInMask: filters.searchInMask,
+      inkbunnyFieldJoinType: filters.fieldJoinType,
+      inkbunnyStringJoinType: filters.stringJoinType,
+      inkbunnyUsername: filters.username,
+      inkbunnySubmissionTypeMask: filters.submissionTypeMask,
+      inkbunnyDaysLimit: filters.daysLimit,
+      inkbunnyOrderBy: filters.orderBy,
+      inkbunnyRandom: filters.random,
+      inkbunnyScraps: filters.scraps,
+    );
   }
 
   Future<void> _loadInitial() async {
@@ -353,7 +376,7 @@ class _TagBrowseScreenState extends State<TagBrowseScreen> {
       context,
       MaterialPageRoute(
         builder: (context) =>
-            CreateSearchScreen(repository: widget.repository, initialSite: widget.site, initialQuery: widget.query, initialLabel: widget.initialLabel),
+            CreateSearchScreen(repository: widget.repository, initialSite: widget.site, initialQuery: widget.query, initialLabel: widget.initialLabel, initialInkbunnyFilters: widget.inkbunnyFilters),
       ),
     );
     if (created == true && mounted) {
