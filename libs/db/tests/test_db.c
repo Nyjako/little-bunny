@@ -2997,6 +2997,68 @@ void test_post_get_pool_ids_returns_pools(void)
     bunny_db_int64_list_free(&pools);
 }
 
+void test_inkbunny_post_get_pools_empty_when_none(void)
+{
+    bunny_db_post_upsert_t post;
+    make_test_post(&post, 613, 1);
+
+    int64_t post_id = 0;
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, bunny_db_post_upsert(g_db, &post, &post_id));
+
+    bunny_db_inkbunny_pool_ref_list_t pools;
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, bunny_db_inkbunny_post_get_pools(g_db, post_id, &pools));
+    TEST_ASSERT_EQUAL(0, pools.count);
+
+    bunny_db_inkbunny_pool_ref_list_free(&pools);
+}
+
+void test_inkbunny_post_pools_replace_then_get(void)
+{
+    bunny_db_post_upsert_t post;
+    make_test_post(&post, 614, 1);
+
+    int64_t post_id = 0;
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, bunny_db_post_upsert(g_db, &post, &post_id));
+
+    bunny_db_inkbunny_pool_ref_t refs[] = {
+        {.pool_id = 9, .name = (char *)"My pool"},
+        {.pool_id = 12, .name = NULL},
+    };
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, bunny_db_inkbunny_post_pools_replace(g_db, post_id, refs, 2));
+
+    bunny_db_inkbunny_pool_ref_list_t pools;
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, bunny_db_inkbunny_post_get_pools(g_db, post_id, &pools));
+    TEST_ASSERT_EQUAL(2, pools.count);
+    TEST_ASSERT_EQUAL(9, pools.items[0].pool_id);
+    TEST_ASSERT_EQUAL_STRING("My pool", pools.items[0].name);
+    TEST_ASSERT_EQUAL(12, pools.items[1].pool_id);
+    TEST_ASSERT_NULL(pools.items[1].name);
+
+    bunny_db_inkbunny_pool_ref_list_free(&pools);
+}
+
+/* Unlike post_pools (e621), there's no position to preserve, so a resync
+ * that drops a pool membership must actually remove the row, not just
+ * leave it stale. */
+void test_inkbunny_post_pools_replace_drops_stale_membership(void)
+{
+    bunny_db_post_upsert_t post;
+    make_test_post(&post, 615, 1);
+
+    int64_t post_id = 0;
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, bunny_db_post_upsert(g_db, &post, &post_id));
+
+    bunny_db_inkbunny_pool_ref_t first_refs[] = {{.pool_id = 9, .name = (char *)"My pool"}};
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, bunny_db_inkbunny_post_pools_replace(g_db, post_id, first_refs, 1));
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, bunny_db_inkbunny_post_pools_replace(g_db, post_id, NULL, 0));
+
+    bunny_db_inkbunny_pool_ref_list_t pools;
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, bunny_db_inkbunny_post_get_pools(g_db, post_id, &pools));
+    TEST_ASSERT_EQUAL(0, pools.count);
+
+    bunny_db_inkbunny_pool_ref_list_free(&pools);
+}
+
 /* M26: position seeds to -1 ("not yet determined") on first membership and
  * stays there until bunny_db_pool_set_post_positions fills it in -- a post
  * whose position is still unknown must sort AFTER every post with a known
@@ -3886,6 +3948,9 @@ int main(void)
     RUN_TEST(test_post_upsert_replaces_relationships_wholesale_on_resync);
     RUN_TEST(test_post_get_pool_ids_empty_when_none);
     RUN_TEST(test_post_get_pool_ids_returns_pools);
+    RUN_TEST(test_inkbunny_post_get_pools_empty_when_none);
+    RUN_TEST(test_inkbunny_post_pools_replace_then_get);
+    RUN_TEST(test_inkbunny_post_pools_replace_drops_stale_membership);
     RUN_TEST(test_pool_search_list_posts_sorts_unknown_positions_after_known_ones);
     RUN_TEST(test_pool_search_list_posts_paginates);
     RUN_TEST(test_pool_search_list_posts_orders_by_position_not_creation_date);

@@ -476,6 +476,14 @@ void test_full_account_search_sync_favorite_flow(void)
     free(response.data);
     memset(&response, 0, sizeof(response));
 
+    /* M76: the Inkbunny counterpart to the e621 pools check above -- same
+     * "post in no pools" shape, just via inkbunny_post_pools instead. */
+    status = do_request("GET", "/posts/1/inkbunny_pools", NULL, &response, true, NULL);
+    TEST_ASSERT_EQUAL(200, status);
+    TEST_ASSERT_EQUAL_STRING("[]", response.data);
+    free(response.data);
+    memset(&response, 0, sizeof(response));
+
     /* Fetches post external_id 42 live (never synced via any search) and
      * caches it -- the fake transport routes this to E621_SINGLE_POST_FIXTURE. */
     status = do_request("POST", "/posts/fetch?site=e621&external_id=42", NULL, &response, true, NULL);

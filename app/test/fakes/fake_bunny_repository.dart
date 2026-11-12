@@ -24,6 +24,7 @@ class FakeBunnyRepository implements BunnyRepository {
   final Map<int, List<BunnyPostFile>> filesByPostId = {};
   final Map<int, BunnyPostRelationships> relationshipsByPostId = {};
   final Map<int, List<int>> poolIdsByPostId = {};
+  final Map<int, List<BunnyInkbunnyPoolRef>> inkbunnyPoolsByPostId = {};
 
   /// Per-site tag blacklist (M13.3), as a set so add/remove stay idempotent
   /// the same way the real `bunny_db_blacklist_*` functions are.
@@ -465,6 +466,9 @@ class FakeBunnyRepository implements BunnyRepository {
 
   @override
   Future<List<int>> getPostPoolIds(int postId) async => List.of(poolIdsByPostId[postId] ?? const []);
+
+  @override
+  Future<List<BunnyInkbunnyPoolRef>> getInkbunnyPostPools(int postId) async => List.of(inkbunnyPoolsByPostId[postId] ?? const []);
 
   @override
   Future<List<String>> getBlacklist(BunnySite site) async => (blacklistBySite[site] ?? const <String>{}).toList()..sort();

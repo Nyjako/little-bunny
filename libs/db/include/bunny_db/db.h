@@ -302,6 +302,19 @@ bunny_db_result_t bunny_db_post_get_relationships(bunny_db_t *db, int64_t post_i
  * no pools). Same "empty is OK, not NOT_FOUND" rule as the relationships read above. */
 bunny_db_result_t bunny_db_post_get_pool_ids(bunny_db_t *db, int64_t post_id, bunny_db_int64_list_t *out_list);
 
+/* The Inkbunny pools a post belongs to (empty for e621, or an Inkbunny post
+ * in no pools) -- see bunny_db_inkbunny_pool_ref_t's own doc comment for why
+ * this is a separate table/function from the e621 pair above rather than
+ * sharing it. Same "empty is OK, not NOT_FOUND" rule. */
+bunny_db_result_t bunny_db_inkbunny_post_get_pools(bunny_db_t *db, int64_t post_id, bunny_db_inkbunny_pool_ref_list_t *out_list);
+
+/* Replaces post_id's entire inkbunny_post_pools row set with `pools` --
+ * unlike post_pools (e621), there's no position to preserve across a
+ * resync, so this is a plain delete-then-reinsert rather than the
+ * selective-delete dance bunny_db_post_upsert does for e621 pools.
+ * pool_count 0 clears every existing row (a post no longer in any pool). */
+bunny_db_result_t bunny_db_inkbunny_post_pools_replace(bunny_db_t *db, int64_t post_id, const bunny_db_inkbunny_pool_ref_t *pools, size_t pool_count);
+
 /* Writes each post_ids[i]'s index as its position within `pool_id` (M26) --
  * post_ids is e621's own, already-ordered array from GET /pools/{id}.json,
  * using e621's EXTERNAL post ids (translated to local post ids internally

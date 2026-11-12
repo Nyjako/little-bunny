@@ -843,6 +843,16 @@ void main() {
       expect(poolIds, [5, 9]);
     });
 
+    test('getInkbunnyPostPools sends GET to the right path and returns id/name pairs (M76)', () async {
+      respond = (_) => http.Response(jsonEncode([{'pool_id': 9, 'name': 'My pool'}, {'pool_id': 12, 'name': null}]), 200);
+
+      final pools = await buildRepository().getInkbunnyPostPools(5);
+
+      expect(capturedMethod, 'GET');
+      expect(capturedUri.path, '/posts/5/inkbunny_pools');
+      expect(pools.map((p) => (p.id, p.name)), [(9, 'My pool'), (12, null)]);
+    });
+
     test('fetchPost sends POST with site/external_id query params and returns the id', () async {
       respond = (_) => http.Response(jsonEncode({'id': 7}), 200);
 

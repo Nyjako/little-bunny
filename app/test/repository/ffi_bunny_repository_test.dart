@@ -116,6 +116,10 @@ void main() {
     expect(await repository.getPostPoolIds(1), isEmpty);
   });
 
+  test('getInkbunnyPostPools returns an empty list for a nonexistent post (M76)', () async {
+    expect(await repository.getInkbunnyPostPools(1), isEmpty);
+  });
+
   test('getPost rejects a post id with no cached post', () async {
     // Unlike the other getPost* reads above, this is a single-row lookup by
     // primary key, so a miss is a real NOT_FOUND rather than an empty list.

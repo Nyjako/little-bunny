@@ -232,6 +232,12 @@ abstract interface class BunnyRepository {
   /// post in no pools).
   Future<List<int>> getPostPoolIds(int postId);
 
+  /// The Inkbunny pools a post belongs to (empty for e621, or an Inkbunny
+  /// post in no pools). Only populated after a full submission fetch
+  /// (search sync alone never surfaces a post's pools) -- see
+  /// [getPostFiles]'s own doc comment for the identical gating reasoning.
+  Future<List<BunnyInkbunnyPoolRef>> getInkbunnyPostPools(int postId);
+
   /// The per-site tag blacklist (M13.3), alphabetical. A rule is usually a
   /// single bare tag, but may be a fuller e621-grammar expression (M28/M54,
   /// see [validateTagQuery]) -- `young` and `rating:e young` can both

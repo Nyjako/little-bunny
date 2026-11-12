@@ -368,6 +368,24 @@ static bunny_core_result_t upsert_inkbunny_submission(bunny_db_t *db, const inkb
     if (result == BUNNY_DB_OK && submission->is_favorite) {
         bunny_db_favorite_add(db, *out_post_id, -1);
     }
+    /* submission->pools only ever has entries on a full fetch (both the
+     * single-post and the 100-at-a-time batch request show_pools=yes) --
+     * replaced wholesale every time, same reasoning as bunny_db's own doc
+     * comment on this function (there's no position to preserve). */
+    if (result == BUNNY_DB_OK) {
+        bunny_db_inkbunny_pool_ref_t *pool_refs = NULL;
+        if (submission->pools.count > 0) {
+            pool_refs = calloc(submission->pools.count, sizeof(*pool_refs));
+            if (pool_refs) {
+                for (size_t i = 0; i < submission->pools.count; i++) {
+                    pool_refs[i].pool_id = submission->pools.items[i].pool_id;
+                    pool_refs[i].name = submission->pools.items[i].name;
+                }
+            }
+        }
+        bunny_db_inkbunny_post_pools_replace(db, *out_post_id, pool_refs, pool_refs ? submission->pools.count : 0);
+        free(pool_refs);
+    }
 
     free((void *)tags.items);
     free(file_ext);
