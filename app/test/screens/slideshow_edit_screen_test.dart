@@ -300,10 +300,13 @@ void main() {
   // widget-test binding, so without hitting this limitation; only the
   // "does tapping this button call it" wiring is unverified here. Same
   // limitation applies to _onDownloadQueueChanged's debounced background
-  // refresh (it calls the exact same SlideshowPrepareService.prepare()) --
-  // its own logic (only refresh once a report already exists, debounce
-  // rapid-fire queue notifications) is simple enough to verify by reading,
-  // and the thing it calls is already covered the same way as above. Same
+  // refresh and initState's own startup call in edit mode (both call the
+  // exact same SlideshowPrepareService.prepare()) -- their own logic (only
+  // refresh once a report already exists for the queue-driven one; always
+  // for the startup one, so Watch comes back unlocked on reopen without a
+  // fresh "Prepare" tap when everything's already downloaded) is simple
+  // enough to verify by reading, and the thing they call is already
+  // covered the same way as above. Same
   // limitation again for _watch() itself: its batched path resolution
   // (DownloadManager.batchLocalFilePathFor) and its self-heal-via-
   // slideshowReplacePost branch for a post whose file no longer resolves
