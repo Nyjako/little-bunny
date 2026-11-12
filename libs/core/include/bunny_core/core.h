@@ -443,8 +443,12 @@ bunny_core_result_t bunny_core_backfill_pool_positions_once(bunny_core_t *core);
  * immediately usable), *without* creating a searches/search_results row -- a
  * stateless "fetch and cache posts matching this query" call, used for the
  * tag/artist click-through browse screen's infinite scroll rather than a
- * saved search. Returns BUNNY_CORE_ERR_INVALID_ARG for page < 1. */
-bunny_core_result_t bunny_core_preview_search(bunny_core_t *core, bunny_db_site_t site, const char *query, int page, bunny_db_post_list_t *out_list);
+ * saved search. `inkbunny_filters` may be NULL (defaults apply); only its
+ * inkbunny_* fields are read, and only for an Inkbunny `site` -- reused from
+ * bunny_db_search_options_t (M74) rather than a parallel struct, same as a
+ * saved search's own sync reads those fields from the search row itself.
+ * Returns BUNNY_CORE_ERR_INVALID_ARG for page < 1. */
+bunny_core_result_t bunny_core_preview_search(bunny_core_t *core, bunny_db_site_t site, const char *query, int page, const bunny_db_search_options_t *inkbunny_filters, bunny_db_post_list_t *out_list);
 
 /* Inkbunny only -- e621's equivalent is just `fav:<username>` as a literal
  * bunny_core_preview_search query, since e621's tag search already supports
