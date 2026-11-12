@@ -41,6 +41,19 @@ class FakeSafUtilPlatform extends SafUtilPlatform {
     }
     return SafDocumentFile(uri: path, name: names.last, isDir: false, length: 0, lastModified: 0);
   }
+
+  /// Each entry is `folderUri: [filenames in that folder]` -- what [list]
+  /// should return for a folder resolved via [child] (`isDir: true`
+  /// entries only; [DownloadManager.batchIsDownloaded] never lists a plain
+  /// file). A folder not present here (including one [child] itself
+  /// resolved, e.g. via a real [mkdirp] call) just means "empty," not an
+  /// error -- matches a real freshly-created SAF folder with nothing in it
+  /// yet.
+  final Map<String, List<String>> listResultsByFolderUri = {};
+
+  @override
+  Future<List<SafDocumentFile>> list(String uri) async =>
+      (listResultsByFolderUri[uri] ?? const []).map((name) => SafDocumentFile(uri: '$uri/$name', name: name, isDir: false, length: 0, lastModified: 0)).toList();
 }
 
 class FakeSafStreamPlatform extends SafStreamPlatform {
