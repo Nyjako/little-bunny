@@ -6,6 +6,7 @@ import '../l10n/app_localizations.dart';
 import '../repository/bunny_models.dart';
 import '../repository/bunny_repository.dart';
 import '../util/tag_query.dart';
+import '../widgets/e621_metatags_panel.dart';
 
 /// Edits an existing saved search -- opened via long-press on its
 /// [SearchesScreen] row (M9.7.2), replacing the old quick heart-toggle icon.
@@ -246,6 +247,7 @@ class _EditSearchScreenState extends State<EditSearchScreen> {
               if (_implicationChain.isNotEmpty) Padding(padding: const EdgeInsets.only(top: 4), child: Text(_implicationChain.join(' → '), style: Theme.of(context).textTheme.bodySmall)),
               if (_suggestions.isNotEmpty)
                 Wrap(spacing: 8, children: _suggestions.map((stat) => ActionChip(label: Text('${stat.name} (${stat.count})'), onPressed: () => _applySuggestion(stat.name))).toList()),
+              if (widget.search.site == BunnySite.e621) E621MetatagsPanel(queryController: _queryController, enabled: !_submitting),
               TextFormField(
                 controller: _intervalController,
                 enabled: !_submitting && !_usesDefaultInterval,

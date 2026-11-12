@@ -25,6 +25,9 @@ void main() {
     final repository = FakeBunnyRepository();
     final search = await _seedSearch(repository);
 
+    tester.view.physicalSize = const Size(800, 2000);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
     await tester.pumpWidget(wrapWithLocalization(EditSearchScreen(repository: repository, search: search)));
     await tester.pumpAndSettle();
 
@@ -38,12 +41,18 @@ void main() {
     final repository = FakeBunnyRepository();
     final e621Search = await _seedSearch(repository, site: BunnySite.e621);
 
+    tester.view.physicalSize = const Size(800, 2000);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
     await tester.pumpWidget(wrapWithLocalization(EditSearchScreen(repository: repository, search: e621Search)));
     await tester.pumpAndSettle();
     expect(find.text('Favorite level'), findsNothing);
     expect(find.widgetWithText(SwitchListTile, 'Auto-upvote new posts'), findsOneWidget);
 
     final inkbunnySearch = await _seedSearch(repository, site: BunnySite.inkbunny);
+    tester.view.physicalSize = const Size(800, 2000);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
     await tester.pumpWidget(wrapWithLocalization(EditSearchScreen(repository: repository, search: inkbunnySearch)));
     await tester.pumpAndSettle();
     expect(find.text('Favorite level'), findsOneWidget);
@@ -54,6 +63,9 @@ void main() {
     final repository = FakeBunnyRepository();
     final search = await _seedSearch(repository);
 
+    tester.view.physicalSize = const Size(800, 2000);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
     await tester.pumpWidget(wrapWithLocalization(EditSearchScreen(repository: repository, search: search)));
     await tester.pumpAndSettle();
 
@@ -71,6 +83,9 @@ void main() {
     final repository = FakeBunnyRepository();
     final search = await _seedSearch(repository);
 
+    tester.view.physicalSize = const Size(800, 2000);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
     await tester.pumpWidget(wrapWithLocalization(EditSearchScreen(repository: repository, search: search)));
     await tester.pumpAndSettle();
 
@@ -88,6 +103,9 @@ void main() {
     final repository = FakeBunnyRepository();
     final search = await _seedSearch(repository);
 
+    tester.view.physicalSize = const Size(800, 2000);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
     await tester.pumpWidget(wrapWithLocalization(EditSearchScreen(repository: repository, search: search)));
     await tester.pumpAndSettle();
 
@@ -103,6 +121,9 @@ void main() {
     final repository = FakeBunnyRepository();
     final search = await _seedSearch(repository, site: BunnySite.inkbunny);
 
+    tester.view.physicalSize = const Size(800, 2000);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
     await tester.pumpWidget(wrapWithLocalization(EditSearchScreen(repository: repository, search: search)));
     await tester.pumpAndSettle();
 
@@ -119,6 +140,9 @@ void main() {
     final search = await _seedSearch(repository);
     expect(search.usesDefaultInterval, isFalse);
 
+    tester.view.physicalSize = const Size(800, 2000);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
     await tester.pumpWidget(wrapWithLocalization(EditSearchScreen(repository: repository, search: search)));
     await tester.pumpAndSettle();
 
@@ -137,6 +161,9 @@ void main() {
     final repository = FakeBunnyRepository();
     final search = await _seedSearch(repository);
 
+    tester.view.physicalSize = const Size(800, 2000);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
     await tester.pumpWidget(wrapWithLocalization(EditSearchScreen(repository: repository, search: search)));
     await tester.pumpAndSettle();
 
@@ -169,6 +196,9 @@ void main() {
     final search = await _seedSearch(repository);
     repository.tagAliasesByNameMatches['cat'] = const [BunnyTagAlias(id: 1, antecedentName: 'cat', consequentName: 'domestic_cat', status: 'active', postCount: 0)];
 
+    tester.view.physicalSize = const Size(800, 2000);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
     await tester.pumpWidget(wrapWithLocalization(EditSearchScreen(repository: repository, search: search)));
     await tester.pumpAndSettle();
 
@@ -183,6 +213,9 @@ void main() {
     final search = await _seedSearch(repository, site: BunnySite.inkbunny);
     repository.tagAliasesByNameMatches['cat'] = const [BunnyTagAlias(id: 1, antecedentName: 'cat', consequentName: 'domestic_cat', status: 'active', postCount: 0)];
 
+    tester.view.physicalSize = const Size(800, 2000);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
     await tester.pumpWidget(wrapWithLocalization(EditSearchScreen(repository: repository, search: search)));
     await tester.pumpAndSettle();
 
@@ -197,6 +230,9 @@ void main() {
     final search = await _seedSearch(repository);
     repository.tagImplicationsByNameMatches['hyper_breasts'] = const [BunnyTagImplication(id: 1, antecedentName: 'hyper_breasts', consequentName: 'breasts', status: 'active')];
 
+    tester.view.physicalSize = const Size(800, 2000);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
     await tester.pumpWidget(wrapWithLocalization(EditSearchScreen(repository: repository, search: search)));
     await tester.pumpAndSettle();
 
@@ -211,6 +247,9 @@ void main() {
     final search = await _seedSearch(repository, site: BunnySite.inkbunny);
     repository.tagImplicationsByNameMatches['hyper_breasts'] = const [BunnyTagImplication(id: 1, antecedentName: 'hyper_breasts', consequentName: 'breasts', status: 'active')];
 
+    tester.view.physicalSize = const Size(800, 2000);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
     await tester.pumpWidget(wrapWithLocalization(EditSearchScreen(repository: repository, search: search)));
     await tester.pumpAndSettle();
 

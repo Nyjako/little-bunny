@@ -9,6 +9,7 @@ import '../services/download_queue_service.dart';
 import '../settings/display_settings_store.dart';
 import '../settings/download_settings_store.dart';
 import '../util/tag_query.dart';
+import '../widgets/e621_metatags_panel.dart';
 import 'tag_browse_screen.dart';
 
 /// A free-text entry point into a live, unsaved [TagBrowseScreen] (M54
@@ -212,6 +213,7 @@ class _CustomSearchScreenState extends State<CustomSearchScreen> {
             if (_implicationChain.isNotEmpty) Padding(padding: const EdgeInsets.only(top: 4), child: Text(_implicationChain.join(' → '), style: Theme.of(context).textTheme.bodySmall)),
             if (_suggestions.isNotEmpty)
               Wrap(spacing: 8, children: _suggestions.map((stat) => ActionChip(label: Text('${stat.name} (${stat.count})'), onPressed: () => _applySuggestion(stat.name))).toList()),
+            if (_site == BunnySite.e621) E621MetatagsPanel(queryController: _queryController),
             const SizedBox(height: 16),
             ValueListenableBuilder<TextEditingValue>(
               valueListenable: _queryController,

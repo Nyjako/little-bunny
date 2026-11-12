@@ -6,6 +6,7 @@ import '../l10n/app_localizations.dart';
 import '../repository/bunny_models.dart';
 import '../repository/bunny_repository.dart';
 import '../util/tag_query.dart';
+import '../widgets/e621_metatags_panel.dart';
 
 /// Creates a new saved search. The query field's tag-autocomplete
 /// (`BunnyRepository.tagAutocomplete`, M8.1) is debounced and only
@@ -336,6 +337,7 @@ class _CreateSearchScreenState extends State<CreateSearchScreen> {
               if (_implicationChain.isNotEmpty) Padding(padding: const EdgeInsets.only(top: 4), child: Text(_implicationChain.join(' → '), style: Theme.of(context).textTheme.bodySmall)),
               if (_suggestions.isNotEmpty)
                 Wrap(spacing: 8, children: _suggestions.map((stat) => ActionChip(label: Text('${stat.name} (${stat.count})'), onPressed: () => _applySuggestion(stat.name))).toList()),
+              if (_site == BunnySite.e621) E621MetatagsPanel(queryController: _queryController, enabled: !_submitting),
               TextFormField(
                 controller: _intervalController,
                 enabled: !_submitting && !_usesDefaultInterval,
