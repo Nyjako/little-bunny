@@ -441,24 +441,47 @@ class _SlideshowEditScreenState extends State<SlideshowEditScreen> {
   /// Re-resolves each ready post's own local path right before playing --
   /// [_prepareReport] is a snapshot that could technically be a moment
   /// stale (e.g. a file removed from disk out-of-band since the last
-  /// Prepare pass); anything that no longer resolves is simply left out of
-  /// this viewing rather than failing the whole action.
+  /// Prepare pass). Resolves every post's path in one batched call
+  /// ([DownloadManager.batchLocalFilePathFor]) rather than one `await` per
+  /// post -- confirmed live as the cause of this action hanging on Android
+  /// and taking the better part of a minute even on desktop for a large
+  /// slideshow, the exact same per-post-SAF-round-trip problem
+  /// [SlideshowPrepareService.prepare] already had to be fixed for.
+  ///
+  /// Anything that no longer resolves (the file's own post deleted,
+  /// corrupted, or moved out-of-band since Prepare ran) is dropped from
+  /// this viewing *and* replaced in the slideshow itself via
+  /// [BunnyRepository.slideshowReplacePost] -- same self-healing remedy
+  /// [SlideshowPrepareService.prepare] already applies to a persistently
+  /// failed download, so a subsequent Prepare downloads a fresh
+  /// replacement instead of this screen quietly feeding the same dead post
+  /// back into every future Watch. Best-effort: a replace failure (e.g. its
+  /// search has nothing left to pick) just leaves the dead post out of this
+  /// viewing, same as before.
   Future<void> _watch() async {
     final report = _prepareReport;
-    if (report == null || report.readyCount == 0) {
+    final slideshowId = _slideshowId;
+    if (report == null || report.readyCount == 0 || slideshowId == null) {
       return;
     }
     final folder = await widget.downloadSettingsStore.loadDestinationFolder();
     if (folder == null || !mounted) {
       return;
     }
-    final paths = <int, String>{};
+    final readyStatuses = report.posts.where((status) => status.readiness == SlideshowPostReadiness.ready).toList(growable: false);
+    final paths = await widget.downloadManager.batchLocalFilePathFor(readyStatuses.map((status) => status.post).toList(growable: false), folder);
     final playable = <BunnyPost>[];
-    for (final post in report.readyPosts) {
-      final path = await widget.downloadManager.localFilePathFor(post, folder);
-      if (path != null) {
-        paths[post.id] = path;
-        playable.add(post);
+    for (final status in readyStatuses) {
+      if (paths.containsKey(status.post.id)) {
+        playable.add(status.post);
+      } else {
+        try {
+          await widget.repository.slideshowReplacePost(slideshowId, status.searchId, status.post.id);
+        } catch (_) {
+          // No other post left in that search to replace it with -- leave
+          // the dead post committed, same as prepare()'s own unreplaceable
+          // case; it's just left out of this particular viewing.
+        }
       }
     }
     if (playable.isEmpty || !mounted) {

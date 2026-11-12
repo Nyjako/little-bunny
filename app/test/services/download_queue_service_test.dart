@@ -497,6 +497,26 @@ void main() {
       expect(restored.succeededCount, 1);
     });
 
+    test('restore leaves a succeeded row alone -- no re-download, no DB mutation (M75)', () async {
+      final post = _post(id: 1);
+      repository.postsById[1] = post;
+      repository.seedDownloadQueueRow(postId: 1, status: 'succeeded');
+      var fetchCalls = 0;
+      repository.downloadFileFetchImpl = (_) async {
+        fetchCalls++;
+        return http.Response.bytes([1, 2, 3], 200);
+      };
+
+      final restored = buildService();
+      await restored.restore(repository);
+      await waitUntilIdle(restored);
+
+      expect(restored.items, hasLength(1));
+      expect(restored.items.single.status, DownloadQueueItemStatus.succeeded);
+      expect((await repository.downloadQueueList()).single.status, 'succeeded');
+      expect(fetchCalls, 0);
+    });
+
     test('restore skips a row whose post no longer resolves, without failing the rest', () async {
       repository.postsById[2] = _post(id: 2);
       repository.seedDownloadQueueRow(postId: 1, status: 'queued'); // never resolvable

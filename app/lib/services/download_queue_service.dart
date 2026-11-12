@@ -746,12 +746,20 @@ class DownloadQueueService extends ChangeNotifier {
   /// after [repository] is available (also callable again later via
   /// [resume], e.g. from a button or notification action, since a row
   /// already pulled into [_items] is tracked in [_restoredRowIds] and never
-  /// added twice). A `queued`/`downloading`/`succeeded` row re-enqueues from
-  /// scratch (nothing is actually still in flight after a process restart,
-  /// and re-running a `succeeded` one is cheap -- [DownloadManager.
-  /// downloadPost]'s own checksum-skip resolves it near instantly without a
-  /// real fetch); a `failed`/`checksum_mismatch` row is restored into view
-  /// with its reason intact but is *not* auto-retried. A post that's no
+  /// added twice). A `queued`/`downloading` row re-enqueues from scratch
+  /// (nothing is actually still in flight after a process restart); a
+  /// `failed`/`checksum_mismatch`/`succeeded` row is restored into view
+  /// as-is and is *not* auto-retried/re-enqueued -- `succeeded` used to
+  /// re-enqueue too (on the assumption that re-running one is cheap, since
+  /// [DownloadManager.downloadPost]'s own checksum-skip resolves it without
+  /// a real fetch), but that assumption doesn't hold once there are
+  /// thousands of already-finished rows (a large slideshow's worth, say):
+  /// re-verifying every one's checksum on every single app restart is real,
+  /// non-free I/O (under SAF, each check is also its own platform-channel
+  /// round trip -- the same per-item cost [DownloadManager.
+  /// batchIsDownloaded]'s own doc comment already describes), and the queue
+  /// screen would briefly show the whole history flipping back to "queued"
+  /// on every restart besides. A post that's no
   /// longer resolvable after [_getPostWithRetry]'s retries (e.g. somehow
   /// uncached, or a genuinely unreachable server) is skipped rather than
   /// failing the whole restore -- a later [resume] call gets another chance
@@ -804,12 +812,24 @@ class DownloadQueueService extends ChangeNotifier {
           try {
             final post = await _getPostWithRetry(repository, row.postId);
             _restoredRowIds.add(row.id);
-            if (row.status == 'failed' || row.status == 'checksum_mismatch') {
+            // 'succeeded' is a terminal state same as the other two here --
+            // restored as-is, never requeued. Treating it like
+            // 'downloading'/'queued' below (the only other branch) used to
+            // force it back to 'queued' and re-download an already-finished
+            // post on every app restart, since a succeeded row stays in the
+            // table as history until clearFinished() is called (see this
+            // class's own doc comment on DownloadQueueItemStatus) rather
+            // than being deleted the moment the download completes.
+            if (row.status == 'failed' || row.status == 'checksum_mismatch' || row.status == 'succeeded') {
               _items.add(
                 DownloadQueueItem(
                   post: post,
                   repository: repository,
-                  status: row.status == 'failed' ? DownloadQueueItemStatus.failed : DownloadQueueItemStatus.checksumMismatch,
+                  status: switch (row.status) {
+                    'failed' => DownloadQueueItemStatus.failed,
+                    'checksum_mismatch' => DownloadQueueItemStatus.checksumMismatch,
+                    _ => DownloadQueueItemStatus.succeeded,
+                  },
                   failureReason: row.failureReason,
                   queueRowIdFuture: Future.value(row.id),
                   poolId: row.poolId,
