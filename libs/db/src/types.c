@@ -37,6 +37,8 @@ void bunny_db_search_free(bunny_db_search_t *search)
     free(search->last_run_at);
     free(search->last_viewed_at);
     free(search->last_updated_at);
+    free(search->inkbunny_username);
+    free(search->inkbunny_order_by);
     memset(search, 0, sizeof(*search));
 }
 

@@ -124,6 +124,24 @@ static const bunny_db_migration_t BUNNY_DB_MIGRATIONS[] = {
      * callers only call that when their own posts_upserted count actually
      * increased. */
     {19, "ALTER TABLE searches ADD COLUMN last_updated_at TEXT;"},
+    /* Inkbunny's advanced search filters (api_search.php's own parameter
+     * set, beyond the plain keyword text/favorites/pool sentinels already
+     * handled through `query`) -- ignored entirely by e621 syncs, so every
+     * e621 search just carries these at their defaults. Mirrors
+     * inkbunny_search_params_t's own field shapes/defaults 1:1
+     * (inkbunny/client.h) rather than inventing a second encoding: 0 for
+     * each *_mask/*_join_type/scraps column means "api_search.php's own
+     * default", same reasoning as every other "0 means unset" column in
+     * this schema. */
+    {20, "ALTER TABLE searches ADD COLUMN inkbunny_search_in_mask INTEGER NOT NULL DEFAULT 0;"
+         "ALTER TABLE searches ADD COLUMN inkbunny_field_join_type INTEGER NOT NULL DEFAULT 0;"
+         "ALTER TABLE searches ADD COLUMN inkbunny_string_join_type INTEGER NOT NULL DEFAULT 0;"
+         "ALTER TABLE searches ADD COLUMN inkbunny_username TEXT;"
+         "ALTER TABLE searches ADD COLUMN inkbunny_submission_type_mask INTEGER NOT NULL DEFAULT 0;"
+         "ALTER TABLE searches ADD COLUMN inkbunny_days_limit INTEGER NOT NULL DEFAULT 0;"
+         "ALTER TABLE searches ADD COLUMN inkbunny_order_by TEXT;"
+         "ALTER TABLE searches ADD COLUMN inkbunny_random INTEGER NOT NULL DEFAULT 0;"
+         "ALTER TABLE searches ADD COLUMN inkbunny_scraps INTEGER NOT NULL DEFAULT 0;"},
 };
 // clang-format on
 
