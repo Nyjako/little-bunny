@@ -826,6 +826,30 @@ class _PostDetailPageState extends State<_PostDetailPage> {
     return files.where((f) => isAudioExt(f.fileExt)).toList();
   }
 
+  /// Text-document files mixed in alongside a non-text primary file -- a
+  /// Writing - Document submission whose first (primary) file is a cover
+  /// image, with the actual story text as additional file(s) (confirmed
+  /// live against post #373335, M28 submission-type coverage follow-up).
+  /// Same reasoning as [_mixedAudioTracks]: without this, the cover shows
+  /// and the story text itself is completely unreachable.
+  List<BunnyPostFile> get _mixedTextDocuments {
+    final files = _files;
+    if (files == null || files.length <= 1) {
+      return const [];
+    }
+    return files.where((f) => isTextDocumentExt(f.fileExt)).toList();
+  }
+
+  Widget _buildTextDocuments(List<BunnyPostFile> files) => Column(
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    children: [
+      for (var i = 0; i < files.length; i++) ...[
+        if (i > 0) const SizedBox(height: 12),
+        TextDocumentViewer(key: ValueKey(files[i].fileUrl), url: files[i].fileUrl, httpHeaders: imageHeadersFor(_post.site)),
+      ],
+    ],
+  );
+
   Widget _buildMedia(AppLocalizations l10n) {
     if (_hasImageGallery) {
       return _buildImageGallery(_files!);
@@ -835,10 +859,15 @@ class _PostDetailPageState extends State<_PostDetailPage> {
     }
     final primary = _buildSingleFileMedia(l10n);
     final mixedAudioTracks = _mixedAudioTracks;
-    if (mixedAudioTracks.isEmpty) {
+    final mixedTextDocuments = _mixedTextDocuments;
+    final extras = <Widget>[
+      if (mixedAudioTracks.isNotEmpty) _buildAudioAlbum(mixedAudioTracks),
+      if (mixedTextDocuments.isNotEmpty) _buildTextDocuments(mixedTextDocuments),
+    ];
+    if (extras.isEmpty) {
       return primary;
     }
-    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [primary, const SizedBox(height: 12), _buildAudioAlbum(mixedAudioTracks)]);
+    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [primary, for (final extra in extras) ...[const SizedBox(height: 12), extra]]);
   }
 
   Widget _buildSingleFileMedia(AppLocalizations l10n) {
