@@ -207,6 +207,55 @@ class DownloadManager {
     return await file.exists() ? file.path : null;
   }
 
+  /// Same question as [localFilePathFor], for many posts at once -- a post
+  /// missing from the returned map simply has no file on disk. Same
+  /// folder-grouped SAF optimization as [batchIsDownloaded] (see its own
+  /// doc comment for why one `SafUtil().child()`/`list()` pair per
+  /// *post* -- not per distinct artist folder -- measured in minutes for a
+  /// large slideshow's worth of posts): confirmed live as the cause of
+  /// a slideshow's own "Watch" action hanging on Android (and taking the
+  /// better part of a minute even on a plain filesystem path, from the
+  /// sheer number of sequential awaited calls) while [SlideshowPrepareService.
+  /// prepare] itself was already fast after already getting this same
+  /// treatment.
+  Future<Map<int, String>> batchLocalFilePathFor(List<BunnyPost> posts, String destinationFolder, {int poolId = 0, String? poolName, int poolPage = 0}) async {
+    if (!destinationFolder.startsWith('content://')) {
+      final result = <int, String>{};
+      for (final post in posts) {
+        final path = await localFilePathFor(post, destinationFolder, poolId: poolId, poolName: poolName, poolPage: poolPage);
+        if (path != null) {
+          result[post.id] = path;
+        }
+      }
+      return result;
+    }
+
+    final postsByFolder = <String, List<BunnyPost>>{};
+    final filenameByPostId = <int, String>{};
+    for (final post in posts) {
+      final ext = post.fileExt ?? 'bin';
+      final (folder, filename) = _destinationFor(post, ext, poolId: poolId, poolName: poolName, poolPage: poolPage);
+      postsByFolder.putIfAbsent(folder, () => []).add(post);
+      filenameByPostId[post.id] = filename;
+    }
+
+    final result = <int, String>{};
+    for (final entry in postsByFolder.entries) {
+      final folderDoc = await SafUtil().child(destinationFolder, [entry.key]);
+      if (folderDoc == null) {
+        continue;
+      }
+      final uriByName = {for (final file in await SafUtil().list(folderDoc.uri)) file.name: file.uri};
+      for (final post in entry.value) {
+        final uri = uriByName[filenameByPostId[post.id]];
+        if (uri != null) {
+          result[post.id] = uri;
+        }
+      }
+    }
+    return result;
+  }
+
   /// SAF-only now (M66 moved the plain-path equivalent into C, see
   /// [BunnyRepository.downloadFile]'s own skip-fetch fast path). Reads back
   /// whatever already sits at [downloadPost]'s own deterministic SAF path

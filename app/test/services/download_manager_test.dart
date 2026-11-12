@@ -430,6 +430,33 @@ void main() {
 
       expect(result, {42: true, 99: false});
     });
+
+    // Same regression as batchIsDownloaded above, for a slideshow's "Watch"
+    // action resolving every ready post's playback path at once instead of
+    // one localFilePathFor call per post.
+    test('batchLocalFilePathFor resolves many posts across a few artist subfolders with one list() call per subfolder', () async {
+      final manager = const DownloadManager();
+      const treeUri = 'content://com.android.externalstorage.documents/tree/primary%3ADownload';
+
+      fakeSafUtil.existingChildPaths['$treeUri/wolf'] = Uint8List(0);
+      fakeSafUtil.listResultsByFolderUri['$treeUri/wolf'] = ['42.png', '44.png'];
+      // 'fox' subfolder deliberately absent -- its post should resolve to
+      // nothing in the result map, not a null/empty-string entry.
+
+      final posts = [_post(id: 42, externalId: 42, artist: 'wolf'), _post(id: 43, externalId: 43, artist: 'wolf'), _post(id: 44, externalId: 44, artist: 'wolf'), _post(id: 50, externalId: 50, artist: 'fox')];
+      final result = await manager.batchLocalFilePathFor(posts, treeUri);
+
+      expect(result, {42: '$treeUri/wolf/42.png', 44: '$treeUri/wolf/44.png'});
+    });
+
+    test('batchLocalFilePathFor matches localFilePathFor for a single post (plain filesystem path)', () async {
+      final manager = const DownloadManager();
+      await manager.downloadPost(_post(id: 42, externalId: 42, artist: 'wolf'), FakeBunnyRepository()..downloadFileFetchImpl = (_) async => http.Response.bytes([1, 2, 3], 200), tempDir.path);
+
+      final result = await manager.batchLocalFilePathFor([_post(id: 42, externalId: 42, artist: 'wolf'), _post(id: 99, externalId: 99, artist: 'wolf')], tempDir.path);
+
+      expect(result, {42: '${tempDir.path}/wolf/42.png'});
+    });
   });
 
   group('autoFavorite (M10.1)', () {
