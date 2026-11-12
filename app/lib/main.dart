@@ -8,6 +8,7 @@ import 'package:just_audio_media_kit/just_audio_media_kit.dart';
 
 import 'bunny_repository_scope.dart';
 import 'l10n/app_localizations.dart';
+import 'native_dependency_licenses.dart';
 import 'repository/bunny_repository.dart';
 import 'repository/bunny_repository_factory.dart';
 import 'screens/lock_screen.dart';
@@ -28,6 +29,7 @@ import 'settings/update_settings_store.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  registerNativeDependencyLicenses();
   // video_player has no official Linux/Windows implementation; fvp fills the
   // gap for exactly those platforms via its own bundled decoder, leaving
   // Android/iOS on video_player's official backend untouched.

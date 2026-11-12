@@ -10,8 +10,13 @@ import 'changelog_screen.dart';
 
 /// App version/description + open-source license list (M27) -- the license
 /// list itself is Flutter's own [LicensePage]/[LicenseRegistry], which
-/// `flutter pub get` already populates from every dependency's own license
-/// file at build time, so there's nothing to maintain here by hand.
+/// `flutter pub get` already populates from every pub dependency's own
+/// license file at build time, so there's nothing to maintain here by hand
+/// for those. The native C libraries `bunny_core_ffi` vendors via CMake/CPM
+/// (curl, cJSON, SQLite, GOBLIN, mbedTLS, plus curl's own system TLS/
+/// compression backends) aren't pub packages, so pub's own scraping never
+/// finds them -- those are registered separately, once, at startup, via
+/// [registerNativeDependencyLicenses].
 class AboutScreen extends StatelessWidget {
   /// Injectable for tests (same reasoning as [UpdateApplyService.client]);
   /// both default to real instances.
