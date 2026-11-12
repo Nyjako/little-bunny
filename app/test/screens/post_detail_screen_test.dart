@@ -656,6 +656,29 @@ void main() {
       expect(find.byKey(const Key('postDetailAudioAlbumList')), findsOneWidget);
       expect(find.text('1. track.mp3'), findsOneWidget);
     });
+
+    // Real shape reported live, post #373335: a Writing - Document
+    // submission whose primary file is a cover image, with the actual
+    // story text as an additional .txt file -- without `_mixedTextDocuments`
+    // (M76), the cover showed and the story text itself was completely
+    // unreachable, exactly mirroring the Music - Single Track case above.
+    testWidgets('a Writing - Document post with a cover image as the primary file still surfaces its text (M76)', (WidgetTester tester) async {
+      final repository = FakeBunnyRepository();
+      final post = _post(site: BunnySite.inkbunny, fileExt: 'jpg');
+      repository.filesByPostId[1] = const [
+        BunnyPostFile(fileUrl: 'https://example.invalid/cover.jpg', fileExt: 'jpg', width: 1200, height: 900),
+        BunnyPostFile(fileUrl: 'https://example.invalid/story.txt', fileExt: 'txt', width: 0, height: 0),
+      ];
+
+      await tester.runAsync(() async {
+        await tester.pumpWidget(wrapWithLocalization(PostDetailScreen(post: post, repository: repository, displaySettingsStore: const DisplaySettingsStore(), downloadSettingsStore: const DownloadSettingsStore(), downloadQueueService: _downloadQueueService())));
+        await Future<void>.delayed(const Duration(milliseconds: 300));
+      });
+      await tester.pump();
+
+      expect(_findCachedNetworkImage(), findsOneWidget);
+      expect(find.byType(TextDocumentViewer), findsOneWidget);
+    });
   });
 
   group('audio playback (M28 Phase 4)', () {
