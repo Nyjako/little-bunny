@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:little_bunny/repository/bunny_models.dart';
 import 'package:little_bunny/screens/slideshow_screen.dart';
@@ -104,6 +105,65 @@ void main() {
     // If the Timer wasn't cancelled in dispose(), flutter_test's own
     // teardown would fail this test with a "pending timer" error here.
     await tester.pump(const Duration(seconds: 2));
+  });
+
+  testWidgets('tapping the right half advances immediately and restarts the interval timer (M76)', (WidgetTester tester) async {
+    final repository = FakeBunnyRepository();
+    final posts = [_post(1, fileExt: 'jpg'), _post(2, fileExt: 'mp4')];
+
+    await tester.pumpWidget(wrapWithLocalization(SlideshowScreen(posts: posts, localFilePaths: const {}, interval: const Duration(seconds: 5), repository: repository)));
+    await tester.pumpAndSettle();
+    final videoShowingInitially = find.byType(VideoPlayer).evaluate().isNotEmpty;
+
+    // Top-right corner, clear of the close button's own hit area (top-left).
+    await tester.tapAt(const Offset(750, 20));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(VideoPlayer).evaluate().isNotEmpty, !videoShowingInitially);
+    expect(repository.markPostSeenCalls, hasLength(2));
+
+    // The timer was restarted by the tap -- a tick at the *original*
+    // interval shouldn't have fired a second advance yet.
+    await tester.pump(const Duration(seconds: 1));
+    expect(repository.markPostSeenCalls, hasLength(2));
+  });
+
+  testWidgets('tapping the left half steps back one post, wrapping to the end of the shuffle (M76)', (WidgetTester tester) async {
+    final repository = FakeBunnyRepository();
+    final posts = [_post(1, fileExt: 'jpg'), _post(2, fileExt: 'mp4')];
+
+    await tester.pumpWidget(wrapWithLocalization(SlideshowScreen(posts: posts, localFilePaths: const {}, interval: const Duration(seconds: 5), repository: repository)));
+    await tester.pumpAndSettle();
+    final videoShowingInitially = find.byType(VideoPlayer).evaluate().isNotEmpty;
+
+    // With only 2 posts, stepping either direction from the start always
+    // lands on the other one -- same observable effect as "next" here, but
+    // exercised through the left-half tap / wrap-to-end branch instead.
+    // Well clear of the close button's own (top-left) hit area.
+    await tester.tapAt(const Offset(50, 400));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(VideoPlayer).evaluate().isNotEmpty, !videoShowingInitially);
+    expect(repository.markPostSeenCalls, hasLength(2));
+  });
+
+  testWidgets('Right/Left arrow keys step forward/back the same way the tap zones do (M76)', (WidgetTester tester) async {
+    final repository = FakeBunnyRepository();
+    final posts = [_post(1, fileExt: 'jpg'), _post(2, fileExt: 'mp4')];
+
+    await tester.pumpWidget(wrapWithLocalization(SlideshowScreen(posts: posts, localFilePaths: const {}, interval: const Duration(seconds: 5), repository: repository)));
+    await tester.pumpAndSettle();
+    final videoShowingInitially = find.byType(VideoPlayer).evaluate().isNotEmpty;
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowRight);
+    await tester.pumpAndSettle();
+    expect(find.byType(VideoPlayer).evaluate().isNotEmpty, !videoShowingInitially);
+    expect(repository.markPostSeenCalls, hasLength(2));
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.arrowLeft);
+    await tester.pumpAndSettle();
+    expect(find.byType(VideoPlayer).evaluate().isNotEmpty, videoShowingInitially);
+    expect(repository.markPostSeenCalls, hasLength(3));
   });
 
   // No widget test covers local-file rendering itself (Image.file/GifPlayer's
