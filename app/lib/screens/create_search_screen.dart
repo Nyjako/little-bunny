@@ -6,6 +6,7 @@ import '../l10n/app_localizations.dart';
 import '../repository/bunny_models.dart';
 import '../repository/bunny_repository.dart';
 import '../util/tag_query.dart';
+import '../widgets/e621_metatags_panel.dart';
 import '../widgets/inkbunny_advanced_filters_panel.dart';
 
 /// Creates a new saved search. The query field's tag-autocomplete
@@ -359,6 +360,7 @@ class _CreateSearchScreenState extends State<CreateSearchScreen> {
               if (_implicationChain.isNotEmpty) Padding(padding: const EdgeInsets.only(top: 4), child: Text(_implicationChain.join(' → '), style: Theme.of(context).textTheme.bodySmall)),
               if (_suggestions.isNotEmpty)
                 Wrap(spacing: 8, children: _suggestions.map((stat) => ActionChip(label: Text('${stat.name} (${stat.count})'), onPressed: () => _applySuggestion(stat.name))).toList()),
+              if (_site == BunnySite.e621) E621MetatagsPanel(queryController: _queryController, enabled: !_submitting),
               if (_site == BunnySite.inkbunny) InkbunnyAdvancedFiltersPanel(value: _inkbunnyFilters, enabled: !_submitting, onChanged: (filters) => setState(() => _inkbunnyFilters = filters)),
               TextFormField(
                 controller: _intervalController,

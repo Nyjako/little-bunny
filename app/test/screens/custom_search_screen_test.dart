@@ -83,6 +83,29 @@ void main() {
     expect(repository.previewSearchCalls, contains((BunnySite.inkbunny, 'fox', 1)));
   });
 
+  testWidgets('the e621 metatags panel is shown only for e621, and toggling a rating updates the query field', (WidgetTester tester) async {
+    final repository = FakeBunnyRepository();
+    await tester.pumpWidget(_wrap(repository));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('e621MetatagsPanel')), findsOneWidget);
+
+    await tester.tap(find.text('Inkbunny'));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('e621MetatagsPanel')), findsNothing);
+
+    await tester.tap(find.text('e621'));
+    await tester.pumpAndSettle();
+
+    await tester.enterText(find.widgetWithText(TextField, 'Query'), 'fox');
+    await tester.tap(find.byKey(const Key('e621MetatagsPanel')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('e621MetatagRatingSafe')));
+    await tester.pumpAndSettle();
+
+    expect(tester.widget<TextField>(find.widgetWithText(TextField, 'Query')).controller!.text, 'fox rating:s');
+  });
+
   testWidgets('the Inkbunny advanced filters panel is shown only for Inkbunny (M74)', (WidgetTester tester) async {
     final repository = FakeBunnyRepository();
     await tester.pumpWidget(_wrap(repository));

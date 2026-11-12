@@ -117,6 +117,15 @@ void main() {
     expect(find.text('Edit search'), findsOneWidget);
 
     await tester.enterText(find.widgetWithText(TextFormField, 'Label'), 'Renamed foxes');
+    // The e621 metatags panel (shown by default, e621 being the search's
+    // site) can push the Save button below the test surface's default
+    // Sliver layout-cache extent.
+    tester.view.physicalSize = const Size(800, 2000);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Save'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Save'));
     await tester.pumpAndSettle();
 
@@ -688,7 +697,12 @@ void main() {
 
     await tester.enterText(find.widgetWithText(TextFormField, 'Label'), 'Foxes');
     await tester.enterText(find.widgetWithText(TextFormField, 'Query'), 'fox');
-    // The group picker (M21) can push the Create button below the fold.
+    // The group picker (M21) and the e621 metatags panel (shown by default)
+    // can push the Create button below the fold.
+    tester.view.physicalSize = const Size(800, 2000);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    await tester.pumpAndSettle();
     await tester.ensureVisible(find.text('Create'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Create'));
@@ -865,6 +879,12 @@ void main() {
     await tester.tap(find.text('Canines').last);
     await tester.pumpAndSettle();
 
+    // The e621 metatags panel (shown by default) can push the Save button
+    // below the test surface's default Sliver layout-cache extent.
+    tester.view.physicalSize = const Size(800, 2000);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    await tester.pumpAndSettle();
     await tester.ensureVisible(find.text('Save'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Save'));

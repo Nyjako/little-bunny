@@ -9,10 +9,19 @@ import '../fakes/test_app.dart';
 
 Widget _wrap(FakeBunnyRepository repository) => wrapWithLocalization(CreateSearchScreen(repository: repository));
 
-/// The group picker (M21) pushed the Create button below the fold on the
-/// test surface's default height -- scroll it into view first rather than
-/// tapping blind, same fix needed at every call site below.
+/// The group picker (M21), and now the e621 metatags panel (always shown
+/// for e621, the default site), push the Create button far enough down
+/// that on the test surface's default height it falls outside the
+/// ListView's own layout cache extent entirely -- not just scrolled off,
+/// genuinely never laid out, so `ensureVisible` has nothing to find (same
+/// root cause already hit for a different screen, see
+/// edit_search_screen_test.dart's Inkbunny star-picker test). Enlarging the
+/// surface first, same fix used there, rather than just scrolling blind.
 Future<void> _tapCreate(WidgetTester tester) async {
+  tester.view.physicalSize = const Size(800, 2000);
+  tester.view.devicePixelRatio = 1.0;
+  addTearDown(tester.view.resetPhysicalSize);
+  await tester.pumpAndSettle();
   await tester.ensureVisible(find.text('Create'));
   await tester.pumpAndSettle();
   await tester.tap(find.text('Create'));
@@ -28,6 +37,9 @@ void main() {
   // just means "everything", see the field's own comment in the screen).
   testWidgets('validates required fields before submitting', (WidgetTester tester) async {
     final repository = FakeBunnyRepository();
+    tester.view.physicalSize = const Size(800, 2000);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
     await tester.pumpWidget(_wrap(repository));
     await tester.pumpAndSettle();
 
@@ -54,6 +66,9 @@ void main() {
 
   testWidgets('submitting a filled form creates the search and pops true', (WidgetTester tester) async {
     final repository = FakeBunnyRepository();
+    tester.view.physicalSize = const Size(800, 2000);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
     await tester.pumpWidget(_wrap(repository));
     await tester.pumpAndSettle();
 
@@ -72,6 +87,9 @@ void main() {
 
   testWidgets('toggling auto-favorite creates the search with it set (M9.6.8)', (WidgetTester tester) async {
     final repository = FakeBunnyRepository();
+    tester.view.physicalSize = const Size(800, 2000);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
     await tester.pumpWidget(_wrap(repository));
     await tester.pumpAndSettle();
 
@@ -87,6 +105,9 @@ void main() {
 
   testWidgets('toggling auto-upvote creates the search with it set, hidden for Inkbunny (M9.7.2)', (WidgetTester tester) async {
     final repository = FakeBunnyRepository();
+    tester.view.physicalSize = const Size(800, 2000);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
     await tester.pumpWidget(_wrap(repository));
     await tester.pumpAndSettle();
 
@@ -104,6 +125,9 @@ void main() {
 
   testWidgets('auto-upvote switch is hidden for Inkbunny searches (M9.7.2)', (WidgetTester tester) async {
     final repository = FakeBunnyRepository();
+    tester.view.physicalSize = const Size(800, 2000);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
     await tester.pumpWidget(_wrap(repository));
     await tester.pumpAndSettle();
 
@@ -117,6 +141,9 @@ void main() {
     final repository = FakeBunnyRepository();
     repository.tagStats.addAll(const [BunnyTagStat(name: 'foxtail', count: 10), BunnyTagStat(name: 'wolfpack', count: 5)]);
 
+    tester.view.physicalSize = const Size(800, 2000);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
     await tester.pumpWidget(_wrap(repository));
     await tester.pumpAndSettle();
 
@@ -137,6 +164,9 @@ void main() {
     final repository = FakeBunnyRepository();
     repository.tagStats.addAll(const [BunnyTagStat(name: 'fox', count: 10)]);
 
+    tester.view.physicalSize = const Size(800, 2000);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
     await tester.pumpWidget(_wrap(repository));
     await tester.pumpAndSettle();
 
@@ -150,6 +180,9 @@ void main() {
     final repository = FakeBunnyRepository();
     repository.tagStats.addAll(const [BunnyTagStat(name: 'dogsled', count: 7)]);
 
+    tester.view.physicalSize = const Size(800, 2000);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
     await tester.pumpWidget(_wrap(repository));
     await tester.pumpAndSettle();
 
@@ -169,6 +202,9 @@ void main() {
     final repository = FakeBunnyRepository();
     repository.tagStats.addAll(const [BunnyTagStat(name: 'african_wild_dog', count: 3)]);
 
+    tester.view.physicalSize = const Size(800, 2000);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
     await tester.pumpWidget(_wrap(repository));
     await tester.pumpAndSettle();
 
@@ -180,6 +216,9 @@ void main() {
 
   testWidgets('picking a site changes which site the search is created for', (WidgetTester tester) async {
     final repository = FakeBunnyRepository();
+    tester.view.physicalSize = const Size(800, 2000);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
     await tester.pumpWidget(_wrap(repository));
     await tester.pumpAndSettle();
 
@@ -244,6 +283,9 @@ void main() {
 
   testWidgets('label mirrors the query until the user edits the label directly', (WidgetTester tester) async {
     final repository = FakeBunnyRepository();
+    tester.view.physicalSize = const Size(800, 2000);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
     await tester.pumpWidget(_wrap(repository));
     await tester.pumpAndSettle();
 
@@ -267,6 +309,9 @@ void main() {
   testWidgets('interval field pre-fills from the server-side default (M20)', (WidgetTester tester) async {
     final repository = FakeBunnyRepository()..defaultSyncIntervalHours = 12;
 
+    tester.view.physicalSize = const Size(800, 2000);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
     await tester.pumpWidget(_wrap(repository));
     await tester.pumpAndSettle();
 
@@ -276,6 +321,9 @@ void main() {
   testWidgets('initialSite/initialQuery pre-fill the site and query (and mirror into the label)', (WidgetTester tester) async {
     final repository = FakeBunnyRepository();
 
+    tester.view.physicalSize = const Size(800, 2000);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
     await tester.pumpWidget(wrapWithLocalization(CreateSearchScreen(repository: repository, initialSite: BunnySite.inkbunny, initialQuery: 'someartist')));
     await tester.pumpAndSettle();
 
@@ -294,6 +342,9 @@ void main() {
     final repository = FakeBunnyRepository();
     repository.poolInfoById[12345] = const BunnyPoolInfo(id: 12345, name: 'Some Comic', postCount: 10);
 
+    tester.view.physicalSize = const Size(800, 2000);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
     await tester.pumpWidget(_wrap(repository));
     await tester.pumpAndSettle();
 
@@ -307,6 +358,9 @@ void main() {
   testWidgets('a raw pool query falls back to the literal text when the pool lookup fails (M13.1)', (WidgetTester tester) async {
     final repository = FakeBunnyRepository();
 
+    tester.view.physicalSize = const Size(800, 2000);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
     await tester.pumpWidget(_wrap(repository));
     await tester.pumpAndSettle();
 
@@ -321,6 +375,9 @@ void main() {
     final repository = FakeBunnyRepository();
     repository.poolInfoById[12345] = const BunnyPoolInfo(id: 12345, name: 'Some Comic', postCount: 10);
 
+    tester.view.physicalSize = const Size(800, 2000);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
     await tester.pumpWidget(
       wrapWithLocalization(CreateSearchScreen(repository: repository, initialSite: BunnySite.e621, initialQuery: 'pool:12345', initialLabel: 'My Own Label')),
     );
@@ -334,6 +391,9 @@ void main() {
   testWidgets('"use default interval" starts checked and submits it with no further action (M30)', (WidgetTester tester) async {
     final repository = FakeBunnyRepository()..defaultSyncIntervalHours = 24;
 
+    tester.view.physicalSize = const Size(800, 2000);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
     await tester.pumpWidget(_wrap(repository));
     await tester.pumpAndSettle();
 
@@ -351,6 +411,9 @@ void main() {
   testWidgets('disabling "use default interval" re-enables the interval field and submits a fixed one', (WidgetTester tester) async {
     final repository = FakeBunnyRepository()..defaultSyncIntervalHours = 24;
 
+    tester.view.physicalSize = const Size(800, 2000);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
     await tester.pumpWidget(_wrap(repository));
     await tester.pumpAndSettle();
 
@@ -371,6 +434,9 @@ void main() {
 
   testWidgets('an invalid query shows an error and blocks submission (M28/M54)', (WidgetTester tester) async {
     final repository = FakeBunnyRepository();
+    tester.view.physicalSize = const Size(800, 2000);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
     await tester.pumpWidget(_wrap(repository));
     await tester.pumpAndSettle();
 
@@ -403,6 +469,9 @@ void main() {
     final repository = FakeBunnyRepository();
     repository.tagAliasesByNameMatches['cat'] = const [BunnyTagAlias(id: 1, antecedentName: 'cat', consequentName: 'domestic_cat', status: 'active', postCount: 0)];
 
+    tester.view.physicalSize = const Size(800, 2000);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
     await tester.pumpWidget(_wrap(repository));
     await tester.pumpAndSettle();
 
@@ -415,6 +484,9 @@ void main() {
   testWidgets('a tag with no known alias shows no hint (M54)', (WidgetTester tester) async {
     final repository = FakeBunnyRepository();
 
+    tester.view.physicalSize = const Size(800, 2000);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
     await tester.pumpWidget(_wrap(repository));
     await tester.pumpAndSettle();
 
@@ -428,6 +500,9 @@ void main() {
     final repository = FakeBunnyRepository();
     repository.tagAliasesByNameMatches['cat'] = const [BunnyTagAlias(id: 1, antecedentName: 'cat', consequentName: 'domestic_cat', status: 'pending', postCount: 0)];
 
+    tester.view.physicalSize = const Size(800, 2000);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
     await tester.pumpWidget(_wrap(repository));
     await tester.pumpAndSettle();
 
@@ -441,6 +516,9 @@ void main() {
     final repository = FakeBunnyRepository();
     repository.tagAliasesByNameMatches['cat'] = const [BunnyTagAlias(id: 1, antecedentName: 'cat', consequentName: 'domestic_cat', status: 'active', postCount: 0)];
 
+    tester.view.physicalSize = const Size(800, 2000);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
     await tester.pumpWidget(_wrap(repository));
     await tester.pumpAndSettle();
 
@@ -460,6 +538,9 @@ void main() {
     repository.tagImplicationsByNameMatches['huge_breasts'] = const [BunnyTagImplication(id: 2, antecedentName: 'huge_breasts', consequentName: 'big_breasts', status: 'active')];
     repository.tagImplicationsByNameMatches['big_breasts'] = const [BunnyTagImplication(id: 3, antecedentName: 'big_breasts', consequentName: 'breasts', status: 'active')];
 
+    tester.view.physicalSize = const Size(800, 2000);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
     await tester.pumpWidget(_wrap(repository));
     await tester.pumpAndSettle();
 
@@ -472,6 +553,9 @@ void main() {
   testWidgets('a tag with no implications shows no chain (M54)', (WidgetTester tester) async {
     final repository = FakeBunnyRepository();
 
+    tester.view.physicalSize = const Size(800, 2000);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
     await tester.pumpWidget(_wrap(repository));
     await tester.pumpAndSettle();
 
@@ -485,6 +569,9 @@ void main() {
     final repository = FakeBunnyRepository();
     repository.tagImplicationsByNameMatches['hyper_breasts'] = const [BunnyTagImplication(id: 1, antecedentName: 'hyper_breasts', consequentName: 'breasts', status: 'active')];
 
+    tester.view.physicalSize = const Size(800, 2000);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
     await tester.pumpWidget(_wrap(repository));
     await tester.pumpAndSettle();
 
@@ -500,6 +587,9 @@ void main() {
 
   testWidgets('switching site re-validates the query under the new dialect (M28/M54)', (WidgetTester tester) async {
     final repository = FakeBunnyRepository();
+    tester.view.physicalSize = const Size(800, 2000);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
     await tester.pumpWidget(_wrap(repository));
     await tester.pumpAndSettle();
 
