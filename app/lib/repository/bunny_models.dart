@@ -69,6 +69,62 @@ const Map<int, String> kInkbunnySubmissionTypeNames = {
   14: 'Photography - Fursuit/Sculpture/Jewelry/etc',
 };
 
+/// Inkbunny's advanced search filters (api_search.php's own parameter set,
+/// M74), as a single controlled value for the shared filter-editing widget
+/// (`InkbunnyAdvancedFiltersPanel`) -- the same shape [BunnySearch] carries
+/// for a saved search, plus [BunnyRepository.createSearch]/[updateSearch]/
+/// [previewSearch]'s own `inkbunny*` named params, just bundled into one
+/// value instead of passed as nine separate ones at every call site that
+/// edits them together.
+class InkbunnySearchFilters {
+  final int searchInMask;
+  final int fieldJoinType;
+  final int stringJoinType;
+  final String? username;
+  final int submissionTypeMask;
+  final int daysLimit;
+  final String? orderBy;
+  final bool random;
+  final int scraps;
+
+  const InkbunnySearchFilters({
+    this.searchInMask = 0,
+    this.fieldJoinType = 0,
+    this.stringJoinType = 0,
+    this.username,
+    this.submissionTypeMask = 0,
+    this.daysLimit = 0,
+    this.orderBy,
+    this.random = false,
+    this.scraps = 0,
+  });
+
+  factory InkbunnySearchFilters.fromSearch(BunnySearch search) => InkbunnySearchFilters(
+    searchInMask: search.inkbunnySearchInMask,
+    fieldJoinType: search.inkbunnyFieldJoinType,
+    stringJoinType: search.inkbunnyStringJoinType,
+    username: search.inkbunnyUsername,
+    submissionTypeMask: search.inkbunnySubmissionTypeMask,
+    daysLimit: search.inkbunnyDaysLimit,
+    orderBy: search.inkbunnyOrderBy,
+    random: search.inkbunnyRandom,
+    scraps: search.inkbunnyScraps,
+  );
+
+  InkbunnySearchFilters copyWith({int? searchInMask, int? fieldJoinType, int? stringJoinType, String? username, bool clearUsername = false, int? submissionTypeMask, int? daysLimit, String? orderBy, bool clearOrderBy = false, bool? random, int? scraps}) =>
+      InkbunnySearchFilters(
+        searchInMask: searchInMask ?? this.searchInMask,
+        fieldJoinType: fieldJoinType ?? this.fieldJoinType,
+        stringJoinType: stringJoinType ?? this.stringJoinType,
+        username: clearUsername ? null : (username ?? this.username),
+        submissionTypeMask: submissionTypeMask ?? this.submissionTypeMask,
+        daysLimit: daysLimit ?? this.daysLimit,
+        orderBy: clearOrderBy ? null : (orderBy ?? this.orderBy),
+        random: random ?? this.random,
+        scraps: scraps ?? this.scraps,
+      );
+}
+
 /// A stored site account, without its secret -- neither implementation of
 /// [BunnyRepository] echoes it back (the server never does, per M5's
 /// `GET /accounts/{site}`, so the FFI implementation deliberately doesn't

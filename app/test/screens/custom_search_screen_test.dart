@@ -83,6 +83,19 @@ void main() {
     expect(repository.previewSearchCalls, contains((BunnySite.inkbunny, 'fox', 1)));
   });
 
+  testWidgets('the Inkbunny advanced filters panel is shown only for Inkbunny (M74)', (WidgetTester tester) async {
+    final repository = FakeBunnyRepository();
+    await tester.pumpWidget(_wrap(repository));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('inkbunnyAdvancedFiltersPanel')), findsNothing);
+
+    await tester.tap(find.text('Inkbunny'));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('inkbunnyAdvancedFiltersPanel')), findsOneWidget);
+  });
+
   testWidgets('autocomplete strips and reattaches a leading - prefix (M9.6.7 pattern)', (WidgetTester tester) async {
     final repository = FakeBunnyRepository();
     repository.tagStats.addAll(const [BunnyTagStat(name: 'dogsled', count: 7)]);

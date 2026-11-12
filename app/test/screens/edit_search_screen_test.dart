@@ -100,6 +100,16 @@ void main() {
   });
 
   testWidgets('picking a star level for an Inkbunny search updates auto_favorite_stars', (WidgetTester tester) async {
+    // Taller surface -- the Inkbunny advanced-filters panel (M74) added
+    // enough height above the star picker that, on the default test
+    // surface, the Save button fell outside the ListView's layout cache
+    // extent entirely (not just scrolled off -- genuinely not yet laid
+    // out), so `ensureVisible` had nothing to find. Same fix already used
+    // elsewhere for a long Inkbunny-only form (slideshow_edit_screen_test.dart).
+    tester.view.physicalSize = const Size(800, 2400);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+
     final repository = FakeBunnyRepository();
     final search = await _seedSearch(repository, site: BunnySite.inkbunny);
 

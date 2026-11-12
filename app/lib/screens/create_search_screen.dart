@@ -6,6 +6,7 @@ import '../l10n/app_localizations.dart';
 import '../repository/bunny_models.dart';
 import '../repository/bunny_repository.dart';
 import '../util/tag_query.dart';
+import '../widgets/inkbunny_advanced_filters_panel.dart';
 
 /// Creates a new saved search. The query field's tag-autocomplete
 /// (`BunnyRepository.tagAutocomplete`, M8.1) is debounced and only
@@ -35,7 +36,13 @@ class CreateSearchScreen extends StatefulWidget {
   /// behavior below never overwrites it.
   final String? initialLabel;
 
-  const CreateSearchScreen({super.key, required this.repository, this.initialSite, this.initialQuery, this.initialLabel});
+  /// Pre-fills the Inkbunny advanced-filter panel (M74) -- used the same way
+  /// as [initialQuery], when a browse that already had filters applied gets
+  /// saved as a real search via [TagBrowseScreen]'s own "add to searches"
+  /// action.
+  final InkbunnySearchFilters? initialInkbunnyFilters;
+
+  const CreateSearchScreen({super.key, required this.repository, this.initialSite, this.initialQuery, this.initialLabel, this.initialInkbunnyFilters});
 
   @override
   State<CreateSearchScreen> createState() => _CreateSearchScreenState();
@@ -83,12 +90,16 @@ class _CreateSearchScreenState extends State<CreateSearchScreen> {
   bool _usesDefaultInterval = true;
   List<BunnyGroup> _groups = [];
   int _groupId = 0;
+  InkbunnySearchFilters _inkbunnyFilters = const InkbunnySearchFilters();
 
   @override
   void initState() {
     super.initState();
     if (widget.initialSite != null) {
       _site = widget.initialSite!;
+    }
+    if (widget.initialInkbunnyFilters != null) {
+      _inkbunnyFilters = widget.initialInkbunnyFilters!;
     }
     _queryController.addListener(_onQueryChanged);
     _queryController.addListener(_onQueryChangedValidate);
@@ -290,6 +301,15 @@ class _CreateSearchScreenState extends State<CreateSearchScreen> {
       autoFavorite: _autoFavorite,
       autoUpvote: _site == BunnySite.e621 && _autoUpvote,
       usesDefaultInterval: _usesDefaultInterval,
+      inkbunnySearchInMask: _inkbunnyFilters.searchInMask,
+      inkbunnyFieldJoinType: _inkbunnyFilters.fieldJoinType,
+      inkbunnyStringJoinType: _inkbunnyFilters.stringJoinType,
+      inkbunnyUsername: _inkbunnyFilters.username,
+      inkbunnySubmissionTypeMask: _inkbunnyFilters.submissionTypeMask,
+      inkbunnyDaysLimit: _inkbunnyFilters.daysLimit,
+      inkbunnyOrderBy: _inkbunnyFilters.orderBy,
+      inkbunnyRandom: _inkbunnyFilters.random,
+      inkbunnyScraps: _inkbunnyFilters.scraps,
     );
     if (_groupId != 0) {
       await widget.repository.setSearchGroup(id, _groupId);
@@ -339,6 +359,7 @@ class _CreateSearchScreenState extends State<CreateSearchScreen> {
               if (_implicationChain.isNotEmpty) Padding(padding: const EdgeInsets.only(top: 4), child: Text(_implicationChain.join(' → '), style: Theme.of(context).textTheme.bodySmall)),
               if (_suggestions.isNotEmpty)
                 Wrap(spacing: 8, children: _suggestions.map((stat) => ActionChip(label: Text('${stat.name} (${stat.count})'), onPressed: () => _applySuggestion(stat.name))).toList()),
+              if (_site == BunnySite.inkbunny) InkbunnyAdvancedFiltersPanel(value: _inkbunnyFilters, enabled: !_submitting, onChanged: (filters) => setState(() => _inkbunnyFilters = filters)),
               TextFormField(
                 controller: _intervalController,
                 enabled: !_submitting && !_usesDefaultInterval,
