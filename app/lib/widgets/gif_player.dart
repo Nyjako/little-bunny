@@ -1,10 +1,10 @@
 import 'dart:async';
-import 'dart:io';
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_cache_manager/flutter_cache_manager.dart';
 
+import '../util/local_media_bytes.dart';
 import 'download_progress_indicator.dart';
 
 /// Plays an animated GIF frame-by-frame (decoding via [ui.Codec] directly,
@@ -93,7 +93,7 @@ class _GifPlayerState extends State<GifPlayer> {
 
   Future<void> _loadLocal(String path) async {
     try {
-      final bytes = await File(path).readAsBytes();
+      final bytes = await readLocalMediaBytes(path);
       final codec = await ui.instantiateImageCodec(bytes);
       if (!mounted) {
         codec.dispose();
