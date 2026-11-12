@@ -612,7 +612,7 @@ void main() {
     // entry that way -- but the bonus track itself is still surfaced via
     // `_mixedAudioTracks` (M28 submission-type coverage follow-up), not
     // silently dropped.
-    testWidgets('a Picture Series post with a mixed image+audio file list shows the primary image plus the bonus track', (WidgetTester tester) async {
+    testWidgets('a Picture Series post with a mixed image+audio file list shows every page as a gallery plus the bonus track (M76)', (WidgetTester tester) async {
       final repository = FakeBunnyRepository();
       final post = _post(site: BunnySite.inkbunny, fileExt: 'png');
       repository.filesByPostId[1] = [
@@ -627,17 +627,21 @@ void main() {
       });
       await tester.pump();
 
-      expect(find.byKey(const Key('postDetailGalleryPrevButton')), findsNothing);
-      expect(find.byKey(const Key('postDetailGalleryNextButton')), findsNothing);
+      // The real fix (M76): every image among the files (not just "every
+      // file is an image") still gets the paging gallery -- the one
+      // mixed-in mp3 no longer costs the other 9 pages their own gallery.
+      expect(find.text('1/10'), findsOneWidget);
+      expect(find.byKey(const Key('postDetailGalleryPrevButton')), findsOneWidget);
+      expect(find.byKey(const Key('postDetailGalleryNextButton')), findsOneWidget);
       expect(_findCachedNetworkImage(), findsOneWidget);
-      expect(find.byKey(const Key('postDetailAudioAlbumList')), findsOneWidget);
-      expect(find.text('1. bonus.mp3'), findsOneWidget);
+      expect(find.byType(AudioPlayerWidget), findsOneWidget);
     });
 
     // Real shape live-checked on a Music - Single Track submission (M28):
     // cover art as the primary file, with the actual track(s) as additional
-    // files -- without `_mixedAudioTracks`, the cover would show and the
-    // only audio on the post would be completely unreachable.
+    // files -- without the general extra-file dispatch (M76; formerly
+    // `_mixedAudioTracks`), the cover would show and the only audio on the
+    // post would be completely unreachable.
     testWidgets('a Music - Single Track post with cover art as the primary file still surfaces its track', (WidgetTester tester) async {
       final repository = FakeBunnyRepository();
       final post = _post(site: BunnySite.inkbunny, fileExt: 'jpg');
@@ -653,8 +657,49 @@ void main() {
       await tester.pump();
 
       expect(_findCachedNetworkImage(), findsOneWidget);
-      expect(find.byKey(const Key('postDetailAudioAlbumList')), findsOneWidget);
-      expect(find.text('1. track.mp3'), findsOneWidget);
+      expect(find.byType(AudioPlayerWidget), findsOneWidget);
+    });
+
+    // Real shape live-checked, M76 submission-type coverage follow-up:
+    // Flash - Interactive's swf-plus-reference-image, and Video -
+    // Animation/3D's gif-plus-mp4 -- neither audio nor text, so
+    // `_mixedAudioTracks`/`_mixedTextDocuments` never covered this at all;
+    // the secondary file was completely unreachable until the general
+    // extra-file dispatch replaced them.
+    testWidgets('a post with an unsupported primary file still surfaces a displayable secondary image (M76)', (WidgetTester tester) async {
+      final repository = FakeBunnyRepository();
+      final post = _post(site: BunnySite.inkbunny, fileExt: 'swf');
+      repository.filesByPostId[1] = const [
+        BunnyPostFile(fileUrl: 'https://example.invalid/clip.swf', fileExt: 'swf', width: 0, height: 0),
+        BunnyPostFile(fileUrl: 'https://example.invalid/reference.png', fileExt: 'png', width: 800, height: 600),
+      ];
+
+      await tester.runAsync(() async {
+        await tester.pumpWidget(wrapWithLocalization(PostDetailScreen(post: post, repository: repository, displaySettingsStore: const DisplaySettingsStore(), downloadSettingsStore: const DownloadSettingsStore(), downloadQueueService: _downloadQueueService())));
+        await Future<void>.delayed(const Duration(milliseconds: 300));
+      });
+      await tester.pump();
+
+      expect(find.textContaining('swf'), findsOneWidget);
+      expect(_findCachedNetworkImage(), findsOneWidget);
+    });
+
+    testWidgets('a video post with a mixed-in gif still surfaces the real video as a secondary file (M76)', (WidgetTester tester) async {
+      final repository = FakeBunnyRepository();
+      final post = _post(site: BunnySite.inkbunny, fileExt: 'gif');
+      repository.filesByPostId[1] = const [
+        BunnyPostFile(fileUrl: 'https://example.invalid/preview.gif', fileExt: 'gif', width: 800, height: 600),
+        BunnyPostFile(fileUrl: 'https://example.invalid/real.mp4', fileExt: 'mp4', width: 1920, height: 1080),
+      ];
+
+      await tester.pumpWidget(wrapWithLocalization(PostDetailScreen(post: post, repository: repository, displaySettingsStore: const DisplaySettingsStore(), downloadSettingsStore: const DownloadSettingsStore(), downloadQueueService: _downloadQueueService())));
+      // Not pumpAndSettle -- the mixed-in gif's own real (caught, failing)
+      // network fetch leaves a dangling future that pumpAndSettle waits on
+      // forever, same reason the gif-only tests above use a bare pump().
+      await tester.pump();
+      await tester.pump();
+
+      expect(find.byType(VideoPlayer), findsOneWidget);
     });
 
     // Real shape reported live, post #373335: a Writing - Document
