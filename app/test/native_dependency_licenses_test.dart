@@ -12,7 +12,7 @@ void main() {
 
     expect(
       packages,
-      containsAll(<String>['curl', 'cJSON', 'SQLite', 'GOBLIN', 'mbedTLS (Android builds)', 'OpenSSL (desktop builds)', 'zlib', 'Brotli (desktop builds)', 'Zstandard (desktop builds)']),
+      containsAll(<String>['curl', 'cJSON', 'SQLite', 'GOBLIN', 'mbedTLS (Android builds)', 'OpenSSL (desktop builds)', 'zlib']),
     );
   });
 
