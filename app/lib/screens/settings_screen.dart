@@ -13,6 +13,7 @@ import '../repository/bunny_models.dart';
 import '../repository/bunny_repository.dart';
 import '../repository/bunny_repository_factory.dart';
 import '../repository/http_bunny_repository.dart';
+import '../services/download_queue_service.dart';
 import '../services/search_backup_service.dart';
 import '../settings/app_lock_service.dart';
 import '../settings/display_settings_store.dart';
@@ -20,6 +21,7 @@ import '../settings/download_settings_store.dart';
 import '../settings/repository_settings_store.dart';
 import '../settings/theme_settings_store.dart';
 import '../settings/update_settings_store.dart';
+import '../util/post_navigation.dart';
 import '../util/tag_query.dart';
 import 'about_screen.dart';
 import 'connection_qr_screen.dart';
@@ -39,6 +41,7 @@ class SettingsScreen extends StatefulWidget {
   final AppLockService lockService;
   final DisplaySettingsStore displaySettingsStore;
   final DownloadSettingsStore downloadSettingsStore;
+  final DownloadQueueService downloadQueueService;
   final RepositorySettingsStore settingsStore;
   final UpdateSettingsStore updateSettingsStore;
   final ValueChanged<ThemeMode> onThemeModeChanged;
@@ -54,6 +57,7 @@ class SettingsScreen extends StatefulWidget {
     required this.lockService,
     required this.displaySettingsStore,
     required this.downloadSettingsStore,
+    required this.downloadQueueService,
     required this.settingsStore,
     required this.updateSettingsStore,
     required this.onThemeModeChanged,
@@ -497,6 +501,73 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
+  /// Jumps straight to a post by its external (site-native) id -- a
+  /// debugging aid (M76) for reproducing a specific post's issue without
+  /// hunting for it through search, same underlying lookup as a parent/
+  /// child/pool cross-reference chip ([openExternalPost]). Validation is
+  /// inline in the dialog itself (an invalid/empty id just disables "Open")
+  /// rather than a separate error state, since there's nothing to show
+  /// until a well-formed id is actually submitted.
+  Future<void> _openPostById(AppLocalizations l10n) async {
+    final idController = TextEditingController();
+    var site = BunnySite.e621;
+    final result = await showDialog<(BunnySite, int)>(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) {
+          final parsedId = int.tryParse(idController.text.trim());
+          return AlertDialog(
+            title: Text(l10n.settingsOpenPostByIdDialogTitle),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                SegmentedButton<BunnySite>(
+                  segments: const [ButtonSegment(value: BunnySite.e621, label: Text('e621')), ButtonSegment(value: BunnySite.inkbunny, label: Text('Inkbunny'))],
+                  selected: {site},
+                  onSelectionChanged: (selection) => setDialogState(() => site = selection.first),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  key: const Key('settingsOpenPostByIdField'),
+                  controller: idController,
+                  autofocus: true,
+                  keyboardType: TextInputType.number,
+                  decoration: InputDecoration(labelText: l10n.settingsOpenPostByIdFieldLabel),
+                  onChanged: (_) => setDialogState(() {}),
+                  onSubmitted: (_) => parsedId == null ? null : Navigator.pop(context, (site, parsedId)),
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(context), child: Text(l10n.commonCancel)),
+              TextButton(onPressed: parsedId == null ? null : () => Navigator.pop(context, (site, parsedId)), child: Text(l10n.settingsOpenPostByIdOpenButton)),
+            ],
+          );
+        },
+      ),
+    );
+    // Not disposed here, deliberately -- same as SlideshowEditScreen's
+    // own dialog-local controllers (_editOverrideCount, for one): the
+    // dialog's exit transition keeps rebuilding this TextField for a few
+    // more frames after showDialog's future completes, so disposing it
+    // immediately throws "used after being disposed" mid-animation.
+    if (result == null || !mounted) {
+      return;
+    }
+    final (selectedSite, postId) = result;
+    await openExternalPost(
+      context: context,
+      l10n: l10n,
+      repository: widget.repository,
+      site: selectedSite,
+      externalId: postId,
+      displaySettingsStore: widget.displaySettingsStore,
+      downloadSettingsStore: widget.downloadSettingsStore,
+      downloadQueueService: widget.downloadQueueService,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
@@ -744,6 +815,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
             title: Text(l10n.settingsAppLockEntry),
             trailing: const Icon(Icons.chevron_right),
             onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => LockSetupScreen(lockService: widget.lockService))),
+          ),
+          const SizedBox(height: 24),
+          Text(l10n.settingsDebugSection, style: Theme.of(context).textTheme.titleMedium),
+          ListTile(
+            contentPadding: EdgeInsets.zero,
+            title: Text(l10n.settingsOpenPostByIdEntry),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => _openPostById(l10n),
           ),
           const SizedBox(height: 24),
           Text(l10n.settingsAboutSection, style: Theme.of(context).textTheme.titleMedium),

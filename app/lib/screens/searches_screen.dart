@@ -1018,6 +1018,7 @@ class _SearchesScreenState extends State<SearchesScreen> with SingleTickerProvid
           lockService: widget.lockService,
           displaySettingsStore: widget.displaySettingsStore,
           downloadSettingsStore: widget.downloadSettingsStore,
+          downloadQueueService: widget.downloadQueueService,
           settingsStore: widget.settingsStore,
           updateSettingsStore: widget.updateSettingsStore,
           onThemeModeChanged: widget.onThemeModeChanged,

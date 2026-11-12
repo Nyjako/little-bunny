@@ -4,7 +4,10 @@ import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:little_bunny/repository/bunny_models.dart';
 import 'package:little_bunny/repository/http_bunny_repository.dart';
+import 'package:little_bunny/screens/post_detail_screen.dart';
 import 'package:little_bunny/screens/settings_screen.dart';
+import 'package:little_bunny/services/download_manager.dart';
+import 'package:little_bunny/services/download_queue_service.dart';
 import 'package:little_bunny/settings/app_lock_service.dart';
 import 'package:little_bunny/settings/display_settings_store.dart';
 import 'package:little_bunny/settings/download_settings_store.dart';
@@ -26,6 +29,7 @@ void main() {
   });
 
   RepositorySettingsStore settingsStore() => RepositorySettingsStore(FakeSecretStore());
+  DownloadQueueService downloadQueueService() => DownloadQueueService(downloadManager: const DownloadManager(), downloadSettingsStore: const DownloadSettingsStore());
 
   testWidgets('shows the persisted theme mode selected', (WidgetTester tester) async {
     const themeStore = ThemeSettingsStore();
@@ -38,6 +42,7 @@ void main() {
           themeSettingsStore: themeStore,
           lockService: AppLockService(FakeSecretStore()),
           downloadSettingsStore: const DownloadSettingsStore(),
+          downloadQueueService: downloadQueueService(),
           updateSettingsStore: const UpdateSettingsStore(),
           displaySettingsStore: const DisplaySettingsStore(),
           settingsStore: settingsStore(),
@@ -66,6 +71,7 @@ void main() {
           themeSettingsStore: themeStore,
           lockService: AppLockService(FakeSecretStore()),
           downloadSettingsStore: const DownloadSettingsStore(),
+          downloadQueueService: downloadQueueService(),
           updateSettingsStore: const UpdateSettingsStore(),
           displaySettingsStore: const DisplaySettingsStore(),
           settingsStore: settingsStore(),
@@ -98,6 +104,7 @@ void main() {
           themeSettingsStore: themeStore,
           lockService: AppLockService(FakeSecretStore()),
           downloadSettingsStore: const DownloadSettingsStore(),
+          downloadQueueService: downloadQueueService(),
           updateSettingsStore: const UpdateSettingsStore(),
           displaySettingsStore: const DisplaySettingsStore(),
           settingsStore: settingsStore(),
@@ -133,6 +140,7 @@ void main() {
           themeSettingsStore: themeStore,
           lockService: AppLockService(FakeSecretStore()),
           downloadSettingsStore: const DownloadSettingsStore(),
+          downloadQueueService: downloadQueueService(),
           updateSettingsStore: const UpdateSettingsStore(),
           displaySettingsStore: const DisplaySettingsStore(),
           settingsStore: settingsStore(),
@@ -169,6 +177,7 @@ void main() {
           themeSettingsStore: const ThemeSettingsStore(),
           lockService: AppLockService(FakeSecretStore()),
           downloadSettingsStore: const DownloadSettingsStore(),
+          downloadQueueService: downloadQueueService(),
           updateSettingsStore: const UpdateSettingsStore(),
           displaySettingsStore: const DisplaySettingsStore(),
           settingsStore: settingsStore(),
@@ -200,6 +209,7 @@ void main() {
           themeSettingsStore: const ThemeSettingsStore(),
           lockService: AppLockService(FakeSecretStore()),
           downloadSettingsStore: const DownloadSettingsStore(),
+          downloadQueueService: downloadQueueService(),
           updateSettingsStore: const UpdateSettingsStore(),
           displaySettingsStore: const DisplaySettingsStore(),
           settingsStore: settingsStore(),
@@ -236,6 +246,7 @@ void main() {
           themeSettingsStore: const ThemeSettingsStore(),
           lockService: AppLockService(FakeSecretStore()),
           downloadSettingsStore: const DownloadSettingsStore(),
+          downloadQueueService: downloadQueueService(),
           updateSettingsStore: const UpdateSettingsStore(),
           displaySettingsStore: const DisplaySettingsStore(),
           settingsStore: settingsStore(),
@@ -263,6 +274,7 @@ void main() {
           lockService: AppLockService(FakeSecretStore()),
           displaySettingsStore: const DisplaySettingsStore(),
           downloadSettingsStore: const DownloadSettingsStore(),
+          downloadQueueService: downloadQueueService(),
           updateSettingsStore: const UpdateSettingsStore(),
           settingsStore: settingsStore(),
           onThemeModeChanged: (_) {},
@@ -291,6 +303,7 @@ void main() {
           themeSettingsStore: const ThemeSettingsStore(),
           lockService: AppLockService(FakeSecretStore()),
           downloadSettingsStore: const DownloadSettingsStore(),
+          downloadQueueService: downloadQueueService(),
           updateSettingsStore: const UpdateSettingsStore(),
           displaySettingsStore: const DisplaySettingsStore(),
           settingsStore: settingsStore(),
@@ -327,6 +340,7 @@ void main() {
           themeSettingsStore: const ThemeSettingsStore(),
           lockService: AppLockService(FakeSecretStore()),
           downloadSettingsStore: downloadStore,
+          downloadQueueService: downloadQueueService(),
           displaySettingsStore: const DisplaySettingsStore(),
           settingsStore: settingsStore(),
           updateSettingsStore: const UpdateSettingsStore(),
@@ -366,6 +380,7 @@ void main() {
           themeSettingsStore: const ThemeSettingsStore(),
           lockService: AppLockService(FakeSecretStore()),
           downloadSettingsStore: downloadStore,
+          downloadQueueService: downloadQueueService(),
           displaySettingsStore: const DisplaySettingsStore(),
           settingsStore: settingsStore(),
           updateSettingsStore: const UpdateSettingsStore(),
@@ -398,6 +413,7 @@ void main() {
           themeSettingsStore: const ThemeSettingsStore(),
           lockService: AppLockService(FakeSecretStore()),
           downloadSettingsStore: const DownloadSettingsStore(),
+          downloadQueueService: downloadQueueService(),
           displaySettingsStore: const DisplaySettingsStore(),
           settingsStore: settingsStore(),
           updateSettingsStore: updateStore,
@@ -430,6 +446,7 @@ void main() {
           themeSettingsStore: const ThemeSettingsStore(),
           lockService: AppLockService(FakeSecretStore()),
           downloadSettingsStore: const DownloadSettingsStore(),
+          downloadQueueService: downloadQueueService(),
           updateSettingsStore: const UpdateSettingsStore(),
           displaySettingsStore: displayStore,
           settingsStore: settingsStore(),
@@ -472,6 +489,7 @@ void main() {
           themeSettingsStore: const ThemeSettingsStore(),
           lockService: AppLockService(FakeSecretStore()),
           downloadSettingsStore: const DownloadSettingsStore(),
+          downloadQueueService: downloadQueueService(),
           updateSettingsStore: const UpdateSettingsStore(),
           displaySettingsStore: const DisplaySettingsStore(),
           settingsStore: settingsStore(),
@@ -499,6 +517,12 @@ void main() {
     // Inkbunny's own list must stay untouched by an e621 addition.
     expect(await repository.getBlacklist(BunnySite.inkbunny), ['gore']);
 
+    // The site switcher sits above "Add tag" -- scrolling down far enough
+    // to reveal "Add tag" can push it back out past the render cache
+    // extent (M76 pushed the list's total length over that threshold), so
+    // scroll back up to it explicitly rather than relying on wherever the
+    // previous scroll happened to land.
+    await tester.dragUntilVisible(find.text('Inkbunny'), find.byType(ListView), const Offset(0, 200));
     await tester.tap(find.text('Inkbunny').last);
     await tester.pumpAndSettle();
 
@@ -522,6 +546,7 @@ void main() {
           themeSettingsStore: const ThemeSettingsStore(),
           lockService: AppLockService(FakeSecretStore()),
           downloadSettingsStore: const DownloadSettingsStore(),
+          downloadQueueService: downloadQueueService(),
           updateSettingsStore: const UpdateSettingsStore(),
           displaySettingsStore: const DisplaySettingsStore(),
           settingsStore: settingsStore(),
@@ -571,6 +596,7 @@ void main() {
           themeSettingsStore: const ThemeSettingsStore(),
           lockService: AppLockService(FakeSecretStore()),
           downloadSettingsStore: const DownloadSettingsStore(),
+          downloadQueueService: downloadQueueService(),
           updateSettingsStore: const UpdateSettingsStore(),
           displaySettingsStore: const DisplaySettingsStore(),
           settingsStore: settingsStore(),
@@ -613,6 +639,7 @@ void main() {
           themeSettingsStore: const ThemeSettingsStore(),
           lockService: AppLockService(FakeSecretStore()),
           downloadSettingsStore: const DownloadSettingsStore(),
+          downloadQueueService: downloadQueueService(),
           updateSettingsStore: const UpdateSettingsStore(),
           displaySettingsStore: const DisplaySettingsStore(),
           settingsStore: settingsStore(),
@@ -648,6 +675,7 @@ void main() {
           themeSettingsStore: const ThemeSettingsStore(),
           lockService: AppLockService(FakeSecretStore()),
           downloadSettingsStore: const DownloadSettingsStore(),
+          downloadQueueService: downloadQueueService(),
           updateSettingsStore: const UpdateSettingsStore(),
           displaySettingsStore: const DisplaySettingsStore(),
           settingsStore: settingsStore(),
@@ -663,6 +691,8 @@ void main() {
 
     await tester.dragUntilVisible(find.text('Add tag'), find.byType(ListView), const Offset(0, -200));
     await tester.pumpAndSettle();
+    // See the equivalent scroll-back-up comment in the test above.
+    await tester.dragUntilVisible(find.text('Inkbunny'), find.byType(ListView), const Offset(0, 200));
     await tester.tap(find.text('Inkbunny').last);
     await tester.pumpAndSettle();
 
@@ -680,6 +710,7 @@ void main() {
           themeSettingsStore: const ThemeSettingsStore(),
           lockService: AppLockService(FakeSecretStore()),
           downloadSettingsStore: const DownloadSettingsStore(),
+          downloadQueueService: downloadQueueService(),
           updateSettingsStore: const UpdateSettingsStore(),
           displaySettingsStore: const DisplaySettingsStore(),
           settingsStore: store,
@@ -707,6 +738,7 @@ void main() {
           themeSettingsStore: const ThemeSettingsStore(),
           lockService: AppLockService(FakeSecretStore()),
           downloadSettingsStore: const DownloadSettingsStore(),
+          downloadQueueService: downloadQueueService(),
           updateSettingsStore: const UpdateSettingsStore(),
           displaySettingsStore: const DisplaySettingsStore(),
           settingsStore: store,
@@ -771,6 +803,7 @@ void main() {
           themeSettingsStore: const ThemeSettingsStore(),
           lockService: AppLockService(FakeSecretStore()),
           downloadSettingsStore: const DownloadSettingsStore(),
+          downloadQueueService: downloadQueueService(),
           updateSettingsStore: const UpdateSettingsStore(),
           displaySettingsStore: const DisplaySettingsStore(),
           settingsStore: store,
@@ -791,5 +824,60 @@ void main() {
     expect(find.text('Connection QR'), findsOneWidget);
     expect(qrRequestUri?.path, '/qr');
     expect(find.byType(Image), findsOneWidget);
+  });
+
+  testWidgets('Open post by ID jumps straight to the chosen site/id (M76)', (WidgetTester tester) async {
+    final repository = FakeBunnyRepository();
+    repository.fetchPostResults['inkbunny:373335'] = 42;
+    repository.postsById[42] = const BunnyPost(
+      id: 42,
+      site: BunnySite.inkbunny,
+      externalId: 373335,
+      title: 'Story cover',
+      score: 0,
+      favCount: 0,
+      commentCount: 0,
+      width: 0,
+      height: 0,
+      cachedAt: '2026-01-01T00:00:00Z',
+      isSeen: false,
+      isFavorited: false,
+    );
+
+    await tester.pumpWidget(
+      wrapWithLocalization(
+        SettingsScreen(
+          repository: repository,
+          themeSettingsStore: const ThemeSettingsStore(),
+          lockService: AppLockService(FakeSecretStore()),
+          downloadSettingsStore: const DownloadSettingsStore(),
+          downloadQueueService: downloadQueueService(),
+          updateSettingsStore: const UpdateSettingsStore(),
+          displaySettingsStore: const DisplaySettingsStore(),
+          settingsStore: settingsStore(),
+          onThemeModeChanged: (_) {},
+          onThemeColorChanged: (_) {},
+          onAmoledChanged: (_) {},
+          onLanguageCodeChanged: (_) {},
+          onRepositoryConfigured: (_) {},
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.dragUntilVisible(find.text('Open post by ID'), find.byType(ListView), const Offset(0, -200));
+    await tester.ensureVisible(find.text('Open post by ID'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Open post by ID'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Inkbunny'));
+    await tester.enterText(find.byKey(const Key('settingsOpenPostByIdField')), '373335');
+    await tester.pump();
+    await tester.tap(find.text('Open'));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(PostDetailScreen), findsOneWidget);
+    expect(find.text('Story cover'), findsOneWidget);
   });
 }
