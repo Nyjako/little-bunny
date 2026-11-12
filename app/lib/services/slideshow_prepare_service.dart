@@ -115,6 +115,10 @@ class SlideshowPrepareService {
         .where((item) => item.status == DownloadQueueItemStatus.queued || item.status == DownloadQueueItemStatus.downloading)
         .map((item) => item.post.id)
         .toSet();
+    // One batched existence check for every committed post, not one
+    // `isDownloaded` call per post -- see `batchIsDownloaded`'s own doc
+    // comment for why that distinction matters a lot under SAF (Android).
+    final downloadedByPostId = await downloadManager.batchIsDownloaded(committed.map((entry) => entry.post).toList(growable: false), folder);
 
     final results = <SlideshowPostStatus>[];
     final toEnqueue = <BunnyPost>[];
@@ -127,7 +131,7 @@ class SlideshowPrepareService {
     for (final entry in committed) {
       originalIdsBySearch.putIfAbsent(entry.searchId, () => {}).add(entry.post.id);
 
-      if (await downloadManager.isDownloaded(entry.post, folder)) {
+      if (downloadedByPostId[entry.post.id] ?? false) {
         results.add(SlideshowPostStatus(searchId: entry.searchId, post: entry.post, readiness: SlideshowPostReadiness.ready));
         continue;
       }

@@ -9,6 +9,8 @@ import '../services/download_queue_service.dart';
 import '../settings/display_settings_store.dart';
 import '../settings/download_settings_store.dart';
 import '../util/tag_query.dart';
+import '../widgets/e621_metatags_panel.dart';
+import '../widgets/inkbunny_advanced_filters_panel.dart';
 import 'tag_browse_screen.dart';
 
 /// A free-text entry point into a live, unsaved [TagBrowseScreen] (M54
@@ -57,6 +59,7 @@ class _CustomSearchScreenState extends State<CustomSearchScreen> {
   /// See CreateSearchScreen's own doc comment (M54).
   List<String> _implicationChain = const [];
   Timer? _implicationCheckDebounce;
+  InkbunnySearchFilters _inkbunnyFilters = const InkbunnySearchFilters();
 
   @override
   void initState() {
@@ -165,7 +168,10 @@ class _CustomSearchScreenState extends State<CustomSearchScreen> {
 
   void _search() {
     final query = _queryController.text.trim();
-    if (query.isEmpty || _queryError != null) {
+    // An empty query is intentionally allowed -- see bunny_tag_query.h's own
+    // doc comment: it's syntactically valid on both sites and just means
+    // "everything" (the newest uploads, same as browsing with no filter).
+    if (_queryError != null) {
       return;
     }
     Navigator.push(
@@ -178,6 +184,7 @@ class _CustomSearchScreenState extends State<CustomSearchScreen> {
           displaySettingsStore: widget.displaySettingsStore,
           downloadSettingsStore: widget.downloadSettingsStore,
           downloadQueueService: widget.downloadQueueService,
+          inkbunnyFilters: _inkbunnyFilters,
         ),
       ),
     );
@@ -212,10 +219,12 @@ class _CustomSearchScreenState extends State<CustomSearchScreen> {
             if (_implicationChain.isNotEmpty) Padding(padding: const EdgeInsets.only(top: 4), child: Text(_implicationChain.join(' → '), style: Theme.of(context).textTheme.bodySmall)),
             if (_suggestions.isNotEmpty)
               Wrap(spacing: 8, children: _suggestions.map((stat) => ActionChip(label: Text('${stat.name} (${stat.count})'), onPressed: () => _applySuggestion(stat.name))).toList()),
+            if (_site == BunnySite.e621) E621MetatagsPanel(queryController: _queryController),
+            if (_site == BunnySite.inkbunny) InkbunnyAdvancedFiltersPanel(value: _inkbunnyFilters, onChanged: (filters) => setState(() => _inkbunnyFilters = filters)),
             const SizedBox(height: 16),
             ValueListenableBuilder<TextEditingValue>(
               valueListenable: _queryController,
-              builder: (context, value, child) => FilledButton(onPressed: value.text.trim().isNotEmpty && _queryError == null ? _search : null, child: Text(l10n.customSearchSubmit)),
+              builder: (context, value, child) => FilledButton(onPressed: _queryError == null ? _search : null, child: Text(l10n.customSearchSubmit)),
             ),
           ],
         ),

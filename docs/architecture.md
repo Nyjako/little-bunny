@@ -283,7 +283,7 @@ calls `server_app_stop()`, which now also tears down the scheduler.
 
 `app/` is the Flutter GUI (desktop + mobile, per the Components section above). Managed via
 [fvm](https://fvm.app/) — always run `fvm flutter ...`/`fvm dart ...`, not the bare
-commands, since the SDK version is pinned in `app/.fvmrc` (Flutter 3.44.0 / Dart 3.12.0) for
+commands, since the SDK version is pinned in `app/.fvmrc` (Flutter 3.47.9 / Dart 3.13.7) for
 reproducibility. **Only Linux desktop and Android are build-verifiable in the dev
 environment this was built in** — Windows/macOS/iOS have no local toolchain there, so those
 platforms are scaffolded (present in `--platforms=...`) but unverified until built somewhere

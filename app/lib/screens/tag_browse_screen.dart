@@ -4,6 +4,7 @@ import '../l10n/app_localizations.dart';
 import '../repository/bunny_models.dart';
 import '../repository/bunny_repository.dart';
 import '../services/download_queue_service.dart';
+import '../services/preview_cache_service.dart';
 import '../settings/display_settings_store.dart';
 import '../settings/download_settings_store.dart';
 import '../util/post_navigation.dart';
@@ -47,6 +48,22 @@ class TagBrowseScreen extends StatefulWidget {
   /// [customFetch] is set.
   final String? title;
 
+  /// When set, page 1's fetch checks this cache first instead of always
+  /// calling [BunnyRepository.previewSearch] directly -- lets a caller (the
+  /// stats screen's recommended-searches section) warm the very first page
+  /// in the background before the user even opens this screen, so it can
+  /// feel instant. `null` everywhere else, which is every other call site
+  /// of this screen today: no behavior change for them.
+  final PreviewCacheService? previewCache;
+
+  /// Inkbunny's advanced search filters (M74) to apply to every page fetch
+  /// -- `null` (every call site but [CustomSearchScreen]'s own) behaves
+  /// exactly like the all-defaults value, since every field in
+  /// [InkbunnySearchFilters] already defaults to "no filter". Also carried
+  /// along into the "save as search" app bar action, so a query previewed
+  /// with filters applied saves with the same filters already set.
+  final InkbunnySearchFilters? inkbunnyFilters;
+
   const TagBrowseScreen({
     super.key,
     required this.site,
@@ -58,6 +75,8 @@ class TagBrowseScreen extends StatefulWidget {
     this.initialLabel,
     this.customFetch,
     this.title,
+    this.previewCache,
+    this.inkbunnyFilters,
   });
 
   @override
@@ -74,6 +93,19 @@ class _TagBrowseScreenState extends State<TagBrowseScreen> {
   int _nextPage = 1;
   PreviewQuality _previewQuality = PreviewQuality.thumbnail;
   int _gridColumns = 3;
+
+  /// Non-empty means selection mode is active, same convention as
+  /// [PostGridScreen]'s own `_selectedPostIds` -- there's no separate
+  /// boolean flag since "at least one post selected" and "in selection mode"
+  /// are the same condition here.
+  final Set<int> _selectedPostIds = {};
+
+  bool get _selectionMode => _selectedPostIds.isNotEmpty;
+
+  /// Unlike [PostGridScreen], there's no "select entire search" here -- this
+  /// screen has no [BunnySearch.totalCount] to page against, only whatever
+  /// infinite scroll has loaded into [_posts] so far.
+  List<BunnyPost> get _selectedPosts => _posts.where((post) => _selectedPostIds.contains(post.id)).toList();
 
   /// Non-null only when [TagBrowseScreen.query] is itself a pool browse
   /// ("pool:`<id>`") -- the id this screen is showing, parsed once up front
@@ -174,6 +206,53 @@ class _TagBrowseScreenState extends State<TagBrowseScreen> {
     );
   }
 
+  void _toggleSelection(int postId) {
+    setState(() {
+      if (!_selectedPostIds.remove(postId)) {
+        _selectedPostIds.add(postId);
+      }
+    });
+  }
+
+  void _onTileTap(List<BunnyPost> posts, BunnyPost post) {
+    if (_selectionMode) {
+      _toggleSelection(post.id);
+    } else {
+      _openPost(posts, post);
+    }
+  }
+
+  void _exitSelectionMode() {
+    setState(() => _selectedPostIds.clear());
+  }
+
+  void _selectAll() {
+    setState(() => _selectedPostIds..clear()..addAll(_posts.map((post) => post.id)));
+  }
+
+  /// Same pool-page-numbering convention as [PostGridScreen._massDownload] --
+  /// a selected post's page is its position in the full, currently-loaded
+  /// [_posts] list (not its position within just the selection), so
+  /// selecting only some of a pool's posts doesn't renumber them.
+  Future<void> _massDownload(AppLocalizations l10n) async {
+    final selected = _selectedPosts;
+    if (selected.isEmpty) {
+      return;
+    }
+    final poolId = _poolId;
+    if (poolId != null) {
+      final pageByPostId = {for (final (index, post) in _posts.indexed) post.id: index + 1};
+      await widget.downloadQueueService.enqueuePool(selected, widget.repository, poolId: poolId, poolName: _poolInfo?.name ?? widget.query, pageByPostId: pageByPostId);
+    } else {
+      await widget.downloadQueueService.enqueueAll(selected, widget.repository);
+    }
+    if (!mounted) {
+      return;
+    }
+    setState(() => _selectedPostIds.clear());
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(l10n.postGridMassDownloadQueued(selected.length))));
+  }
+
   void _openWikiPage(String title) {
     Navigator.push(
       context,
@@ -248,7 +327,28 @@ class _TagBrowseScreenState extends State<TagBrowseScreen> {
       return customFetch(page);
     }
     final query = widget.site == BunnySite.e621 && widget.query.startsWith('pool:') ? '${widget.query} order:id' : widget.query;
-    return widget.repository.previewSearch(widget.site, query, page: page);
+    final previewCache = widget.previewCache;
+    // Only page 1 -- a recommendation's background warm-up ([PreviewCacheService.
+    // prefetch]) only ever fetches the first page, so there's nothing cached
+    // for page 2 onward anyway.
+    if (previewCache != null && page == 1) {
+      return previewCache.getOrFetch(widget.repository, widget.site, query, page: page);
+    }
+    final filters = widget.inkbunnyFilters ?? const InkbunnySearchFilters();
+    return widget.repository.previewSearch(
+      widget.site,
+      query,
+      page: page,
+      inkbunnySearchInMask: filters.searchInMask,
+      inkbunnyFieldJoinType: filters.fieldJoinType,
+      inkbunnyStringJoinType: filters.stringJoinType,
+      inkbunnyUsername: filters.username,
+      inkbunnySubmissionTypeMask: filters.submissionTypeMask,
+      inkbunnyDaysLimit: filters.daysLimit,
+      inkbunnyOrderBy: filters.orderBy,
+      inkbunnyRandom: filters.random,
+      inkbunnyScraps: filters.scraps,
+    );
   }
 
   Future<void> _loadInitial() async {
@@ -336,7 +436,7 @@ class _TagBrowseScreenState extends State<TagBrowseScreen> {
       context,
       MaterialPageRoute(
         builder: (context) =>
-            CreateSearchScreen(repository: widget.repository, initialSite: widget.site, initialQuery: widget.query, initialLabel: widget.initialLabel),
+            CreateSearchScreen(repository: widget.repository, initialSite: widget.site, initialQuery: widget.query, initialLabel: widget.initialLabel, initialInkbunnyFilters: widget.inkbunnyFilters),
       ),
     );
     if (created == true && mounted) {
@@ -399,22 +499,38 @@ class _TagBrowseScreenState extends State<TagBrowseScreen> {
     );
   }
 
+  AppBar _buildAppBar(AppLocalizations l10n) {
+    final toolbarHeight = isWideScreen(context) ? compactToolbarHeight : null;
+    if (_selectionMode) {
+      return AppBar(
+        toolbarHeight: toolbarHeight,
+        leading: IconButton(icon: const Icon(Icons.close), tooltip: l10n.postGridExitSelectionTooltip, onPressed: _exitSelectionMode),
+        title: Text(l10n.postGridSelectionCount(_selectedPostIds.length)),
+        actions: [
+          IconButton(icon: const Icon(Icons.select_all), tooltip: l10n.postGridSelectAll, onPressed: _selectAll),
+          IconButton(icon: const Icon(Icons.download), tooltip: l10n.postGridMassDownloadTooltip, onPressed: () => _massDownload(l10n)),
+        ],
+      );
+    }
+    return AppBar(
+      toolbarHeight: toolbarHeight,
+      title: Text(widget.title ?? widget.query),
+      actions: widget.customFetch == null
+          ? [
+              _existingMatch != null
+                  ? IconButton(icon: const Icon(Icons.check_circle), tooltip: l10n.tagBrowseAlreadySavedTooltip, onPressed: () => _removeFromSearches(l10n))
+                  : IconButton(icon: const Icon(Icons.add), tooltip: l10n.tagBrowseAddToSearchesTooltip, onPressed: _addToSearches),
+            ]
+          : null,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
     final poolHeader = _poolHeader(l10n);
     return Scaffold(
-      appBar: AppBar(
-        toolbarHeight: isWideScreen(context) ? compactToolbarHeight : null,
-        title: Text(widget.title ?? widget.query),
-        actions: widget.customFetch == null
-            ? [
-                _existingMatch != null
-                    ? IconButton(icon: const Icon(Icons.check_circle), tooltip: l10n.tagBrowseAlreadySavedTooltip, onPressed: () => _removeFromSearches(l10n))
-                    : IconButton(icon: const Icon(Icons.add), tooltip: l10n.tagBrowseAddToSearchesTooltip, onPressed: _addToSearches),
-              ]
-            : null,
-      ),
+      appBar: _buildAppBar(l10n),
       body: Column(
         children: [
           ?poolHeader,
@@ -433,7 +549,15 @@ class _TagBrowseScreenState extends State<TagBrowseScreen> {
                         return const Center(child: CircularProgressIndicator());
                       }
                       final post = _posts[index];
-                      return PostGridTile(key: ValueKey(post.id), post: post, imageUrl: _imageUrlFor(post), onTap: () => _openPost(_posts, post));
+                      return PostGridTile(
+                        key: ValueKey(post.id),
+                        post: post,
+                        imageUrl: _imageUrlFor(post),
+                        selected: _selectedPostIds.contains(post.id),
+                        onTap: () => _onTileTap(_posts, post),
+                        onLongPress: () => _toggleSelection(post.id),
+                        selectionMode: _selectionMode,
+                      );
                     },
                   ),
           ),

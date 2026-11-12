@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:little_bunny/repository/bunny_models.dart';
@@ -5,6 +7,7 @@ import 'package:little_bunny/screens/post_detail_screen.dart';
 import 'package:little_bunny/screens/tag_browse_screen.dart';
 import 'package:little_bunny/services/download_manager.dart';
 import 'package:little_bunny/services/download_queue_service.dart';
+import 'package:little_bunny/services/preview_cache_service.dart';
 import 'package:little_bunny/settings/display_settings_store.dart';
 import 'package:little_bunny/settings/download_settings_store.dart';
 import 'package:little_bunny/widgets/post_grid_tile.dart';
@@ -16,15 +19,17 @@ import '../fakes/test_app.dart';
 
 DownloadQueueService _downloadQueueService() => DownloadQueueService(downloadManager: const DownloadManager(), downloadSettingsStore: const DownloadSettingsStore());
 
-BunnyPost _post(int id) => BunnyPost(
+BunnyPost _post(int id, {String? fileUrl, String? fileExt, String? artist = 'someartist'}) => BunnyPost(
   id: id,
   site: BunnySite.e621,
   externalId: id,
-  artist: 'someartist',
+  artist: artist,
   score: 1,
   favCount: 0,
   commentCount: 0,
   previewUrl: 'https://example.invalid/$id.jpg',
+  fileUrl: fileUrl,
+  fileExt: fileExt,
   width: 100,
   height: 100,
   cachedAt: '2026-01-01T00:00:00Z',
@@ -92,6 +97,32 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byType(PostDetailScreen), findsOneWidget);
+  });
+
+  testWidgets('a warmed previewCache answers page 1 without calling previewSearch again', (WidgetTester tester) async {
+    final repository = FakeBunnyRepository();
+    final previewCache = PreviewCacheService();
+    repository.previewSearchResults['e621:someartist:1'] = [_post(1)];
+    await previewCache.getOrFetch(repository, BunnySite.e621, 'someartist');
+    repository.previewSearchCalls.clear();
+
+    await tester.pumpWidget(
+      wrapWithLocalization(
+        TagBrowseScreen(
+          site: BunnySite.e621,
+          query: 'someartist',
+          repository: repository,
+          displaySettingsStore: const DisplaySettingsStore(),
+          downloadSettingsStore: const DownloadSettingsStore(),
+          downloadQueueService: _downloadQueueService(),
+          previewCache: previewCache,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const ValueKey(1)), findsOneWidget);
+    expect(repository.previewSearchCalls, isEmpty); // served from the cache, not a fresh call
   });
 
   testWidgets('a post opened from a tag browse carries the current query into its tag menu (M54 partial)', (WidgetTester tester) async {
@@ -317,6 +348,14 @@ void main() {
       // CreateSearchScreen is reached via a push (as opposed to being the
       // route's own home) -- same nested-overlay flakiness as elsewhere in
       // this codebase, invoked directly instead.
+      // The pushed CreateSearchScreen's e621 metatags panel pushes the
+      // Create button below the test surface's default Sliver layout-cache
+      // extent (same offstage trap as create_search_screen_test.dart) --
+      // enlarge the viewport first so ensureVisible can actually find it.
+      tester.view.physicalSize = const Size(800, 2000);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+      await tester.pumpAndSettle();
       await tester.ensureVisible(find.widgetWithText(FilledButton, 'Create'));
       tester.widget<FilledButton>(find.widgetWithText(FilledButton, 'Create')).onPressed!();
       await tester.pumpAndSettle();
@@ -407,6 +446,94 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.byTooltip('Save as a search'), findsNothing);
+    });
+  });
+
+  group('selecting posts to download', () {
+    late Directory tempDir;
+
+    setUp(() async {
+      tempDir = await Directory.systemTemp.createTemp('tag_browse_mass_download_test');
+      SharedPreferences.setMockInitialValues({'download_destination_folder': tempDir.path});
+    });
+
+    tearDown(() async {
+      if (await tempDir.exists()) {
+        await tempDir.delete(recursive: true);
+      }
+    });
+
+    testWidgets('long-pressing a post enters selection mode, and tapping download enqueues the selection', (WidgetTester tester) async {
+      final repository = FakeBunnyRepository();
+      repository.previewSearchResults['e621:someartist:1'] = [
+        _post(1, fileUrl: 'https://example.invalid/1.jpg', fileExt: 'jpg'),
+        _post(2, fileUrl: 'https://example.invalid/2.jpg', fileExt: 'jpg'),
+      ];
+      final downloadQueueService = DownloadQueueService(downloadManager: const DownloadManager(), downloadSettingsStore: const DownloadSettingsStore());
+
+      await tester.pumpWidget(
+        wrapWithLocalization(
+          TagBrowseScreen(
+            site: BunnySite.e621,
+            query: 'someartist',
+            repository: repository,
+            displaySettingsStore: const DisplaySettingsStore(),
+            downloadSettingsStore: const DownloadSettingsStore(),
+            downloadQueueService: downloadQueueService,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      tester.widget<PostGridTile>(find.byKey(const ValueKey(1))).onLongPress!();
+      await tester.pumpAndSettle();
+      expect(find.text('1 selected'), findsOneWidget);
+
+      tester.widget<PostGridTile>(find.byKey(const ValueKey(2))).onTap();
+      await tester.pumpAndSettle();
+      expect(find.text('2 selected'), findsOneWidget);
+
+      await tester.tap(find.descendant(of: find.byType(AppBar), matching: find.byIcon(Icons.download)));
+      await tester.pump();
+
+      expect(find.text('2 queued for download'), findsOneWidget);
+      expect(find.text('someartist'), findsOneWidget); // selection mode exited, app bar back to normal
+      expect(downloadQueueService.totalCount, 2);
+    });
+
+    testWidgets('tapping a selected post while in selection mode deselects it instead of opening it', (WidgetTester tester) async {
+      final repository = FakeBunnyRepository();
+      repository.previewSearchResults['e621:someartist:1'] = [_post(1), _post(2)];
+
+      await tester.pumpWidget(wrap(repository));
+      await tester.pumpAndSettle();
+
+      tester.widget<PostGridTile>(find.byKey(const ValueKey(1))).onLongPress!();
+      await tester.pumpAndSettle();
+      tester.widget<PostGridTile>(find.byKey(const ValueKey(1))).onTap();
+      await tester.pumpAndSettle();
+
+      expect(find.byType(PostDetailScreen), findsNothing);
+      expect(find.text('someartist'), findsOneWidget); // deselecting the only selection exits selection mode
+    });
+
+    testWidgets('select all selects every loaded post', (WidgetTester tester) async {
+      final repository = FakeBunnyRepository();
+      repository.previewSearchResults['e621:someartist:1'] = [_post(1), _post(2), _post(3)];
+
+      await tester.pumpWidget(wrap(repository));
+      await tester.pumpAndSettle();
+
+      tester.widget<PostGridTile>(find.byKey(const ValueKey(1))).onLongPress!();
+      await tester.pumpAndSettle();
+      await tester.tap(find.descendant(of: find.byType(AppBar), matching: find.byIcon(Icons.select_all)));
+      await tester.pumpAndSettle();
+
+      expect(find.text('3 selected'), findsOneWidget);
+
+      await tester.tap(find.descendant(of: find.byType(AppBar), matching: find.byIcon(Icons.close)));
+      await tester.pumpAndSettle();
+      expect(find.text('someartist'), findsOneWidget);
     });
   });
 }

@@ -86,6 +86,15 @@ Map<String, Object?> _searchToMap(bunny_db_search_t search) => {
   'usesDefaultInterval': search.uses_default_interval,
   'groupId': search.group_id,
   'lastUpdatedAt': _readNullableString(search.last_updated_at),
+  'inkbunnySearchInMask': search.inkbunny_search_in_mask,
+  'inkbunnyFieldJoinType': search.inkbunny_field_join_type,
+  'inkbunnyStringJoinType': search.inkbunny_string_join_type,
+  'inkbunnyUsername': _readNullableString(search.inkbunny_username),
+  'inkbunnySubmissionTypeMask': search.inkbunny_submission_type_mask,
+  'inkbunnyDaysLimit': search.inkbunny_days_limit,
+  'inkbunnyOrderBy': _readNullableString(search.inkbunny_order_by),
+  'inkbunnyRandom': search.inkbunny_random,
+  'inkbunnyScraps': search.inkbunny_scraps,
 };
 
 Map<String, Object?> _groupToMap(bunny_db_group_t group) => {'id': group.id, 'name': _readNullableString(group.name), 'pinned': group.pinned, 'createdAt': _readNullableString(group.created_at)};
@@ -218,8 +227,35 @@ class _CreateSearchRequest extends _Request {
   final int autoFavoriteStars;
   final bool autoUpvote;
   final bool usesDefaultInterval;
+  final int inkbunnySearchInMask;
+  final int inkbunnyFieldJoinType;
+  final int inkbunnyStringJoinType;
+  final String? inkbunnyUsername;
+  final int inkbunnySubmissionTypeMask;
+  final int inkbunnyDaysLimit;
+  final String? inkbunnyOrderBy;
+  final bool inkbunnyRandom;
+  final int inkbunnyScraps;
 
-  const _CreateSearchRequest(this.site, this.label, this.query, this.intervalHours, this.autoFavorite, this.autoFavoriteStars, this.autoUpvote, this.usesDefaultInterval);
+  const _CreateSearchRequest(
+    this.site,
+    this.label,
+    this.query,
+    this.intervalHours,
+    this.autoFavorite,
+    this.autoFavoriteStars,
+    this.autoUpvote,
+    this.usesDefaultInterval,
+    this.inkbunnySearchInMask,
+    this.inkbunnyFieldJoinType,
+    this.inkbunnyStringJoinType,
+    this.inkbunnyUsername,
+    this.inkbunnySubmissionTypeMask,
+    this.inkbunnyDaysLimit,
+    this.inkbunnyOrderBy,
+    this.inkbunnyRandom,
+    this.inkbunnyScraps,
+  );
 }
 
 class _UpdateSearchRequest extends _Request {
@@ -231,8 +267,35 @@ class _UpdateSearchRequest extends _Request {
   final int autoFavoriteStars;
   final bool autoUpvote;
   final bool usesDefaultInterval;
+  final int inkbunnySearchInMask;
+  final int inkbunnyFieldJoinType;
+  final int inkbunnyStringJoinType;
+  final String? inkbunnyUsername;
+  final int inkbunnySubmissionTypeMask;
+  final int inkbunnyDaysLimit;
+  final String? inkbunnyOrderBy;
+  final bool inkbunnyRandom;
+  final int inkbunnyScraps;
 
-  const _UpdateSearchRequest(this.searchId, this.label, this.query, this.intervalHours, this.autoFavorite, this.autoFavoriteStars, this.autoUpvote, this.usesDefaultInterval);
+  const _UpdateSearchRequest(
+    this.searchId,
+    this.label,
+    this.query,
+    this.intervalHours,
+    this.autoFavorite,
+    this.autoFavoriteStars,
+    this.autoUpvote,
+    this.usesDefaultInterval,
+    this.inkbunnySearchInMask,
+    this.inkbunnyFieldJoinType,
+    this.inkbunnyStringJoinType,
+    this.inkbunnyUsername,
+    this.inkbunnySubmissionTypeMask,
+    this.inkbunnyDaysLimit,
+    this.inkbunnyOrderBy,
+    this.inkbunnyRandom,
+    this.inkbunnyScraps,
+  );
 }
 
 class _GetDefaultSyncIntervalHoursRequest extends _Request {
@@ -575,8 +638,30 @@ class _PreviewSearchRequest extends _Request {
   final String site;
   final String query;
   final int page;
+  final int inkbunnySearchInMask;
+  final int inkbunnyFieldJoinType;
+  final int inkbunnyStringJoinType;
+  final String? inkbunnyUsername;
+  final int inkbunnySubmissionTypeMask;
+  final int inkbunnyDaysLimit;
+  final String? inkbunnyOrderBy;
+  final bool inkbunnyRandom;
+  final int inkbunnyScraps;
 
-  const _PreviewSearchRequest(this.site, this.query, this.page);
+  const _PreviewSearchRequest(
+    this.site,
+    this.query,
+    this.page,
+    this.inkbunnySearchInMask,
+    this.inkbunnyFieldJoinType,
+    this.inkbunnyStringJoinType,
+    this.inkbunnyUsername,
+    this.inkbunnySubmissionTypeMask,
+    this.inkbunnyDaysLimit,
+    this.inkbunnyOrderBy,
+    this.inkbunnyRandom,
+    this.inkbunnyScraps,
+  );
 }
 
 class _ListMyInkbunnyFavoritesRequest extends _Request {
@@ -770,6 +855,34 @@ Map<String, Object?>? _handleGetAccount(Pointer<bunny_core_t> core, _GetAccountR
   });
 }
 
+/// Shared by the create/update/preview-search dispatch cases below -- same
+/// nine Inkbunny advanced-filter fields, same native struct shape either way
+/// ([bunny_db_search_options_t], reused for a preview's filters same as the
+/// C side does, M74).
+void _fillInkbunnyOptions(
+  Pointer<bunny_db_search_options_t> options,
+  Arena arena, {
+  required int searchInMask,
+  required int fieldJoinType,
+  required int stringJoinType,
+  required String? username,
+  required int submissionTypeMask,
+  required int daysLimit,
+  required String? orderBy,
+  required bool random,
+  required int scraps,
+}) {
+  options.ref.inkbunny_search_in_mask = searchInMask;
+  options.ref.inkbunny_field_join_type = fieldJoinType;
+  options.ref.inkbunny_string_join_type = stringJoinType;
+  options.ref.inkbunny_username = username == null ? nullptr : username.toNativeUtf8(allocator: arena).cast();
+  options.ref.inkbunny_submission_type_mask = submissionTypeMask;
+  options.ref.inkbunny_days_limit = daysLimit;
+  options.ref.inkbunny_order_by = orderBy == null ? nullptr : orderBy.toNativeUtf8(allocator: arena).cast();
+  options.ref.inkbunny_random = random;
+  options.ref.inkbunny_scraps = scraps;
+}
+
 List<Map<String, Object?>> _handleListSearches(Pointer<bunny_core_t> core) {
   return using((arena) {
     final out = arena<bunny_db_search_list_t>();
@@ -849,6 +962,7 @@ Map<String, Object?> _statsReportToMap(bunny_core_stats_report_t report) => {
   'topUsedTags': _tagStatListToMaps(report.top_used_tags),
   'topPools': _tagStatListToMaps(report.top_pools),
   'topViewedSearches': _tagStatListToMaps(report.top_viewed_searches),
+  'topTagPairs': _tagStatListToMaps(report.top_tag_pairs),
 };
 
 Map<String, Object?> _handleGetStatsReport(Pointer<bunny_core_t> core) {
@@ -996,7 +1110,21 @@ Map<String, Object?> _handleFetchPool(Pointer<bunny_core_t> core, _FetchPoolRequ
 List<Map<String, Object?>> _handlePreviewSearch(Pointer<bunny_core_t> core, _PreviewSearchRequest r) {
   return using((arena) {
     final out = arena<bunny_db_post_list_t>();
-    _check(_bindings.bunny_core_preview_search(core, _siteFromWire(r.site), r.query.toNativeUtf8(allocator: arena).cast(), r.page, out));
+    final inkbunnyFilters = arena<bunny_db_search_options_t>();
+    _fillInkbunnyOptions(
+      inkbunnyFilters,
+      arena,
+      searchInMask: r.inkbunnySearchInMask,
+      fieldJoinType: r.inkbunnyFieldJoinType,
+      stringJoinType: r.inkbunnyStringJoinType,
+      username: r.inkbunnyUsername,
+      submissionTypeMask: r.inkbunnySubmissionTypeMask,
+      daysLimit: r.inkbunnyDaysLimit,
+      orderBy: r.inkbunnyOrderBy,
+      random: r.inkbunnyRandom,
+      scraps: r.inkbunnyScraps,
+    );
+    _check(_bindings.bunny_core_preview_search(core, _siteFromWire(r.site), r.query.toNativeUtf8(allocator: arena).cast(), r.page, inkbunnyFilters, out));
     final items = <Map<String, Object?>>[];
     for (var i = 0; i < out.ref.count; i++) {
       items.add(_postToMap(out.ref.items[i]));
@@ -1325,6 +1453,19 @@ Object? _dispatch(Pointer<bunny_core_t>? core, _Request request, void Function(P
         options.ref.auto_favorite_stars = r.autoFavoriteStars;
         options.ref.auto_upvote = r.autoUpvote;
         options.ref.uses_default_interval = r.usesDefaultInterval;
+        _fillInkbunnyOptions(
+          options,
+          arena,
+          searchInMask: r.inkbunnySearchInMask,
+          fieldJoinType: r.inkbunnyFieldJoinType,
+          stringJoinType: r.inkbunnyStringJoinType,
+          username: r.inkbunnyUsername,
+          submissionTypeMask: r.inkbunnySubmissionTypeMask,
+          daysLimit: r.inkbunnyDaysLimit,
+          orderBy: r.inkbunnyOrderBy,
+          random: r.inkbunnyRandom,
+          scraps: r.inkbunnyScraps,
+        );
         _check(_bindings.bunny_core_search_create(c, _siteFromWire(r.site), r.label.toNativeUtf8(allocator: arena).cast(), r.query.toNativeUtf8(allocator: arena).cast(), r.intervalHours, options, outId));
         return outId.value;
       case _ListSearchesRequest():
@@ -1362,6 +1503,19 @@ Object? _dispatch(Pointer<bunny_core_t>? core, _Request request, void Function(P
         options.ref.auto_favorite_stars = r.autoFavoriteStars;
         options.ref.auto_upvote = r.autoUpvote;
         options.ref.uses_default_interval = r.usesDefaultInterval;
+        _fillInkbunnyOptions(
+          options,
+          arena,
+          searchInMask: r.inkbunnySearchInMask,
+          fieldJoinType: r.inkbunnyFieldJoinType,
+          stringJoinType: r.inkbunnyStringJoinType,
+          username: r.inkbunnyUsername,
+          submissionTypeMask: r.inkbunnySubmissionTypeMask,
+          daysLimit: r.inkbunnyDaysLimit,
+          orderBy: r.inkbunnyOrderBy,
+          random: r.inkbunnyRandom,
+          scraps: r.inkbunnyScraps,
+        );
         _check(_bindings.bunny_core_search_update(c, r.searchId, r.label.toNativeUtf8(allocator: arena).cast(), r.query.toNativeUtf8(allocator: arena).cast(), r.intervalHours, options));
         return null;
       case _ListSearchPostsRequest r:
@@ -1627,8 +1781,45 @@ class BunnyCoreNative {
 
   Future<void> verifyAccount(String site, String username, String secret) => _send<void>(_VerifyAccountRequest(site, username, secret));
 
-  Future<int> createSearch(String site, String label, String query, int intervalHours, {bool autoFavorite = false, int autoFavoriteStars = 1, bool autoUpvote = false, bool usesDefaultInterval = false}) =>
-      _send<int>(_CreateSearchRequest(site, label, query, intervalHours, autoFavorite, autoFavoriteStars, autoUpvote, usesDefaultInterval));
+  Future<int> createSearch(
+    String site,
+    String label,
+    String query,
+    int intervalHours, {
+    bool autoFavorite = false,
+    int autoFavoriteStars = 1,
+    bool autoUpvote = false,
+    bool usesDefaultInterval = false,
+    int inkbunnySearchInMask = 0,
+    int inkbunnyFieldJoinType = 0,
+    int inkbunnyStringJoinType = 0,
+    String? inkbunnyUsername,
+    int inkbunnySubmissionTypeMask = 0,
+    int inkbunnyDaysLimit = 0,
+    String? inkbunnyOrderBy,
+    bool inkbunnyRandom = false,
+    int inkbunnyScraps = 0,
+  }) => _send<int>(
+    _CreateSearchRequest(
+      site,
+      label,
+      query,
+      intervalHours,
+      autoFavorite,
+      autoFavoriteStars,
+      autoUpvote,
+      usesDefaultInterval,
+      inkbunnySearchInMask,
+      inkbunnyFieldJoinType,
+      inkbunnyStringJoinType,
+      inkbunnyUsername,
+      inkbunnySubmissionTypeMask,
+      inkbunnyDaysLimit,
+      inkbunnyOrderBy,
+      inkbunnyRandom,
+      inkbunnyScraps,
+    ),
+  );
 
   Future<List<Map<String, Object?>>> listSearches() => _send<List<Map<String, Object?>>>(const _ListSearchesRequest());
 
@@ -1650,8 +1841,45 @@ class BunnyCoreNative {
 
   Future<void> deleteGroup(int groupId) => _send<void>(_DeleteGroupRequest(groupId));
 
-  Future<void> updateSearch(int searchId, String label, String query, int intervalHours, {bool autoFavorite = false, int autoFavoriteStars = 1, bool autoUpvote = false, bool usesDefaultInterval = false}) =>
-      _send<void>(_UpdateSearchRequest(searchId, label, query, intervalHours, autoFavorite, autoFavoriteStars, autoUpvote, usesDefaultInterval));
+  Future<void> updateSearch(
+    int searchId,
+    String label,
+    String query,
+    int intervalHours, {
+    bool autoFavorite = false,
+    int autoFavoriteStars = 1,
+    bool autoUpvote = false,
+    bool usesDefaultInterval = false,
+    int inkbunnySearchInMask = 0,
+    int inkbunnyFieldJoinType = 0,
+    int inkbunnyStringJoinType = 0,
+    String? inkbunnyUsername,
+    int inkbunnySubmissionTypeMask = 0,
+    int inkbunnyDaysLimit = 0,
+    String? inkbunnyOrderBy,
+    bool inkbunnyRandom = false,
+    int inkbunnyScraps = 0,
+  }) => _send<void>(
+    _UpdateSearchRequest(
+      searchId,
+      label,
+      query,
+      intervalHours,
+      autoFavorite,
+      autoFavoriteStars,
+      autoUpvote,
+      usesDefaultInterval,
+      inkbunnySearchInMask,
+      inkbunnyFieldJoinType,
+      inkbunnyStringJoinType,
+      inkbunnyUsername,
+      inkbunnySubmissionTypeMask,
+      inkbunnyDaysLimit,
+      inkbunnyOrderBy,
+      inkbunnyRandom,
+      inkbunnyScraps,
+    ),
+  );
 
   Future<int> getDefaultSyncIntervalHours() => _send<int>(const _GetDefaultSyncIntervalHoursRequest());
 
@@ -1742,7 +1970,35 @@ class BunnyCoreNative {
 
   Future<Map<String, Object?>> fetchPool(int poolId) => _send<Map<String, Object?>>(_FetchPoolRequest(poolId));
 
-  Future<List<Map<String, Object?>>> previewSearch(String site, String query, {int page = 1}) => _send<List<Map<String, Object?>>>(_PreviewSearchRequest(site, query, page));
+  Future<List<Map<String, Object?>>> previewSearch(
+    String site,
+    String query, {
+    int page = 1,
+    int inkbunnySearchInMask = 0,
+    int inkbunnyFieldJoinType = 0,
+    int inkbunnyStringJoinType = 0,
+    String? inkbunnyUsername,
+    int inkbunnySubmissionTypeMask = 0,
+    int inkbunnyDaysLimit = 0,
+    String? inkbunnyOrderBy,
+    bool inkbunnyRandom = false,
+    int inkbunnyScraps = 0,
+  }) => _send<List<Map<String, Object?>>>(
+    _PreviewSearchRequest(
+      site,
+      query,
+      page,
+      inkbunnySearchInMask,
+      inkbunnyFieldJoinType,
+      inkbunnyStringJoinType,
+      inkbunnyUsername,
+      inkbunnySubmissionTypeMask,
+      inkbunnyDaysLimit,
+      inkbunnyOrderBy,
+      inkbunnyRandom,
+      inkbunnyScraps,
+    ),
+  );
 
   Future<List<Map<String, Object?>>> listMyInkbunnyFavorites({int page = 1}) => _send<List<Map<String, Object?>>>(_ListMyInkbunnyFavoritesRequest(page));
 

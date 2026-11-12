@@ -42,6 +42,24 @@ typedef struct
      * whatever it last was) so toggling this back off doesn't lose the
      * previous explicit value. */
     bool uses_default_interval;
+
+    /* Inkbunny's advanced search filters (api_search.php's own parameter
+     * set, M74) -- ignored entirely by e621 searches. Values/defaults
+     * mirror inkbunny_search_params_t 1:1 (inkbunny/client.h; bunny_core
+     * translates these at sync time) rather than inventing a second
+     * encoding -- libs/db has no dependency on libinkbunny, so these stay
+     * plain ints/bools/strings here instead of that library's own enum
+     * types. String fields are borrowed (not freed by the db layer), same
+     * as label/query above. */
+    int inkbunny_search_in_mask;       /* INKBUNNY_SEARCH_IN_* bits; 0 = default (keywords) */
+    int inkbunny_field_join_type;      /* 0 = or, 1 = and */
+    int inkbunny_string_join_type;     /* 0 = and, 1 = or, 2 = exact */
+    const char *inkbunny_username;     /* NULL = unset */
+    int inkbunny_submission_type_mask; /* bit (type_id - 1); 0 = every type */
+    int inkbunny_days_limit;           /* 0 = no limit */
+    const char *inkbunny_order_by;     /* NULL = default (create_datetime) */
+    bool inkbunny_random;
+    int inkbunny_scraps; /* 0 = both, 1 = no, 2 = only */
 } bunny_db_search_options_t;
 
 typedef struct
@@ -65,6 +83,19 @@ typedef struct
     bool uses_default_interval;         /* see bunny_db_search_options_t above */
     int64_t group_id;                   /* the search_groups row this search belongs to; 0 = ungrouped (M21) */
     char *last_updated_at;              /* NULL if no sync has ever found a new post -- distinct from last_run_at (M69) */
+
+    /* See bunny_db_search_options_t above -- same fields, owned here (duped
+     * from the row, freed by bunny_db_search_free) since this struct is an
+     * output, not a borrowed-string input. */
+    int inkbunny_search_in_mask;
+    int inkbunny_field_join_type;
+    int inkbunny_string_join_type;
+    char *inkbunny_username;
+    int inkbunny_submission_type_mask;
+    int inkbunny_days_limit;
+    char *inkbunny_order_by;
+    bool inkbunny_random;
+    int inkbunny_scraps;
 } bunny_db_search_t;
 
 /* A folder-like way to organize saved searches in SearchesScreen's tree view

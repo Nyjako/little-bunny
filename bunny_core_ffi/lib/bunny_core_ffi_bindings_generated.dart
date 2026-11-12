@@ -2428,16 +2428,28 @@ class BunnyCoreFfiBindings {
   /// immediately usable), *without* creating a searches/search_results row -- a
   /// stateless "fetch and cache posts matching this query" call, used for the
   /// tag/artist click-through browse screen's infinite scroll rather than a
-  /// saved search. Returns BUNNY_CORE_ERR_INVALID_ARG for page < 1.
+  /// saved search. `inkbunny_filters` may be NULL (defaults apply); only its
+  /// inkbunny_* fields are read, and only for an Inkbunny `site` -- reused from
+  /// bunny_db_search_options_t (M74) rather than a parallel struct, same as a
+  /// saved search's own sync reads those fields from the search row itself.
+  /// Returns BUNNY_CORE_ERR_INVALID_ARG for page < 1.
   bunny_core_result_t bunny_core_preview_search(
     ffi.Pointer<bunny_core_t> core,
     bunny_db_site_t site,
     ffi.Pointer<ffi.Char> query,
     int page,
+    ffi.Pointer<bunny_db_search_options_t> inkbunny_filters,
     ffi.Pointer<bunny_db_post_list_t> out_list,
   ) {
     return bunny_core_result_t.fromValue(
-      _bunny_core_preview_search(core, site.value, query, page, out_list),
+      _bunny_core_preview_search(
+        core,
+        site.value,
+        query,
+        page,
+        inkbunny_filters,
+        out_list,
+      ),
     );
   }
 
@@ -2449,6 +2461,7 @@ class BunnyCoreFfiBindings {
             ffi.UnsignedInt,
             ffi.Pointer<ffi.Char>,
             ffi.Int,
+            ffi.Pointer<bunny_db_search_options_t>,
             ffi.Pointer<bunny_db_post_list_t>,
           )
         >
@@ -2460,6 +2473,7 @@ class BunnyCoreFfiBindings {
           int,
           ffi.Pointer<ffi.Char>,
           int,
+          ffi.Pointer<bunny_db_search_options_t>,
           ffi.Pointer<bunny_db_post_list_t>,
         )
       >();
@@ -3446,6 +3460,39 @@ final class bunny_db_search_options_t extends ffi.Struct {
   /// previous explicit value.
   @ffi.Bool()
   external bool uses_default_interval;
+
+  /// INKBUNNY_SEARCH_IN_* bits; 0 = default (keywords)
+  @ffi.Int()
+  external int inkbunny_search_in_mask;
+
+  /// 0 = or, 1 = and
+  @ffi.Int()
+  external int inkbunny_field_join_type;
+
+  /// 0 = and, 1 = or, 2 = exact
+  @ffi.Int()
+  external int inkbunny_string_join_type;
+
+  /// NULL = unset
+  external ffi.Pointer<ffi.Char> inkbunny_username;
+
+  /// bit (type_id - 1); 0 = every type
+  @ffi.Int()
+  external int inkbunny_submission_type_mask;
+
+  /// 0 = no limit
+  @ffi.Int()
+  external int inkbunny_days_limit;
+
+  /// NULL = default (create_datetime)
+  external ffi.Pointer<ffi.Char> inkbunny_order_by;
+
+  @ffi.Bool()
+  external bool inkbunny_random;
+
+  /// 0 = both, 1 = no, 2 = only
+  @ffi.Int()
+  external int inkbunny_scraps;
 }
 
 final class bunny_db_search_t extends ffi.Struct {
@@ -3514,6 +3561,34 @@ final class bunny_db_search_t extends ffi.Struct {
 
   /// NULL if no sync has ever found a new post -- distinct from last_run_at (M69)
   external ffi.Pointer<ffi.Char> last_updated_at;
+
+  /// See bunny_db_search_options_t above -- same fields, owned here (duped
+  /// from the row, freed by bunny_db_search_free) since this struct is an
+  /// output, not a borrowed-string input.
+  @ffi.Int()
+  external int inkbunny_search_in_mask;
+
+  @ffi.Int()
+  external int inkbunny_field_join_type;
+
+  @ffi.Int()
+  external int inkbunny_string_join_type;
+
+  external ffi.Pointer<ffi.Char> inkbunny_username;
+
+  @ffi.Int()
+  external int inkbunny_submission_type_mask;
+
+  @ffi.Int()
+  external int inkbunny_days_limit;
+
+  external ffi.Pointer<ffi.Char> inkbunny_order_by;
+
+  @ffi.Bool()
+  external bool inkbunny_random;
+
+  @ffi.Int()
+  external int inkbunny_scraps;
 }
 
 /// A folder-like way to organize saved searches in SearchesScreen's tree view
@@ -4115,7 +4190,10 @@ final class bunny_core_config_t extends ffi.Struct {
 /// (Inkbunny has no pool concept), the other three sections merge both
 /// sites' own rankings into one combined top-N, each `name` prefixed with
 /// its site ("e621: ", "inkbunny: ") since the same tag/label text can
-/// legitimately exist on both.
+/// legitimately exist on both. top_tag_pairs follows the same merge/prefix
+/// convention; each entry's `name` is "<tagA> + <tagB>" (see
+/// bunny_db_top_favorited_tag_pairs' own doc comment), feeding a
+/// recommended-search suggestion beyond a single tag.
 final class bunny_core_stats_report_t extends ffi.Struct {
   external bunny_db_tag_stat_list_t top_favorited_tags;
 
@@ -4124,6 +4202,8 @@ final class bunny_core_stats_report_t extends ffi.Struct {
   external bunny_db_tag_stat_list_t top_pools;
 
   external bunny_db_tag_stat_list_t top_viewed_searches;
+
+  external bunny_db_tag_stat_list_t top_tag_pairs;
 
   /// ISO 8601 UTC; NULL if no report has ever been built yet
   external ffi.Pointer<ffi.Char> computed_at;

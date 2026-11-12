@@ -14,6 +14,10 @@ docs/API - Inkbunny.pdf
 # reference only
 docs/API - e621.yaml
 
+# Real Inkbunny submission ids for manual M28 type-coverage verification --
+# personal test data, not ours to redistribute
+docs/inkbunny_posts.txt
+
 # CMake / build outputs
 build/
 build-*/

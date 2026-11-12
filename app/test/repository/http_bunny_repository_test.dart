@@ -123,6 +123,15 @@ void main() {
         'auto_favorite_stars': 1,
         'auto_upvote': false,
         'uses_default_interval': false,
+        'inkbunny_search_in_mask': 0,
+        'inkbunny_field_join_type': 0,
+        'inkbunny_string_join_type': 0,
+        'inkbunny_username': null,
+        'inkbunny_submission_type_mask': 0,
+        'inkbunny_days_limit': 0,
+        'inkbunny_order_by': null,
+        'inkbunny_random': false,
+        'inkbunny_scraps': 0,
       });
       expect(id, 42);
     });
@@ -418,6 +427,15 @@ void main() {
         'auto_favorite_stars': 3,
         'auto_upvote': true,
         'uses_default_interval': false,
+        'inkbunny_search_in_mask': 0,
+        'inkbunny_field_join_type': 0,
+        'inkbunny_string_join_type': 0,
+        'inkbunny_username': null,
+        'inkbunny_submission_type_mask': 0,
+        'inkbunny_days_limit': 0,
+        'inkbunny_order_by': null,
+        'inkbunny_random': false,
+        'inkbunny_scraps': 0,
       });
     });
 
@@ -608,6 +626,9 @@ void main() {
           'top_viewed_searches': [
             {'name': 'e621: My search', 'count': 4},
           ],
+          'top_tag_pairs': [
+            {'name': 'e621: forest + wolf', 'count': 2},
+          ],
         }),
         200,
       );
@@ -621,11 +642,19 @@ void main() {
       expect(report.topUsedTags.single.count, 2);
       expect(report.topPools.single.name, 'pool:5');
       expect(report.topViewedSearches.single.count, 4);
+      expect(report.topTagPairs.single.name, 'e621: forest + wolf');
     });
 
     test('refreshStatsReport sends POST and maps the unified report (M40)', () async {
       respond = (_) => http.Response(
-        jsonEncode({'computed_at': '2026-01-02T00:00:00Z', 'top_favorited_tags': [], 'top_used_tags': [], 'top_pools': [], 'top_viewed_searches': []}),
+        jsonEncode({
+          'computed_at': '2026-01-02T00:00:00Z',
+          'top_favorited_tags': [],
+          'top_used_tags': [],
+          'top_pools': [],
+          'top_viewed_searches': [],
+          'top_tag_pairs': [],
+        }),
         200,
       );
 
@@ -638,7 +667,14 @@ void main() {
 
     test('getStatsReport maps a null computed_at to null, not a cast error (M55)', () async {
       respond = (_) => http.Response(
-        jsonEncode({'computed_at': null, 'top_favorited_tags': [], 'top_used_tags': [], 'top_pools': [], 'top_viewed_searches': []}),
+        jsonEncode({
+          'computed_at': null,
+          'top_favorited_tags': [],
+          'top_used_tags': [],
+          'top_pools': [],
+          'top_viewed_searches': [],
+          'top_tag_pairs': [],
+        }),
         200,
       );
 
@@ -909,7 +945,18 @@ void main() {
 
       expect(capturedMethod, 'POST');
       expect(capturedUri.path, '/search/preview');
-      expect(capturedUri.queryParameters, {'site': 'e621', 'query': 'someartist', 'page': '1'});
+      expect(capturedUri.queryParameters, {
+        'site': 'e621',
+        'query': 'someartist',
+        'page': '1',
+        'ib_search_in_mask': '0',
+        'ib_field_join_type': '0',
+        'ib_string_join_type': '0',
+        'ib_submission_type_mask': '0',
+        'ib_days_limit': '0',
+        'ib_random': '0',
+        'ib_scraps': '0',
+      });
       expect(posts, hasLength(1));
       expect(posts.single.externalId, 7);
     });
@@ -919,7 +966,18 @@ void main() {
 
       await buildRepository().previewSearch(BunnySite.e621, 'someartist', page: 3);
 
-      expect(capturedUri.queryParameters, {'site': 'e621', 'query': 'someartist', 'page': '3'});
+      expect(capturedUri.queryParameters, {
+        'site': 'e621',
+        'query': 'someartist',
+        'page': '3',
+        'ib_search_in_mask': '0',
+        'ib_field_join_type': '0',
+        'ib_string_join_type': '0',
+        'ib_submission_type_mask': '0',
+        'ib_days_limit': '0',
+        'ib_random': '0',
+        'ib_scraps': '0',
+      });
     });
 
     test('getPostComments sends GET to the right path and maps the response', () async {

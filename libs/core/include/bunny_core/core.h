@@ -232,13 +232,17 @@ bunny_core_result_t bunny_core_top_used_tags(bunny_core_t *core, bunny_db_site_t
  * (Inkbunny has no pool concept), the other three sections merge both
  * sites' own rankings into one combined top-N, each `name` prefixed with
  * its site ("e621: ", "inkbunny: ") since the same tag/label text can
- * legitimately exist on both. */
+ * legitimately exist on both. top_tag_pairs follows the same merge/prefix
+ * convention; each entry's `name` is "<tagA> + <tagB>" (see
+ * bunny_db_top_favorited_tag_pairs' own doc comment), feeding a
+ * recommended-search suggestion beyond a single tag. */
 typedef struct
 {
     bunny_db_tag_stat_list_t top_favorited_tags;
     bunny_db_tag_stat_list_t top_used_tags;
     bunny_db_tag_stat_list_t top_pools;
     bunny_db_tag_stat_list_t top_viewed_searches;
+    bunny_db_tag_stat_list_t top_tag_pairs;
     char *computed_at; /* ISO 8601 UTC; NULL if no report has ever been built yet */
 } bunny_core_stats_report_t;
 
@@ -439,8 +443,12 @@ bunny_core_result_t bunny_core_backfill_pool_positions_once(bunny_core_t *core);
  * immediately usable), *without* creating a searches/search_results row -- a
  * stateless "fetch and cache posts matching this query" call, used for the
  * tag/artist click-through browse screen's infinite scroll rather than a
- * saved search. Returns BUNNY_CORE_ERR_INVALID_ARG for page < 1. */
-bunny_core_result_t bunny_core_preview_search(bunny_core_t *core, bunny_db_site_t site, const char *query, int page, bunny_db_post_list_t *out_list);
+ * saved search. `inkbunny_filters` may be NULL (defaults apply); only its
+ * inkbunny_* fields are read, and only for an Inkbunny `site` -- reused from
+ * bunny_db_search_options_t (M74) rather than a parallel struct, same as a
+ * saved search's own sync reads those fields from the search row itself.
+ * Returns BUNNY_CORE_ERR_INVALID_ARG for page < 1. */
+bunny_core_result_t bunny_core_preview_search(bunny_core_t *core, bunny_db_site_t site, const char *query, int page, const bunny_db_search_options_t *inkbunny_filters, bunny_db_post_list_t *out_list);
 
 /* Inkbunny only -- e621's equivalent is just `fav:<username>` as a literal
  * bunny_core_preview_search query, since e621's tag search already supports

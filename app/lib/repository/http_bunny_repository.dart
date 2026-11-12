@@ -37,6 +37,15 @@ BunnySearch _searchFromJson(Map<String, Object?> j) => BunnySearch(
   usesDefaultInterval: j['uses_default_interval'] as bool? ?? false,
   groupId: (j['group_id'] as num?)?.toInt() ?? 0,
   lastUpdatedAt: j['last_updated_at'] as String?,
+  inkbunnySearchInMask: (j['inkbunny_search_in_mask'] as num?)?.toInt() ?? 0,
+  inkbunnyFieldJoinType: (j['inkbunny_field_join_type'] as num?)?.toInt() ?? 0,
+  inkbunnyStringJoinType: (j['inkbunny_string_join_type'] as num?)?.toInt() ?? 0,
+  inkbunnyUsername: j['inkbunny_username'] as String?,
+  inkbunnySubmissionTypeMask: (j['inkbunny_submission_type_mask'] as num?)?.toInt() ?? 0,
+  inkbunnyDaysLimit: (j['inkbunny_days_limit'] as num?)?.toInt() ?? 0,
+  inkbunnyOrderBy: j['inkbunny_order_by'] as String?,
+  inkbunnyRandom: j['inkbunny_random'] as bool? ?? false,
+  inkbunnyScraps: (j['inkbunny_scraps'] as num?)?.toInt() ?? 0,
 );
 
 BunnyGroup _groupFromJson(Map<String, Object?> j) => BunnyGroup(id: (j['id'] as num).toInt(), name: j['name'] as String, pinned: j['pinned'] as bool, createdAt: j['created_at'] as String);
@@ -103,6 +112,7 @@ BunnyStatsReport _statsReportFromJson(Map<String, Object?> j) => BunnyStatsRepor
   topUsedTags: _tagStatListFromJson(j['top_used_tags']),
   topPools: _tagStatListFromJson(j['top_pools']),
   topViewedSearches: _tagStatListFromJson(j['top_viewed_searches']),
+  topTagPairs: _tagStatListFromJson(j['top_tag_pairs']),
 );
 
 BunnyPostTag _postTagFromJson(Map<String, Object?> j) => BunnyPostTag(name: j['name'] as String, category: j['category'] as String?);
@@ -327,6 +337,15 @@ class HttpBunnyRepository implements BunnyRepository {
     int autoFavoriteStars = 1,
     bool autoUpvote = false,
     bool usesDefaultInterval = false,
+    int inkbunnySearchInMask = 0,
+    int inkbunnyFieldJoinType = 0,
+    int inkbunnyStringJoinType = 0,
+    String? inkbunnyUsername,
+    int inkbunnySubmissionTypeMask = 0,
+    int inkbunnyDaysLimit = 0,
+    String? inkbunnyOrderBy,
+    bool inkbunnyRandom = false,
+    int inkbunnyScraps = 0,
   }) async {
     final response = await _client.post(
       _uri('/searches'),
@@ -340,6 +359,15 @@ class HttpBunnyRepository implements BunnyRepository {
         'auto_favorite_stars': autoFavoriteStars,
         'auto_upvote': autoUpvote,
         'uses_default_interval': usesDefaultInterval,
+        'inkbunny_search_in_mask': inkbunnySearchInMask,
+        'inkbunny_field_join_type': inkbunnyFieldJoinType,
+        'inkbunny_string_join_type': inkbunnyStringJoinType,
+        'inkbunny_username': inkbunnyUsername,
+        'inkbunny_submission_type_mask': inkbunnySubmissionTypeMask,
+        'inkbunny_days_limit': inkbunnyDaysLimit,
+        'inkbunny_order_by': inkbunnyOrderBy,
+        'inkbunny_random': inkbunnyRandom,
+        'inkbunny_scraps': inkbunnyScraps,
       }),
     );
     if (response.statusCode != 201) {
@@ -441,6 +469,15 @@ class HttpBunnyRepository implements BunnyRepository {
     int autoFavoriteStars = 1,
     bool autoUpvote = false,
     bool usesDefaultInterval = false,
+    int inkbunnySearchInMask = 0,
+    int inkbunnyFieldJoinType = 0,
+    int inkbunnyStringJoinType = 0,
+    String? inkbunnyUsername,
+    int inkbunnySubmissionTypeMask = 0,
+    int inkbunnyDaysLimit = 0,
+    String? inkbunnyOrderBy,
+    bool inkbunnyRandom = false,
+    int inkbunnyScraps = 0,
   }) async {
     final response = await _client.put(
       _uri('/searches/$searchId'),
@@ -453,6 +490,15 @@ class HttpBunnyRepository implements BunnyRepository {
         'auto_favorite_stars': autoFavoriteStars,
         'auto_upvote': autoUpvote,
         'uses_default_interval': usesDefaultInterval,
+        'inkbunny_search_in_mask': inkbunnySearchInMask,
+        'inkbunny_field_join_type': inkbunnyFieldJoinType,
+        'inkbunny_string_join_type': inkbunnyStringJoinType,
+        'inkbunny_username': inkbunnyUsername,
+        'inkbunny_submission_type_mask': inkbunnySubmissionTypeMask,
+        'inkbunny_days_limit': inkbunnyDaysLimit,
+        'inkbunny_order_by': inkbunnyOrderBy,
+        'inkbunny_random': inkbunnyRandom,
+        'inkbunny_scraps': inkbunnyScraps,
       }),
     );
     if (response.statusCode != 200) {
@@ -649,8 +695,37 @@ class HttpBunnyRepository implements BunnyRepository {
   }
 
   @override
-  Future<List<BunnyPost>> previewSearch(BunnySite site, String query, {int page = 1}) async {
-    final response = await _client.post(_uri('/search/preview', {'site': site.toWireString(), 'query': query, 'page': '$page'}), headers: _headers);
+  Future<List<BunnyPost>> previewSearch(
+    BunnySite site,
+    String query, {
+    int page = 1,
+    int inkbunnySearchInMask = 0,
+    int inkbunnyFieldJoinType = 0,
+    int inkbunnyStringJoinType = 0,
+    String? inkbunnyUsername,
+    int inkbunnySubmissionTypeMask = 0,
+    int inkbunnyDaysLimit = 0,
+    String? inkbunnyOrderBy,
+    bool inkbunnyRandom = false,
+    int inkbunnyScraps = 0,
+  }) async {
+    final response = await _client.post(
+      _uri('/search/preview', {
+        'site': site.toWireString(),
+        'query': query,
+        'page': '$page',
+        'ib_search_in_mask': '$inkbunnySearchInMask',
+        'ib_field_join_type': '$inkbunnyFieldJoinType',
+        'ib_string_join_type': '$inkbunnyStringJoinType',
+        'ib_username': ?inkbunnyUsername,
+        'ib_submission_type_mask': '$inkbunnySubmissionTypeMask',
+        'ib_days_limit': '$inkbunnyDaysLimit',
+        'ib_order_by': ?inkbunnyOrderBy,
+        'ib_random': inkbunnyRandom ? '1' : '0',
+        'ib_scraps': '$inkbunnyScraps',
+      }),
+      headers: _headers,
+    );
     if (response.statusCode != 200) {
       _throwError(response);
     }

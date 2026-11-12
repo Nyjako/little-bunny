@@ -1,21 +1,14 @@
 #ifndef BUNNY_COMMON_RATE_LIMIT_H
 #define BUNNY_COMMON_RATE_LIMIT_H
 
-#include <stdbool.h>
-
-#include <goblin/high_res_timer.h>
+#include <goblin/rate_limit.h>
 
 /* Shared by libe621/libinkbunny's client.c, both of which pace outgoing
- * requests to min_request_interval_sec apart -- was previously duplicated
- * in each as POSIX clock_gettime(CLOCK_MONOTONIC, ...)/nanosleep, which
- * doesn't exist on MSVC (no CLOCK_MONOTONIC, no nanosleep); built on
- * GOBLIN's own cross-platform goblin_timer instead. */
-typedef struct
-{
-    double min_interval_sec;
-    goblin_timer last_request_time;
-    bool has_last_request_time;
-} bunny_rate_limiter_t;
+ * requests to min_request_interval_sec apart. Built on GOBLIN's own
+ * goblin_rate_limiter -- was previously a thin wrapper around goblin_timer
+ * plus hand-rolled Win32 Sleep()/POSIX nanosleep(), which is now exactly
+ * what goblin_rate_limiter itself does internally. */
+typedef goblin_rate_limiter bunny_rate_limiter_t;
 
 void bunny_rate_limiter_init(bunny_rate_limiter_t *limiter, double min_interval_sec);
 

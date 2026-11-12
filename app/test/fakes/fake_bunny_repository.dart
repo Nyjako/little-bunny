@@ -107,6 +107,15 @@ class FakeBunnyRepository implements BunnyRepository {
     int autoFavoriteStars = 1,
     bool autoUpvote = false,
     bool usesDefaultInterval = false,
+    int inkbunnySearchInMask = 0,
+    int inkbunnyFieldJoinType = 0,
+    int inkbunnyStringJoinType = 0,
+    String? inkbunnyUsername,
+    int inkbunnySubmissionTypeMask = 0,
+    int inkbunnyDaysLimit = 0,
+    String? inkbunnyOrderBy,
+    bool inkbunnyRandom = false,
+    int inkbunnyScraps = 0,
   }) async {
     final id = _nextSearchId++;
     searches.add(
@@ -121,6 +130,15 @@ class FakeBunnyRepository implements BunnyRepository {
         autoFavoriteStars: autoFavoriteStars,
         autoUpvote: autoUpvote,
         usesDefaultInterval: usesDefaultInterval,
+        inkbunnySearchInMask: inkbunnySearchInMask,
+        inkbunnyFieldJoinType: inkbunnyFieldJoinType,
+        inkbunnyStringJoinType: inkbunnyStringJoinType,
+        inkbunnyUsername: inkbunnyUsername,
+        inkbunnySubmissionTypeMask: inkbunnySubmissionTypeMask,
+        inkbunnyDaysLimit: inkbunnyDaysLimit,
+        inkbunnyOrderBy: inkbunnyOrderBy,
+        inkbunnyRandom: inkbunnyRandom,
+        inkbunnyScraps: inkbunnyScraps,
       ),
     );
     return id;
@@ -147,6 +165,15 @@ class FakeBunnyRepository implements BunnyRepository {
           usesDefaultInterval: search.usesDefaultInterval,
           groupId: search.groupId,
           lastUpdatedAt: search.lastUpdatedAt,
+          inkbunnySearchInMask: search.inkbunnySearchInMask,
+          inkbunnyFieldJoinType: search.inkbunnyFieldJoinType,
+          inkbunnyStringJoinType: search.inkbunnyStringJoinType,
+          inkbunnyUsername: search.inkbunnyUsername,
+          inkbunnySubmissionTypeMask: search.inkbunnySubmissionTypeMask,
+          inkbunnyDaysLimit: search.inkbunnyDaysLimit,
+          inkbunnyOrderBy: search.inkbunnyOrderBy,
+          inkbunnyRandom: search.inkbunnyRandom,
+          inkbunnyScraps: search.inkbunnyScraps,
         ),
       )
       .toList();
@@ -213,6 +240,15 @@ class FakeBunnyRepository implements BunnyRepository {
     int autoFavoriteStars = 1,
     bool autoUpvote = false,
     bool usesDefaultInterval = false,
+    int inkbunnySearchInMask = 0,
+    int inkbunnyFieldJoinType = 0,
+    int inkbunnyStringJoinType = 0,
+    String? inkbunnyUsername,
+    int inkbunnySubmissionTypeMask = 0,
+    int inkbunnyDaysLimit = 0,
+    String? inkbunnyOrderBy,
+    bool inkbunnyRandom = false,
+    int inkbunnyScraps = 0,
   }) async {
     final index = searches.indexWhere((search) => search.id == searchId);
     if (index == -1) {
@@ -235,6 +271,15 @@ class FakeBunnyRepository implements BunnyRepository {
       pinned: search.pinned,
       usesDefaultInterval: usesDefaultInterval,
       groupId: search.groupId,
+      inkbunnySearchInMask: inkbunnySearchInMask,
+      inkbunnyFieldJoinType: inkbunnyFieldJoinType,
+      inkbunnyStringJoinType: inkbunnyStringJoinType,
+      inkbunnyUsername: inkbunnyUsername,
+      inkbunnySubmissionTypeMask: inkbunnySubmissionTypeMask,
+      inkbunnyDaysLimit: inkbunnyDaysLimit,
+      inkbunnyOrderBy: inkbunnyOrderBy,
+      inkbunnyRandom: inkbunnyRandom,
+      inkbunnyScraps: inkbunnyScraps,
     );
   }
 
@@ -327,7 +372,14 @@ class FakeBunnyRepository implements BunnyRepository {
   /// -- tests that care about specific sections overwrite this wholesale
   /// rather than building it up field-by-field, since M40's report is a
   /// single opaque unit server-side too (no per-section fetch/refresh).
-  BunnyStatsReport statsReport = const BunnyStatsReport(computedAt: '2026-01-01T00:00:00Z', topFavoritedTags: [], topUsedTags: [], topPools: [], topViewedSearches: []);
+  BunnyStatsReport statsReport = const BunnyStatsReport(
+    computedAt: '2026-01-01T00:00:00Z',
+    topFavoritedTags: [],
+    topUsedTags: [],
+    topPools: [],
+    topViewedSearches: [],
+    topTagPairs: [],
+  );
 
   /// Set by [refreshStatsReport] -- lets a test assert a manual refresh
   /// actually happened (distinct from [getStatsReport], which never mutates
@@ -499,7 +551,20 @@ class FakeBunnyRepository implements BunnyRepository {
   }
 
   @override
-  Future<List<BunnyPost>> previewSearch(BunnySite site, String query, {int page = 1}) async {
+  Future<List<BunnyPost>> previewSearch(
+    BunnySite site,
+    String query, {
+    int page = 1,
+    int inkbunnySearchInMask = 0,
+    int inkbunnyFieldJoinType = 0,
+    int inkbunnyStringJoinType = 0,
+    String? inkbunnyUsername,
+    int inkbunnySubmissionTypeMask = 0,
+    int inkbunnyDaysLimit = 0,
+    String? inkbunnyOrderBy,
+    bool inkbunnyRandom = false,
+    int inkbunnyScraps = 0,
+  }) async {
     previewSearchCalls.add((site, query, page));
     return List.of(previewSearchResults['${site.toWireString()}:$query:$page'] ?? const []);
   }

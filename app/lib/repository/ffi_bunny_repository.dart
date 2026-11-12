@@ -29,6 +29,15 @@ BunnySearch _searchFromMap(Map<String, Object?> m) => BunnySearch(
   usesDefaultInterval: m['usesDefaultInterval'] as bool,
   groupId: m['groupId'] as int,
   lastUpdatedAt: m['lastUpdatedAt'] as String?,
+  inkbunnySearchInMask: m['inkbunnySearchInMask'] as int,
+  inkbunnyFieldJoinType: m['inkbunnyFieldJoinType'] as int,
+  inkbunnyStringJoinType: m['inkbunnyStringJoinType'] as int,
+  inkbunnyUsername: m['inkbunnyUsername'] as String?,
+  inkbunnySubmissionTypeMask: m['inkbunnySubmissionTypeMask'] as int,
+  inkbunnyDaysLimit: m['inkbunnyDaysLimit'] as int,
+  inkbunnyOrderBy: m['inkbunnyOrderBy'] as String?,
+  inkbunnyRandom: m['inkbunnyRandom'] as bool,
+  inkbunnyScraps: m['inkbunnyScraps'] as int,
 );
 
 BunnyGroup _groupFromMap(Map<String, Object?> m) => BunnyGroup(id: m['id'] as int, name: m['name'] as String, pinned: m['pinned'] as bool, createdAt: m['createdAt'] as String);
@@ -84,6 +93,7 @@ BunnyStatsReport _statsReportFromMap(Map<String, Object?> m) => BunnyStatsReport
   topUsedTags: _tagStatListFromMaps(m['topUsedTags']),
   topPools: _tagStatListFromMaps(m['topPools']),
   topViewedSearches: _tagStatListFromMaps(m['topViewedSearches']),
+  topTagPairs: _tagStatListFromMaps(m['topTagPairs']),
 );
 
 BunnyPostTag _postTagFromMap(Map<String, Object?> m) => BunnyPostTag(name: m['name'] as String, category: m['category'] as String?);
@@ -228,6 +238,15 @@ class FfiBunnyRepository implements BunnyRepository {
     int autoFavoriteStars = 1,
     bool autoUpvote = false,
     bool usesDefaultInterval = false,
+    int inkbunnySearchInMask = 0,
+    int inkbunnyFieldJoinType = 0,
+    int inkbunnyStringJoinType = 0,
+    String? inkbunnyUsername,
+    int inkbunnySubmissionTypeMask = 0,
+    int inkbunnyDaysLimit = 0,
+    String? inkbunnyOrderBy,
+    bool inkbunnyRandom = false,
+    int inkbunnyScraps = 0,
   }) => _wrapped(
     () => _native.createSearch(
       site.toWireString(),
@@ -238,6 +257,15 @@ class FfiBunnyRepository implements BunnyRepository {
       autoFavoriteStars: autoFavoriteStars,
       autoUpvote: autoUpvote,
       usesDefaultInterval: usesDefaultInterval,
+      inkbunnySearchInMask: inkbunnySearchInMask,
+      inkbunnyFieldJoinType: inkbunnyFieldJoinType,
+      inkbunnyStringJoinType: inkbunnyStringJoinType,
+      inkbunnyUsername: inkbunnyUsername,
+      inkbunnySubmissionTypeMask: inkbunnySubmissionTypeMask,
+      inkbunnyDaysLimit: inkbunnyDaysLimit,
+      inkbunnyOrderBy: inkbunnyOrderBy,
+      inkbunnyRandom: inkbunnyRandom,
+      inkbunnyScraps: inkbunnyScraps,
     ),
   );
 
@@ -287,6 +315,15 @@ class FfiBunnyRepository implements BunnyRepository {
     int autoFavoriteStars = 1,
     bool autoUpvote = false,
     bool usesDefaultInterval = false,
+    int inkbunnySearchInMask = 0,
+    int inkbunnyFieldJoinType = 0,
+    int inkbunnyStringJoinType = 0,
+    String? inkbunnyUsername,
+    int inkbunnySubmissionTypeMask = 0,
+    int inkbunnyDaysLimit = 0,
+    String? inkbunnyOrderBy,
+    bool inkbunnyRandom = false,
+    int inkbunnyScraps = 0,
   }) => _wrapped(
     () => _native.updateSearch(
       searchId,
@@ -297,6 +334,15 @@ class FfiBunnyRepository implements BunnyRepository {
       autoFavoriteStars: autoFavoriteStars,
       autoUpvote: autoUpvote,
       usesDefaultInterval: usesDefaultInterval,
+      inkbunnySearchInMask: inkbunnySearchInMask,
+      inkbunnyFieldJoinType: inkbunnyFieldJoinType,
+      inkbunnyStringJoinType: inkbunnyStringJoinType,
+      inkbunnyUsername: inkbunnyUsername,
+      inkbunnySubmissionTypeMask: inkbunnySubmissionTypeMask,
+      inkbunnyDaysLimit: inkbunnyDaysLimit,
+      inkbunnyOrderBy: inkbunnyOrderBy,
+      inkbunnyRandom: inkbunnyRandom,
+      inkbunnyScraps: inkbunnyScraps,
     ),
   );
 
@@ -392,8 +438,36 @@ class FfiBunnyRepository implements BunnyRepository {
   }
 
   @override
-  Future<List<BunnyPost>> previewSearch(BunnySite site, String query, {int page = 1}) async {
-    final items = await _wrapped(() => _native.previewSearch(site.toWireString(), query, page: page));
+  Future<List<BunnyPost>> previewSearch(
+    BunnySite site,
+    String query, {
+    int page = 1,
+    int inkbunnySearchInMask = 0,
+    int inkbunnyFieldJoinType = 0,
+    int inkbunnyStringJoinType = 0,
+    String? inkbunnyUsername,
+    int inkbunnySubmissionTypeMask = 0,
+    int inkbunnyDaysLimit = 0,
+    String? inkbunnyOrderBy,
+    bool inkbunnyRandom = false,
+    int inkbunnyScraps = 0,
+  }) async {
+    final items = await _wrapped(
+      () => _native.previewSearch(
+        site.toWireString(),
+        query,
+        page: page,
+        inkbunnySearchInMask: inkbunnySearchInMask,
+        inkbunnyFieldJoinType: inkbunnyFieldJoinType,
+        inkbunnyStringJoinType: inkbunnyStringJoinType,
+        inkbunnyUsername: inkbunnyUsername,
+        inkbunnySubmissionTypeMask: inkbunnySubmissionTypeMask,
+        inkbunnyDaysLimit: inkbunnyDaysLimit,
+        inkbunnyOrderBy: inkbunnyOrderBy,
+        inkbunnyRandom: inkbunnyRandom,
+        inkbunnyScraps: inkbunnyScraps,
+      ),
+    );
     return items.map(_postFromMap).toList();
   }
 

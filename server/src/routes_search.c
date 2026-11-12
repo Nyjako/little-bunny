@@ -4,6 +4,7 @@
 #include <cJSON.h>
 
 #include <stdbool.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include "auth.h"
@@ -50,6 +51,49 @@ static cJSON *post_to_json(const bunny_db_post_t *post)
     return json;
 }
 
+/* Inkbunny advanced-search preview filters (M74) -- same "ib_" query-param
+ * prefix as every field below, all optional, all defaulting to 0/false/NULL
+ * (api_search.php's own defaults) when absent. Ignored entirely for an e621
+ * preview. Static buffers (username/order_by) live in the caller's frame and
+ * are only borrowed by the returned options struct, matching
+ * bunny_db_search_options_t's own borrowed-string convention. */
+static void parse_inkbunny_preview_filters(const char *query_string, char *username_buf, size_t username_buf_size, char *order_by_buf, size_t order_by_buf_size, bunny_db_search_options_t *out_options)
+{
+    memset(out_options, 0, sizeof(*out_options));
+    if (!query_string) {
+        return;
+    }
+
+    char int_value[16];
+    if (mg_get_var(query_string, strlen(query_string), "ib_search_in_mask", int_value, sizeof(int_value)) > 0) {
+        out_options->inkbunny_search_in_mask = atoi(int_value);
+    }
+    if (mg_get_var(query_string, strlen(query_string), "ib_field_join_type", int_value, sizeof(int_value)) > 0) {
+        out_options->inkbunny_field_join_type = atoi(int_value);
+    }
+    if (mg_get_var(query_string, strlen(query_string), "ib_string_join_type", int_value, sizeof(int_value)) > 0) {
+        out_options->inkbunny_string_join_type = atoi(int_value);
+    }
+    if (mg_get_var(query_string, strlen(query_string), "ib_username", username_buf, username_buf_size) > 0) {
+        out_options->inkbunny_username = username_buf;
+    }
+    if (mg_get_var(query_string, strlen(query_string), "ib_submission_type_mask", int_value, sizeof(int_value)) > 0) {
+        out_options->inkbunny_submission_type_mask = atoi(int_value);
+    }
+    if (mg_get_var(query_string, strlen(query_string), "ib_days_limit", int_value, sizeof(int_value)) > 0) {
+        out_options->inkbunny_days_limit = atoi(int_value);
+    }
+    if (mg_get_var(query_string, strlen(query_string), "ib_order_by", order_by_buf, order_by_buf_size) > 0) {
+        out_options->inkbunny_order_by = order_by_buf;
+    }
+    if (mg_get_var(query_string, strlen(query_string), "ib_random", int_value, sizeof(int_value)) > 0) {
+        out_options->inkbunny_random = strcmp(int_value, "1") == 0;
+    }
+    if (mg_get_var(query_string, strlen(query_string), "ib_scraps", int_value, sizeof(int_value)) > 0) {
+        out_options->inkbunny_scraps = atoi(int_value);
+    }
+}
+
 static int handle_preview_search(struct mg_connection *conn, server_context_t *ctx, const char *query_string)
 {
     char site_value[16];
@@ -69,8 +113,13 @@ static int handle_preview_search(struct mg_connection *conn, server_context_t *c
         return server_json_respond_error(conn, BUNNY_CORE_ERR_INVALID_ARG);
     }
 
+    char ib_username[128];
+    char ib_order_by[64];
+    bunny_db_search_options_t inkbunny_filters;
+    parse_inkbunny_preview_filters(query_string, ib_username, sizeof(ib_username), ib_order_by, sizeof(ib_order_by), &inkbunny_filters);
+
     bunny_db_post_list_t posts;
-    bunny_core_result_t result = bunny_core_preview_search(ctx->core, site, query_value, (int)page, &posts);
+    bunny_core_result_t result = bunny_core_preview_search(ctx->core, site, query_value, (int)page, &inkbunny_filters, &posts);
 
     if (result != BUNNY_CORE_OK) {
         return server_json_respond_error(conn, result);

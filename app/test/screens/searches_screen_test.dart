@@ -9,6 +9,7 @@ import 'package:little_bunny/repository/bunny_models.dart';
 import 'package:little_bunny/screens/searches_screen.dart';
 import 'package:little_bunny/services/download_manager.dart';
 import 'package:little_bunny/services/download_queue_service.dart';
+import 'package:little_bunny/services/preview_cache_service.dart';
 import 'package:little_bunny/services/update_check_service.dart';
 import 'package:little_bunny/settings/app_lock_service.dart';
 import 'package:little_bunny/settings/display_settings_store.dart';
@@ -33,6 +34,7 @@ Widget _wrap(FakeBunnyRepository repository, {DownloadQueueService? downloadQueu
       displaySettingsStore: const DisplaySettingsStore(),
       downloadSettingsStore: const DownloadSettingsStore(),
       downloadQueueService: downloadQueueService ?? DownloadQueueService(downloadManager: const DownloadManager(), downloadSettingsStore: const DownloadSettingsStore()),
+      previewCacheService: PreviewCacheService(),
       settingsStore: RepositorySettingsStore(FakeSecretStore()),
       updateSettingsStore: updateSettingsStore ?? const UpdateSettingsStore(),
       updateCheckService: updateCheckService ?? const UpdateCheckService(),
@@ -115,6 +117,15 @@ void main() {
     expect(find.text('Edit search'), findsOneWidget);
 
     await tester.enterText(find.widgetWithText(TextFormField, 'Label'), 'Renamed foxes');
+    // The e621 metatags panel (shown by default, e621 being the search's
+    // site) can push the Save button below the test surface's default
+    // Sliver layout-cache extent.
+    tester.view.physicalSize = const Size(800, 2000);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('Save'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Save'));
     await tester.pumpAndSettle();
 
@@ -686,7 +697,12 @@ void main() {
 
     await tester.enterText(find.widgetWithText(TextFormField, 'Label'), 'Foxes');
     await tester.enterText(find.widgetWithText(TextFormField, 'Query'), 'fox');
-    // The group picker (M21) can push the Create button below the fold.
+    // The group picker (M21) and the e621 metatags panel (shown by default)
+    // can push the Create button below the fold.
+    tester.view.physicalSize = const Size(800, 2000);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    await tester.pumpAndSettle();
     await tester.ensureVisible(find.text('Create'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Create'));
@@ -863,6 +879,12 @@ void main() {
     await tester.tap(find.text('Canines').last);
     await tester.pumpAndSettle();
 
+    // The e621 metatags panel (shown by default) can push the Save button
+    // below the test surface's default Sliver layout-cache extent.
+    tester.view.physicalSize = const Size(800, 2000);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    await tester.pumpAndSettle();
     await tester.ensureVisible(find.text('Save'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Save'));
@@ -978,6 +1000,95 @@ void main() {
       expect(repository.searches, hasLength(1));
       expect(repository.searches.single.id, keeperId);
       expect(find.textContaining('duplicate searches found'), findsNothing);
+    });
+  });
+
+  group('finder (local filter over saved searches/pools)', () {
+    testWidgets('the finder field is hidden until the search icon is tapped', (WidgetTester tester) async {
+      final repository = FakeBunnyRepository();
+      await repository.createSearch(BunnySite.e621, 'Foxes', 'fox');
+
+      await tester.pumpWidget(_wrap(repository));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(TextField), findsNothing);
+
+      await tester.tap(find.byTooltip('Find a saved search or pool'));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(TextField), findsOneWidget);
+    });
+
+    testWidgets('typing filters the Searches tab by label or query text', (WidgetTester tester) async {
+      final repository = FakeBunnyRepository();
+      await repository.createSearch(BunnySite.e621, 'Foxes', 'fox');
+      await repository.createSearch(BunnySite.e621, 'Wolves', 'wolf');
+
+      await tester.pumpWidget(_wrap(repository));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byTooltip('Find a saved search or pool'));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextField), 'wolf');
+      await tester.pumpAndSettle();
+
+      expect(find.text('Foxes'), findsNothing);
+      expect(find.text('Wolves'), findsOneWidget);
+    });
+
+    testWidgets('typing a pool id finds that pool even when it is not in the label or query text', (WidgetTester tester) async {
+      final repository = FakeBunnyRepository();
+      await repository.createSearch(BunnySite.e621, 'A nice comic', 'pool:108216');
+      await repository.createSearch(BunnySite.e621, 'Another pool', 'pool:5');
+
+      await tester.pumpWidget(_wrap(repository));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Pools'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byTooltip('Find a saved search or pool'));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextField), '108216');
+      await tester.pumpAndSettle();
+
+      expect(find.text('A nice comic'), findsOneWidget);
+      expect(find.text('Another pool'), findsNothing);
+    });
+
+    testWidgets('clearing the filter shows every search again', (WidgetTester tester) async {
+      final repository = FakeBunnyRepository();
+      await repository.createSearch(BunnySite.e621, 'Foxes', 'fox');
+      await repository.createSearch(BunnySite.e621, 'Wolves', 'wolf');
+
+      await tester.pumpWidget(_wrap(repository));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byTooltip('Find a saved search or pool'));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextField), 'wolf');
+      await tester.pumpAndSettle();
+      expect(find.text('Foxes'), findsNothing);
+
+      await tester.tap(find.byTooltip('Clear'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Foxes'), findsOneWidget);
+      expect(find.text('Wolves'), findsOneWidget);
+    });
+
+    testWidgets('no matches shows the finder-specific empty state instead of the generic one', (WidgetTester tester) async {
+      final repository = FakeBunnyRepository();
+      await repository.createSearch(BunnySite.e621, 'Foxes', 'fox');
+
+      await tester.pumpWidget(_wrap(repository));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byTooltip('Find a saved search or pool'));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextField), 'nonexistent');
+      await tester.pumpAndSettle();
+
+      expect(find.text('Nothing matches "nonexistent".'), findsOneWidget);
     });
   });
 
