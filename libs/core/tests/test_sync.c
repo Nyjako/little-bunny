@@ -1392,6 +1392,56 @@ void test_slideshow_reroll_all_never_duplicates_a_post_across_searches(void)
     free(fixture2);
 }
 
+/* Regression for a real bug found live: the exclusion set a reroll
+ * passes to the picker must cover every OTHER search's current posts, but
+ * NOT this search's own -- its own picks are about to be replaced wholesale
+ * by this very call. A search with no count cap (unbounded, like this one)
+ * whose entire small candidate pool had already been assigned to it by an
+ * earlier commit used to reroll down to nothing: the stale "all_ids"
+ * exclusion set (read before this search's own old picks are cleared)
+ * still included every one of them, so excluding "everything already
+ * committed" left zero candidates for a search whose own prior assignment
+ * already covered its whole pool. Confirmed live against a real slideshow
+ * with ~4k posts across many searches -- each successive "reroll all" made
+ * it worse, converging every search toward 0/1 posts. */
+void test_slideshow_reroll_all_does_not_starve_a_search_whose_own_pool_is_already_fully_assigned(void)
+{
+    char *fixture = build_e621_posts_page_json(5, 7700);
+    TEST_ASSERT_NOT_NULL(fixture);
+    g_e621_state.bodies[0] = fixture;
+    g_e621_state.body_count = 1;
+    int64_t search_id = 0;
+    bunny_core_search_create(g_core, BUNNY_DB_SITE_E621, "wolves", "wolf", 24, NULL, &search_id);
+    bunny_core_sync_stats_t stats;
+    bunny_core_sync_due_searches(g_core, &stats);
+    TEST_ASSERT_EQUAL(5, stats.posts_upserted);
+
+    /* No default_posts_per_search/override (unbounded, has_count false) --
+     * same shape as the real slideshow this was confirmed against. */
+    int64_t slideshow_id = 0;
+    bunny_core_slideshow_create(g_core, "Show", false, 0, false, 0, &slideshow_id);
+    bunny_core_slideshow_search_add(g_core, slideshow_id, search_id, false, 0);
+
+    /* First commit: with only 5 candidates and no cap, this search's own
+     * pool gets fully assigned (all 5). */
+    TEST_ASSERT_EQUAL(BUNNY_CORE_OK, bunny_core_slideshow_search_commit_picks(g_core, slideshow_id, search_id));
+    bunny_db_slideshow_post_list_t first_pass;
+    bunny_core_slideshow_posts_list(g_core, slideshow_id, search_id, &first_pass);
+    TEST_ASSERT_EQUAL(5, (int)first_pass.count);
+    bunny_db_slideshow_post_list_free(&first_pass);
+
+    /* Reroll all (the exact user-facing action that triggered this) must
+     * still fill this search back up to its full 5-post pool, not drop it
+     * to 0 just because those same 5 posts were already assigned to it. */
+    TEST_ASSERT_EQUAL(BUNNY_CORE_OK, bunny_core_slideshow_reroll_all(g_core, slideshow_id));
+    bunny_db_slideshow_post_list_t after_reroll;
+    bunny_core_slideshow_posts_list(g_core, slideshow_id, search_id, &after_reroll);
+    TEST_ASSERT_EQUAL(5, (int)after_reroll.count);
+    bunny_db_slideshow_post_list_free(&after_reroll);
+
+    free(fixture);
+}
+
 void test_slideshow_replace_post_swaps_to_a_different_post(void)
 {
     char *fixture = build_e621_posts_page_json(5, 7600);
@@ -2806,6 +2856,7 @@ int main(void)
     RUN_TEST(test_slideshow_search_commit_picks_falls_back_to_slideshow_default_when_no_override);
     RUN_TEST(test_slideshow_search_commit_picks_respects_max_total_posts_across_searches);
     RUN_TEST(test_slideshow_reroll_all_never_duplicates_a_post_across_searches);
+    RUN_TEST(test_slideshow_reroll_all_does_not_starve_a_search_whose_own_pool_is_already_fully_assigned);
     RUN_TEST(test_slideshow_replace_post_swaps_to_a_different_post);
     RUN_TEST(test_slideshow_replace_post_errors_when_the_search_is_exhausted);
     RUN_TEST(test_preview_search_requests_the_given_e621_page);
