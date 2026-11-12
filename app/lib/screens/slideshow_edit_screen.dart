@@ -96,6 +96,12 @@ class _SlideshowEditScreenState extends State<SlideshowEditScreen> {
       _maxTotalController.text = slideshow.maxTotalPosts?.toString() ?? '';
       unawaited(_loadLinks());
       unawaited(_loadSlideshowBlacklist());
+      // Re-derives readiness on every open, not just after an explicit
+      // "Prepare" tap -- without this, a slideshow prepared in an earlier
+      // session always came back up with Watch disabled until the user
+      // tapped Prepare again, even though everything was already downloaded
+      // and sitting on disk the whole time.
+      unawaited(_refreshPrepareReportQuietly());
     }
     _slideshowBlacklistTagController.addListener(_onSlideshowBlacklistTagChanged);
     _slideshowBlacklistTagController.addListener(_onSlideshowBlacklistTagChangedAutocomplete);
@@ -135,10 +141,12 @@ class _SlideshowEditScreenState extends State<SlideshowEditScreen> {
     _prepareRefreshDebounce = Timer(const Duration(seconds: 2), _refreshPrepareReportQuietly);
   }
 
-  /// Same work as [_prepare], minus the `_preparing` flag -- this runs in
-  /// the background in response to the download queue's own progress, not
-  /// a user tap, so the "Prepare" button shouldn't flicker into its
-  /// disabled/spinner state for it.
+  /// Same work as [_prepare], minus the `_preparing` flag -- runs in the
+  /// background in response to the download queue's own progress, and once
+  /// up front from [initState] (so Watch comes back unlocked on reopen
+  /// without needing a fresh "Prepare" tap), not a user tap, so the
+  /// "Prepare" button shouldn't flicker into its disabled/spinner state for
+  /// either.
   Future<void> _refreshPrepareReportQuietly() async {
     final slideshowId = _slideshowId;
     if (slideshowId == null) {
