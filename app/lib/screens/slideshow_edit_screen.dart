@@ -79,6 +79,12 @@ class _SlideshowEditScreenState extends State<SlideshowEditScreen> {
   List<BunnyTagStat> _slideshowBlacklistSuggestions = [];
   Timer? _slideshowBlacklistAutocompleteDebounce;
 
+  /// Debounces [_onDownloadQueueChanged] below -- the queue service notifies
+  /// on every status transition (queued -> downloading -> succeeded/failed),
+  /// which for a large slideshow's worth of downloads could otherwise mean
+  /// a refresh (a few repository round-trips) firing once per post.
+  Timer? _prepareRefreshDebounce;
+
   @override
   void initState() {
     super.initState();
@@ -93,6 +99,12 @@ class _SlideshowEditScreenState extends State<SlideshowEditScreen> {
     }
     _slideshowBlacklistTagController.addListener(_onSlideshowBlacklistTagChanged);
     _slideshowBlacklistTagController.addListener(_onSlideshowBlacklistTagChangedAutocomplete);
+    // So "ready to watch" ticks up live as downloads actually finish,
+    // instead of only ever updating on another explicit "Prepare" tap --
+    // watching never waited for every post to be ready (see
+    // SlideshowPrepareService's own doc comment), but discovering a post
+    // had actually become ready meanwhile did, until now.
+    widget.downloadQueueService.addListener(_onDownloadQueueChanged);
   }
 
   @override
@@ -106,7 +118,48 @@ class _SlideshowEditScreenState extends State<SlideshowEditScreen> {
     _slideshowBlacklistTagController.removeListener(_onSlideshowBlacklistTagChanged);
     _slideshowBlacklistTagController.removeListener(_onSlideshowBlacklistTagChangedAutocomplete);
     _slideshowBlacklistTagController.dispose();
+    _prepareRefreshDebounce?.cancel();
+    widget.downloadQueueService.removeListener(_onDownloadQueueChanged);
     super.dispose();
+  }
+
+  /// Only refreshes once the user has already tapped "Prepare" at least
+  /// once this session (`_prepareReport != null`) -- before that, there's
+  /// nothing to refresh, and this must never be what first kicks off
+  /// downloading a slideshow's posts on its own.
+  void _onDownloadQueueChanged() {
+    if (_prepareReport == null || _preparing) {
+      return;
+    }
+    _prepareRefreshDebounce?.cancel();
+    _prepareRefreshDebounce = Timer(const Duration(seconds: 2), _refreshPrepareReportQuietly);
+  }
+
+  /// Same work as [_prepare], minus the `_preparing` flag -- this runs in
+  /// the background in response to the download queue's own progress, not
+  /// a user tap, so the "Prepare" button shouldn't flicker into its
+  /// disabled/spinner state for it.
+  Future<void> _refreshPrepareReportQuietly() async {
+    final slideshowId = _slideshowId;
+    if (slideshowId == null) {
+      return;
+    }
+    final service = SlideshowPrepareService(
+      repository: widget.repository,
+      downloadQueueService: widget.downloadQueueService,
+      downloadManager: widget.downloadManager,
+      downloadSettingsStore: widget.downloadSettingsStore,
+    );
+    try {
+      final report = await service.prepare(slideshowId);
+      if (mounted) {
+        setState(() => _prepareReport = report);
+      }
+    } catch (_) {
+      // Best-effort background refresh -- a failure here just means the
+      // next explicit "Prepare" tap (or the next queue change) tries again,
+      // same as any other transient failure already tolerated in this flow.
+    }
   }
 
   void _onSlideshowBlacklistTagChanged() {
