@@ -93,8 +93,8 @@ typedef enum
 
 typedef struct
 {
-    const char *text; /* may be NULL; matched against the search_in_mask fields below */
-    int search_in_mask; /* INKBUNNY_SEARCH_IN_* bits; 0 defaults to KEYWORDS (api_search.php's own text/keywords default) */
+    const char *text;                   /* may be NULL; matched against the search_in_mask fields below */
+    int search_in_mask;                 /* INKBUNNY_SEARCH_IN_* bits; 0 defaults to KEYWORDS (api_search.php's own text/keywords default) */
     inkbunny_field_join_t field_join;   /* only meaningful when more than one search_in_mask bit is set */
     inkbunny_string_join_t string_join; /* only meaningful when `text` has more than one word */
     const char *favorited_by_user_id;   /* may be NULL; Inkbunny's numeric user id (as a string) whose existing favorites to list */
@@ -106,10 +106,10 @@ typedef struct
                                          * GET /pools/{id}.json) -- callers that need reading order should treat the reversed
                                          * creation-date order as a best-effort placeholder, same as e621's pools did before
                                          * that authoritative-ordering fetch was added. */
-    unsigned submission_type_mask;       /* INKBUNNY_SUBMISSION_TYPE_BIT(id) bits; 0 means every type */
-    int days_limit;                      /* 0 means unset/no limit; api_search.php's own `dayslimit` */
-    const char *order_by;                /* may be NULL (defaults to "create_datetime"); one of api_search.php's own `orderby` values, passed through verbatim */
-    bool random;                          /* api_search.php's own `random` -- shuffles results after every other filter/sort is applied */
+    unsigned submission_type_mask;      /* INKBUNNY_SUBMISSION_TYPE_BIT(id) bits; 0 means every type */
+    int days_limit;                     /* 0 means unset/no limit; api_search.php's own `dayslimit` */
+    const char *order_by;               /* may be NULL (defaults to "create_datetime"); one of api_search.php's own `orderby` values, passed through verbatim */
+    bool random;                        /* api_search.php's own `random` -- shuffles results after every other filter/sort is applied */
     inkbunny_scraps_t scraps;
     int page; /* 1-based; 0 or negative defaults to 1 */
 } inkbunny_search_params_t;

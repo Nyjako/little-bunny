@@ -35,6 +35,40 @@ const int kMediaMaskVideo = 2;
 const int kMediaMaskGif = 4;
 const int kMediaMaskAll = 7;
 
+/// Bits for [BunnySearch.inkbunnySearchInMask] -- mirrors
+/// `INKBUNNY_SEARCH_IN_*` (libs/inkbunny/include/inkbunny/client.h). 0
+/// defaults to keywords-only, matching api_search.php's own default.
+const int kInkbunnySearchInKeywords = 1;
+const int kInkbunnySearchInTitle = 2;
+const int kInkbunnySearchInDescription = 4;
+const int kInkbunnySearchInMd5 = 8;
+
+/// Bit (typeId - 1) for [BunnySearch.inkbunnySubmissionTypeMask] -- mirrors
+/// `INKBUNNY_SUBMISSION_TYPE_BIT` (libs/inkbunny/include/inkbunny/client.h).
+/// `typeId` is one of api_search.php's own `submission_type_id` values
+/// (1-14, see `kInkbunnySubmissionTypeNames` below for the full list).
+int kInkbunnySubmissionTypeBit(int typeId) => 1 << (typeId - 1);
+
+/// Display name for each of api_search.php's own `submission_type_id`
+/// values (1-14), in that same order -- for building a submission-type
+/// filter UI without hardcoding the list at every call site.
+const Map<int, String> kInkbunnySubmissionTypeNames = {
+  1: 'Picture/Pinup',
+  2: 'Sketch',
+  3: 'Picture Series',
+  4: 'Comic',
+  5: 'Portfolio',
+  6: 'Shockwave/Flash - Animation',
+  7: 'Shockwave/Flash - Interactive',
+  8: 'Video - Feature Length',
+  9: 'Video - Animation/3D/CGI',
+  10: 'Music - Single Track',
+  11: 'Music - Album',
+  12: 'Writing - Document',
+  13: 'Character Sheet',
+  14: 'Photography - Fursuit/Sculpture/Jewelry/etc',
+};
+
 /// A stored site account, without its secret -- neither implementation of
 /// [BunnyRepository] echoes it back (the server never does, per M5's
 /// `GET /accounts/{site}`, so the FFI implementation deliberately doesn't
@@ -101,6 +135,20 @@ class BunnySearch {
   /// order and the searches list's own per-row indicator.
   final String? lastUpdatedAt;
 
+  /// Inkbunny's advanced search filters (api_search.php's own parameter set,
+  /// M74) -- ignored entirely for an e621 search, which never sets any of
+  /// these away from their defaults. See [BunnyRepository.createSearch]'s
+  /// own doc comments for what each field means.
+  final int inkbunnySearchInMask;
+  final int inkbunnyFieldJoinType;
+  final int inkbunnyStringJoinType;
+  final String? inkbunnyUsername;
+  final int inkbunnySubmissionTypeMask;
+  final int inkbunnyDaysLimit;
+  final String? inkbunnyOrderBy;
+  final bool inkbunnyRandom;
+  final int inkbunnyScraps;
+
   /// `pool:<id>` is a real tag e621's own search syntax understands
   /// natively (M9.6.2); Inkbunny's /api_search.php also accepts an
   /// (undocumented, confirmed live) `pool_id` param with the same meaning,
@@ -145,6 +193,15 @@ class BunnySearch {
     this.usesDefaultInterval = false,
     this.groupId = 0,
     this.lastUpdatedAt,
+    this.inkbunnySearchInMask = 0,
+    this.inkbunnyFieldJoinType = 0,
+    this.inkbunnyStringJoinType = 0,
+    this.inkbunnyUsername,
+    this.inkbunnySubmissionTypeMask = 0,
+    this.inkbunnyDaysLimit = 0,
+    this.inkbunnyOrderBy,
+    this.inkbunnyRandom = false,
+    this.inkbunnyScraps = 0,
   });
 }
 
