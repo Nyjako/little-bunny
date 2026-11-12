@@ -148,10 +148,45 @@ class _SearchesScreenState extends State<SearchesScreen> with SingleTickerProvid
   /// duplicates that shows up later.
   bool _duplicatesBannerDismissed = false;
 
+  /// A local, client-side filter over this screen's own already-saved
+  /// searches/pools -- not a live site search. Session-only, same
+  /// "toggle-able, re-hidden rather than persisted" convention as
+  /// [_duplicatesBannerDismissed] above; starts hidden so the already-dense
+  /// app bar/list isn't cluttered until the user actually wants it.
+  final _finderController = TextEditingController();
+  bool _finderVisible = false;
+
+  void _toggleFinder() {
+    setState(() {
+      _finderVisible = !_finderVisible;
+      if (!_finderVisible) {
+        _finderController.clear();
+      }
+    });
+  }
+
+  /// Matches [filter] (already trimmed/lowercased by the caller) against a
+  /// search's own label or query text -- covers title, tags, and author,
+  /// since a search's query is typically the artist/tag text being
+  /// searched and its label defaults to mirroring it. A pool's numeric id
+  /// is matched directly too (same `substring(5)` convention [BunnySearch.
+  /// isPool] call sites elsewhere in the app already use to parse it),
+  /// since the id itself isn't otherwise repeated in the label/query text.
+  bool _matchesFinder(BunnySearch search, String filter) {
+    if (filter.isEmpty) {
+      return true;
+    }
+    if (search.label.toLowerCase().contains(filter) || search.query.toLowerCase().contains(filter)) {
+      return true;
+    }
+    return search.isPool && int.tryParse(search.query.substring(5))?.toString() == filter;
+  }
+
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 3, vsync: this)..addListener(() => setState(() {}));
+    _finderController.addListener(() => setState(() {}));
     _loadSortOrder();
     _pollSyncStatusOnce();
     _syncStatusPollTimer = Timer.periodic(const Duration(seconds: 2), (_) => _pollSyncStatusOnce());
@@ -275,6 +310,7 @@ class _SearchesScreenState extends State<SearchesScreen> with SingleTickerProvid
   void dispose() {
     _syncStatusPollTimer?.cancel();
     _tabController.dispose();
+    _finderController.dispose();
     super.dispose();
   }
 
@@ -934,6 +970,9 @@ class _SearchesScreenState extends State<SearchesScreen> with SingleTickerProvid
     onPressed: _syncStatus.active ? null : _checkForUpdates,
   );
 
+  Widget _finderIconButton(AppLocalizations l10n) =>
+      IconButton(icon: Icon(_finderVisible ? Icons.search_off : Icons.search), tooltip: l10n.searchesFinderTooltip, onPressed: _toggleFinder);
+
   Widget _downloadQueueIconButton(AppLocalizations l10n) => IconButton(
     icon: const Icon(Icons.download_outlined),
     tooltip: l10n.searchesDownloadQueueTooltip,
@@ -1010,6 +1049,7 @@ class _SearchesScreenState extends State<SearchesScreen> with SingleTickerProvid
 
   List<Widget> _wideModeActions(AppLocalizations l10n) => [
     _syncIconButton(l10n),
+    _finderIconButton(l10n),
     IconButton(icon: const Icon(Icons.travel_explore), tooltip: l10n.searchesCustomSearchTooltip, onPressed: _openCustomSearch),
     _downloadQueueIconButton(l10n),
     IconButton(icon: const Icon(Icons.person_outline), tooltip: l10n.searchesAccountsTooltip, onPressed: _openAccounts),
@@ -1034,15 +1074,17 @@ class _SearchesScreenState extends State<SearchesScreen> with SingleTickerProvid
     ),
   ];
 
-  /// Narrow/mobile width (M9.6.6's breakpoint): only [_syncIconButton] and
-  /// [_downloadQueueIconButton] -- the two most frequently used -- stay as
-  /// direct icons; everything else [_wideModeActions] shows individually
+  /// Narrow/mobile width (M9.6.6's breakpoint): only [_syncIconButton],
+  /// [_finderIconButton], and [_downloadQueueIconButton] -- the most
+  /// frequently used -- stay as direct icons; everything else
+  /// [_wideModeActions] shows individually
   /// (custom search, accounts, tag stats, settings, new group, sort, and
   /// select-for-download) folds into one overflow menu, same `value:`-vs-
   /// `onTap:`-only trick the sort menu above already uses for its own
   /// value-less item, just extended to more of them.
   List<Widget> _narrowModeActions(AppLocalizations l10n) => [
     _syncIconButton(l10n),
+    _finderIconButton(l10n),
     _downloadQueueIconButton(l10n),
     PopupMenuButton<SearchSortOrder>(
       icon: const Icon(Icons.more_vert),
@@ -1097,18 +1139,36 @@ class _SearchesScreenState extends State<SearchesScreen> with SingleTickerProvid
           }
           final all = snapshot.data!.searches;
           final groups = snapshot.data!.groups;
-          final searches = _sortedEntries(_buildEntries(all.where((search) => !search.isPool && !search.isFavorites).toList(), groups));
-          final pools = _sortedEntries(_buildEntries(all.where((search) => search.isPool).toList(), groups));
+          final rawFilter = _finderController.text.trim();
+          final filter = rawFilter.toLowerCase();
+          final searches = _sortedEntries(_buildEntries(all.where((search) => !search.isPool && !search.isFavorites && _matchesFinder(search, filter)).toList(), groups));
+          final pools = _sortedEntries(_buildEntries(all.where((search) => search.isPool && _matchesFinder(search, filter)).toList(), groups));
           final duplicateGroups = findDuplicateSearchGroups(all);
           return Column(
             children: [
               if (duplicateGroups.isNotEmpty && !_duplicatesBannerDismissed) _duplicatesBanner(l10n, duplicateGroups, groups),
+              if (_finderVisible)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+                  child: TextField(
+                    controller: _finderController,
+                    autofocus: true,
+                    decoration: InputDecoration(
+                      hintText: l10n.searchesFinderHint,
+                      prefixIcon: const Icon(Icons.search),
+                      suffixIcon: _finderController.text.isEmpty
+                          ? null
+                          : IconButton(icon: const Icon(Icons.clear), tooltip: l10n.searchesFinderClearTooltip, onPressed: _finderController.clear),
+                      isDense: true,
+                    ),
+                  ),
+                ),
               Expanded(
                 child: TabBarView(
                   controller: _tabController,
                   children: [
-                    _searchList(searches, l10n.searchesEmptyState),
-                    _searchList(pools, l10n.searchesPoolsEmptyState),
+                    _searchList(searches, filter.isEmpty ? l10n.searchesEmptyState : l10n.searchesFinderEmptyState(rawFilter)),
+                    _searchList(pools, filter.isEmpty ? l10n.searchesPoolsEmptyState : l10n.searchesFinderEmptyState(rawFilter)),
                     SlideshowsScreen(
                       repository: _repository!,
                       downloadManager: const DownloadManager(),
