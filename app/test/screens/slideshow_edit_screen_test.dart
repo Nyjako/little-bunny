@@ -303,7 +303,14 @@ void main() {
   // refresh (it calls the exact same SlideshowPrepareService.prepare()) --
   // its own logic (only refresh once a report already exists, debounce
   // rapid-fire queue notifications) is simple enough to verify by reading,
-  // and the thing it calls is already covered the same way as above.
+  // and the thing it calls is already covered the same way as above. Same
+  // limitation again for _watch() itself: its batched path resolution
+  // (DownloadManager.batchLocalFilePathFor) and its self-heal-via-
+  // slideshowReplacePost branch for a post whose file no longer resolves
+  // are both real dart:io/SAF work -- the former is covered directly in
+  // download_manager_test.dart, the latter is simple enough (one
+  // try/catch around an already-tested repository method) to verify by
+  // reading.
 
   testWidgets('Watch stays disabled before Prepare has ever produced a report', (tester) async {
     final id = await repository.slideshowCreate('my slideshow');
