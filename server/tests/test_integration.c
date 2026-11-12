@@ -1216,6 +1216,46 @@ void test_search_auto_favorite_create_and_update(void)
     free(response.data);
 }
 
+void test_search_inkbunny_advanced_filters_create_and_update(void)
+{
+    response_buffer_t response = {0};
+
+    long status = do_request("POST", "/searches",
+                             "{\"site\":\"inkbunny\",\"label\":\"dragons\",\"query\":\"dragon\",\"interval_hours\":24,"
+                             "\"inkbunny_search_in_mask\":3,\"inkbunny_field_join_type\":1,\"inkbunny_string_join_type\":2,"
+                             "\"inkbunny_username\":\"someartist\",\"inkbunny_submission_type_mask\":5,\"inkbunny_days_limit\":30,"
+                             "\"inkbunny_order_by\":\"views\",\"inkbunny_random\":true,\"inkbunny_scraps\":2}",
+                             &response, true, NULL);
+    TEST_ASSERT_EQUAL(201, status);
+    free(response.data);
+    memset(&response, 0, sizeof(response));
+
+    status = do_request("GET", "/searches", NULL, &response, true, NULL);
+    TEST_ASSERT_EQUAL(200, status);
+    TEST_ASSERT_NOT_NULL(strstr(response.data, "\"inkbunny_search_in_mask\":3"));
+    TEST_ASSERT_NOT_NULL(strstr(response.data, "\"inkbunny_field_join_type\":1"));
+    TEST_ASSERT_NOT_NULL(strstr(response.data, "\"inkbunny_string_join_type\":2"));
+    TEST_ASSERT_NOT_NULL(strstr(response.data, "\"inkbunny_username\":\"someartist\""));
+    TEST_ASSERT_NOT_NULL(strstr(response.data, "\"inkbunny_submission_type_mask\":5"));
+    TEST_ASSERT_NOT_NULL(strstr(response.data, "\"inkbunny_days_limit\":30"));
+    TEST_ASSERT_NOT_NULL(strstr(response.data, "\"inkbunny_order_by\":\"views\""));
+    TEST_ASSERT_NOT_NULL(strstr(response.data, "\"inkbunny_random\":true"));
+    TEST_ASSERT_NOT_NULL(strstr(response.data, "\"inkbunny_scraps\":2"));
+    free(response.data);
+    memset(&response, 0, sizeof(response));
+
+    status = do_request("PUT", "/searches/1", "{\"label\":\"dragons\",\"query\":\"dragon\",\"interval_hours\":24,\"inkbunny_submission_type_mask\":9}", &response, true, NULL);
+    TEST_ASSERT_EQUAL(200, status);
+    free(response.data);
+    memset(&response, 0, sizeof(response));
+
+    status = do_request("GET", "/searches", NULL, &response, true, NULL);
+    TEST_ASSERT_EQUAL(200, status);
+    TEST_ASSERT_NOT_NULL(strstr(response.data, "\"inkbunny_submission_type_mask\":9"));
+    TEST_ASSERT_NOT_NULL(strstr(response.data, "\"inkbunny_username\":null"));
+    free(response.data);
+}
+
 void test_my_inkbunny_favorites_searches_and_caches_with_favorite_marked(void)
 {
     response_buffer_t response = {0};
@@ -1730,6 +1770,7 @@ int main(void)
     RUN_TEST(test_slideshow_blacklist_is_isolated_per_slideshow);
     RUN_TEST(test_search_touch_viewed);
     RUN_TEST(test_search_auto_favorite_create_and_update);
+    RUN_TEST(test_search_inkbunny_advanced_filters_create_and_update);
     RUN_TEST(test_my_inkbunny_favorites_searches_and_caches_with_favorite_marked);
     RUN_TEST(test_scheduler_syncs_search_automatically);
     RUN_TEST(test_scheduler_backs_up_database_automatically);

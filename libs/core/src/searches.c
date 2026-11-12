@@ -500,6 +500,39 @@ bunny_core_result_t bunny_core_slideshow_search_commit_picks(bunny_core_t *core,
         return bunny_core_map_db_result(result);
     }
     size_t other_total = all_ids.count - current_for_this_search.count;
+
+    /* The exclusion set passed to the picker below must cover every OTHER
+     * search's current posts, but NOT this search's own -- its own picks
+     * are about to be replaced wholesale by this very call, so leaving them
+     * in would wrongly shrink (often to nothing) the pool this reroll draws
+     * from, since this search's own candidates are exactly the posts most
+     * likely to already be in all_ids from its last commit. Confirmed live
+     * (bug report): a slideshow whose searches had already converged close
+     * to their own candidate pool's size saw every single one of them
+     * reroll down to 0-1 posts on the next "reroll all", each pass making
+     * the next worse. Build a filtered copy here rather than mutating
+     * all_ids in place, since other_total above already captured the
+     * un-filtered count it needs. */
+    int64_t *other_ids = all_ids.count > 0 ? malloc(all_ids.count * sizeof(int64_t)) : NULL;
+    size_t other_ids_count = 0;
+    if (all_ids.count > 0 && !other_ids) {
+        bunny_db_slideshow_post_list_free(&current_for_this_search);
+        bunny_db_int64_list_free(&all_ids);
+        bunny_core_db_unlock(core);
+        return BUNNY_CORE_ERR_UNKNOWN;
+    }
+    for (size_t i = 0; i < all_ids.count; i++) {
+        bool is_own = false;
+        for (size_t j = 0; j < current_for_this_search.count; j++) {
+            if (all_ids.items[i] == current_for_this_search.items[j].post.id) {
+                is_own = true;
+                break;
+            }
+        }
+        if (!is_own) {
+            other_ids[other_ids_count++] = all_ids.items[i];
+        }
+    }
     bunny_db_slideshow_post_list_free(&current_for_this_search);
 
     /* "No cap" (has_count false) is represented by requesting a very large
@@ -520,13 +553,15 @@ bunny_core_result_t bunny_core_slideshow_search_commit_picks(bunny_core_t *core,
     bunny_db_post_list_t picked;
     memset(&picked, 0, sizeof(picked));
     if (request_count > 0) {
-        bunny_core_result_t pick_result = bunny_core_slideshow_pick_posts_for_search_locked(core->db, search_id, slideshow_id, request_count, all_ids.items, all_ids.count, BUNNY_DB_RATING_MASK_ALL, BUNNY_DB_MEDIA_MASK_ALL, &picked);
+        bunny_core_result_t pick_result = bunny_core_slideshow_pick_posts_for_search_locked(core->db, search_id, slideshow_id, request_count, other_ids, other_ids_count, BUNNY_DB_RATING_MASK_ALL, BUNNY_DB_MEDIA_MASK_ALL, &picked);
+        free(other_ids);
         bunny_db_int64_list_free(&all_ids);
         if (pick_result != BUNNY_CORE_OK) {
             bunny_core_db_unlock(core);
             return pick_result;
         }
     } else {
+        free(other_ids);
         bunny_db_int64_list_free(&all_ids);
     }
 

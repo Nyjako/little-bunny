@@ -9,7 +9,7 @@
 
 GOBLIN_DYN_ARRAY_DECL(bunny_db_search, bunny_db_search_t)
 
-static const bunny_db_search_options_t BUNNY_DB_SEARCH_OPTIONS_DEFAULT = {false, 1, false, false};
+static const bunny_db_search_options_t BUNNY_DB_SEARCH_OPTIONS_DEFAULT = {false, 1, false, false, 0, 0, 0, NULL, 0, 0, NULL, false, 0};
 
 bunny_db_result_t bunny_db_search_create(bunny_db_t *db, bunny_db_site_t site, const char *label, const char *query, int interval_hours, const bunny_db_search_options_t *options, int64_t *out_id)
 {
@@ -20,7 +20,10 @@ bunny_db_result_t bunny_db_search_create(bunny_db_t *db, bunny_db_site_t site, c
         options = &BUNNY_DB_SEARCH_OPTIONS_DEFAULT;
     }
 
-    const char *sql = "INSERT INTO searches (site, label, query, interval_hours, auto_favorite, auto_favorite_stars, auto_upvote, uses_default_interval) VALUES (?, ?, ?, ?, ?, ?, ?, ?);";
+    const char *sql = "INSERT INTO searches (site, label, query, interval_hours, auto_favorite, auto_favorite_stars, auto_upvote, uses_default_interval, "
+                      "inkbunny_search_in_mask, inkbunny_field_join_type, inkbunny_string_join_type, inkbunny_username, inkbunny_submission_type_mask, "
+                      "inkbunny_days_limit, inkbunny_order_by, inkbunny_random, inkbunny_scraps) "
+                      "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);";
     sqlite3_stmt *stmt = NULL;
     if (sqlite3_prepare_v2(db->handle, sql, -1, &stmt, NULL) != SQLITE_OK) {
         return BUNNY_DB_ERR_QUERY_FAILED;
@@ -34,6 +37,15 @@ bunny_db_result_t bunny_db_search_create(bunny_db_t *db, bunny_db_site_t site, c
     sqlite3_bind_int(stmt, 6, options->auto_favorite_stars);
     sqlite3_bind_int(stmt, 7, options->auto_upvote ? 1 : 0);
     sqlite3_bind_int(stmt, 8, options->uses_default_interval ? 1 : 0);
+    sqlite3_bind_int(stmt, 9, options->inkbunny_search_in_mask);
+    sqlite3_bind_int(stmt, 10, options->inkbunny_field_join_type);
+    sqlite3_bind_int(stmt, 11, options->inkbunny_string_join_type);
+    bunny_db_bind_text_or_null(stmt, 12, options->inkbunny_username);
+    sqlite3_bind_int(stmt, 13, options->inkbunny_submission_type_mask);
+    sqlite3_bind_int(stmt, 14, options->inkbunny_days_limit);
+    bunny_db_bind_text_or_null(stmt, 15, options->inkbunny_order_by);
+    sqlite3_bind_int(stmt, 16, options->inkbunny_random ? 1 : 0);
+    sqlite3_bind_int(stmt, 17, options->inkbunny_scraps);
 
     int rc = sqlite3_step(stmt);
     sqlite3_finalize(stmt);
@@ -117,6 +129,15 @@ static void fill_search_from_row(sqlite3_stmt *stmt, bunny_db_search_t *out)
     out->uses_default_interval = sqlite3_column_int(stmt, 16) != 0;
     out->group_id = sqlite3_column_type(stmt, 17) == SQLITE_NULL ? 0 : sqlite3_column_int64(stmt, 17);
     out->last_updated_at = bunny_db_column_text_dup(stmt, 18);
+    out->inkbunny_search_in_mask = sqlite3_column_int(stmt, 19);
+    out->inkbunny_field_join_type = sqlite3_column_int(stmt, 20);
+    out->inkbunny_string_join_type = sqlite3_column_int(stmt, 21);
+    out->inkbunny_username = bunny_db_column_text_dup(stmt, 22);
+    out->inkbunny_submission_type_mask = sqlite3_column_int(stmt, 23);
+    out->inkbunny_days_limit = sqlite3_column_int(stmt, 24);
+    out->inkbunny_order_by = bunny_db_column_text_dup(stmt, 25);
+    out->inkbunny_random = sqlite3_column_int(stmt, 26) != 0;
+    out->inkbunny_scraps = sqlite3_column_int(stmt, 27);
 }
 
 bunny_db_result_t bunny_db_search_list(bunny_db_t *db, bunny_db_search_list_t *out_list)
@@ -137,7 +158,9 @@ bunny_db_result_t bunny_db_search_list(bunny_db_t *db, bunny_db_search_list_t *o
                       "(SELECT COUNT(*) FROM search_results sr WHERE sr.search_id = s.id) AS total_count, "
                       "s.auto_favorite, s.auto_favorite_stars, s.auto_upvote, s.pinned, s.last_viewed_at, "
                       "s.initial_sync_done, s.highest_synced_external_id, s.uses_default_interval, s.group_id, "
-                      "s.last_updated_at "
+                      "s.last_updated_at, s.inkbunny_search_in_mask, s.inkbunny_field_join_type, s.inkbunny_string_join_type, "
+                      "s.inkbunny_username, s.inkbunny_submission_type_mask, s.inkbunny_days_limit, s.inkbunny_order_by, "
+                      "s.inkbunny_random, s.inkbunny_scraps "
                       "FROM searches s ORDER BY s.id;";
     sqlite3_stmt *stmt = NULL;
     if (sqlite3_prepare_v2(db->handle, sql, -1, &stmt, NULL) != SQLITE_OK) {
@@ -294,7 +317,10 @@ bunny_db_result_t bunny_db_search_update(bunny_db_t *db, int64_t search_id, cons
     if (!db || !label || !query || !options) {
         return BUNNY_DB_ERR_INVALID_ARG;
     }
-    const char *sql = "UPDATE searches SET label = ?, query = ?, interval_hours = ?, auto_favorite = ?, auto_favorite_stars = ?, auto_upvote = ?, uses_default_interval = ? WHERE id = ?;";
+    const char *sql = "UPDATE searches SET label = ?, query = ?, interval_hours = ?, auto_favorite = ?, auto_favorite_stars = ?, auto_upvote = ?, uses_default_interval = ?, "
+                      "inkbunny_search_in_mask = ?, inkbunny_field_join_type = ?, inkbunny_string_join_type = ?, inkbunny_username = ?, "
+                      "inkbunny_submission_type_mask = ?, inkbunny_days_limit = ?, inkbunny_order_by = ?, inkbunny_random = ?, inkbunny_scraps = ? "
+                      "WHERE id = ?;";
     sqlite3_stmt *stmt = NULL;
     if (sqlite3_prepare_v2(db->handle, sql, -1, &stmt, NULL) != SQLITE_OK) {
         return BUNNY_DB_ERR_QUERY_FAILED;
@@ -306,7 +332,16 @@ bunny_db_result_t bunny_db_search_update(bunny_db_t *db, int64_t search_id, cons
     sqlite3_bind_int(stmt, 5, options->auto_favorite_stars);
     sqlite3_bind_int(stmt, 6, options->auto_upvote ? 1 : 0);
     sqlite3_bind_int(stmt, 7, options->uses_default_interval ? 1 : 0);
-    sqlite3_bind_int64(stmt, 8, search_id);
+    sqlite3_bind_int(stmt, 8, options->inkbunny_search_in_mask);
+    sqlite3_bind_int(stmt, 9, options->inkbunny_field_join_type);
+    sqlite3_bind_int(stmt, 10, options->inkbunny_string_join_type);
+    bunny_db_bind_text_or_null(stmt, 11, options->inkbunny_username);
+    sqlite3_bind_int(stmt, 12, options->inkbunny_submission_type_mask);
+    sqlite3_bind_int(stmt, 13, options->inkbunny_days_limit);
+    bunny_db_bind_text_or_null(stmt, 14, options->inkbunny_order_by);
+    sqlite3_bind_int(stmt, 15, options->inkbunny_random ? 1 : 0);
+    sqlite3_bind_int(stmt, 16, options->inkbunny_scraps);
+    sqlite3_bind_int64(stmt, 17, search_id);
     int rc = sqlite3_step(stmt);
     sqlite3_finalize(stmt);
     return rc == SQLITE_DONE ? BUNNY_DB_OK : bunny_db_sqlite_rc_to_result(rc);

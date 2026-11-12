@@ -98,6 +98,63 @@ void test_search_create_with_auto_favorite(void)
     bunny_db_search_list_free(&list);
 }
 
+void test_search_create_and_update_round_trip_inkbunny_advanced_filters(void)
+{
+    int64_t id = 0;
+    bunny_db_search_options_t create_options = {0};
+    create_options.inkbunny_search_in_mask = 3;
+    create_options.inkbunny_field_join_type = 1;
+    create_options.inkbunny_string_join_type = 2;
+    create_options.inkbunny_username = "someartist";
+    create_options.inkbunny_submission_type_mask = 5;
+    create_options.inkbunny_days_limit = 30;
+    create_options.inkbunny_order_by = "views";
+    create_options.inkbunny_random = true;
+    create_options.inkbunny_scraps = 2;
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, bunny_db_search_create(g_db, BUNNY_DB_SITE_INKBUNNY, "dragons", "dragon", 24, &create_options, &id));
+
+    bunny_db_search_list_t list;
+    bunny_db_search_list(g_db, &list);
+    TEST_ASSERT_EQUAL(3, list.items[0].inkbunny_search_in_mask);
+    TEST_ASSERT_EQUAL(1, list.items[0].inkbunny_field_join_type);
+    TEST_ASSERT_EQUAL(2, list.items[0].inkbunny_string_join_type);
+    TEST_ASSERT_EQUAL_STRING("someartist", list.items[0].inkbunny_username);
+    TEST_ASSERT_EQUAL(5, list.items[0].inkbunny_submission_type_mask);
+    TEST_ASSERT_EQUAL(30, list.items[0].inkbunny_days_limit);
+    TEST_ASSERT_EQUAL_STRING("views", list.items[0].inkbunny_order_by);
+    TEST_ASSERT_TRUE(list.items[0].inkbunny_random);
+    TEST_ASSERT_EQUAL(2, list.items[0].inkbunny_scraps);
+    bunny_db_search_list_free(&list);
+
+    bunny_db_search_options_t update_options = {0};
+    update_options.inkbunny_submission_type_mask = 9;
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, bunny_db_search_update(g_db, id, "dragons", "dragon", 24, &update_options));
+
+    bunny_db_search_list(g_db, &list);
+    TEST_ASSERT_EQUAL(9, list.items[0].inkbunny_submission_type_mask);
+    TEST_ASSERT_NULL(list.items[0].inkbunny_username);
+    bunny_db_search_list_free(&list);
+}
+
+void test_search_create_defaults_inkbunny_advanced_filters_to_unset(void)
+{
+    int64_t id = 0;
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, bunny_db_search_create(g_db, BUNNY_DB_SITE_E621, "wolves", "wolf", 24, NULL, &id));
+
+    bunny_db_search_list_t list;
+    bunny_db_search_list(g_db, &list);
+    TEST_ASSERT_EQUAL(0, list.items[0].inkbunny_search_in_mask);
+    TEST_ASSERT_EQUAL(0, list.items[0].inkbunny_field_join_type);
+    TEST_ASSERT_EQUAL(0, list.items[0].inkbunny_string_join_type);
+    TEST_ASSERT_NULL(list.items[0].inkbunny_username);
+    TEST_ASSERT_EQUAL(0, list.items[0].inkbunny_submission_type_mask);
+    TEST_ASSERT_EQUAL(0, list.items[0].inkbunny_days_limit);
+    TEST_ASSERT_NULL(list.items[0].inkbunny_order_by);
+    TEST_ASSERT_FALSE(list.items[0].inkbunny_random);
+    TEST_ASSERT_EQUAL(0, list.items[0].inkbunny_scraps);
+    bunny_db_search_list_free(&list);
+}
+
 void test_search_create_defaults_auto_favorite_stars_to_one(void)
 {
     int64_t id = 0;
@@ -3723,6 +3780,8 @@ int main(void)
     RUN_TEST(test_account_is_per_site);
     RUN_TEST(test_search_create_and_list);
     RUN_TEST(test_search_create_with_auto_favorite);
+    RUN_TEST(test_search_create_and_update_round_trip_inkbunny_advanced_filters);
+    RUN_TEST(test_search_create_defaults_inkbunny_advanced_filters_to_unset);
     RUN_TEST(test_search_create_defaults_auto_favorite_stars_to_one);
     RUN_TEST(test_search_update_modifies_label_query_interval_and_options);
     RUN_TEST(test_search_list_unseen_count);

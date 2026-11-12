@@ -28,12 +28,23 @@ void main() {
     SharedPreferences.setMockInitialValues({});
   });
 
-  testWidgets('the Search button is disabled for an empty query', (WidgetTester tester) async {
+  // An empty query is intentionally allowed on both sites (bunny_tag_query.h's
+  // own doc comment) -- it means "everything", the same as browsing with no
+  // filter, so the button stays enabled and pushes an empty-query preview.
+  testWidgets('the Search button is enabled for an empty query and previews everything', (WidgetTester tester) async {
     final repository = FakeBunnyRepository();
+    repository.previewSearchResults['e621::1'] = [];
+
     await tester.pumpWidget(_wrap(repository));
     await tester.pumpAndSettle();
 
-    expect(tester.widget<FilledButton>(find.widgetWithText(FilledButton, 'Search')).onPressed, isNull);
+    expect(tester.widget<FilledButton>(find.widgetWithText(FilledButton, 'Search')).onPressed, isNotNull);
+
+    await tester.tap(find.widgetWithText(FilledButton, 'Search'));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(TagBrowseScreen), findsOneWidget);
+    expect(repository.previewSearchCalls, contains((BunnySite.e621, '', 1)));
   });
 
   testWidgets('typing a query enables the Search button, which pushes a live preview', (WidgetTester tester) async {
@@ -93,6 +104,19 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(tester.widget<TextField>(find.widgetWithText(TextField, 'Query')).controller!.text, 'fox rating:s');
+  });
+
+  testWidgets('the Inkbunny advanced filters panel is shown only for Inkbunny (M74)', (WidgetTester tester) async {
+    final repository = FakeBunnyRepository();
+    await tester.pumpWidget(_wrap(repository));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('inkbunnyAdvancedFiltersPanel')), findsNothing);
+
+    await tester.tap(find.text('Inkbunny'));
+    await tester.pumpAndSettle();
+
+    expect(find.byKey(const Key('inkbunnyAdvancedFiltersPanel')), findsOneWidget);
   });
 
   testWidgets('autocomplete strips and reattaches a leading - prefix (M9.6.7 pattern)', (WidgetTester tester) async {

@@ -580,6 +580,26 @@ static bunny_core_result_t sync_e621_search(bunny_core_t *core, const bunny_db_s
     return BUNNY_CORE_OK;
 }
 
+/* Applies the advanced-filter half of inkbunny_search_params_t (everything
+ * except text/favorited_by_user_id/pool_id/page, which each call site below
+ * still sets itself depending on which kind of search this is) -- shared
+ * between a saved search's own sync (fields read from the bunny_db_search_t
+ * row) and an unsaved preview (fields read from a caller-supplied
+ * bunny_db_search_options_t, or defaulted when the caller passes NULL,
+ * e.g. a plain e621 preview that never touches Inkbunny filters at all). */
+static void fill_inkbunny_advanced_params(inkbunny_search_params_t *params, int search_in_mask, int field_join_type, int string_join_type, const char *username, int submission_type_mask, int days_limit, const char *order_by, bool random, int scraps)
+{
+    params->search_in_mask = search_in_mask;
+    params->field_join = field_join_type == 1 ? INKBUNNY_FIELD_JOIN_AND : INKBUNNY_FIELD_JOIN_OR;
+    params->string_join = string_join_type == 1 ? INKBUNNY_STRING_JOIN_OR : string_join_type == 2 ? INKBUNNY_STRING_JOIN_EXACT : INKBUNNY_STRING_JOIN_AND;
+    params->username = username;
+    params->submission_type_mask = (unsigned)submission_type_mask;
+    params->days_limit = days_limit;
+    params->order_by = order_by;
+    params->random = random;
+    params->scraps = scraps == 1 ? INKBUNNY_SCRAPS_NO : scraps == 2 ? INKBUNNY_SCRAPS_ONLY : INKBUNNY_SCRAPS_BOTH;
+}
+
 /* sync_mutex is held for this entire function -- see the identical note on
  * sync_e621_search above. */
 static bunny_core_result_t sync_inkbunny_search(bunny_core_t *core, const bunny_db_search_t *search, bunny_core_sync_stats_t *stats, int position, int total)
@@ -651,6 +671,7 @@ static bunny_core_result_t sync_inkbunny_search(bunny_core_t *core, const bunny_
         } else {
             params.text = search->query;
         }
+        fill_inkbunny_advanced_params(&params, search->inkbunny_search_in_mask, search->inkbunny_field_join_type, search->inkbunny_string_join_type, search->inkbunny_username, search->inkbunny_submission_type_mask, search->inkbunny_days_limit, search->inkbunny_order_by, search->inkbunny_random, search->inkbunny_scraps);
         params.page = page;
 
         inkbunny_submission_list_t submissions;
@@ -907,7 +928,7 @@ bunny_core_result_t bunny_core_backfill_inkbunny_details(bunny_core_t *core, bun
     return BUNNY_CORE_OK;
 }
 
-bunny_core_result_t bunny_core_preview_search(bunny_core_t *core, bunny_db_site_t site, const char *query, int page, bunny_db_post_list_t *out_list)
+bunny_core_result_t bunny_core_preview_search(bunny_core_t *core, bunny_db_site_t site, const char *query, int page, const bunny_db_search_options_t *inkbunny_filters, bunny_db_post_list_t *out_list)
 {
     if (!core || !query || !out_list || page < 1) {
         return BUNNY_CORE_ERR_INVALID_ARG;
@@ -988,6 +1009,8 @@ bunny_core_result_t bunny_core_preview_search(bunny_core_t *core, bunny_db_site_
         } else {
             params.text = query;
         }
+        fill_inkbunny_advanced_params(&params, inkbunny_filters ? inkbunny_filters->inkbunny_search_in_mask : 0, inkbunny_filters ? inkbunny_filters->inkbunny_field_join_type : 0, inkbunny_filters ? inkbunny_filters->inkbunny_string_join_type : 0, inkbunny_filters ? inkbunny_filters->inkbunny_username : NULL, inkbunny_filters ? inkbunny_filters->inkbunny_submission_type_mask : 0,
+                                      inkbunny_filters ? inkbunny_filters->inkbunny_days_limit : 0, inkbunny_filters ? inkbunny_filters->inkbunny_order_by : NULL, inkbunny_filters && inkbunny_filters->inkbunny_random, inkbunny_filters ? inkbunny_filters->inkbunny_scraps : 0);
         params.page = page;
 
         inkbunny_submission_list_t submissions;

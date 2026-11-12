@@ -32,6 +32,9 @@ void main() {
     SharedPreferences.setMockInitialValues({});
   });
 
+  // Only the label is a required field -- the query intentionally has no
+  // required-field validator (an empty query is valid on both sites and
+  // just means "everything", see the field's own comment in the screen).
   testWidgets('validates required fields before submitting', (WidgetTester tester) async {
     final repository = FakeBunnyRepository();
     tester.view.physicalSize = const Size(800, 2000);
@@ -43,8 +46,22 @@ void main() {
     await _tapCreate(tester);
     await tester.pumpAndSettle();
 
-    expect(find.text('Required'), findsNWidgets(2));
+    expect(find.text('Required'), findsNWidgets(1));
     expect(repository.searches, isEmpty);
+  });
+
+  testWidgets('a label with an empty query creates a search with an empty query', (WidgetTester tester) async {
+    final repository = FakeBunnyRepository();
+    await tester.pumpWidget(_wrap(repository));
+    await tester.pumpAndSettle();
+
+    await tester.enterText(find.widgetWithText(TextFormField, 'Label'), 'Everything new');
+    await _tapCreate(tester);
+    await tester.pumpAndSettle();
+
+    expect(repository.searches, hasLength(1));
+    expect(repository.searches.single.label, 'Everything new');
+    expect(repository.searches.single.query, '');
   });
 
   testWidgets('submitting a filled form creates the search and pops true', (WidgetTester tester) async {
@@ -213,6 +230,55 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(repository.searches.single.site, BunnySite.inkbunny);
+  });
+
+  testWidgets('expanding the Inkbunny advanced filters panel and setting values creates the search with them (M74)', (WidgetTester tester) async {
+    // Taller surface -- the advanced filters panel, once expanded, is long
+    // enough to push the Create button past the default test surface's
+    // layout cache extent (same fix as edit_search_screen_test.dart's
+    // Inkbunny star-picker test).
+    tester.view.physicalSize = const Size(800, 2400);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+
+    final repository = FakeBunnyRepository();
+    await tester.pumpWidget(_wrap(repository));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Inkbunny'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.widgetWithText(TextFormField, 'Label'), 'Dragons');
+    await tester.enterText(find.widgetWithText(TextFormField, 'Query'), 'dragon');
+
+    await tester.ensureVisible(find.byKey(const Key('inkbunnyAdvancedFiltersPanel')));
+    await tester.tap(find.byKey(const Key('inkbunnyAdvancedFiltersPanel')));
+    await tester.pumpAndSettle();
+
+    await tester.ensureVisible(find.byKey(const Key('inkbunnySearchInTitle')));
+    await tester.tap(find.byKey(const Key('inkbunnySearchInTitle')));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.byKey(const Key('inkbunnyUsernameField')));
+    await tester.enterText(find.byKey(const Key('inkbunnyUsernameField')), 'someartist');
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.byKey(const Key('inkbunnyDaysLimitField')));
+    await tester.enterText(find.byKey(const Key('inkbunnyDaysLimitField')), '30');
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.byKey(const Key('inkbunnyRandomCheckbox')));
+    await tester.tap(find.byKey(const Key('inkbunnyRandomCheckbox')));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.byKey(const Key('inkbunnySubmissionType4')));
+    await tester.tap(find.byKey(const Key('inkbunnySubmissionType4')));
+    await tester.pumpAndSettle();
+
+    await _tapCreate(tester);
+    await tester.pumpAndSettle();
+
+    final search = repository.searches.single;
+    expect(search.inkbunnySearchInMask, kInkbunnySearchInTitle);
+    expect(search.inkbunnyUsername, 'someartist');
+    expect(search.inkbunnyDaysLimit, 30);
+    expect(search.inkbunnyRandom, isTrue);
+    expect(search.inkbunnySubmissionTypeMask, kInkbunnySubmissionTypeBit(4));
   });
 
   testWidgets('label mirrors the query until the user edits the label directly', (WidgetTester tester) async {

@@ -13,10 +13,10 @@ import 'package:saf_util/saf_util_platform_interface.dart';
 import '../fakes/fake_bunny_repository.dart';
 import '../fakes/fake_saf_platform.dart';
 
-BunnyPost _post({BunnySite site = BunnySite.e621, String? artist, String? fileUrl = 'https://static1.e621.net/data/1.png', String? fileExt = 'png', String? fileMd5}) => BunnyPost(
-  id: 1,
+BunnyPost _post({int id = 1, int externalId = 42, BunnySite site = BunnySite.e621, String? artist, String? fileUrl = 'https://static1.e621.net/data/1.png', String? fileExt = 'png', String? fileMd5}) => BunnyPost(
+  id: id,
   site: site,
-  externalId: 42,
+  externalId: externalId,
   artist: artist,
   score: 0,
   favCount: 0,
@@ -395,6 +395,40 @@ void main() {
       fakeSafUtil.existingChildPaths['$treeUri/wolf/42.png'] = Uint8List(0);
 
       expect(await manager.isDownloaded(_post(artist: 'wolf'), treeUri), isTrue);
+    });
+
+    // Regression: batchIsDownloaded exists specifically because the naive
+    // "call isDownloaded once per post" approach measured in minutes on a
+    // real Android device for a large slideshow's worth of posts (confirmed
+    // live) -- every call re-resolves the artist subfolder from scratch via
+    // `child`, which (on the real platform side) means re-listing that
+    // whole subfolder just to find one filename in it. These tests cover
+    // the Dart-side batching logic -- that it lists each distinct subfolder
+    // exactly once and dispatches every post in it from that one listing,
+    // not the real platform plugin's own performance.
+    test('batchIsDownloaded resolves many posts across a few artist subfolders with one list() call per subfolder', () async {
+      final manager = const DownloadManager();
+      const treeUri = 'content://com.android.externalstorage.documents/tree/primary%3ADownload';
+
+      fakeSafUtil.existingChildPaths['$treeUri/wolf'] = Uint8List(0);
+      fakeSafUtil.listResultsByFolderUri['$treeUri/wolf'] = ['42.png', '44.png'];
+      // 'fox' subfolder deliberately absent from existingChildPaths -- never
+      // created yet, so every post under it should resolve to false without
+      // a list() call at all (nothing to list).
+
+      final posts = [_post(id: 42, externalId: 42, artist: 'wolf'), _post(id: 43, externalId: 43, artist: 'wolf'), _post(id: 44, externalId: 44, artist: 'wolf'), _post(id: 50, externalId: 50, artist: 'fox')];
+      final result = await manager.batchIsDownloaded(posts, treeUri);
+
+      expect(result, {42: true, 43: false, 44: true, 50: false});
+    });
+
+    test('batchIsDownloaded matches isDownloaded for a single post (plain filesystem path)', () async {
+      final manager = const DownloadManager();
+      await manager.downloadPost(_post(id: 42, externalId: 42, artist: 'wolf'), FakeBunnyRepository()..downloadFileFetchImpl = (_) async => http.Response.bytes([1, 2, 3], 200), tempDir.path);
+
+      final result = await manager.batchIsDownloaded([_post(id: 42, externalId: 42, artist: 'wolf'), _post(id: 99, externalId: 99, artist: 'wolf')], tempDir.path);
+
+      expect(result, {42: true, 99: false});
     });
   });
 

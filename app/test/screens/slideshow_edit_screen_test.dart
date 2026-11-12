@@ -298,7 +298,12 @@ void main() {
   // fully covered elsewhere by plain test()s (slideshow_prepare_service_test.dart,
   // download_manager_test.dart) that use real temp files without a
   // widget-test binding, so without hitting this limitation; only the
-  // "does tapping this button call it" wiring is unverified here.
+  // "does tapping this button call it" wiring is unverified here. Same
+  // limitation applies to _onDownloadQueueChanged's debounced background
+  // refresh (it calls the exact same SlideshowPrepareService.prepare()) --
+  // its own logic (only refresh once a report already exists, debounce
+  // rapid-fire queue notifications) is simple enough to verify by reading,
+  // and the thing it calls is already covered the same way as above.
 
   testWidgets('Watch stays disabled before Prepare has ever produced a report', (tester) async {
     final id = await repository.slideshowCreate('my slideshow');

@@ -238,6 +238,99 @@ void test_search_by_pool_id_sends_pool_id_param(void)
     inkbunny_client_destroy(client);
 }
 
+void test_search_advanced_filters_send_every_param(void)
+{
+    inkbunny_client_t *client = make_test_client();
+    char *login_fixture = NULL;
+    login_test_client(client, &login_fixture);
+    free(login_fixture);
+
+    char *fixture = read_fixture("search_response.json");
+    TEST_ASSERT_NOT_NULL(fixture);
+    g_state.response_status = 200;
+    g_state.response_body = fixture;
+    g_state.response_body_len = strlen(fixture);
+
+    inkbunny_search_params_t params;
+    memset(&params, 0, sizeof(params));
+    params.text = "dragon";
+    params.search_in_mask = INKBUNNY_SEARCH_IN_TITLE | INKBUNNY_SEARCH_IN_DESCRIPTION;
+    params.field_join = INKBUNNY_FIELD_JOIN_AND;
+    params.string_join = INKBUNNY_STRING_JOIN_EXACT;
+    params.username = "someartist";
+    params.submission_type_mask = INKBUNNY_SUBMISSION_TYPE_BIT(3) | INKBUNNY_SUBMISSION_TYPE_BIT(4);
+    params.days_limit = 30;
+    params.order_by = "views";
+    params.random = true;
+    params.scraps = INKBUNNY_SCRAPS_ONLY;
+
+    inkbunny_submission_list_t list;
+    inkbunny_result_t result = inkbunny_search(client, &params, &list);
+
+    TEST_ASSERT_EQUAL(INKBUNNY_OK, result);
+    TEST_ASSERT_NOT_NULL(strstr(g_state.last_url, "keywords=no"));
+    TEST_ASSERT_NOT_NULL(strstr(g_state.last_url, "title=yes"));
+    TEST_ASSERT_NOT_NULL(strstr(g_state.last_url, "description=yes"));
+    TEST_ASSERT_NOT_NULL(strstr(g_state.last_url, "md5=no"));
+    TEST_ASSERT_NOT_NULL(strstr(g_state.last_url, "field_join_type=and"));
+    TEST_ASSERT_NOT_NULL(strstr(g_state.last_url, "string_join_type=exact"));
+    TEST_ASSERT_NOT_NULL(strstr(g_state.last_url, "username=someartist"));
+    TEST_ASSERT_NOT_NULL(strstr(g_state.last_url, "type=3,4"));
+    TEST_ASSERT_NOT_NULL(strstr(g_state.last_url, "dayslimit=30"));
+    TEST_ASSERT_NOT_NULL(strstr(g_state.last_url, "orderby=views"));
+    TEST_ASSERT_NOT_NULL(strstr(g_state.last_url, "random=yes"));
+    TEST_ASSERT_NOT_NULL(strstr(g_state.last_url, "scraps=only"));
+
+    inkbunny_submission_list_free(&list);
+    free(fixture);
+    inkbunny_client_destroy(client);
+}
+
+/* Defaults (search_in_mask=0/field_join=OR/string_join=AND/scraps=BOTH) match
+ * api_search.php's own defaults -- confirms a zero-initialized params struct
+ * still sends an explicit "keywords=yes" (api_search.php's own default
+ * field) whenever `text` is set, but omits scraps/random/dayslimit/type/
+ * username/orderby entirely rather than sending them at their default/unset
+ * values. */
+void test_search_defaults_send_keywords_only_and_omit_unset_filters(void)
+{
+    inkbunny_client_t *client = make_test_client();
+    char *login_fixture = NULL;
+    login_test_client(client, &login_fixture);
+    free(login_fixture);
+
+    char *fixture = read_fixture("search_response.json");
+    TEST_ASSERT_NOT_NULL(fixture);
+    g_state.response_status = 200;
+    g_state.response_body = fixture;
+    g_state.response_body_len = strlen(fixture);
+
+    inkbunny_search_params_t params;
+    memset(&params, 0, sizeof(params));
+    params.text = "dragon";
+
+    inkbunny_submission_list_t list;
+    inkbunny_result_t result = inkbunny_search(client, &params, &list);
+
+    TEST_ASSERT_EQUAL(INKBUNNY_OK, result);
+    TEST_ASSERT_NOT_NULL(strstr(g_state.last_url, "keywords=yes"));
+    TEST_ASSERT_NOT_NULL(strstr(g_state.last_url, "title=no"));
+    TEST_ASSERT_NOT_NULL(strstr(g_state.last_url, "description=no"));
+    TEST_ASSERT_NOT_NULL(strstr(g_state.last_url, "md5=no"));
+    TEST_ASSERT_NOT_NULL(strstr(g_state.last_url, "field_join_type=or"));
+    TEST_ASSERT_NOT_NULL(strstr(g_state.last_url, "string_join_type=and"));
+    TEST_ASSERT_NULL(strstr(g_state.last_url, "scraps="));
+    TEST_ASSERT_NULL(strstr(g_state.last_url, "random="));
+    TEST_ASSERT_NULL(strstr(g_state.last_url, "dayslimit="));
+    TEST_ASSERT_NULL(strstr(g_state.last_url, "&type="));
+    TEST_ASSERT_NULL(strstr(g_state.last_url, "username="));
+    TEST_ASSERT_NULL(strstr(g_state.last_url, "orderby="));
+
+    inkbunny_submission_list_free(&list);
+    free(fixture);
+    inkbunny_client_destroy(client);
+}
+
 void test_get_submission_success(void)
 {
     inkbunny_client_t *client = make_test_client();
@@ -396,6 +489,8 @@ int main(void)
     RUN_TEST(test_search_requires_login);
     RUN_TEST(test_search_success);
     RUN_TEST(test_search_by_pool_id_sends_pool_id_param);
+    RUN_TEST(test_search_advanced_filters_send_every_param);
+    RUN_TEST(test_search_defaults_send_keywords_only_and_omit_unset_filters);
     RUN_TEST(test_get_submission_success);
     RUN_TEST(test_get_submission_not_found);
     RUN_TEST(test_get_submissions_too_many_ids);

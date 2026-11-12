@@ -909,7 +909,7 @@ void test_preview_search_upserts_posts_without_creating_a_search(void)
     g_e621_state.body_count = 1;
 
     bunny_db_post_list_t posts;
-    bunny_core_result_t result = bunny_core_preview_search(g_core, BUNNY_DB_SITE_E621, "wolf", 1, &posts);
+    bunny_core_result_t result = bunny_core_preview_search(g_core, BUNNY_DB_SITE_E621, "wolf", 1, NULL, &posts);
     TEST_ASSERT_EQUAL(BUNNY_CORE_OK, result);
     TEST_ASSERT_EQUAL(1, (int)posts.count);
     TEST_ASSERT_EQUAL(1, posts.items[0].external_id);
@@ -940,7 +940,7 @@ void test_preview_search_applies_the_tag_blacklist_for_a_plain_query(void)
     bunny_core_blacklist_add(g_core, BUNNY_DB_SITE_E621, "one");
 
     bunny_db_post_list_t posts;
-    bunny_core_result_t result = bunny_core_preview_search(g_core, BUNNY_DB_SITE_E621, "wolf", 1, &posts);
+    bunny_core_result_t result = bunny_core_preview_search(g_core, BUNNY_DB_SITE_E621, "wolf", 1, NULL, &posts);
     TEST_ASSERT_EQUAL(BUNNY_CORE_OK, result);
     TEST_ASSERT_EQUAL(0, (int)posts.count);
     bunny_db_post_list_free(&posts);
@@ -963,7 +963,7 @@ void test_preview_search_applies_a_complex_multi_tag_blacklist_rule(void)
     bunny_core_blacklist_add(g_core, BUNNY_DB_SITE_E621, "one someartist");
 
     bunny_db_post_list_t posts;
-    bunny_core_result_t result = bunny_core_preview_search(g_core, BUNNY_DB_SITE_E621, "wolf", 1, &posts);
+    bunny_core_result_t result = bunny_core_preview_search(g_core, BUNNY_DB_SITE_E621, "wolf", 1, NULL, &posts);
     TEST_ASSERT_EQUAL(BUNNY_CORE_OK, result);
     TEST_ASSERT_EQUAL(0, (int)posts.count);
     bunny_db_post_list_free(&posts);
@@ -1392,6 +1392,56 @@ void test_slideshow_reroll_all_never_duplicates_a_post_across_searches(void)
     free(fixture2);
 }
 
+/* Regression for a real bug found live: the exclusion set a reroll
+ * passes to the picker must cover every OTHER search's current posts, but
+ * NOT this search's own -- its own picks are about to be replaced wholesale
+ * by this very call. A search with no count cap (unbounded, like this one)
+ * whose entire small candidate pool had already been assigned to it by an
+ * earlier commit used to reroll down to nothing: the stale "all_ids"
+ * exclusion set (read before this search's own old picks are cleared)
+ * still included every one of them, so excluding "everything already
+ * committed" left zero candidates for a search whose own prior assignment
+ * already covered its whole pool. Confirmed live against a real slideshow
+ * with ~4k posts across many searches -- each successive "reroll all" made
+ * it worse, converging every search toward 0/1 posts. */
+void test_slideshow_reroll_all_does_not_starve_a_search_whose_own_pool_is_already_fully_assigned(void)
+{
+    char *fixture = build_e621_posts_page_json(5, 7700);
+    TEST_ASSERT_NOT_NULL(fixture);
+    g_e621_state.bodies[0] = fixture;
+    g_e621_state.body_count = 1;
+    int64_t search_id = 0;
+    bunny_core_search_create(g_core, BUNNY_DB_SITE_E621, "wolves", "wolf", 24, NULL, &search_id);
+    bunny_core_sync_stats_t stats;
+    bunny_core_sync_due_searches(g_core, &stats);
+    TEST_ASSERT_EQUAL(5, stats.posts_upserted);
+
+    /* No default_posts_per_search/override (unbounded, has_count false) --
+     * same shape as the real slideshow this was confirmed against. */
+    int64_t slideshow_id = 0;
+    bunny_core_slideshow_create(g_core, "Show", false, 0, false, 0, &slideshow_id);
+    bunny_core_slideshow_search_add(g_core, slideshow_id, search_id, false, 0);
+
+    /* First commit: with only 5 candidates and no cap, this search's own
+     * pool gets fully assigned (all 5). */
+    TEST_ASSERT_EQUAL(BUNNY_CORE_OK, bunny_core_slideshow_search_commit_picks(g_core, slideshow_id, search_id));
+    bunny_db_slideshow_post_list_t first_pass;
+    bunny_core_slideshow_posts_list(g_core, slideshow_id, search_id, &first_pass);
+    TEST_ASSERT_EQUAL(5, (int)first_pass.count);
+    bunny_db_slideshow_post_list_free(&first_pass);
+
+    /* Reroll all (the exact user-facing action that triggered this) must
+     * still fill this search back up to its full 5-post pool, not drop it
+     * to 0 just because those same 5 posts were already assigned to it. */
+    TEST_ASSERT_EQUAL(BUNNY_CORE_OK, bunny_core_slideshow_reroll_all(g_core, slideshow_id));
+    bunny_db_slideshow_post_list_t after_reroll;
+    bunny_core_slideshow_posts_list(g_core, slideshow_id, search_id, &after_reroll);
+    TEST_ASSERT_EQUAL(5, (int)after_reroll.count);
+    bunny_db_slideshow_post_list_free(&after_reroll);
+
+    free(fixture);
+}
+
 void test_slideshow_replace_post_swaps_to_a_different_post(void)
 {
     char *fixture = build_e621_posts_page_json(5, 7600);
@@ -1467,7 +1517,7 @@ void test_preview_search_pool_browse_is_unaffected_by_the_tag_blacklist(void)
     bunny_core_blacklist_add(g_core, BUNNY_DB_SITE_E621, "one");
 
     bunny_db_post_list_t posts;
-    bunny_core_result_t result = bunny_core_preview_search(g_core, BUNNY_DB_SITE_E621, "pool:5", 1, &posts);
+    bunny_core_result_t result = bunny_core_preview_search(g_core, BUNNY_DB_SITE_E621, "pool:5", 1, NULL, &posts);
     TEST_ASSERT_EQUAL(BUNNY_CORE_OK, result);
     TEST_ASSERT_EQUAL(1, (int)posts.count);
     bunny_db_post_list_free(&posts);
@@ -1487,7 +1537,7 @@ void test_preview_search_favorites_browse_is_unaffected_by_the_tag_blacklist(voi
     bunny_core_blacklist_add(g_core, BUNNY_DB_SITE_E621, "one");
 
     bunny_db_post_list_t posts;
-    bunny_core_result_t result = bunny_core_preview_search(g_core, BUNNY_DB_SITE_E621, "fav:someuser", 1, &posts);
+    bunny_core_result_t result = bunny_core_preview_search(g_core, BUNNY_DB_SITE_E621, "fav:someuser", 1, NULL, &posts);
     TEST_ASSERT_EQUAL(BUNNY_CORE_OK, result);
     TEST_ASSERT_EQUAL(1, (int)posts.count);
     bunny_db_post_list_free(&posts);
@@ -1505,7 +1555,7 @@ void test_preview_search_requests_the_given_e621_page(void)
     g_e621_state.body_count = 1;
 
     bunny_db_post_list_t posts;
-    bunny_core_result_t result = bunny_core_preview_search(g_core, BUNNY_DB_SITE_E621, "wolf", 3, &posts);
+    bunny_core_result_t result = bunny_core_preview_search(g_core, BUNNY_DB_SITE_E621, "wolf", 3, NULL, &posts);
     TEST_ASSERT_EQUAL(BUNNY_CORE_OK, result);
     bunny_db_post_list_free(&posts);
     free(fixture);
@@ -1526,7 +1576,7 @@ void test_preview_search_requests_the_given_inkbunny_page(void)
     g_inkbunny_state.body_count = 2;
 
     bunny_db_post_list_t posts;
-    bunny_core_result_t result = bunny_core_preview_search(g_core, BUNNY_DB_SITE_INKBUNNY, "tribute", 2, &posts);
+    bunny_core_result_t result = bunny_core_preview_search(g_core, BUNNY_DB_SITE_INKBUNNY, "tribute", 2, NULL, &posts);
     TEST_ASSERT_EQUAL(BUNNY_CORE_OK, result);
     bunny_db_post_list_free(&posts);
     free(login_fixture);
@@ -1552,7 +1602,7 @@ void test_preview_search_inkbunny_pool_sends_pool_id_not_literal_text(void)
     g_inkbunny_state.body_count = 2;
 
     bunny_db_post_list_t posts;
-    bunny_core_result_t result = bunny_core_preview_search(g_core, BUNNY_DB_SITE_INKBUNNY, "pool:108216", 1, &posts);
+    bunny_core_result_t result = bunny_core_preview_search(g_core, BUNNY_DB_SITE_INKBUNNY, "pool:108216", 1, NULL, &posts);
     TEST_ASSERT_EQUAL(BUNNY_CORE_OK, result);
     bunny_db_post_list_free(&posts);
     free(login_fixture);
@@ -1594,7 +1644,7 @@ void test_list_my_inkbunny_favorites_rejects_a_page_below_one(void)
 void test_preview_search_rejects_a_page_below_one(void)
 {
     bunny_db_post_list_t posts;
-    bunny_core_result_t result = bunny_core_preview_search(g_core, BUNNY_DB_SITE_E621, "wolf", 0, &posts);
+    bunny_core_result_t result = bunny_core_preview_search(g_core, BUNNY_DB_SITE_E621, "wolf", 0, NULL, &posts);
     TEST_ASSERT_EQUAL(BUNNY_CORE_ERR_INVALID_ARG, result);
 }
 
@@ -1609,7 +1659,7 @@ void test_e621_requests_use_the_bare_user_agent_without_an_account(void)
     g_e621_state.body_count = 1;
 
     bunny_db_post_list_t posts;
-    bunny_core_result_t result = bunny_core_preview_search(g_core, BUNNY_DB_SITE_E621, "wolf", 1, &posts);
+    bunny_core_result_t result = bunny_core_preview_search(g_core, BUNNY_DB_SITE_E621, "wolf", 1, NULL, &posts);
     TEST_ASSERT_EQUAL(BUNNY_CORE_OK, result);
     bunny_db_post_list_free(&posts);
     free(fixture);
@@ -1630,7 +1680,7 @@ void test_e621_requests_include_the_configured_username_in_the_user_agent(void)
     g_e621_state.body_count = 1;
 
     bunny_db_post_list_t posts;
-    bunny_core_result_t result = bunny_core_preview_search(g_core, BUNNY_DB_SITE_E621, "wolf", 1, &posts);
+    bunny_core_result_t result = bunny_core_preview_search(g_core, BUNNY_DB_SITE_E621, "wolf", 1, NULL, &posts);
     TEST_ASSERT_EQUAL(BUNNY_CORE_OK, result);
     bunny_db_post_list_free(&posts);
     free(fixture);
@@ -2806,6 +2856,7 @@ int main(void)
     RUN_TEST(test_slideshow_search_commit_picks_falls_back_to_slideshow_default_when_no_override);
     RUN_TEST(test_slideshow_search_commit_picks_respects_max_total_posts_across_searches);
     RUN_TEST(test_slideshow_reroll_all_never_duplicates_a_post_across_searches);
+    RUN_TEST(test_slideshow_reroll_all_does_not_starve_a_search_whose_own_pool_is_already_fully_assigned);
     RUN_TEST(test_slideshow_replace_post_swaps_to_a_different_post);
     RUN_TEST(test_slideshow_replace_post_errors_when_the_search_is_exhausted);
     RUN_TEST(test_preview_search_requests_the_given_e621_page);

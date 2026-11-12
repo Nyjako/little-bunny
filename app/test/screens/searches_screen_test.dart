@@ -1003,6 +1003,95 @@ void main() {
     });
   });
 
+  group('finder (local filter over saved searches/pools)', () {
+    testWidgets('the finder field is hidden until the search icon is tapped', (WidgetTester tester) async {
+      final repository = FakeBunnyRepository();
+      await repository.createSearch(BunnySite.e621, 'Foxes', 'fox');
+
+      await tester.pumpWidget(_wrap(repository));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(TextField), findsNothing);
+
+      await tester.tap(find.byTooltip('Find a saved search or pool'));
+      await tester.pumpAndSettle();
+
+      expect(find.byType(TextField), findsOneWidget);
+    });
+
+    testWidgets('typing filters the Searches tab by label or query text', (WidgetTester tester) async {
+      final repository = FakeBunnyRepository();
+      await repository.createSearch(BunnySite.e621, 'Foxes', 'fox');
+      await repository.createSearch(BunnySite.e621, 'Wolves', 'wolf');
+
+      await tester.pumpWidget(_wrap(repository));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byTooltip('Find a saved search or pool'));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextField), 'wolf');
+      await tester.pumpAndSettle();
+
+      expect(find.text('Foxes'), findsNothing);
+      expect(find.text('Wolves'), findsOneWidget);
+    });
+
+    testWidgets('typing a pool id finds that pool even when it is not in the label or query text', (WidgetTester tester) async {
+      final repository = FakeBunnyRepository();
+      await repository.createSearch(BunnySite.e621, 'A nice comic', 'pool:108216');
+      await repository.createSearch(BunnySite.e621, 'Another pool', 'pool:5');
+
+      await tester.pumpWidget(_wrap(repository));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Pools'));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byTooltip('Find a saved search or pool'));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextField), '108216');
+      await tester.pumpAndSettle();
+
+      expect(find.text('A nice comic'), findsOneWidget);
+      expect(find.text('Another pool'), findsNothing);
+    });
+
+    testWidgets('clearing the filter shows every search again', (WidgetTester tester) async {
+      final repository = FakeBunnyRepository();
+      await repository.createSearch(BunnySite.e621, 'Foxes', 'fox');
+      await repository.createSearch(BunnySite.e621, 'Wolves', 'wolf');
+
+      await tester.pumpWidget(_wrap(repository));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byTooltip('Find a saved search or pool'));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextField), 'wolf');
+      await tester.pumpAndSettle();
+      expect(find.text('Foxes'), findsNothing);
+
+      await tester.tap(find.byTooltip('Clear'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Foxes'), findsOneWidget);
+      expect(find.text('Wolves'), findsOneWidget);
+    });
+
+    testWidgets('no matches shows the finder-specific empty state instead of the generic one', (WidgetTester tester) async {
+      final repository = FakeBunnyRepository();
+      await repository.createSearch(BunnySite.e621, 'Foxes', 'fox');
+
+      await tester.pumpWidget(_wrap(repository));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byTooltip('Find a saved search or pool'));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.byType(TextField), 'nonexistent');
+      await tester.pumpAndSettle();
+
+      expect(find.text('Nothing matches "nonexistent".'), findsOneWidget);
+    });
+  });
+
   testWidgets('skips the automatic update check when auto-check is disabled', (WidgetTester tester) async {
     SharedPreferences.setMockInitialValues({'update_auto_check_enabled': false});
     final checkService = UpdateCheckService(

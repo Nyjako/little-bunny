@@ -186,6 +186,55 @@ int64_t inkbunny_client_get_user_id(const inkbunny_client_t *client)
     return client ? client->user_id : 0;
 }
 
+/* Comma-separated submission_type_id list from a INKBUNNY_SUBMISSION_TYPE_BIT
+ * mask (api_search.php's own `type` param format: "no spaces"). out must be
+ * at least 42 bytes (14 two-digit ids + 13 commas + NUL). Returns the number
+ * of ids written, 0 if mask is 0 (caller should then omit the param entirely). */
+static int inkbunny_submission_type_mask_to_list(unsigned mask, char *out, size_t out_size)
+{
+    size_t offset = 0;
+    int count = 0;
+    for (int type_id = 1; type_id <= 14; type_id++) {
+        if (!(mask & INKBUNNY_SUBMISSION_TYPE_BIT(type_id))) {
+            continue;
+        }
+        offset += (size_t)snprintf(out + offset, out_size - offset, "%s%d", count > 0 ? "," : "", type_id);
+        count++;
+    }
+    return count;
+}
+
+static const char *inkbunny_field_join_str(inkbunny_field_join_t join)
+{
+    return join == INKBUNNY_FIELD_JOIN_AND ? "and" : "or";
+}
+
+static const char *inkbunny_string_join_str(inkbunny_string_join_t join)
+{
+    switch (join) {
+        case INKBUNNY_STRING_JOIN_OR:
+            return "or";
+        case INKBUNNY_STRING_JOIN_EXACT:
+            return "exact";
+        case INKBUNNY_STRING_JOIN_AND:
+        default:
+            return "and";
+    }
+}
+
+static const char *inkbunny_scraps_str(inkbunny_scraps_t scraps)
+{
+    switch (scraps) {
+        case INKBUNNY_SCRAPS_NO:
+            return "no";
+        case INKBUNNY_SCRAPS_ONLY:
+            return "only";
+        case INKBUNNY_SCRAPS_BOTH:
+        default:
+            return "both";
+    }
+}
+
 inkbunny_result_t inkbunny_search(inkbunny_client_t *client, const inkbunny_search_params_t *params, inkbunny_submission_list_t *out_submissions)
 {
     if (!client || !out_submissions) {
@@ -207,15 +256,45 @@ inkbunny_result_t inkbunny_search(inkbunny_client_t *client, const inkbunny_sear
             }
             offset += (size_t)snprintf(query + offset, sizeof(query) - offset, "&text=%s", encoded_text);
             free(encoded_text);
-        }
-        if (params->keywords_only) {
-            offset += (size_t)snprintf(query + offset, sizeof(query) - offset, "&keywords=yes");
+
+            int mask = params->search_in_mask ? params->search_in_mask : INKBUNNY_SEARCH_IN_KEYWORDS;
+            offset += (size_t)snprintf(query + offset, sizeof(query) - offset, "&keywords=%s", (mask & INKBUNNY_SEARCH_IN_KEYWORDS) ? "yes" : "no");
+            offset += (size_t)snprintf(query + offset, sizeof(query) - offset, "&title=%s", (mask & INKBUNNY_SEARCH_IN_TITLE) ? "yes" : "no");
+            offset += (size_t)snprintf(query + offset, sizeof(query) - offset, "&description=%s", (mask & INKBUNNY_SEARCH_IN_DESCRIPTION) ? "yes" : "no");
+            offset += (size_t)snprintf(query + offset, sizeof(query) - offset, "&md5=%s", (mask & INKBUNNY_SEARCH_IN_MD5) ? "yes" : "no");
+            offset += (size_t)snprintf(query + offset, sizeof(query) - offset, "&field_join_type=%s", inkbunny_field_join_str(params->field_join));
+            offset += (size_t)snprintf(query + offset, sizeof(query) - offset, "&string_join_type=%s", inkbunny_string_join_str(params->string_join));
         }
         if (params->favorited_by_user_id && params->favorited_by_user_id[0]) {
             offset += (size_t)snprintf(query + offset, sizeof(query) - offset, "&favs_user_id=%s", params->favorited_by_user_id);
         }
+        if (params->username && params->username[0]) {
+            char *encoded_username = goblin_url_encode(params->username);
+            if (!encoded_username) {
+                return INKBUNNY_ERR_UNKNOWN;
+            }
+            offset += (size_t)snprintf(query + offset, sizeof(query) - offset, "&username=%s", encoded_username);
+            free(encoded_username);
+        }
         if (params->pool_id > 0) {
             offset += (size_t)snprintf(query + offset, sizeof(query) - offset, "&pool_id=%lld", (long long)params->pool_id);
+        }
+        if (params->submission_type_mask) {
+            char type_list[42];
+            inkbunny_submission_type_mask_to_list(params->submission_type_mask, type_list, sizeof(type_list));
+            offset += (size_t)snprintf(query + offset, sizeof(query) - offset, "&type=%s", type_list);
+        }
+        if (params->days_limit > 0) {
+            offset += (size_t)snprintf(query + offset, sizeof(query) - offset, "&dayslimit=%d", params->days_limit);
+        }
+        if (params->order_by && params->order_by[0]) {
+            offset += (size_t)snprintf(query + offset, sizeof(query) - offset, "&orderby=%s", params->order_by);
+        }
+        if (params->random) {
+            offset += (size_t)snprintf(query + offset, sizeof(query) - offset, "&random=yes");
+        }
+        if (params->scraps != INKBUNNY_SCRAPS_BOTH) {
+            offset += (size_t)snprintf(query + offset, sizeof(query) - offset, "&scraps=%s", inkbunny_scraps_str(params->scraps));
         }
         if (params->page > 0) {
             offset += (size_t)snprintf(query + offset, sizeof(query) - offset, "&page=%d", params->page);

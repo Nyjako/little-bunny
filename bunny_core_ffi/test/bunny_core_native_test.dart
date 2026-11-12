@@ -54,6 +54,40 @@ void main() {
     expect(searches.single['lastUpdatedAt'], isNull);
   });
 
+  test('createSearch/updateSearch round-trip Inkbunny advanced filters (M74)', () async {
+    final id = await native.createSearch(
+      'inkbunny',
+      'dragons',
+      'dragon',
+      24,
+      inkbunnySearchInMask: 3,
+      inkbunnyFieldJoinType: 1,
+      inkbunnyStringJoinType: 2,
+      inkbunnyUsername: 'someartist',
+      inkbunnySubmissionTypeMask: 5,
+      inkbunnyDaysLimit: 30,
+      inkbunnyOrderBy: 'views',
+      inkbunnyRandom: true,
+      inkbunnyScraps: 2,
+    );
+
+    var searches = await native.listSearches();
+    expect(searches.single['inkbunnySearchInMask'], 3);
+    expect(searches.single['inkbunnyFieldJoinType'], 1);
+    expect(searches.single['inkbunnyStringJoinType'], 2);
+    expect(searches.single['inkbunnyUsername'], 'someartist');
+    expect(searches.single['inkbunnySubmissionTypeMask'], 5);
+    expect(searches.single['inkbunnyDaysLimit'], 30);
+    expect(searches.single['inkbunnyOrderBy'], 'views');
+    expect(searches.single['inkbunnyRandom'], isTrue);
+    expect(searches.single['inkbunnyScraps'], 2);
+
+    await native.updateSearch(id, 'dragons', 'dragon', 24, inkbunnySubmissionTypeMask: 9);
+    searches = await native.listSearches();
+    expect(searches.single['inkbunnySubmissionTypeMask'], 9);
+    expect(searches.single['inkbunnyUsername'], isNull);
+  });
+
   test('createGroup then listGroups round-trips, and setSearchGroup/deleteGroup ungroups', () async {
     final groupId = await native.createGroup('Wolves', true);
     var groups = await native.listGroups();

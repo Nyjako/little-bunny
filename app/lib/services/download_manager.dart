@@ -136,6 +136,60 @@ class DownloadManager {
     return File('$destinationFolder/$folder/$filename').exists();
   }
 
+  /// Same question as [isDownloaded], for many posts at once -- returns a
+  /// map keyed by [BunnyPost.id]. On a plain filesystem path this is just
+  /// [isDownloaded] in a loop (already a fast direct stat call); under SAF
+  /// (`content://`, Android's Storage Access Framework) it's a real
+  /// optimization, not just a convenience wrapper: `SafUtil().child()` has
+  /// no direct "does this path exist" primitive on Android's side, so it
+  /// resolves one path *segment* at a time, meaning every call for a post
+  /// re-lists that post's whole artist subfolder from scratch just to find
+  /// one matching filename in it. Checking hundreds or thousands of posts
+  /// this way (e.g. a slideshow's whole committed set, M51 v2 prepare)
+  /// measured in minutes on a real device -- confirmed live as the cause of
+  /// "Prepare" appearing to hang on Android while working fine on desktop's
+  /// plain-path branch. This instead lists each distinct artist subfolder's
+  /// contents exactly ONCE (posts naturally group into relatively few
+  /// subfolders -- one per artist -- even when there are thousands of
+  /// posts), then checks filename membership in that listing purely in
+  /// Dart, with no further platform-channel round trip per post.
+  Future<Map<int, bool>> batchIsDownloaded(List<BunnyPost> posts, String destinationFolder, {int poolId = 0, String? poolName, int poolPage = 0}) async {
+    if (!destinationFolder.startsWith('content://')) {
+      final result = <int, bool>{};
+      for (final post in posts) {
+        result[post.id] = await isDownloaded(post, destinationFolder, poolId: poolId, poolName: poolName, poolPage: poolPage);
+      }
+      return result;
+    }
+
+    final postsByFolder = <String, List<BunnyPost>>{};
+    final filenameByPostId = <int, String>{};
+    for (final post in posts) {
+      final ext = post.fileExt ?? 'bin';
+      final (folder, filename) = _destinationFor(post, ext, poolId: poolId, poolName: poolName, poolPage: poolPage);
+      postsByFolder.putIfAbsent(folder, () => []).add(post);
+      filenameByPostId[post.id] = filename;
+    }
+
+    final result = <int, bool>{};
+    for (final entry in postsByFolder.entries) {
+      final folderDoc = await SafUtil().child(destinationFolder, [entry.key]);
+      if (folderDoc == null) {
+        // The subfolder itself doesn't exist yet -- none of its posts can
+        // be downloaded, and there's nothing to list.
+        for (final post in entry.value) {
+          result[post.id] = false;
+        }
+        continue;
+      }
+      final existingNames = (await SafUtil().list(folderDoc.uri)).map((f) => f.name).toSet();
+      for (final post in entry.value) {
+        result[post.id] = existingNames.contains(filenameByPostId[post.id]);
+      }
+    }
+    return result;
+  }
+
   /// Same deterministic-path computation [isDownloaded] already uses, but
   /// returning the resolved path (or SAF uri) instead of a bare bool --
   /// for a caller that needs to actually read the file, not just check
