@@ -98,6 +98,13 @@
   "searchesTabPools": "Zbiory",
   "searchesTabSlideshows": "Pokazy slajdów",
   "searchesPoolsEmptyState": "Brak zapisanych zbiorów. Naciśnij +, aby dodać.",
+  "searchesFinderTooltip": "Znajdź zapisane wyszukiwanie lub zbiór",
+  "searchesFinderHint": "Szukaj po tytule, tagach, autorze lub ID zbioru",
+  "searchesFinderClearTooltip": "Wyczyść",
+  "searchesFinderEmptyState": "Brak wyników dla \"{query}\".",
+  "@searchesFinderEmptyState": {
+    "placeholders": {"query": {"type": "String"}}
+  },
   "searchesFavoritesLabel": "Ulubione",
   "searchesNewPoolTooltip": "Dodaj zbiór",
   "searchesSortTooltip": "Sortuj",

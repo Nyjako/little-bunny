@@ -98,6 +98,13 @@
   "searchesTabPools": "Pools",
   "searchesTabSlideshows": "Slideshows",
   "searchesPoolsEmptyState": "No saved pools yet. Tap + to add one.",
+  "searchesFinderTooltip": "Find a saved search or pool",
+  "searchesFinderHint": "Find by title, tags, author, or pool ID",
+  "searchesFinderClearTooltip": "Clear",
+  "searchesFinderEmptyState": "Nothing matches \"{query}\".",
+  "@searchesFinderEmptyState": {
+    "placeholders": {"query": {"type": "String"}}
+  },
   "searchesFavoritesLabel": "Favorites",
   "searchesNewPoolTooltip": "Add pool",
   "searchesSortTooltip": "Sort",
