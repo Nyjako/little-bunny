@@ -124,7 +124,19 @@ class _SlideshowScreenState extends State<SlideshowScreen> {
         onKeyEvent: _handleKey,
         child: Stack(
           children: [
-            Center(child: PostMediaPage(post: _currentPost, localFilePath: widget.localFilePaths[_currentPost.id])),
+            // A post-specific key, not just a plain PostMediaPage(...) --
+            // without one, every post reuses the exact same Stack slot, so
+            // Flutter keeps the old State alive across _advance()/_goNext()
+            // instead of rebuilding it. Image.file (Linux/Windows, a plain
+            // path) tolerates that since it diffs by ImageProvider equality
+            // and reloads anyway, but _LocalContentUriImage/GifPlayer/the
+            // video controller (Android SAF content:// paths) only ever
+            // read their bytes once in initState -- confirmed live as why
+            // the slideshow got stuck on the first post on Android (auto
+            // *and* manual advance alike): the cursor moved, but the
+            // on-screen media silently kept rendering the first post's
+            // already-loaded bytes forever.
+            Center(child: PostMediaPage(key: ValueKey(_currentPost.id), post: _currentPost, localFilePath: widget.localFilePaths[_currentPost.id])),
             Row(
               children: [
                 Expanded(child: GestureDetector(behavior: HitTestBehavior.translucent, onTap: _goPrevious)),
