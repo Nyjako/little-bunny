@@ -67,9 +67,9 @@ const _animatedViaGifPlayerExtensions = {'gif', 'webp'};
 /// `_PostDetailPageState` method) so [_ExtraFileMedia] below -- a separate
 /// widget/state, not an instance of that class -- can render an image file
 /// the exact same way the primary one does.
-Widget buildFileImageContent(String fileUrl, String ext, BunnySite site) {
+Widget buildFileImageContent(String fileUrl, String ext, BunnySite site, {String? previewUrl}) {
   return _animatedViaGifPlayerExtensions.contains(ext)
-      ? GifPlayer(imageUrl: fileUrl, httpHeaders: imageHeadersFor(site))
+      ? GifPlayer(imageUrl: fileUrl, httpHeaders: imageHeadersFor(site), previewUrl: previewUrl)
       : Image(
           image: CachedNetworkImageProvider(fileUrl, headers: imageHeadersFor(site)),
           fit: BoxFit.contain,
@@ -905,7 +905,7 @@ class _PostDetailPageState extends State<_PostDetailPage> {
     final maxHeight = MediaQuery.sizeOf(context).height * 0.6;
     Widget bounded(Widget child) => ConstrainedBox(constraints: BoxConstraints(maxHeight: maxHeight), child: AspectRatio(aspectRatio: aspectRatio, child: child));
     if (_imageExtensions.contains(ext)) {
-      final content = buildFileImageContent(post.fileUrl!, ext, post.site);
+      final content = buildFileImageContent(post.fileUrl!, ext, post.site, previewUrl: post.previewUrl);
       return GestureDetector(key: const Key('postDetailImageTapTarget'), onTap: _openFullScreenViewer, child: bounded(content));
     }
     if (isVideoExt(ext)) {
@@ -941,7 +941,7 @@ class _PostDetailPageState extends State<_PostDetailPage> {
     final aspectRatio = (file.width > 0 && file.height > 0) ? file.width / file.height : 16 / 9;
     final maxHeight = MediaQuery.sizeOf(context).height * 0.6;
     Widget bounded(Widget child) => ConstrainedBox(constraints: BoxConstraints(maxHeight: maxHeight), child: AspectRatio(aspectRatio: aspectRatio, child: child));
-    final content = buildFileImageContent(file.fileUrl, file.fileExt?.toLowerCase() ?? '', _post.site);
+    final content = buildFileImageContent(file.fileUrl, file.fileExt?.toLowerCase() ?? '', _post.site, previewUrl: file.previewUrl);
     return Stack(
       alignment: Alignment.bottomCenter,
       children: [
@@ -1641,7 +1641,7 @@ class _ExtraFileMediaState extends State<_ExtraFileMedia> {
     final file = widget.file;
     final ext = file.fileExt?.toLowerCase();
     if (ext != null && _imageExtensions.contains(ext)) {
-      return _bounded(buildFileImageContent(file.fileUrl, ext, widget.site));
+      return _bounded(buildFileImageContent(file.fileUrl, ext, widget.site, previewUrl: file.previewUrl));
     }
     if (isVideoExt(ext)) {
       return FutureBuilder<void>(

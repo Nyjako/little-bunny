@@ -339,6 +339,11 @@
     "placeholders": {"extension": {"type": "String"}}
   },
   "postDetailOpenExternally": "Otwórz zewnętrznie",
+  "gifPlayerTooLargeMessage": "Ten GIF ma {size} -- wystarczająco dużo, że wczytanie go może zużyć dużo pamięci",
+  "@gifPlayerTooLargeMessage": {
+    "placeholders": {"size": {"type": "String"}}
+  },
+  "gifPlayerPlayAnywayButton": "Odtwórz mimo to",
   "postDetailAudioTrackLabel": "Ścieżka {position}",
   "@postDetailAudioTrackLabel": {
     "placeholders": {"position": {"type": "int"}}
