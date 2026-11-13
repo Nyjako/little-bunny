@@ -306,6 +306,20 @@ bunny_core_result_t bunny_core_post_get_relationships(bunny_core_t *core, int64_
  * in no pools) -- a thin pass-through to bunny_db. */
 bunny_core_result_t bunny_core_post_get_pool_ids(bunny_core_t *core, int64_t post_id, bunny_db_int64_list_t *out_list);
 
+/* The Inkbunny pools a post belongs to (empty for e621, or an Inkbunny post
+ * in no pools) -- a thin pass-through to bunny_db. Populated by
+ * upsert_inkbunny_submission below whenever a full submission fetch
+ * (single or batched) brings back a `pools` array; a search-sync-only post
+ * (never fetched in full) has none yet. */
+bunny_core_result_t bunny_core_inkbunny_post_get_pools(bunny_core_t *core, int64_t post_id, bunny_db_inkbunny_pool_ref_list_t *out_list);
+
+/* Backfills an Inkbunny pool's own name from whatever's already locally
+ * known about it -- a thin pass-through to bunny_db. See
+ * bunny_db_inkbunny_pool_name_for_id's own doc comment for why this is the
+ * best available substitute for e621's bunny_core_fetch_pool, which
+ * Inkbunny has no equivalent of at all. */
+bunny_core_result_t bunny_core_inkbunny_pool_name_for_id(bunny_core_t *core, int64_t pool_id, char **out_name);
+
 /* --- Tag blacklist (M13.3, M28/M54) -- thin pass-throughs to bunny_db_blacklist_*.
  * See bunny_db/db.h for which post-listing query the blacklist does (and
  * deliberately does not) apply to. bunny_core_blacklist_add validates

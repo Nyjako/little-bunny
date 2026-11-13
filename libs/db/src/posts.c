@@ -12,6 +12,7 @@ GOBLIN_DYN_ARRAY_DECL(bunny_db_post_tag, bunny_db_post_tag_t)
 GOBLIN_DYN_ARRAY_DECL(bunny_db_string, char *)
 GOBLIN_DYN_ARRAY_DECL(bunny_db_int64, int64_t)
 GOBLIN_DYN_ARRAY_DECL(bunny_db_post_file, bunny_db_post_file_t)
+GOBLIN_DYN_ARRAY_DECL(bunny_db_inkbunny_pool_ref, bunny_db_inkbunny_pool_ref_t)
 
 /* Per-row rating/media-type bucket, bitwise-ANDed against a caller-supplied
  * mask (M28) -- see the BUNNY_DB_RATING_MASK_ and BUNNY_DB_MEDIA_MASK_
@@ -417,6 +418,114 @@ bunny_db_result_t bunny_db_post_get_pool_ids(bunny_db_t *db, int64_t post_id, bu
 
     out_list->items = arr.items;
     out_list->count = arr.count;
+    return BUNNY_DB_OK;
+}
+
+bunny_db_result_t bunny_db_inkbunny_post_get_pools(bunny_db_t *db, int64_t post_id, bunny_db_inkbunny_pool_ref_list_t *out_list)
+{
+    if (!db || !out_list) {
+        return BUNNY_DB_ERR_INVALID_ARG;
+    }
+    memset(out_list, 0, sizeof(*out_list));
+
+    const char *sql = "SELECT pool_id, pool_name FROM inkbunny_post_pools WHERE post_id = ? ORDER BY pool_id ASC;";
+    sqlite3_stmt *stmt = NULL;
+    if (sqlite3_prepare_v2(db->handle, sql, -1, &stmt, NULL) != SQLITE_OK) {
+        return BUNNY_DB_ERR_QUERY_FAILED;
+    }
+    sqlite3_bind_int64(stmt, 1, post_id);
+
+    bunny_db_inkbunny_pool_ref_array arr;
+    bunny_db_inkbunny_pool_ref_array_init(&arr);
+
+    int rc;
+    while ((rc = sqlite3_step(stmt)) == SQLITE_ROW) {
+        bunny_db_inkbunny_pool_ref_t item;
+        item.pool_id = sqlite3_column_int64(stmt, 0);
+        item.name = bunny_db_column_text_dup(stmt, 1);
+        if (!bunny_db_inkbunny_pool_ref_array_push(&arr, item)) {
+            sqlite3_finalize(stmt);
+            bunny_db_inkbunny_pool_ref_free(&item);
+            for (size_t i = 0; i < arr.count; i++) {
+                bunny_db_inkbunny_pool_ref_free(&arr.items[i]);
+            }
+            bunny_db_inkbunny_pool_ref_array_free(&arr);
+            return BUNNY_DB_ERR_UNKNOWN;
+        }
+    }
+    sqlite3_finalize(stmt);
+
+    if (rc != SQLITE_DONE) {
+        for (size_t i = 0; i < arr.count; i++) {
+            bunny_db_inkbunny_pool_ref_free(&arr.items[i]);
+        }
+        bunny_db_inkbunny_pool_ref_array_free(&arr);
+        return bunny_db_sqlite_rc_to_result(rc);
+    }
+
+    out_list->items = arr.items;
+    out_list->count = arr.count;
+    return BUNNY_DB_OK;
+}
+
+bunny_db_result_t bunny_db_inkbunny_post_pools_replace(bunny_db_t *db, int64_t post_id, const bunny_db_inkbunny_pool_ref_t *pools, size_t pool_count)
+{
+    if (!db) {
+        return BUNNY_DB_ERR_INVALID_ARG;
+    }
+
+    const char *del_sql = "DELETE FROM inkbunny_post_pools WHERE post_id = ?;";
+    sqlite3_stmt *del_stmt = NULL;
+    if (sqlite3_prepare_v2(db->handle, del_sql, -1, &del_stmt, NULL) != SQLITE_OK) {
+        return BUNNY_DB_ERR_QUERY_FAILED;
+    }
+    sqlite3_bind_int64(del_stmt, 1, post_id);
+    sqlite3_step(del_stmt);
+    sqlite3_finalize(del_stmt);
+
+    for (size_t i = 0; i < pool_count; i++) {
+        const char *insert_sql = "INSERT INTO inkbunny_post_pools (post_id, pool_id, pool_name) VALUES (?, ?, ?);";
+        sqlite3_stmt *insert_stmt = NULL;
+        if (sqlite3_prepare_v2(db->handle, insert_sql, -1, &insert_stmt, NULL) != SQLITE_OK) {
+            return BUNNY_DB_ERR_QUERY_FAILED;
+        }
+        sqlite3_bind_int64(insert_stmt, 1, post_id);
+        sqlite3_bind_int64(insert_stmt, 2, pools[i].pool_id);
+        bunny_db_bind_text_or_null(insert_stmt, 3, pools[i].name);
+        sqlite3_step(insert_stmt);
+        sqlite3_finalize(insert_stmt);
+    }
+
+    return BUNNY_DB_OK;
+}
+
+bunny_db_result_t bunny_db_inkbunny_pool_name_for_id(bunny_db_t *db, int64_t pool_id, char **out_name)
+{
+    if (!db || !out_name) {
+        return BUNNY_DB_ERR_INVALID_ARG;
+    }
+    *out_name = NULL;
+
+    const char *sql = "SELECT pool_name FROM inkbunny_post_pools WHERE pool_id = ? AND pool_name IS NOT NULL LIMIT 1;";
+    sqlite3_stmt *stmt = NULL;
+    if (sqlite3_prepare_v2(db->handle, sql, -1, &stmt, NULL) != SQLITE_OK) {
+        return BUNNY_DB_ERR_QUERY_FAILED;
+    }
+    sqlite3_bind_int64(stmt, 1, pool_id);
+
+    int rc = sqlite3_step(stmt);
+    if (rc == SQLITE_ROW) {
+        *out_name = bunny_db_column_text_dup(stmt, 0);
+        rc = sqlite3_step(stmt); /* drain to SQLITE_DONE */
+    }
+    sqlite3_finalize(stmt);
+
+    if (rc != SQLITE_DONE && rc != SQLITE_ROW) {
+        free(*out_name);
+        *out_name = NULL;
+        return bunny_db_sqlite_rc_to_result(rc);
+    }
+
     return BUNNY_DB_OK;
 }
 

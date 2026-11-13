@@ -254,6 +254,33 @@ static int handle_get_post_pools(struct mg_connection *conn, server_context_t *c
     return status;
 }
 
+static int handle_get_inkbunny_post_pools(struct mg_connection *conn, server_context_t *ctx, int64_t post_id)
+{
+    bunny_db_inkbunny_pool_ref_list_t list;
+    bunny_core_result_t result = bunny_core_inkbunny_post_get_pools(ctx->core, post_id, &list);
+
+    if (result != BUNNY_CORE_OK) {
+        return server_json_respond_error(conn, result);
+    }
+
+    cJSON *response = cJSON_CreateArray();
+    for (size_t i = 0; i < list.count; i++) {
+        cJSON *item = cJSON_CreateObject();
+        cJSON_AddNumberToObject(item, "pool_id", (double)list.items[i].pool_id);
+        if (list.items[i].name) {
+            cJSON_AddStringToObject(item, "name", list.items[i].name);
+        } else {
+            cJSON_AddNullToObject(item, "name");
+        }
+        cJSON_AddItemToArray(response, item);
+    }
+    bunny_db_inkbunny_pool_ref_list_free(&list);
+
+    int status = server_json_respond(conn, 200, response);
+    cJSON_Delete(response);
+    return status;
+}
+
 static int handle_fetch_post(struct mg_connection *conn, server_context_t *ctx, const char *query_string)
 {
     char site_value[16];
@@ -391,6 +418,9 @@ static int posts_handler(struct mg_connection *conn, void *cbdata)
     }
     if (strcmp(method, "GET") == 0 && server_route_parse_id_with_suffix(sub_path, "pools", &post_id)) {
         return handle_get_post_pools(conn, ctx, post_id);
+    }
+    if (strcmp(method, "GET") == 0 && server_route_parse_id_with_suffix(sub_path, "inkbunny_pools", &post_id)) {
+        return handle_get_inkbunny_post_pools(conn, ctx, post_id);
     }
     if (strcmp(method, "POST") == 0 && strcmp(sub_path, "fetch") == 0) {
         return handle_fetch_post(conn, ctx, info->query_string);

@@ -205,6 +205,28 @@ void bunny_db_int64_list_free(bunny_db_int64_list_t *list)
     list->count = 0;
 }
 
+void bunny_db_inkbunny_pool_ref_free(bunny_db_inkbunny_pool_ref_t *ref)
+{
+    if (!ref) {
+        return;
+    }
+    free(ref->name);
+    memset(ref, 0, sizeof(*ref));
+}
+
+void bunny_db_inkbunny_pool_ref_list_free(bunny_db_inkbunny_pool_ref_list_t *list)
+{
+    if (!list) {
+        return;
+    }
+    for (size_t i = 0; i < list->count; i++) {
+        bunny_db_inkbunny_pool_ref_free(&list->items[i]);
+    }
+    free(list->items);
+    list->items = NULL;
+    list->count = 0;
+}
+
 void bunny_db_post_relationships_free(bunny_db_post_relationships_t *relationships)
 {
     if (!relationships) {

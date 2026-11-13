@@ -4,6 +4,7 @@
 #include <cJSON.h>
 
 #include <stdbool.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include "auth.h"
@@ -58,7 +59,54 @@ static int pools_handler(struct mg_connection *conn, void *cbdata)
     return server_json_respond_error(conn, BUNNY_CORE_ERR_NOT_FOUND);
 }
 
+/* Inkbunny has no equivalent of bunny_core_fetch_pool (no "fetch pool
+ * metadata by id" endpoint at all) -- this is the best substitute,
+ * backfilling from whatever's already locally known via some other post
+ * in the same pool. See bunny_core_inkbunny_pool_name_for_id's own doc
+ * comment. */
+static int handle_get_inkbunny_pool_name(struct mg_connection *conn, server_context_t *ctx, int64_t pool_id)
+{
+    char *name = NULL;
+    bunny_core_result_t result = bunny_core_inkbunny_pool_name_for_id(ctx->core, pool_id, &name);
+
+    if (result != BUNNY_CORE_OK) {
+        return server_json_respond_error(conn, result);
+    }
+
+    cJSON *response = cJSON_CreateObject();
+    cJSON_AddNumberToObject(response, "id", (double)pool_id);
+    if (name) {
+        cJSON_AddStringToObject(response, "name", name);
+    } else {
+        cJSON_AddNullToObject(response, "name");
+    }
+    free(name);
+
+    int status = server_json_respond(conn, 200, response);
+    cJSON_Delete(response);
+    return status;
+}
+
+static int inkbunny_pools_handler(struct mg_connection *conn, void *cbdata)
+{
+    server_context_t *ctx = (server_context_t *)cbdata;
+    if (!server_auth_check_request(ctx->auth, conn)) {
+        return 401;
+    }
+
+    const struct mg_request_info *info = mg_get_request_info(conn);
+    const char *sub_path = server_route_sub_path(info->local_uri, "/inkbunny_pools");
+
+    int64_t pool_id = 0;
+    if (strcmp(info->request_method, "GET") == 0 && sub_path && server_route_parse_id(sub_path, &pool_id)) {
+        return handle_get_inkbunny_pool_name(conn, ctx, pool_id);
+    }
+
+    return server_json_respond_error(conn, BUNNY_CORE_ERR_NOT_FOUND);
+}
+
 void server_routes_register_pools(struct mg_context *mg_ctx, server_context_t *ctx)
 {
     mg_set_request_handler(mg_ctx, "/pools", pools_handler, ctx);
+    mg_set_request_handler(mg_ctx, "/inkbunny_pools", inkbunny_pools_handler, ctx);
 }

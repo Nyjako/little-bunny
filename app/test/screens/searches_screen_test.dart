@@ -799,7 +799,7 @@ void main() {
     expect(repository.searches, hasLength(1));
   });
 
-  testWidgets('add-pool dialog can create an Inkbunny pool search, skipping the e621-only name lookup (M28)', (WidgetTester tester) async {
+  testWidgets('add-pool dialog creates an Inkbunny pool search with a bare id label when no name is known locally (M28/M76)', (WidgetTester tester) async {
     final repository = FakeBunnyRepository();
     repository.poolInfoById[108216] = const BunnyPoolInfo(id: 108216, name: 'should never be used', postCount: 20);
 
@@ -822,12 +822,39 @@ void main() {
 
     // Never attempted the e621-only lookup -- it would risk showing an
     // unrelated e621 pool's name if the numeric id happened to collide.
+    // getInkbunnyPoolName (M76) IS attempted, but nothing's cached for this
+    // pool id yet, so it falls back to the bare id label, same as always.
     expect(repository.fetchPoolCallCount, 0);
     expect(find.text('pool:108216'), findsOneWidget);
     expect(repository.searches, hasLength(1));
     expect(repository.searches.single.site, BunnySite.inkbunny);
     expect(repository.searches.single.query, 'pool:108216');
     expect(repository.searches.single.usesDefaultInterval, isTrue);
+  });
+
+  testWidgets('add-pool dialog backfills an Inkbunny pool search\'s label from a name already known locally (M76)', (WidgetTester tester) async {
+    final repository = FakeBunnyRepository();
+    repository.inkbunnyPoolNameById[108216] = 'Sleepover Party';
+
+    await tester.pumpWidget(_wrap(repository));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Pools'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byType(FloatingActionButton));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.descendant(of: find.byType(AlertDialog), matching: find.text('Inkbunny')));
+    await tester.pumpAndSettle();
+
+    await tester.enterText(find.widgetWithText(TextField, 'Pool ID'), '108216');
+    await tester.tap(find.text('Add'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Sleepover Party'), findsOneWidget);
+    expect(repository.searches.single.label, 'Sleepover Party');
+    expect(repository.searches.single.query, 'pool:108216');
   });
 
   testWidgets('add-pool dialog refuses a pool that is already saved (M38)', (WidgetTester tester) async {

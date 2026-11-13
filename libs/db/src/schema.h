@@ -134,6 +134,17 @@ static const char *const BUNNY_DB_SCHEMA_SQL = "PRAGMA foreign_keys = ON;"
                                                "    pool_id INTEGER NOT NULL,"
                                                "    PRIMARY KEY (post_id, pool_id)"
                                                ");"
+                                               /* Inkbunny's own pool membership (separate from post_pools above,
+                                                * which is e621-specific -- see bunny_db_inkbunny_pool_ref_t's own
+                                                * doc comment for why the shapes don't match). Replaced wholesale on
+                                                * every full submission fetch, not position-preserving like
+                                                * post_pools -- there's no position to preserve. */
+                                               "CREATE TABLE IF NOT EXISTS inkbunny_post_pools ("
+                                               "    post_id INTEGER NOT NULL REFERENCES posts(id) ON DELETE CASCADE,"
+                                               "    pool_id INTEGER NOT NULL,"
+                                               "    pool_name TEXT,"
+                                               "    PRIMARY KEY (post_id, pool_id)"
+                                               ");"
                                                /* The medium-quality image variant (e621's "sample", Inkbunny's "screen")
                                                 * -- a single nullable URL per post, same one-to-one shape as
                                                 * post_relationships (the PK *is* the FK), upserted unconditionally on

@@ -1346,6 +1346,41 @@ void main() {
     expect(labelField.controller!.text, 'My pool');
   });
 
+  testWidgets('Inkbunny pool chip shows the pool\'s own name and opens a live preview, no "order:id" (M76)', (WidgetTester tester) async {
+    final repository = FakeBunnyRepository();
+    final post = _post(site: BunnySite.inkbunny, fileExt: 'jpg');
+    repository.inkbunnyPoolsByPostId[1] = const [BunnyInkbunnyPoolRef(id: 9, name: 'My pool')];
+
+    await tester.runAsync(() async {
+      await tester.pumpWidget(wrapWithLocalization(PostDetailScreen(post: post, repository: repository, displaySettingsStore: const DisplaySettingsStore(), downloadSettingsStore: const DownloadSettingsStore(), downloadQueueService: _downloadQueueService())));
+      await Future<void>.delayed(const Duration(milliseconds: 300));
+    });
+    await tester.pump();
+    await scrollToEnd(tester);
+
+    expect(find.text('My pool'), findsOneWidget);
+    await tester.tap(find.text('My pool'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('pool:9'), findsOneWidget);
+    expect(repository.previewSearchCalls, contains((BunnySite.inkbunny, 'pool:9', 1)));
+  });
+
+  testWidgets('Inkbunny pool chip falls back to "#<id>" when the pool has no name (M76)', (WidgetTester tester) async {
+    final repository = FakeBunnyRepository();
+    final post = _post(site: BunnySite.inkbunny, fileExt: 'jpg');
+    repository.inkbunnyPoolsByPostId[1] = const [BunnyInkbunnyPoolRef(id: 9)];
+
+    await tester.runAsync(() async {
+      await tester.pumpWidget(wrapWithLocalization(PostDetailScreen(post: post, repository: repository, displaySettingsStore: const DisplaySettingsStore(), downloadSettingsStore: const DownloadSettingsStore(), downloadQueueService: _downloadQueueService())));
+      await Future<void>.delayed(const Duration(milliseconds: 300));
+    });
+    await tester.pump();
+    await scrollToEnd(tester);
+
+    expect(find.text('#9'), findsOneWidget);
+  });
+
   testWidgets('tapping favorite queues the action, drains the queue, and flips the icon', (WidgetTester tester) async {
     final repository = FakeBunnyRepository();
     final post = _post(fileExt: 'jpg');

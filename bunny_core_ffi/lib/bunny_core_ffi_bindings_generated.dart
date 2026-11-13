@@ -257,6 +257,42 @@ class BunnyCoreFfiBindings {
   late final _bunny_db_int64_list_free = _bunny_db_int64_list_freePtr
       .asFunction<void Function(ffi.Pointer<bunny_db_int64_list_t>)>();
 
+  void bunny_db_inkbunny_pool_ref_free(
+    ffi.Pointer<bunny_db_inkbunny_pool_ref_t> ref,
+  ) {
+    return _bunny_db_inkbunny_pool_ref_free(ref);
+  }
+
+  late final _bunny_db_inkbunny_pool_ref_freePtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.Void Function(ffi.Pointer<bunny_db_inkbunny_pool_ref_t>)
+        >
+      >('bunny_db_inkbunny_pool_ref_free');
+  late final _bunny_db_inkbunny_pool_ref_free =
+      _bunny_db_inkbunny_pool_ref_freePtr
+          .asFunction<
+            void Function(ffi.Pointer<bunny_db_inkbunny_pool_ref_t>)
+          >();
+
+  void bunny_db_inkbunny_pool_ref_list_free(
+    ffi.Pointer<bunny_db_inkbunny_pool_ref_list_t> list,
+  ) {
+    return _bunny_db_inkbunny_pool_ref_list_free(list);
+  }
+
+  late final _bunny_db_inkbunny_pool_ref_list_freePtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.Void Function(ffi.Pointer<bunny_db_inkbunny_pool_ref_list_t>)
+        >
+      >('bunny_db_inkbunny_pool_ref_list_free');
+  late final _bunny_db_inkbunny_pool_ref_list_free =
+      _bunny_db_inkbunny_pool_ref_list_freePtr
+          .asFunction<
+            void Function(ffi.Pointer<bunny_db_inkbunny_pool_ref_list_t>)
+          >();
+
   void bunny_db_post_relationships_free(
     ffi.Pointer<bunny_db_post_relationships_t> relationships,
   ) {
@@ -1987,6 +2023,76 @@ class BunnyCoreFfiBindings {
           ffi.Pointer<bunny_db_int64_list_t>,
         )
       >();
+
+  /// The Inkbunny pools a post belongs to (empty for e621, or an Inkbunny post
+  /// in no pools) -- a thin pass-through to bunny_db. Populated by
+  /// upsert_inkbunny_submission below whenever a full submission fetch
+  /// (single or batched) brings back a `pools` array; a search-sync-only post
+  /// (never fetched in full) has none yet.
+  bunny_core_result_t bunny_core_inkbunny_post_get_pools(
+    ffi.Pointer<bunny_core_t> core,
+    int post_id,
+    ffi.Pointer<bunny_db_inkbunny_pool_ref_list_t> out_list,
+  ) {
+    return bunny_core_result_t.fromValue(
+      _bunny_core_inkbunny_post_get_pools(core, post_id, out_list),
+    );
+  }
+
+  late final _bunny_core_inkbunny_post_get_poolsPtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.UnsignedInt Function(
+            ffi.Pointer<bunny_core_t>,
+            ffi.Int64,
+            ffi.Pointer<bunny_db_inkbunny_pool_ref_list_t>,
+          )
+        >
+      >('bunny_core_inkbunny_post_get_pools');
+  late final _bunny_core_inkbunny_post_get_pools =
+      _bunny_core_inkbunny_post_get_poolsPtr
+          .asFunction<
+            int Function(
+              ffi.Pointer<bunny_core_t>,
+              int,
+              ffi.Pointer<bunny_db_inkbunny_pool_ref_list_t>,
+            )
+          >();
+
+  /// Backfills an Inkbunny pool's own name from whatever's already locally
+  /// known about it -- a thin pass-through to bunny_db. See
+  /// bunny_db_inkbunny_pool_name_for_id's own doc comment for why this is the
+  /// best available substitute for e621's bunny_core_fetch_pool, which
+  /// Inkbunny has no equivalent of at all.
+  bunny_core_result_t bunny_core_inkbunny_pool_name_for_id(
+    ffi.Pointer<bunny_core_t> core,
+    int pool_id,
+    ffi.Pointer<ffi.Pointer<ffi.Char>> out_name,
+  ) {
+    return bunny_core_result_t.fromValue(
+      _bunny_core_inkbunny_pool_name_for_id(core, pool_id, out_name),
+    );
+  }
+
+  late final _bunny_core_inkbunny_pool_name_for_idPtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.UnsignedInt Function(
+            ffi.Pointer<bunny_core_t>,
+            ffi.Int64,
+            ffi.Pointer<ffi.Pointer<ffi.Char>>,
+          )
+        >
+      >('bunny_core_inkbunny_pool_name_for_id');
+  late final _bunny_core_inkbunny_pool_name_for_id =
+      _bunny_core_inkbunny_pool_name_for_idPtr
+          .asFunction<
+            int Function(
+              ffi.Pointer<bunny_core_t>,
+              int,
+              ffi.Pointer<ffi.Pointer<ffi.Char>>,
+            )
+          >();
 
   /// --- Tag blacklist (M13.3, M28/M54) -- thin pass-throughs to bunny_db_blacklist_*.
   /// See bunny_db/db.h for which post-listing query the blacklist does (and
@@ -3787,6 +3893,26 @@ final class bunny_db_string_list_t extends ffi.Struct {
 /// bunny_db_post_relationships_t.children below.
 final class bunny_db_int64_list_t extends ffi.Struct {
   external ffi.Pointer<ffi.Int64> items;
+
+  @ffi.Size()
+  external int count;
+}
+
+/// One Inkbunny pool a post belongs to -- unlike e621's post_pools (plain
+/// ids + a separately-fetched position/name), Inkbunny's own submission
+/// fetch already hands back each pool's name directly (api_submissions.php's
+/// show_pools=yes), and has no "list this pool's posts in order" endpoint at
+/// all to backfill a position from, so there's nothing to fetch or store
+/// beyond the id/name pair itself.
+final class bunny_db_inkbunny_pool_ref_t extends ffi.Struct {
+  @ffi.Int64()
+  external int pool_id;
+
+  external ffi.Pointer<ffi.Char> name;
+}
+
+final class bunny_db_inkbunny_pool_ref_list_t extends ffi.Struct {
+  external ffi.Pointer<bunny_db_inkbunny_pool_ref_t> items;
 
   @ffi.Size()
   external int count;

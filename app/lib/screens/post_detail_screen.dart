@@ -419,6 +419,7 @@ class _PostDetailPageState extends State<_PostDetailPage> {
   late final Future<List<String>> _sourcesFuture;
   Future<BunnyPostRelationships>? _relationshipsFuture;
   Future<List<int>>? _poolIdsFuture;
+  Future<List<BunnyInkbunnyPoolRef>>? _inkbunnyPoolsFuture;
 
   /// Resolved contents of a multi-file Inkbunny submission (M28 Phase 3,
   /// Picture Series/Comic/Portfolio) -- null until the live refresh below
@@ -496,6 +497,10 @@ class _PostDetailPageState extends State<_PostDetailPage> {
           setState(() => _files = files);
         }
       });
+      // Same gating as getPostFiles above -- a post's Inkbunny pools are
+      // only ever known after a full submission fetch (show_pools=yes),
+      // never from a search sync alone.
+      _inkbunnyPoolsFuture = refreshedPost.then((_) => widget.repository.getInkbunnyPostPools(widget.post.id));
     }
 
     _maybeInitVideo(widget.post);
@@ -1388,28 +1393,73 @@ class _PostDetailPageState extends State<_PostDetailPage> {
     );
   }
 
-  Widget _poolsSection(AppLocalizations l10n) {
-    final future = _poolIdsFuture;
-    if (future == null) {
-      return const SizedBox.shrink();
-    }
-    return FutureBuilder<List<int>>(
-      future: future,
-      builder: (context, snapshot) {
-        final poolIds = snapshot.data ?? const [];
-        if (poolIds.isEmpty) {
-          return const SizedBox.shrink();
-        }
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Divider(),
-            Padding(padding: const EdgeInsets.only(bottom: 4), child: Text(l10n.postDetailPoolsLabel, style: Theme.of(context).textTheme.titleSmall)),
-            Wrap(spacing: 4, runSpacing: 4, children: poolIds.map((id) => ActionChip(label: Text('#$id'), onPressed: () => _openPool(l10n, id))).toList()),
-          ],
-        );
-      },
+  // Inkbunny counterpart to _openPool above -- no separate metadata lookup
+  // needed, since the pool's own name already came back on the same full
+  // submission fetch that surfaced the pool at all (see
+  // BunnyInkbunnyPoolRef's own doc comment).
+  Future<void> _openInkbunnyPool(BunnyInkbunnyPoolRef pool) async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => TagBrowseScreen(
+          site: BunnySite.inkbunny,
+          query: 'pool:${pool.id}',
+          repository: widget.repository,
+          displaySettingsStore: widget.displaySettingsStore,
+          downloadSettingsStore: widget.downloadSettingsStore,
+          downloadQueueService: widget.downloadQueueService,
+          initialLabel: pool.name,
+        ),
+      ),
     );
+  }
+
+  Widget _poolsSection(AppLocalizations l10n) {
+    final poolIdsFuture = _poolIdsFuture;
+    if (poolIdsFuture != null) {
+      return FutureBuilder<List<int>>(
+        future: poolIdsFuture,
+        builder: (context, snapshot) {
+          final poolIds = snapshot.data ?? const [];
+          if (poolIds.isEmpty) {
+            return const SizedBox.shrink();
+          }
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Divider(),
+              Padding(padding: const EdgeInsets.only(bottom: 4), child: Text(l10n.postDetailPoolsLabel, style: Theme.of(context).textTheme.titleSmall)),
+              Wrap(spacing: 4, runSpacing: 4, children: poolIds.map((id) => ActionChip(label: Text('#$id'), onPressed: () => _openPool(l10n, id))).toList()),
+            ],
+          );
+        },
+      );
+    }
+    final inkbunnyPoolsFuture = _inkbunnyPoolsFuture;
+    if (inkbunnyPoolsFuture != null) {
+      return FutureBuilder<List<BunnyInkbunnyPoolRef>>(
+        future: inkbunnyPoolsFuture,
+        builder: (context, snapshot) {
+          final pools = snapshot.data ?? const [];
+          if (pools.isEmpty) {
+            return const SizedBox.shrink();
+          }
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Divider(),
+              Padding(padding: const EdgeInsets.only(bottom: 4), child: Text(l10n.postDetailPoolsLabel, style: Theme.of(context).textTheme.titleSmall)),
+              Wrap(
+                spacing: 4,
+                runSpacing: 4,
+                children: pools.map((pool) => ActionChip(label: Text(pool.name ?? '#${pool.id}'), onPressed: () => _openInkbunnyPool(pool))).toList(),
+              ),
+            ],
+          );
+        },
+      );
+    }
+    return const SizedBox.shrink();
   }
 
   Future<void> _postComment(AppLocalizations l10n) async {
