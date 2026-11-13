@@ -36,6 +36,10 @@ void main() {
 
   setUp(() async {
     tempDir = await Directory.systemTemp.createTemp('download_manager_test');
+    // DownloadManager's SAF-folder cache (M78) is static -- it would
+    // otherwise leak a resolved folder URI across tests in this file that
+    // happen to share a destination/folder pair.
+    DownloadManager.resetSafFolderCacheForTesting();
   });
 
   tearDown(() async {
@@ -65,6 +69,20 @@ void main() {
     expect(result.outcome, DownloadOutcome.verified);
     expect(result.filePath, '${tempDir.path}/some_bad_artist/42.png');
     expect(await File(result.filePath!).readAsBytes(), bytes);
+  });
+
+  test('a multi-artist post nests each artist as its own subfolder (M78)', () async {
+    // The C sync layer already filters non-artist meta tags out of this
+    // joined string before Dart ever sees it -- this is purely about
+    // turning "artista, artistb" into nested folders, not re-filtering.
+    const manager = DownloadManager();
+    final repository = FakeBunnyRepository();
+    repository.downloadFileFetchImpl = (_) async => http.Response.bytes([1], 200);
+
+    final result = await manager.downloadPost(_post(artist: 'artista, artistb'), repository, tempDir.path);
+
+    expect(result.filePath, '${tempDir.path}/artista/artistb/42.png');
+    expect(await File(result.filePath!).exists(), isTrue);
   });
 
   test('onProgress (M62) reports bytes received against the response\'s own content length', () async {
@@ -284,6 +302,35 @@ void main() {
       expect(fakeSafUtil.mkdirpCalls, [(treeUri, 'pool:5 - Comic')]);
       expect(fakeSafStream.writeFileBytesCalls, [('$treeUri/pool:5 - Comic', '5 - p0001 [42].png', 'image/png')]);
     });
+
+    test('SAF (content:// destination): concurrent downloads into the same pool folder only call mkdirp once (M78)', () async {
+      // Confirmed live as the cause of a pool's downloads creating several
+      // duplicate, mostly-empty folders on Android: DownloadQueueService
+      // runs several workers concurrently (M62), and without the caching
+      // this guards, each one independently called mkdirp for the
+      // identical folder name at nearly the same moment.
+      final fakeSafUtil = FakeSafUtilPlatform();
+      final fakeSafStream = FakeSafStreamPlatform(fakeSafUtil);
+      SafUtilPlatform.instance = fakeSafUtil;
+      SafStreamPlatform.instance = fakeSafStream;
+      const treeUri = 'content://com.android.externalstorage.documents/tree/primary%3ADownload';
+      final manager = DownloadManager(client: MockClient((_) async => http.Response.bytes([1, 2, 3], 200)));
+      final repository = FakeBunnyRepository();
+
+      final results = await Future.wait([
+        manager.downloadPost(_post(id: 1, externalId: 42), repository, treeUri, poolId: 5, poolName: 'Comic', poolPage: 1),
+        manager.downloadPost(_post(id: 2, externalId: 43), repository, treeUri, poolId: 5, poolName: 'Comic', poolPage: 2),
+      ]);
+
+      expect(results.map((r) => r.outcome), [DownloadOutcome.verified, DownloadOutcome.verified]);
+      expect(fakeSafUtil.mkdirpCalls, [(treeUri, 'pool:5 - Comic')]);
+      // Both files still actually landed under that one shared folder --
+      // the dedup only avoids the redundant mkdirp calls, not the writes.
+      expect(
+        fakeSafStream.writeFileBytesCalls.toSet(),
+        {('$treeUri/pool:5 - Comic', '5 - p0001 [42].png', 'image/png'), ('$treeUri/pool:5 - Comic', '5 - p0002 [43].png', 'image/png')},
+      );
+    });
   });
 
   test('reports failed on a non-200 response, with the status code as the error message', () async {
@@ -384,6 +431,20 @@ void main() {
       expect(fakeSafUtil.mkdirpCalls, [('content://com.android.externalstorage.documents/tree/primary%3ADownload', 'some_bad_artist')]);
       expect(fakeSafStream.writeFileBytesCalls, [('content://com.android.externalstorage.documents/tree/primary%3ADownload/some_bad_artist', '42.png', 'image/png')]);
       expect(result.filePath, 'content://com.android.externalstorage.documents/tree/primary%3ADownload/some_bad_artist/42.png');
+    });
+
+    test('a multi-artist post creates each artist as its own nested SAF directory level (M78)', () async {
+      final manager = DownloadManager(client: MockClient((_) async => http.Response.bytes([1, 2, 3], 200)));
+      final repository = FakeBunnyRepository();
+      const treeUri = 'content://com.android.externalstorage.documents/tree/primary%3ADownload';
+
+      final result = await manager.downloadPost(_post(artist: 'artista, artistb'), repository, treeUri);
+
+      expect(result.outcome, DownloadOutcome.verified);
+      // mkdirp is given each artist as its own path segment, not one
+      // segment whose display name literally contains a slash.
+      expect(fakeSafUtil.mkdirpCalls, [(treeUri, 'artista/artistb')]);
+      expect(result.filePath, '$treeUri/artista/artistb/42.png');
     });
 
     test('isDownloaded checks for the file as a SAF child of the artist subfolder, not dart:io', () async {

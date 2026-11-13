@@ -5,7 +5,9 @@ import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart' show compute;
 import 'package:http/http.dart' as http;
 import 'package:saf_stream/saf_stream.dart';
+import 'package:saf_stream/saf_stream_platform_interface.dart' show SafNewFile;
 import 'package:saf_util/saf_util.dart';
+import 'package:saf_util/saf_util_platform_interface.dart' show SafDocumentFile;
 
 import '../repository/bunny_models.dart';
 import '../repository/bunny_repository.dart';
@@ -86,11 +88,47 @@ class DownloadManager {
 
   const DownloadManager({this.client});
 
+  /// Shared across every `const DownloadManager()` instance (there's
+  /// effectively only ever one real destination folder/pool folder pair in
+  /// use at a time) -- caches the resolved/created SAF folder per
+  /// `destinationFolder/folder` pair (M78), so concurrent downloads into
+  /// the same folder ([DownloadQueueService]'s own concurrency, M62) share
+  /// one [SafUtil.mkdirp] call instead of each racing to create their own.
+  /// Confirmed live as the cause of a pool's downloads creating several
+  /// duplicate, mostly-empty folders on Android: several workers
+  /// independently calling `mkdirp` for the identical folder name at
+  /// nearly the same moment, with the SAF provider not deduping concurrent
+  /// creates of the same name.
+  static final Map<String, Future<SafDocumentFile>> _safFolderCache = {};
+
+  /// [folder] is split on `/` into separate path segments before being
+  /// handed to [SafUtil.mkdirp] (M78) -- a nested multi-artist folder (e.g.
+  /// `artista/artistb`) needs each level created as its own segment, not
+  /// one segment whose display name literally contains a slash.
+  static Future<SafDocumentFile> _resolveSafFolder(String destinationFolder, String folder) =>
+      _safFolderCache.putIfAbsent('$destinationFolder/$folder', () => SafUtil().mkdirp(destinationFolder, folder.split('/')));
+
+  /// Same purpose as [AppWakelock.resetForTesting] -- [_safFolderCache] is
+  /// static (every `const DownloadManager()` is the same canonical
+  /// instance anyway, so an instance field would share it app-wide just
+  /// the same, but a const constructor can't initialize a field to a fresh
+  /// mutable value), so it would otherwise leak resolved folder URIs
+  /// across tests in the same file/run. Call this in `setUp` wherever a
+  /// test asserts on [SafUtil.mkdirp] call counts.
+  static void resetSafFolderCacheForTesting() => _safFolderCache.clear();
+
+  /// [artist] may credit more than one real artist (M78 filters e621's own
+  /// non-artist meta tags -- "third-party_edit", "avoid_posting", etc. --
+  /// out of it well before this ever sees it, at the C sync layer), joined
+  /// with ", ". Each one becomes its own nested subfolder level (e.g.
+  /// `artista/artistb`) instead of one folder literally named
+  /// "artista, artistb".
   static String _sanitizeArtist(String? artist) {
-    if (artist == null || artist.trim().isEmpty) {
+    final names = (artist ?? '').split(', ').map((name) => name.trim()).where((name) => name.isNotEmpty).toList();
+    if (names.isEmpty) {
       return 'unknown';
     }
-    return artist.replaceAll(RegExp(r'[\\/:*?"<>|]'), '_');
+    return names.map((name) => name.replaceAll(RegExp(r'[\\/:*?"<>|]'), '_')).join('/');
   }
 
   static String _sanitizePoolName(String? name) {
@@ -393,8 +431,21 @@ class DownloadManager {
       // create (or reuse) the folder under the picked tree, then write the
       // file into it. overwrite: true always overwrites at the same
       // deterministic path rather than generating a new name each time.
-      final folderDir = await SafUtil().mkdirp(destinationFolder, [folder]);
-      final newFile = await SafStream().writeFileBytes(folderDir.uri, filename, _mimeTypeFor(ext), bytes, overwrite: true);
+      // _resolveSafFolder (M78) is what makes "reuse" actually hold under
+      // concurrent downloads into the same folder, not just sequential ones.
+      var folderDir = await _resolveSafFolder(destinationFolder, folder);
+      SafNewFile newFile;
+      try {
+        newFile = await SafStream().writeFileBytes(folderDir.uri, filename, _mimeTypeFor(ext), bytes, overwrite: true);
+      } catch (_) {
+        // The cached folder URI can go stale (e.g. the folder was deleted
+        // out-of-band since it was first resolved this app run) -- evict
+        // and re-resolve once before giving up, rather than failing every
+        // future download into this folder for the rest of this run.
+        _safFolderCache.remove('$destinationFolder/$folder');
+        folderDir = await _resolveSafFolder(destinationFolder, folder);
+        newFile = await SafStream().writeFileBytes(folderDir.uri, filename, _mimeTypeFor(ext), bytes, overwrite: true);
+      }
       final filePath = newFile.uri.toString();
 
       final checksum = await compute(_computeMd5, bytes);
