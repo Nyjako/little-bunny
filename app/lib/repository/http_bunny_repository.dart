@@ -636,6 +636,15 @@ class HttpBunnyRepository implements BunnyRepository {
   }
 
   @override
+  Future<String?> getInkbunnyPoolName(int poolId) async {
+    final response = await _client.get(_uri('/inkbunny_pools/$poolId'), headers: _headers);
+    if (response.statusCode != 200) {
+      _throwError(response);
+    }
+    return _decodeObject(response)['name'] as String?;
+  }
+
+  @override
   Future<int> fetchPost(BunnySite site, int externalId) async {
     final response = await _client.post(_uri('/posts/fetch', {'site': site.toWireString(), 'external_id': externalId.toString()}), headers: _headers);
     if (response.statusCode != 200) {

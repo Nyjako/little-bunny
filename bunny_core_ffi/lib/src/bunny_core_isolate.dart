@@ -627,6 +627,12 @@ class _GetInkbunnyPostPoolsRequest extends _Request {
   const _GetInkbunnyPostPoolsRequest(this.postId);
 }
 
+class _GetInkbunnyPoolNameRequest extends _Request {
+  final int poolId;
+
+  const _GetInkbunnyPoolNameRequest(this.poolId);
+}
+
 class _FetchAndCachePostRequest extends _Request {
   final String site;
   final int externalId;
@@ -1096,6 +1102,23 @@ List<Map<String, Object?>> _handleGetInkbunnyPostPools(Pointer<bunny_core_t> cor
     }
     _bindings.bunny_db_inkbunny_pool_ref_list_free(out);
     return items;
+  });
+}
+
+/// `out_name`'s `char*` is heap-allocated on the native side via plain
+/// `malloc` (goblin_copy_cstr) -- `malloc.free` (not one of the generated
+/// `bunny_db_*_free` helpers, since this is a bare string, not a struct)
+/// correctly releases it, same C runtime allocator either side of the FFI
+/// boundary.
+String? _handleGetInkbunnyPoolName(Pointer<bunny_core_t> core, _GetInkbunnyPoolNameRequest r) {
+  return using((arena) {
+    final out = arena<Pointer<Char>>();
+    _check(_bindings.bunny_core_inkbunny_pool_name_for_id(core, r.poolId, out));
+    final name = _readNullableString(out.value);
+    if (out.value != nullptr) {
+      malloc.free(out.value);
+    }
+    return name;
   });
 }
 
@@ -1645,6 +1668,8 @@ Object? _dispatch(Pointer<bunny_core_t>? core, _Request request, void Function(P
         return _handleGetPostPoolIds(c, r);
       case _GetInkbunnyPostPoolsRequest r:
         return _handleGetInkbunnyPostPools(c, r);
+      case _GetInkbunnyPoolNameRequest r:
+        return _handleGetInkbunnyPoolName(c, r);
       case _FetchAndCachePostRequest r:
         return _handleFetchAndCachePost(c, r);
       case _FetchPoolRequest r:
@@ -1989,6 +2014,8 @@ class BunnyCoreNative {
   Future<List<int>> getPostPoolIds(int postId) => _send<List<int>>(_GetPostPoolIdsRequest(postId));
 
   Future<List<Map<String, Object?>>> getInkbunnyPostPools(int postId) => _send<List<Map<String, Object?>>>(_GetInkbunnyPostPoolsRequest(postId));
+
+  Future<String?> getInkbunnyPoolName(int poolId) => _send<String?>(_GetInkbunnyPoolNameRequest(poolId));
 
   Future<int> fetchAndCachePost(String site, int externalId) => _send<int>(_FetchAndCachePostRequest(site, externalId));
 

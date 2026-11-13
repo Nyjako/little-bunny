@@ -3059,6 +3059,35 @@ void test_inkbunny_post_pools_replace_drops_stale_membership(void)
     bunny_db_inkbunny_pool_ref_list_free(&pools);
 }
 
+void test_inkbunny_pool_name_for_id_null_when_never_seen(void)
+{
+    char *name = (char *)"sentinel";
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, bunny_db_inkbunny_pool_name_for_id(g_db, 999999, &name));
+    TEST_ASSERT_NULL(name);
+}
+
+/* The whole point of this backfill (M76 follow-up): a pool search created
+ * by typing in a bare id has no live "fetch pool metadata" endpoint to ask
+ * (Inkbunny has none) -- but if ANY other post ever synced locally happens
+ * to belong to the same pool_id, its name is sitting right there in
+ * inkbunny_post_pools already, from a completely unrelated post. */
+void test_inkbunny_pool_name_for_id_finds_name_from_an_unrelated_post(void)
+{
+    bunny_db_post_upsert_t post;
+    make_test_post(&post, 616, 1);
+
+    int64_t post_id = 0;
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, bunny_db_post_upsert(g_db, &post, &post_id));
+
+    bunny_db_inkbunny_pool_ref_t refs[] = {{.pool_id = 55409, .name = (char *)"Sleepover Party"}};
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, bunny_db_inkbunny_post_pools_replace(g_db, post_id, refs, 1));
+
+    char *name = NULL;
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, bunny_db_inkbunny_pool_name_for_id(g_db, 55409, &name));
+    TEST_ASSERT_EQUAL_STRING("Sleepover Party", name);
+    free(name);
+}
+
 /* M26: position seeds to -1 ("not yet determined") on first membership and
  * stays there until bunny_db_pool_set_post_positions fills it in -- a post
  * whose position is still unknown must sort AFTER every post with a known
@@ -3951,6 +3980,8 @@ int main(void)
     RUN_TEST(test_inkbunny_post_get_pools_empty_when_none);
     RUN_TEST(test_inkbunny_post_pools_replace_then_get);
     RUN_TEST(test_inkbunny_post_pools_replace_drops_stale_membership);
+    RUN_TEST(test_inkbunny_pool_name_for_id_null_when_never_seen);
+    RUN_TEST(test_inkbunny_pool_name_for_id_finds_name_from_an_unrelated_post);
     RUN_TEST(test_pool_search_list_posts_sorts_unknown_positions_after_known_ones);
     RUN_TEST(test_pool_search_list_posts_paginates);
     RUN_TEST(test_pool_search_list_posts_orders_by_position_not_creation_date);

@@ -238,6 +238,16 @@ abstract interface class BunnyRepository {
   /// [getPostFiles]'s own doc comment for the identical gating reasoning.
   Future<List<BunnyInkbunnyPoolRef>> getInkbunnyPostPools(int postId);
 
+  /// Backfills an Inkbunny pool's own name from whatever's already known
+  /// locally about it (M76 follow-up) -- Inkbunny has no "fetch pool
+  /// metadata by id" endpoint at all (unlike [fetchPool], e621-only), so
+  /// this is the best substitute: any post ever synced locally that
+  /// happened to belong to this same pool id already carries its name
+  /// (from [getInkbunnyPostPools]'s own data). Null if no such post has
+  /// ever been seen, same "nothing to show, not an error" shape as
+  /// [getInkbunnyPostPools] returning empty.
+  Future<String?> getInkbunnyPoolName(int poolId);
+
   /// The per-site tag blacklist (M13.3), alphabetical. A rule is usually a
   /// single bare tag, but may be a fuller e621-grammar expression (M28/M54,
   /// see [validateTagQuery]) -- `young` and `rating:e young` can both

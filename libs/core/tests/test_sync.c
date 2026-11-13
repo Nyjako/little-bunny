@@ -501,6 +501,16 @@ void test_fetch_and_cache_post_stores_inkbunny_pools(void)
     TEST_ASSERT_EQUAL_STRING("Digimon Tributes", pools.items[0].name);
     bunny_db_inkbunny_pool_ref_list_free(&pools);
 
+    /* M76 follow-up: the name this post's own fetch just stored is now
+     * backfillable for pool id 42 directly, with no post_id involved at
+     * all -- the shape a "create a pool search by typing in a bare id"
+     * action actually needs. */
+    char *name = NULL;
+    result = bunny_core_inkbunny_pool_name_for_id(g_core, 42, &name);
+    TEST_ASSERT_EQUAL(BUNNY_CORE_OK, result);
+    TEST_ASSERT_EQUAL_STRING("Digimon Tributes", name);
+    free(name);
+
     free(login_fixture);
     free(submission_fixture);
 }

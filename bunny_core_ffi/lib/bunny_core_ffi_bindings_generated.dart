@@ -2059,6 +2059,41 @@ class BunnyCoreFfiBindings {
             )
           >();
 
+  /// Backfills an Inkbunny pool's own name from whatever's already locally
+  /// known about it -- a thin pass-through to bunny_db. See
+  /// bunny_db_inkbunny_pool_name_for_id's own doc comment for why this is the
+  /// best available substitute for e621's bunny_core_fetch_pool, which
+  /// Inkbunny has no equivalent of at all.
+  bunny_core_result_t bunny_core_inkbunny_pool_name_for_id(
+    ffi.Pointer<bunny_core_t> core,
+    int pool_id,
+    ffi.Pointer<ffi.Pointer<ffi.Char>> out_name,
+  ) {
+    return bunny_core_result_t.fromValue(
+      _bunny_core_inkbunny_pool_name_for_id(core, pool_id, out_name),
+    );
+  }
+
+  late final _bunny_core_inkbunny_pool_name_for_idPtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.UnsignedInt Function(
+            ffi.Pointer<bunny_core_t>,
+            ffi.Int64,
+            ffi.Pointer<ffi.Pointer<ffi.Char>>,
+          )
+        >
+      >('bunny_core_inkbunny_pool_name_for_id');
+  late final _bunny_core_inkbunny_pool_name_for_id =
+      _bunny_core_inkbunny_pool_name_for_idPtr
+          .asFunction<
+            int Function(
+              ffi.Pointer<bunny_core_t>,
+              int,
+              ffi.Pointer<ffi.Pointer<ffi.Char>>,
+            )
+          >();
+
   /// --- Tag blacklist (M13.3, M28/M54) -- thin pass-throughs to bunny_db_blacklist_*.
   /// See bunny_db/db.h for which post-listing query the blacklist does (and
   /// deliberately does not) apply to. bunny_core_blacklist_add validates

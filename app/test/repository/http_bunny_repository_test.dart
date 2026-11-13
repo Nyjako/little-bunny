@@ -853,6 +853,16 @@ void main() {
       expect(pools.map((p) => (p.id, p.name)), [(9, 'My pool'), (12, null)]);
     });
 
+    test('getInkbunnyPoolName sends GET to the right path and returns the name, or null (M76)', () async {
+      respond = (_) => http.Response(jsonEncode({'id': 55409, 'name': 'Sleepover Party'}), 200);
+
+      final name = await buildRepository().getInkbunnyPoolName(55409);
+
+      expect(capturedMethod, 'GET');
+      expect(capturedUri.path, '/inkbunny_pools/55409');
+      expect(name, 'Sleepover Party');
+    });
+
     test('fetchPost sends POST with site/external_id query params and returns the id', () async {
       respond = (_) => http.Response(jsonEncode({'id': 7}), 200);
 

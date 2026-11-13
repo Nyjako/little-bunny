@@ -501,6 +501,17 @@ void test_full_account_search_sync_favorite_flow(void)
     free(response.data);
     memset(&response, 0, sizeof(response));
 
+    /* M76: Inkbunny's own substitute for the e621 pool-metadata lookup
+     * above -- a pool id no post has ever recorded locally has no name to
+     * backfill, same "null, not an error" shape as bunny_db's own doc
+     * comment on this. */
+    status = do_request("GET", "/inkbunny_pools/55409", NULL, &response, true, NULL);
+    TEST_ASSERT_EQUAL(200, status);
+    TEST_ASSERT_NOT_NULL(strstr(response.data, "\"id\":55409"));
+    TEST_ASSERT_NOT_NULL(strstr(response.data, "\"name\":null"));
+    free(response.data);
+    memset(&response, 0, sizeof(response));
+
     /* The fetched post (external_id 42) is local id 2 (the search sync's
      * post took id 1) -- GET /posts/{id} reads it back by that local id. */
     status = do_request("GET", "/posts/2", NULL, &response, true, NULL);

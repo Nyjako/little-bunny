@@ -414,6 +414,9 @@ class FfiBunnyRepository implements BunnyRepository {
   }
 
   @override
+  Future<String?> getInkbunnyPoolName(int poolId) => _wrapped(() => _native.getInkbunnyPoolName(poolId));
+
+  @override
   Future<int> fetchPost(BunnySite site, int externalId) => _wrapped(() => _native.fetchAndCachePost(site.toWireString(), externalId));
 
   @override
