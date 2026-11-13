@@ -408,6 +408,15 @@ class FfiBunnyRepository implements BunnyRepository {
   Future<List<int>> getPostPoolIds(int postId) => _wrapped(() => _native.getPostPoolIds(postId));
 
   @override
+  Future<List<BunnyInkbunnyPoolRef>> getInkbunnyPostPools(int postId) async {
+    final raw = await _wrapped(() => _native.getInkbunnyPostPools(postId));
+    return raw.map((entry) => BunnyInkbunnyPoolRef(id: entry['poolId']! as int, name: entry['name'] as String?)).toList(growable: false);
+  }
+
+  @override
+  Future<String?> getInkbunnyPoolName(int poolId) => _wrapped(() => _native.getInkbunnyPoolName(poolId));
+
+  @override
   Future<int> fetchPost(BunnySite site, int externalId) => _wrapped(() => _native.fetchAndCachePost(site.toWireString(), externalId));
 
   @override

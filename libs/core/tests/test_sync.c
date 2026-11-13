@@ -474,6 +474,47 @@ void test_fetch_and_cache_post_upserts_live_inkbunny_submission(void)
     free(submission_fixture);
 }
 
+void test_fetch_and_cache_post_stores_inkbunny_pools(void)
+{
+    /* inkbunny_submission_full.json's own "pools" array (pool_id 42,
+     * "Digimon Tributes") -- api_submissions.php's show_pools=yes response,
+     * already requested/parsed by inkbunny_get_submission, used to be
+     * discarded right after upsert_inkbunny_submission ran (M76). */
+    char *login_fixture = read_fixture("inkbunny_login_success.json");
+    char *submission_fixture = read_fixture("inkbunny_submission_full.json");
+    TEST_ASSERT_NOT_NULL(login_fixture);
+    TEST_ASSERT_NOT_NULL(submission_fixture);
+    g_inkbunny_state.bodies[0] = login_fixture;
+    g_inkbunny_state.bodies[1] = submission_fixture;
+    g_inkbunny_state.body_count = 2;
+
+    int64_t post_id = 0;
+    bunny_core_result_t result = bunny_core_fetch_and_cache_post(g_core, BUNNY_DB_SITE_INKBUNNY, 3955918, &post_id);
+    TEST_ASSERT_EQUAL(BUNNY_CORE_OK, result);
+    TEST_ASSERT_TRUE(post_id > 0);
+
+    bunny_db_inkbunny_pool_ref_list_t pools;
+    result = bunny_core_inkbunny_post_get_pools(g_core, post_id, &pools);
+    TEST_ASSERT_EQUAL(BUNNY_CORE_OK, result);
+    TEST_ASSERT_EQUAL(1, (int)pools.count);
+    TEST_ASSERT_EQUAL(42, pools.items[0].pool_id);
+    TEST_ASSERT_EQUAL_STRING("Digimon Tributes", pools.items[0].name);
+    bunny_db_inkbunny_pool_ref_list_free(&pools);
+
+    /* M76 follow-up: the name this post's own fetch just stored is now
+     * backfillable for pool id 42 directly, with no post_id involved at
+     * all -- the shape a "create a pool search by typing in a bare id"
+     * action actually needs. */
+    char *name = NULL;
+    result = bunny_core_inkbunny_pool_name_for_id(g_core, 42, &name);
+    TEST_ASSERT_EQUAL(BUNNY_CORE_OK, result);
+    TEST_ASSERT_EQUAL_STRING("Digimon Tributes", name);
+    free(name);
+
+    free(login_fixture);
+    free(submission_fixture);
+}
+
 void test_fetch_and_cache_post_stores_every_file_on_a_multi_file_inkbunny_submission(void)
 {
     /* M28: a Picture Series (or Comic/Portfolio/Music - Album) submission
@@ -2823,6 +2864,7 @@ int main(void)
     RUN_TEST(test_sync_e621_search_upserts_post_relationships_and_pools);
     RUN_TEST(test_fetch_and_cache_post_upserts_live_e621_post);
     RUN_TEST(test_fetch_and_cache_post_upserts_live_inkbunny_submission);
+    RUN_TEST(test_fetch_and_cache_post_stores_inkbunny_pools);
     RUN_TEST(test_fetch_and_cache_post_stores_every_file_on_a_multi_file_inkbunny_submission);
     RUN_TEST(test_fetch_and_cache_post_rejects_a_flash_submission);
     RUN_TEST(test_backfill_inkbunny_details_is_a_noop_with_no_thin_posts);

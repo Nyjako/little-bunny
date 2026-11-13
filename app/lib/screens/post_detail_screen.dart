@@ -55,6 +55,60 @@ bool _isImage(BunnyPost post) => post.fileExt != null && _imageExtensions.contai
 /// unrelated reasons -- this is purely a detail-view rendering decision.
 const _animatedViaGifPlayerExtensions = {'gif', 'webp'};
 
+/// Image's own loadingBuilder (standard ImageStream/ImageChunkEvent
+/// machinery), not CachedNetworkImage's progressIndicatorBuilder -- the
+/// latter switches CachedNetworkImage's internal rendering onto a
+/// different, flutter_cache_manager-streaming-backed path that never
+/// settles under `flutter_test` (confirmed: it hung even the simplest tests
+/// in this screen's own test suite, unrelated to gifs at all). This uses
+/// the exact same CachedNetworkImageProvider plain CachedNetworkImage
+/// already resolves through, which is already proven compatible with this
+/// test suite's existing pumpAndSettle calls. Top-level (not a
+/// `_PostDetailPageState` method) so [_ExtraFileMedia] below -- a separate
+/// widget/state, not an instance of that class -- can render an image file
+/// the exact same way the primary one does.
+Widget buildFileImageContent(String fileUrl, String ext, BunnySite site, {String? previewUrl}) {
+  return _animatedViaGifPlayerExtensions.contains(ext)
+      ? GifPlayer(imageUrl: fileUrl, httpHeaders: imageHeadersFor(site), previewUrl: previewUrl)
+      : Image(
+          image: CachedNetworkImageProvider(fileUrl, headers: imageHeadersFor(site)),
+          fit: BoxFit.contain,
+          loadingBuilder: (context, child, loadingProgress) {
+            if (loadingProgress == null) {
+              return child;
+            }
+            final total = loadingProgress.expectedTotalBytes;
+            return DownloadProgressIndicator(progress: total != null ? loadingProgress.cumulativeBytesLoaded / total : null);
+          },
+        );
+}
+
+/// The generic "this file format isn't supported yet" fallback -- shared by
+/// the primary file's own dispatch ([_PostDetailPageState._buildSingleFileMedia])
+/// and [_ExtraFileMedia] below, so a `.swf` (or any other unhandled type)
+/// gets the same "open externally" escape hatch regardless of whether it's
+/// the submission's primary file or one mixed in behind it.
+Widget buildUnsupportedFormatFallback(AppLocalizations l10n, String ext, String fileUrl) => Padding(
+  padding: const EdgeInsets.all(16),
+  child: Column(
+    mainAxisSize: MainAxisSize.min,
+    children: [
+      Text(l10n.postDetailUnsupportedFormat(ext)),
+      const SizedBox(height: 8),
+      OutlinedButton.icon(
+        onPressed: () async {
+          final uri = Uri.tryParse(fileUrl);
+          if (uri != null) {
+            await launchUrl(uri, mode: LaunchMode.externalApplication);
+          }
+        },
+        icon: const Icon(Icons.open_in_new),
+        label: Text(l10n.postDetailOpenExternally),
+      ),
+    ],
+  ),
+);
+
 /// Rebuilds [post] with the given fields adjusted -- used to optimistically
 /// reflect a favorite/vote action (M8.5.14) in the UI immediately, without
 /// waiting for a resync. No `copyWith` exists on [BunnyPost] (nothing else
@@ -365,6 +419,7 @@ class _PostDetailPageState extends State<_PostDetailPage> {
   late final Future<List<String>> _sourcesFuture;
   Future<BunnyPostRelationships>? _relationshipsFuture;
   Future<List<int>>? _poolIdsFuture;
+  Future<List<BunnyInkbunnyPoolRef>>? _inkbunnyPoolsFuture;
 
   /// Resolved contents of a multi-file Inkbunny submission (M28 Phase 3,
   /// Picture Series/Comic/Portfolio) -- null until the live refresh below
@@ -442,6 +497,10 @@ class _PostDetailPageState extends State<_PostDetailPage> {
           setState(() => _files = files);
         }
       });
+      // Same gating as getPostFiles above -- a post's Inkbunny pools are
+      // only ever known after a full submission fetch (show_pools=yes),
+      // never from a search sync alone.
+      _inkbunnyPoolsFuture = refreshedPost.then((_) => widget.repository.getInkbunnyPostPools(widget.post.id));
     }
 
     _maybeInitVideo(widget.post);
@@ -788,57 +847,54 @@ class _PostDetailPageState extends State<_PostDetailPage> {
     );
   }
 
-  /// True only once [_files] has resolved with more than one entry that are
-  /// *all* plain images -- the only shape the paging gallery below knows how
-  /// to render. A video (never observed with more than one file in practice)
-  /// falls back to [_buildSingleFileMedia]'s existing single-primary-file
-  /// rendering untouched, same as any other post -- no gallery controls, no
-  /// behavior change. A mix that includes audio is handled by
-  /// [_mixedAudioTracks] instead, not here.
-  bool get _hasImageGallery {
-    final files = _files;
-    return files != null && files.length > 1 && files.every((f) => _imageExtensions.contains(f.fileExt?.toLowerCase()));
-  }
-
-  /// Counterpart to [_hasImageGallery] for Inkbunny Music - Album
-  /// submissions -- true once [_files] resolves with more than one entry
-  /// that are all audio files.
-  bool get _hasAudioAlbum {
-    final files = _files;
-    return files != null && files.length > 1 && files.every((f) => isAudioExt(f.fileExt));
-  }
-
-  /// Audio files mixed in alongside non-audio ones on the same submission --
-  /// e.g. a Music - Single Track submission whose first (primary) file is
-  /// cover art, with the actual track(s) as additional files (confirmed live
-  /// against a real submission, M28 submission-type coverage follow-up).
-  /// [_hasAudioAlbum] only covers an *all-audio* multi-file submission
-  /// (Music - Album); without this, [_buildSingleFileMedia] would render
-  /// just the cover and the only audio on the post would be unreachable.
-  /// Only called once both [_hasImageGallery] and [_hasAudioAlbum] are known
-  /// false, so a non-empty result here always means a genuine mix, never an
-  /// all-audio submission counted twice.
-  List<BunnyPostFile> get _mixedAudioTracks {
+  /// The real, general fix (M76) for "a file on a multi-file Inkbunny
+  /// submission is unreachable" -- confirmed live across several distinct
+  /// shapes (Music - Single Track's cover-art-plus-track(s), Writing -
+  /// Document's cover-plus-story-text, Flash - Interactive's swf-plus-
+  /// reference-image, Video - Animation's gif-plus-mp4, and a Picture
+  /// Series with a bonus audio track mixed into its page list) that a
+  /// one-combination-at-a-time special case (an earlier version of this
+  /// method had `_hasImageGallery`/`_hasAudioAlbum`/`_mixedAudioTracks`/
+  /// `_mixedTextDocuments`, each hand-written for exactly one shape) kept
+  /// needing a new case for every time a new shape turned up live, and
+  /// still missed plenty it never special-cased at all (image+video,
+  /// anything+unsupported, ...).
+  ///
+  /// Instead, every file in [_files] is classified by what it actually is,
+  /// with no notion of "the primary file" at all -- Inkbunny's own file
+  /// order is upload order, not an importance ranking (confirmed live: a
+  /// cover image can sort before or after its own audio track depending on
+  /// the submission). Images render together as the existing paging
+  /// gallery once there's more than one (reused verbatim for "every image
+  /// among the files," not just "every file is an image"); a single image
+  /// gets the plain single-file treatment. Audio files get the same
+  /// one-vs-many treatment via the existing track-list album UI. Every
+  /// other file -- video, text, or anything unsupported -- renders
+  /// individually via [_ExtraFileMedia], in its original relative order,
+  /// so nothing is ever silently dropped regardless of how many files of
+  /// which types a submission happens to mix together.
+  Widget _buildMedia(AppLocalizations l10n) {
     final files = _files;
     if (files == null || files.length <= 1) {
-      return const [];
+      return _buildSingleFileMedia(l10n);
     }
-    return files.where((f) => isAudioExt(f.fileExt)).toList();
-  }
+    final maxHeight = MediaQuery.sizeOf(context).height * 0.6;
+    final images = files.where((f) => _imageExtensions.contains(f.fileExt?.toLowerCase())).toList(growable: false);
+    final audios = files.where((f) => isAudioExt(f.fileExt)).toList(growable: false);
+    final rest = files.where((f) => !images.contains(f) && !audios.contains(f)).toList(growable: false);
 
-  Widget _buildMedia(AppLocalizations l10n) {
-    if (_hasImageGallery) {
-      return _buildImageGallery(_files!);
-    }
-    if (_hasAudioAlbum) {
-      return _buildAudioAlbum(_files!);
-    }
-    final primary = _buildSingleFileMedia(l10n);
-    final mixedAudioTracks = _mixedAudioTracks;
-    if (mixedAudioTracks.isEmpty) {
-      return primary;
-    }
-    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [primary, const SizedBox(height: 12), _buildAudioAlbum(mixedAudioTracks)]);
+    final sections = <Widget>[
+      if (images.length > 1)
+        _buildImageGallery(images)
+      else if (images.length == 1)
+        _ExtraFileMedia(key: ValueKey(images.single.fileUrl), file: images.single, site: _post.site, maxHeight: maxHeight),
+      if (audios.length > 1)
+        _buildAudioAlbum(audios)
+      else if (audios.length == 1)
+        _ExtraFileMedia(key: ValueKey(audios.single.fileUrl), file: audios.single, site: _post.site, maxHeight: maxHeight),
+      for (final file in rest) _ExtraFileMedia(key: ValueKey(file.fileUrl), file: file, site: _post.site, maxHeight: maxHeight),
+    ];
+    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [for (var i = 0; i < sections.length; i++) ...[if (i > 0) const SizedBox(height: 12), sections[i]]]);
   }
 
   Widget _buildSingleFileMedia(AppLocalizations l10n) {
@@ -854,7 +910,7 @@ class _PostDetailPageState extends State<_PostDetailPage> {
     final maxHeight = MediaQuery.sizeOf(context).height * 0.6;
     Widget bounded(Widget child) => ConstrainedBox(constraints: BoxConstraints(maxHeight: maxHeight), child: AspectRatio(aspectRatio: aspectRatio, child: child));
     if (_imageExtensions.contains(ext)) {
-      final content = _buildImageContent(post.fileUrl!, ext, post.site);
+      final content = buildFileImageContent(post.fileUrl!, ext, post.site, previewUrl: post.previewUrl);
       return GestureDetector(key: const Key('postDetailImageTapTarget'), onTap: _openFullScreenViewer, child: bounded(content));
     }
     if (isVideoExt(ext)) {
@@ -875,42 +931,7 @@ class _PostDetailPageState extends State<_PostDetailPage> {
     if (isTextDocumentExt(ext)) {
       return TextDocumentViewer(key: ValueKey(post.fileUrl), url: post.fileUrl!, httpHeaders: imageHeadersFor(post.site));
     }
-    return Padding(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(l10n.postDetailUnsupportedFormat(ext)),
-          const SizedBox(height: 8),
-          OutlinedButton.icon(onPressed: () => _launchSource(post.fileUrl!), icon: const Icon(Icons.open_in_new), label: Text(l10n.postDetailOpenExternally)),
-        ],
-      ),
-    );
-  }
-
-  /// Image's own loadingBuilder (standard ImageStream/ImageChunkEvent
-  /// machinery), not CachedNetworkImage's progressIndicatorBuilder -- the
-  /// latter switches CachedNetworkImage's internal rendering onto a
-  /// different, flutter_cache_manager-streaming-backed path that never
-  /// settles under `flutter_test` (confirmed: it hung even the simplest
-  /// tests in this screen's own test suite, unrelated to gifs at all). This
-  /// uses the exact same CachedNetworkImageProvider plain CachedNetworkImage
-  /// already resolves through, which is already proven compatible with this
-  /// test suite's existing pumpAndSettle calls.
-  Widget _buildImageContent(String fileUrl, String ext, BunnySite site) {
-    return _animatedViaGifPlayerExtensions.contains(ext)
-        ? GifPlayer(imageUrl: fileUrl, httpHeaders: imageHeadersFor(site))
-        : Image(
-            image: CachedNetworkImageProvider(fileUrl, headers: imageHeadersFor(site)),
-            fit: BoxFit.contain,
-            loadingBuilder: (context, child, loadingProgress) {
-              if (loadingProgress == null) {
-                return child;
-              }
-              final total = loadingProgress.expectedTotalBytes;
-              return DownloadProgressIndicator(progress: total != null ? loadingProgress.cumulativeBytesLoaded / total : null);
-            },
-          );
+    return buildUnsupportedFormatFallback(l10n, ext, post.fileUrl!);
   }
 
   /// Explicit prev/next controls rather than a nested `PageView` -- this
@@ -925,7 +946,7 @@ class _PostDetailPageState extends State<_PostDetailPage> {
     final aspectRatio = (file.width > 0 && file.height > 0) ? file.width / file.height : 16 / 9;
     final maxHeight = MediaQuery.sizeOf(context).height * 0.6;
     Widget bounded(Widget child) => ConstrainedBox(constraints: BoxConstraints(maxHeight: maxHeight), child: AspectRatio(aspectRatio: aspectRatio, child: child));
-    final content = _buildImageContent(file.fileUrl, file.fileExt?.toLowerCase() ?? '', _post.site);
+    final content = buildFileImageContent(file.fileUrl, file.fileExt?.toLowerCase() ?? '', _post.site, previewUrl: file.previewUrl);
     return Stack(
       alignment: Alignment.bottomCenter,
       children: [
@@ -1372,28 +1393,73 @@ class _PostDetailPageState extends State<_PostDetailPage> {
     );
   }
 
-  Widget _poolsSection(AppLocalizations l10n) {
-    final future = _poolIdsFuture;
-    if (future == null) {
-      return const SizedBox.shrink();
-    }
-    return FutureBuilder<List<int>>(
-      future: future,
-      builder: (context, snapshot) {
-        final poolIds = snapshot.data ?? const [];
-        if (poolIds.isEmpty) {
-          return const SizedBox.shrink();
-        }
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Divider(),
-            Padding(padding: const EdgeInsets.only(bottom: 4), child: Text(l10n.postDetailPoolsLabel, style: Theme.of(context).textTheme.titleSmall)),
-            Wrap(spacing: 4, runSpacing: 4, children: poolIds.map((id) => ActionChip(label: Text('#$id'), onPressed: () => _openPool(l10n, id))).toList()),
-          ],
-        );
-      },
+  // Inkbunny counterpart to _openPool above -- no separate metadata lookup
+  // needed, since the pool's own name already came back on the same full
+  // submission fetch that surfaced the pool at all (see
+  // BunnyInkbunnyPoolRef's own doc comment).
+  Future<void> _openInkbunnyPool(BunnyInkbunnyPoolRef pool) async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => TagBrowseScreen(
+          site: BunnySite.inkbunny,
+          query: 'pool:${pool.id}',
+          repository: widget.repository,
+          displaySettingsStore: widget.displaySettingsStore,
+          downloadSettingsStore: widget.downloadSettingsStore,
+          downloadQueueService: widget.downloadQueueService,
+          initialLabel: pool.name,
+        ),
+      ),
     );
+  }
+
+  Widget _poolsSection(AppLocalizations l10n) {
+    final poolIdsFuture = _poolIdsFuture;
+    if (poolIdsFuture != null) {
+      return FutureBuilder<List<int>>(
+        future: poolIdsFuture,
+        builder: (context, snapshot) {
+          final poolIds = snapshot.data ?? const [];
+          if (poolIds.isEmpty) {
+            return const SizedBox.shrink();
+          }
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Divider(),
+              Padding(padding: const EdgeInsets.only(bottom: 4), child: Text(l10n.postDetailPoolsLabel, style: Theme.of(context).textTheme.titleSmall)),
+              Wrap(spacing: 4, runSpacing: 4, children: poolIds.map((id) => ActionChip(label: Text('#$id'), onPressed: () => _openPool(l10n, id))).toList()),
+            ],
+          );
+        },
+      );
+    }
+    final inkbunnyPoolsFuture = _inkbunnyPoolsFuture;
+    if (inkbunnyPoolsFuture != null) {
+      return FutureBuilder<List<BunnyInkbunnyPoolRef>>(
+        future: inkbunnyPoolsFuture,
+        builder: (context, snapshot) {
+          final pools = snapshot.data ?? const [];
+          if (pools.isEmpty) {
+            return const SizedBox.shrink();
+          }
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Divider(),
+              Padding(padding: const EdgeInsets.only(bottom: 4), child: Text(l10n.postDetailPoolsLabel, style: Theme.of(context).textTheme.titleSmall)),
+              Wrap(
+                spacing: 4,
+                runSpacing: 4,
+                children: pools.map((pool) => ActionChip(label: Text(pool.name ?? '#${pool.id}'), onPressed: () => _openInkbunnyPool(pool))).toList(),
+              ),
+            ],
+          );
+        },
+      );
+    }
+    return const SizedBox.shrink();
   }
 
   Future<void> _postComment(AppLocalizations l10n) async {
@@ -1555,5 +1621,96 @@ class _PostDetailPageState extends State<_PostDetailPage> {
         ],
       ),
     );
+  }
+}
+
+/// Renders a single file from a multi-file Inkbunny submission that isn't
+/// part of the all-images-together gallery or all-audio-together album
+/// (see [_PostDetailPageState._buildMedia]'s own doc comment) -- including
+/// the lone image or lone audio file when there's only one of that type,
+/// not just genuinely "other" files (video/text/unsupported). Dispatched
+/// by its own extension exactly like a single-file post's primary media
+/// is, so every file is reachable no matter how many of which types a
+/// submission mixes together.
+///
+/// A separate `StatefulWidget` (own lifecycle) rather than sharing
+/// [_PostDetailPageState]'s `_videoController`/`_chewieController` fields --
+/// those are eagerly initialized in `initState` for the primary file, since
+/// the overwhelming majority of posts are single-file and that avoids a
+/// delay once the build reaches the video branch. An extra file with video
+/// is rare enough that lazily creating its own controller here, once this
+/// widget actually mounts, isn't worth replicating that eagerness for.
+class _ExtraFileMedia extends StatefulWidget {
+  final BunnyPostFile file;
+  final BunnySite site;
+  final double maxHeight;
+
+  const _ExtraFileMedia({super.key, required this.file, required this.site, required this.maxHeight});
+
+  @override
+  State<_ExtraFileMedia> createState() => _ExtraFileMediaState();
+}
+
+class _ExtraFileMediaState extends State<_ExtraFileMedia> {
+  VideoPlayerController? _videoController;
+  ChewieController? _chewieController;
+  Future<void>? _videoInitFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    if (isVideoExt(widget.file.fileExt)) {
+      final controller = VideoPlayerController.networkUrl(Uri.parse(widget.file.fileUrl), httpHeaders: imageHeadersFor(widget.site) ?? const {});
+      controller.setVolume(0);
+      _videoController = controller;
+      _videoInitFuture = controller.initialize().then((_) {
+        if (!mounted) {
+          return;
+        }
+        setState(() {
+          _chewieController = ChewieController(videoPlayerController: controller, aspectRatio: _aspectRatio, autoPlay: false, looping: true, allowFullScreen: true, allowMuting: true);
+        });
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _chewieController?.dispose();
+    _videoController?.dispose();
+    super.dispose();
+  }
+
+  double get _aspectRatio => (widget.file.width > 0 && widget.file.height > 0) ? widget.file.width / widget.file.height : 16 / 9;
+
+  Widget _bounded(Widget child) => ConstrainedBox(constraints: BoxConstraints(maxHeight: widget.maxHeight), child: AspectRatio(aspectRatio: _aspectRatio, child: child));
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
+    final file = widget.file;
+    final ext = file.fileExt?.toLowerCase();
+    if (ext != null && _imageExtensions.contains(ext)) {
+      return _bounded(buildFileImageContent(file.fileUrl, ext, widget.site, previewUrl: file.previewUrl));
+    }
+    if (isVideoExt(ext)) {
+      return FutureBuilder<void>(
+        future: _videoInitFuture,
+        builder: (context, snapshot) {
+          final chewieController = _chewieController;
+          if (snapshot.connectionState != ConnectionState.done || chewieController == null) {
+            return _bounded(const Center(child: CircularProgressIndicator()));
+          }
+          return _bounded(Chewie(controller: chewieController));
+        },
+      );
+    }
+    if (isAudioExt(ext)) {
+      return AudioPlayerWidget(key: ValueKey(file.fileUrl), url: file.fileUrl, httpHeaders: imageHeadersFor(widget.site));
+    }
+    if (ext != null && isTextDocumentExt(ext)) {
+      return TextDocumentViewer(key: ValueKey(file.fileUrl), url: file.fileUrl, httpHeaders: imageHeadersFor(widget.site));
+    }
+    return buildUnsupportedFormatFallback(l10n, ext ?? '', file.fileUrl);
   }
 }

@@ -36,7 +36,7 @@ class PostMediaPage extends StatelessWidget {
       return _FullScreenVideoPage(post: post, localFilePath: path);
     }
     if (isGifExt(post.fileExt)) {
-      return GifPlayer(imageUrl: post.fileUrl ?? '', localFilePath: path, httpHeaders: imageHeadersFor(post.site));
+      return GifPlayer(imageUrl: post.fileUrl ?? '', localFilePath: path, httpHeaders: imageHeadersFor(post.site), previewUrl: post.previewUrl);
     }
     if (path != null) {
       // A `content://` SAF uri (Android) can't be opened as a plain `File`

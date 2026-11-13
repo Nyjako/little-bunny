@@ -242,6 +242,24 @@ typedef struct
     size_t count;
 } bunny_db_int64_list_t;
 
+/* One Inkbunny pool a post belongs to -- unlike e621's post_pools (plain
+ * ids + a separately-fetched position/name), Inkbunny's own submission
+ * fetch already hands back each pool's name directly (api_submissions.php's
+ * show_pools=yes), and has no "list this pool's posts in order" endpoint at
+ * all to backfill a position from, so there's nothing to fetch or store
+ * beyond the id/name pair itself. */
+typedef struct
+{
+    int64_t pool_id;
+    char *name;
+} bunny_db_inkbunny_pool_ref_t;
+
+typedef struct
+{
+    bunny_db_inkbunny_pool_ref_t *items;
+    size_t count;
+} bunny_db_inkbunny_pool_ref_list_t;
+
 /* e621 parent/child post relationships (site's own external ids -- a parent
  * or child post may never have been synced locally, so these aren't local
  * posts.id values). has_active_children mirrors e621's own flag: a post can
@@ -401,6 +419,8 @@ void bunny_db_post_file_free(bunny_db_post_file_t *file);
 void bunny_db_post_file_list_free(bunny_db_post_file_list_t *list);
 void bunny_db_string_list_free(bunny_db_string_list_t *list);
 void bunny_db_int64_list_free(bunny_db_int64_list_t *list);
+void bunny_db_inkbunny_pool_ref_free(bunny_db_inkbunny_pool_ref_t *ref);
+void bunny_db_inkbunny_pool_ref_list_free(bunny_db_inkbunny_pool_ref_list_t *list);
 void bunny_db_post_relationships_free(bunny_db_post_relationships_t *relationships);
 void bunny_db_action_free(bunny_db_action_t *action);
 void bunny_db_action_list_free(bunny_db_action_list_t *list);

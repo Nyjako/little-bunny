@@ -339,6 +339,11 @@
     "placeholders": {"extension": {"type": "String"}}
   },
   "postDetailOpenExternally": "Open externally",
+  "gifPlayerTooLargeMessage": "This GIF is {size} -- large enough that loading it could use a lot of memory",
+  "@gifPlayerTooLargeMessage": {
+    "placeholders": {"size": {"type": "String"}}
+  },
+  "gifPlayerPlayAnywayButton": "Play anyway",
   "postDetailAudioTrackLabel": "Track {position}",
   "@postDetailAudioTrackLabel": {
     "placeholders": {"position": {"type": "int"}}
@@ -460,6 +465,11 @@
   "settingsAppLockEntry": "Manage app lock",
   "settingsAboutSection": "About",
   "settingsAboutEntry": "About LittleBunny",
+  "settingsDebugSection": "Debug",
+  "settingsOpenPostByIdEntry": "Open post by ID",
+  "settingsOpenPostByIdDialogTitle": "Open post by ID",
+  "settingsOpenPostByIdFieldLabel": "Post ID",
+  "settingsOpenPostByIdOpenButton": "Open",
 
   "aboutScreenTitle": "About",
   "aboutAppDescription": "An e621 + Inkbunny viewer and manager: saved searches that update on a schedule, mark unseen posts, mass like/favorite/download, comment, and keep everything in sync across devices -- with a fully offline standalone mode too.",

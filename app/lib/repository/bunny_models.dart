@@ -510,6 +510,18 @@ class BunnyPoolInfo {
   const BunnyPoolInfo({required this.id, this.name, this.description, required this.postCount, this.referencedPoolIds = const []});
 }
 
+/// One Inkbunny pool a post belongs to -- unlike [BunnyPoolInfo] (e621), the
+/// name is already known from the same full-submission fetch that surfaces
+/// the pool at all (api_submissions.php's `show_pools=yes`), so there's no
+/// separate metadata lookup like [BunnyRepository.fetchPool]. Mirrors
+/// `bunny_db_inkbunny_pool_ref_t`.
+class BunnyInkbunnyPoolRef {
+  final int id;
+  final String? name;
+
+  const BunnyInkbunnyPoolRef({required this.id, this.name});
+}
+
 /// Mirrors `bunny_core_tag_category_t`'s numeric order (do not reorder --
 /// index must match the native enum, since the FFI layer passes it through
 /// as a bare int).

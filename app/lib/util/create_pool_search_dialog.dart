@@ -67,21 +67,22 @@ Future<bool> showCreatePoolSearchDialog(BuildContext context, BunnyRepository re
   // this works purely as a nice-to-have -- a failed lookup (network error,
   // deleted pool, etc.) still creates a perfectly functional pool search
   // with a fallback label, rather than blocking the whole action on it.
-  // Inkbunny has no "fetch pool metadata" endpoint at all (M28) -- always
-  // falls back to the raw-id label there, no lookup attempted (pool ids
-  // aren't shared/comparable across sites, so trying e621's own lookup
-  // with an Inkbunny pool id would risk silently naming it after an
-  // unrelated e621 pool that happens to share the same numeric id).
+  // Inkbunny has no "fetch pool metadata" endpoint at all (M28) -- pool ids
+  // aren't shared/comparable across sites, so trying e621's own lookup with
+  // an Inkbunny pool id would risk silently naming it after an unrelated
+  // e621 pool that happens to share the same numeric id. getInkbunnyPoolName
+  // (M76 follow-up) is the best substitute: it backfills from whatever's
+  // already locally known about this pool id from some other post, rather
+  // than a live site fetch -- still just "pool:<id>" the very first time
+  // this exact pool id is ever seen locally, same as before this existed.
   String label = 'pool:$poolId';
-  if (site == BunnySite.e621) {
-    try {
-      final info = await repository.fetchPool(poolId);
-      if (info.name != null && info.name!.isNotEmpty) {
-        label = info.name!;
-      }
-    } catch (_) {
-      // Fall back to the default label above.
+  try {
+    final name = site == BunnySite.e621 ? (await repository.fetchPool(poolId)).name : await repository.getInkbunnyPoolName(poolId);
+    if (name != null && name.isNotEmpty) {
+      label = name;
     }
+  } catch (_) {
+    // Fall back to the default label above.
   }
 
   await repository.createSearch(site, label, 'pool:$poolId', usesDefaultInterval: true);
