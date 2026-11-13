@@ -649,10 +649,11 @@
   },
   "slideshowEditPrepareHeading": "Prepare",
   "slideshowEditPrepareButton": "Prepare",
-  "slideshowEditPrepareSummary": "{ready} ready, {inProgress} downloading, {replaced} replaced, {unreplaceable} couldn't be replaced",
+  "slideshowEditPrepareSummary": "{ready} ready, {missing} missing, {inProgress} downloading, {replaced} replaced, {unreplaceable} couldn't be replaced",
   "@slideshowEditPrepareSummary": {
     "placeholders": {
       "ready": {"type": "int"},
+      "missing": {"type": "int"},
       "inProgress": {"type": "int"},
       "replaced": {"type": "int"},
       "unreplaceable": {"type": "int"}
@@ -668,5 +669,7 @@
   "slideshowEditRetryButton": "Retry",
   "slideshowEditWatchButton": "Watch",
   "slideshowEditPrepareErrorMessage": "Couldn't prepare the slideshow",
-  "slideshowEditNoDestinationFolderMessage": "No download destination folder configured. Set one in Settings first."
+  "slideshowEditNoDestinationFolderMessage": "No download destination folder configured. Set one in Settings first.",
+  "slideshowPauseTooltip": "Pause slideshow",
+  "slideshowResumeTooltip": "Resume slideshow"
 }

@@ -40,6 +40,17 @@ enum SlideshowPostReadiness {
   /// replacement. The dead post stays committed (never silently dropped)
   /// -- a later [SlideshowPrepareService.prepare] call tries again.
   unreplaceable,
+
+  /// Not on disk and not actively downloading, same as [inProgress]'s own
+  /// "needs work" case -- but [prepare] was called with `enqueueMissing:
+  /// false` (M78), so nothing was actually enqueued/replaced for it. Exists
+  /// so a quiet background refresh can report accurate counts without ever
+  /// being the thing that *starts* a download -- only an explicit "Prepare"
+  /// tap (or any other explicit download action elsewhere in the app) does
+  /// that. A post that's merely missing today (e.g. its file was deleted
+  /// out-of-band) stays this way, not silently re-queued, until the user
+  /// asks for it again.
+  missing,
 }
 
 /// One committed post's outcome from a single [SlideshowPrepareService.prepare]
@@ -67,6 +78,7 @@ class SlideshowPrepareReport {
   const SlideshowPrepareReport(this.posts);
 
   int get readyCount => posts.where((p) => p.readiness == SlideshowPostReadiness.ready).length;
+  int get missingCount => posts.where((p) => p.readiness == SlideshowPostReadiness.missing).length;
   int get inProgressCount => posts.where((p) => p.readiness == SlideshowPostReadiness.inProgress).length;
   int get replacedCount => posts.where((p) => p.readiness == SlideshowPostReadiness.replaced).length;
   int get unreplaceableCount => posts.where((p) => p.readiness == SlideshowPostReadiness.unreplaceable).length;
@@ -100,7 +112,15 @@ class SlideshowPrepareService {
 
   SlideshowPrepareService({required this.repository, required this.downloadQueueService, required this.downloadManager, required this.downloadSettingsStore});
 
-  Future<SlideshowPrepareReport> prepare(int slideshowId) async {
+  /// [enqueueMissing] gates every mutating action this method can take --
+  /// enqueueing a never-attempted/missing post, and replacing a stuck one
+  /// (which also enqueues the replacement). `false` (used by a quiet
+  /// background refresh, e.g. on screen open) makes this purely a read of
+  /// current state: a non-ready, non-active post is reported as
+  /// [SlideshowPostReadiness.missing] and left completely alone. `true`
+  /// (the default, used by an explicit "Prepare" tap) is today's original
+  /// behavior, unchanged.
+  Future<SlideshowPrepareReport> prepare(int slideshowId, {bool enqueueMissing = true}) async {
     final folder = await downloadSettingsStore.loadDestinationFolder();
     if (folder == null) {
       throw const SlideshowPrepareException('No download folder configured');
@@ -137,6 +157,11 @@ class SlideshowPrepareService {
       }
       if (activePostIds.contains(entry.post.id)) {
         results.add(SlideshowPostStatus(searchId: entry.searchId, post: entry.post, readiness: SlideshowPostReadiness.inProgress));
+        continue;
+      }
+
+      if (!enqueueMissing) {
+        results.add(SlideshowPostStatus(searchId: entry.searchId, post: entry.post, readiness: SlideshowPostReadiness.missing));
         continue;
       }
 
