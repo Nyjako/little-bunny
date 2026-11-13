@@ -141,12 +141,16 @@ class _SlideshowEditScreenState extends State<SlideshowEditScreen> {
     _prepareRefreshDebounce = Timer(const Duration(seconds: 2), _refreshPrepareReportQuietly);
   }
 
-  /// Same work as [_prepare], minus the `_preparing` flag -- runs in the
-  /// background in response to the download queue's own progress, and once
-  /// up front from [initState] (so Watch comes back unlocked on reopen
-  /// without needing a fresh "Prepare" tap), not a user tap, so the
-  /// "Prepare" button shouldn't flicker into its disabled/spinner state for
-  /// either.
+  /// Same work as [_prepare], minus the `_preparing` flag and minus any
+  /// actual downloading -- runs in the background in response to the
+  /// download queue's own progress, and once up front from [initState] (so
+  /// Watch comes back unlocked on reopen without needing a fresh "Prepare"
+  /// tap), not a user tap, so the "Prepare" button shouldn't flicker into
+  /// its disabled/spinner state for either. `enqueueMissing: false` (M78) is
+  /// what makes this safe to run unprompted: a post that's merely missing
+  /// (e.g. its file was deleted out-of-band since the last real Prepare) is
+  /// reported as such, never silently re-enqueued just because this screen
+  /// happened to reopen.
   Future<void> _refreshPrepareReportQuietly() async {
     final slideshowId = _slideshowId;
     if (slideshowId == null) {
@@ -159,7 +163,7 @@ class _SlideshowEditScreenState extends State<SlideshowEditScreen> {
       downloadSettingsStore: widget.downloadSettingsStore,
     );
     try {
-      final report = await service.prepare(slideshowId);
+      final report = await service.prepare(slideshowId, enqueueMissing: false);
       if (mounted) {
         setState(() => _prepareReport = report);
       }
@@ -598,8 +602,7 @@ class _SlideshowEditScreenState extends State<SlideshowEditScreen> {
             const SizedBox(height: 8),
             LinearProgressIndicator(value: report.posts.isEmpty ? 0 : report.readyCount / report.posts.length),
             const SizedBox(height: 4),
-            // missingCount wired up once SlideshowPrepareReport tracks it (M78).
-            Text(l10n.slideshowEditPrepareSummary(report.readyCount, 0, report.inProgressCount, report.replacedCount, report.unreplaceableCount)),
+            Text(l10n.slideshowEditPrepareSummary(report.readyCount, report.missingCount, report.inProgressCount, report.replacedCount, report.unreplaceableCount)),
             for (final status in report.posts.where((status) => status.readiness == SlideshowPostReadiness.unreplaceable))
               Padding(
                 padding: const EdgeInsets.only(top: 4),
