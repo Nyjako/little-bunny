@@ -339,6 +339,11 @@
     "placeholders": {"extension": {"type": "String"}}
   },
   "postDetailOpenExternally": "Open externally",
+  "gifPlayerTooLargeMessage": "This GIF is {size} -- large enough that loading it could use a lot of memory",
+  "@gifPlayerTooLargeMessage": {
+    "placeholders": {"size": {"type": "String"}}
+  },
+  "gifPlayerPlayAnywayButton": "Play anyway",
   "postDetailAudioTrackLabel": "Track {position}",
   "@postDetailAudioTrackLabel": {
     "placeholders": {"position": {"type": "int"}}

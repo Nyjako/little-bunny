@@ -3,9 +3,14 @@ import 'dart:io';
 import 'package:file/local.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
 import 'package:little_bunny/widgets/gif_player.dart';
+import 'package:path_provider_platform_interface/path_provider_platform_interface.dart';
 
 import '../fakes/fake_cache_manager.dart';
+import '../fakes/fake_path_provider.dart';
+import '../fakes/test_app.dart';
 
 /// Single-frame, 1x1 transparent GIF -- a well-known minimal valid GIF byte
 /// sequence (used widely as a "tracking pixel" test fixture).
@@ -41,6 +46,10 @@ void main() {
 
   setUp(() {
     tempDir = Directory.systemTemp.createTempSync('gif_player_test_');
+    // Only exercised by the size-guard fallback's own preview Image, which
+    // goes through CachedNetworkImage's flutter_cache_manager just like a
+    // real post thumbnail would.
+    PathProviderPlatform.instance = FakePathProviderPlatform();
   });
 
   tearDown(() {
@@ -85,5 +94,119 @@ void main() {
 
     expect(find.byType(RawImage), findsOneWidget);
     expect(find.text('1/2'), findsOneWidget);
+  });
+
+  group('size guard (M76)', () {
+    testWidgets('a network gif over the limit shows the fallback with the preview, not the real gif -- Play anyway loads it', (WidgetTester tester) async {
+      final client = MockClient((request) async {
+        expect(request.method, 'HEAD');
+        return http.Response('', 200, headers: {'content-length': '500'});
+      });
+
+      await tester.pumpWidget(
+        wrapWithLocalization(
+          GifPlayer(
+            imageUrl: 'https://example.invalid/big.gif',
+            previewUrl: 'https://example.invalid/big_preview.jpg',
+            cacheManager: fakeCacheManagerFor(_singleFrameGifBytes),
+            client: client,
+            autoPlayMaxBytes: 100,
+          ),
+        ),
+      );
+      await tester.pump();
+
+      // RawImage shows up either way here -- Image's own loading placeholder
+      // (the preview, before its network fetch resolves) also renders one
+      // internally -- so GifPlayer's real decoded frame is distinguished by
+      // where it actually lives: nested in the FittedBox/SizedBox GifPlayer
+      // itself wraps it in, which the preview Image is never part of.
+      expect(find.descendant(of: find.byType(FittedBox), matching: find.byType(RawImage)), findsNothing);
+      expect(find.byType(Image), findsOneWidget);
+      expect(find.textContaining('500 B'), findsOneWidget);
+      expect(find.byKey(const Key('gifPlayAnywayButton')), findsOneWidget);
+
+      // tester.tap()'s gesture-arena resolution needs a pump() to actually
+      // invoke onPressed, but pump() relies on the fake-async zone's own
+      // clock -- mixing it with runAsync (needed so the real file read/
+      // decode this kicks off can actually resolve) is unreliable. Invoking
+      // onPressed directly sidesteps gesture recognition entirely, same
+      // precedent as PostDetailScreen's own download-button tests.
+      final playAnywayButton = tester.widget<FilledButton>(find.byKey(const Key('gifPlayAnywayButton')));
+      await tester.runAsync(() async {
+        playAnywayButton.onPressed!();
+        await Future<void>.delayed(const Duration(milliseconds: 300));
+      });
+      await tester.pump();
+
+      expect(find.descendant(of: find.byType(FittedBox), matching: find.byType(RawImage)), findsOneWidget);
+    });
+
+    testWidgets('a network gif over the limit with no preview shows a plain placeholder instead', (WidgetTester tester) async {
+      final client = MockClient((request) async => http.Response('', 200, headers: {'content-length': '500'}));
+
+      await tester.pumpWidget(
+        wrapWithLocalization(
+          GifPlayer(imageUrl: 'https://example.invalid/big.gif', cacheManager: fakeCacheManagerFor(_singleFrameGifBytes), client: client, autoPlayMaxBytes: 100),
+        ),
+      );
+      await tester.pump();
+
+      expect(find.byType(Image), findsNothing);
+      expect(find.byIcon(Icons.image_outlined), findsOneWidget);
+    });
+
+    testWidgets('a network gif under the limit loads normally without ever showing the fallback', (WidgetTester tester) async {
+      final client = MockClient((request) async => http.Response('', 200, headers: {'content-length': '10'}));
+
+      await tester.runAsync(() async {
+        await tester.pumpWidget(
+          wrapWithLocalization(
+            GifPlayer(imageUrl: 'https://example.invalid/small.gif', cacheManager: fakeCacheManagerFor(_singleFrameGifBytes), client: client, autoPlayMaxBytes: 100),
+          ),
+        );
+        await Future<void>.delayed(const Duration(milliseconds: 300));
+      });
+      await tester.pump();
+
+      expect(find.byKey(const Key('gifPlayAnywayButton')), findsNothing);
+      expect(find.descendant(of: find.byType(FittedBox), matching: find.byType(RawImage)), findsOneWidget);
+    });
+
+    testWidgets('a local gif over the limit shows the fallback -- Play anyway reads the real file', (WidgetTester tester) async {
+      final file = File('${tempDir.path}/local.gif')..writeAsBytesSync(_singleFrameGifBytes);
+
+      await tester.runAsync(() async {
+        await tester.pumpWidget(wrapWithLocalization(GifPlayer(imageUrl: '', localFilePath: file.path, autoPlayMaxBytes: 2)));
+        await Future<void>.delayed(const Duration(milliseconds: 300));
+      });
+      await tester.pump();
+
+      expect(find.descendant(of: find.byType(FittedBox), matching: find.byType(RawImage)), findsNothing);
+      expect(find.byKey(const Key('gifPlayAnywayButton')), findsOneWidget);
+
+      // Same onPressed-direct-invocation reasoning as the network test above.
+      final playAnywayButton = tester.widget<FilledButton>(find.byKey(const Key('gifPlayAnywayButton')));
+      await tester.runAsync(() async {
+        playAnywayButton.onPressed!();
+        await Future<void>.delayed(const Duration(milliseconds: 300));
+      });
+      await tester.pump();
+
+      expect(find.descendant(of: find.byType(FittedBox), matching: find.byType(RawImage)), findsOneWidget);
+    });
+
+    testWidgets('a local gif under the limit loads normally without ever showing the fallback', (WidgetTester tester) async {
+      final file = File('${tempDir.path}/local.gif')..writeAsBytesSync(_singleFrameGifBytes);
+
+      await tester.runAsync(() async {
+        await tester.pumpWidget(wrapWithLocalization(GifPlayer(imageUrl: '', localFilePath: file.path)));
+        await Future<void>.delayed(const Duration(milliseconds: 300));
+      });
+      await tester.pump();
+
+      expect(find.byKey(const Key('gifPlayAnywayButton')), findsNothing);
+      expect(find.descendant(of: find.byType(FittedBox), matching: find.byType(RawImage)), findsOneWidget);
+    });
   });
 }
