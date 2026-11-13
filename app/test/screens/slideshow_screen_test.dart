@@ -3,10 +3,13 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:little_bunny/repository/bunny_models.dart';
 import 'package:little_bunny/screens/slideshow_screen.dart';
+import 'package:saf_stream/saf_stream_platform_interface.dart';
+import 'package:saf_util/saf_util_platform_interface.dart';
 import 'package:video_player/video_player.dart';
 import 'package:video_player_platform_interface/video_player_platform_interface.dart';
 
 import '../fakes/fake_bunny_repository.dart';
+import '../fakes/fake_saf_platform.dart';
 import '../fakes/fake_video_player_platform.dart';
 import '../fakes/test_app.dart';
 
@@ -25,6 +28,18 @@ BunnyPost _post(int id, {String fileExt = 'jpg'}) => BunnyPost(
   isSeen: false,
   isFavorited: false,
 );
+
+// Two distinct, minimal, real 1x1 PNGs (a decode failure inside Image.memory
+// fails a test for an unrelated reason, so arbitrary placeholder bytes won't
+// do) -- a plain solid-color pixel each, red and blue.
+final Uint8List _redOnePixelPng = Uint8List.fromList([
+  137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13, 73, 72, 68, 82, 0, 0, 0, 1, 0, 0, 0, 1, 8, 2, 0, 0, 0, 144, 119, 83, 222, 0, 0, 0, 12, 73, 68, 65, 84, 120, 156, 99, 248, 207, 192, 0, 0, 3, 1, 1, 0,
+  201, 254, 146, 239, 0, 0, 0, 0, 73, 69, 78, 68, 174, 66, 96, 130,
+]);
+final Uint8List _blueOnePixelPng = Uint8List.fromList([
+  137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13, 73, 72, 68, 82, 0, 0, 0, 1, 0, 0, 0, 1, 8, 2, 0, 0, 0, 144, 119, 83, 222, 0, 0, 0, 12, 73, 68, 65, 84, 120, 156, 99, 96, 96, 248, 15, 0, 1, 3, 1, 0,
+  8, 137, 194, 236, 0, 0, 0, 0, 73, 69, 78, 68, 174, 66, 96, 130,
+]);
 
 void main() {
   setUpAll(() {
@@ -164,6 +179,43 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byType(VideoPlayer).evaluate().isNotEmpty, videoShowingInitially);
     expect(repository.markPostSeenCalls, hasLength(3));
+  });
+
+  testWidgets('advancing reloads a SAF content:// local file instead of leaving the previous post on screen (M76 regression)', (WidgetTester tester) async {
+    final safUtil = FakeSafUtilPlatform();
+    final safStream = FakeSafStreamPlatform(safUtil);
+    SafUtilPlatform.instance = safUtil;
+    SafStreamPlatform.instance = safStream;
+    // Keyed by the content:// uri itself -- FakeSafStreamPlatform.readFileBytes
+    // reads straight out of this map, same as DownloadManager's own
+    // resolve-then-read SAF path. Real (if minimal) 1x1 PNGs, not arbitrary
+    // bytes -- Image.memory tries to decode whatever it's given, and a
+    // decode failure fails this test for an unrelated reason.
+    safUtil.existingChildPaths['content://tree/1.jpg'] = _redOnePixelPng;
+    safUtil.existingChildPaths['content://tree/2.jpg'] = _blueOnePixelPng;
+
+    final repository = FakeBunnyRepository();
+    final posts = [_post(1), _post(2)];
+    final localFilePaths = {1: 'content://tree/1.jpg', 2: 'content://tree/2.jpg'};
+
+    await tester.pumpWidget(
+      wrapWithLocalization(SlideshowScreen(posts: posts, localFilePaths: localFilePaths, interval: const Duration(seconds: 5), repository: repository)),
+    );
+    await tester.pumpAndSettle();
+
+    Uint8List currentBytes() => ((tester.widget(find.byType(Image)) as Image).image as MemoryImage).bytes;
+    final firstBytes = currentBytes();
+
+    await tester.tapAt(const Offset(750, 20));
+    await tester.pumpAndSettle();
+
+    // Without a post-specific key on PostMediaPage, _LocalContentUriImage's
+    // State survives this rebuild and never re-reads -- currentBytes() would
+    // still equal firstBytes despite _advance() having moved to the other
+    // post (confirmed live: the slideshow got stuck on the first post's
+    // image on Android no matter how many times it was tapped or how long
+    // it waited).
+    expect(currentBytes(), isNot(equals(firstBytes)));
   });
 
   // No widget test covers local-file rendering itself (Image.file/GifPlayer's
