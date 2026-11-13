@@ -649,10 +649,11 @@
   },
   "slideshowEditPrepareHeading": "Przygotuj",
   "slideshowEditPrepareButton": "Przygotuj",
-  "slideshowEditPrepareSummary": "{ready} gotowych, {inProgress} pobieranych, {replaced} zastąpionych, {unreplaceable} nie udało się zastąpić",
+  "slideshowEditPrepareSummary": "{ready} gotowych, {missing} brakujących, {inProgress} pobieranych, {replaced} zastąpionych, {unreplaceable} nie udało się zastąpić",
   "@slideshowEditPrepareSummary": {
     "placeholders": {
       "ready": {"type": "int"},
+      "missing": {"type": "int"},
       "inProgress": {"type": "int"},
       "replaced": {"type": "int"},
       "unreplaceable": {"type": "int"}
@@ -668,5 +669,7 @@
   "slideshowEditRetryButton": "Ponów",
   "slideshowEditWatchButton": "Oglądaj",
   "slideshowEditPrepareErrorMessage": "Nie udało się przygotować pokazu slajdów",
-  "slideshowEditNoDestinationFolderMessage": "Nie skonfigurowano folderu docelowego pobierania. Ustaw go najpierw w Ustawieniach."
+  "slideshowEditNoDestinationFolderMessage": "Nie skonfigurowano folderu docelowego pobierania. Ustaw go najpierw w Ustawieniach.",
+  "slideshowPauseTooltip": "Wstrzymaj pokaz slajdów",
+  "slideshowResumeTooltip": "Wznów pokaz slajdów"
 }
