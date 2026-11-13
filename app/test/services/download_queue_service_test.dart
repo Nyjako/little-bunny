@@ -71,11 +71,11 @@ void main() {
   // every existing MockClient handler here still works unchanged by
   // feeding it through FakeBunnyRepository.downloadFileFetchImpl instead,
   // preserving each test's own per-URL branching logic.
-  DownloadQueueService buildService({http.Client? client}) {
+  DownloadQueueService buildService({http.Client? client, DateTime Function()? now}) {
     if (client != null) {
       repository.downloadFileFetchImpl = (url) => client.send(http.Request('GET', Uri.parse(url))).then(http.Response.fromStream);
     }
-    return DownloadQueueService(downloadManager: const DownloadManager(), downloadSettingsStore: const DownloadSettingsStore(), notifier: notifier);
+    return DownloadQueueService(downloadManager: const DownloadManager(), downloadSettingsStore: const DownloadSettingsStore(), notifier: notifier, now: now);
   }
 
   Future<void> waitUntilIdle(DownloadQueueService service) async {
@@ -158,7 +158,17 @@ void main() {
   });
 
   test('enqueueAll processes every item, reporting progress through to completion (M62: concurrently, order not guaranteed)', () async {
-    final service = buildService(client: MockClient((_) async => http.Response.bytes([1, 2, 3], 200)));
+    // A self-advancing fake clock -- every call to it is a full second past
+    // the previous one, so the M78 progress-notification throttle (below,
+    // its own dedicated test) never suppresses any of this test's 3 calls;
+    // this test is about per-item total/failed/eta, not about throttling.
+    var fakeNow = DateTime(2026, 1, 1);
+    DateTime nextFakeNow() {
+      fakeNow = fakeNow.add(const Duration(seconds: 1));
+      return fakeNow;
+    }
+
+    final service = buildService(client: MockClient((_) async => http.Response.bytes([1, 2, 3], 200)), now: nextFakeNow);
     final posts = [_post(id: 1), _post(id: 2), _post(id: 3)];
 
     service.enqueueAll(posts, repository);
@@ -216,6 +226,54 @@ void main() {
     gates[2].complete();
     await waitUntilIdle(service);
     expect(service.succeededCount, 4);
+  });
+
+  test('OS progress notifications are throttled to once per interval, not once per completed item (M78)', () async {
+    var fakeNow = DateTime(2026, 1, 1);
+    final gates = List.generate(3, (_) => Completer<void>());
+    var requestCount = 0;
+    final service = buildService(
+      client: MockClient((_) async {
+        final index = requestCount;
+        requestCount++;
+        await gates[index].future;
+        return http.Response.bytes([1, 2, 3], 200);
+      }),
+      now: () => fakeNow,
+    );
+
+    service.enqueueAll([_post(id: 1), _post(id: 2), _post(id: 3)], repository);
+    while (service.downloadingItems.length < 3) {
+      await Future<void>.delayed(const Duration(milliseconds: 1));
+    }
+
+    // Item 1 finishes: the very first notification this session, so it
+    // always fires regardless of the clock.
+    gates[0].complete();
+    while (notifier.progressCalls.isEmpty) {
+      await Future<void>.delayed(const Duration(milliseconds: 1));
+    }
+    expect(notifier.progressCalls, hasLength(1));
+
+    // Item 2 finishes at the exact same fake instant -- well inside the
+    // throttle window, so this completion must not add a second OS call,
+    // even though the item itself still finishes normally.
+    gates[1].complete();
+    while (service.succeededCount < 2) {
+      await Future<void>.delayed(const Duration(milliseconds: 1));
+    }
+    expect(notifier.progressCalls, hasLength(1));
+
+    // Advance the fake clock past the throttle window, then let item 3
+    // finish -- now due again.
+    fakeNow = fakeNow.add(const Duration(seconds: 1));
+    gates[2].complete();
+    await waitUntilIdle(service);
+    expect(notifier.progressCalls, hasLength(2));
+    // The final call still reports the real, un-throttled totals -- nothing
+    // about the throttled-away item 2 was lost from the queue's own state.
+    expect(notifier.progressCalls.last.$1, 3);
+    expect(service.succeededCount, 3);
   });
 
   group('enqueue dedup -- a post already active in the queue is not added twice', () {
