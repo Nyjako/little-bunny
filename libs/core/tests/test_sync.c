@@ -208,6 +208,38 @@ void test_sync_e621_search_upserts_post(void)
     free(fixture);
 }
 
+void test_sync_e621_filters_non_artist_tags_from_the_credited_artist(void)
+{
+    /* "third-party_edit" is tagged as an artist-category tag here, same as
+     * e621 itself does for several administrative markers that don't name
+     * a real person -- the joined artist field must not include it, but
+     * must still keep both real artists either side of it. */
+    const char *body = "{\"posts\":[{\"id\":1,\"created_at\":\"2024-01-01T00:00:00.000-05:00\","
+                       "\"file\":{\"width\":100,\"height\":100,\"ext\":\"png\",\"size\":1000,\"md5\":\"aaa\",\"url\":\"https://static1.e621.net/data/1.png\"},"
+                       "\"preview\":{\"width\":50,\"height\":50,\"url\":\"https://static1.e621.net/data/preview/1.png\"},"
+                       "\"sample\":{\"has\":false},\"score\":{\"up\":1,\"down\":0,\"total\":1},"
+                       "\"tags\":{\"general\":[],\"species\":[],\"character\":[],\"copyright\":[],"
+                       "\"artist\":[\"artista\",\"third-party_edit\",\"artistb\"],\"invalid\":[],\"lore\":[],\"meta\":[]},"
+                       "\"rating\":\"s\",\"fav_count\":1,\"sources\":[],\"description\":\"a test post\",\"comment_count\":0,\"is_favorited\":false,\"pools\":[]}]}";
+    g_e621_state.bodies[0] = body;
+    g_e621_state.body_count = 1;
+
+    int64_t search_id = 0;
+    bunny_core_result_t result = bunny_core_search_create(g_core, BUNNY_DB_SITE_E621, "wolves", "wolf", 24, NULL, &search_id);
+    TEST_ASSERT_EQUAL(BUNNY_CORE_OK, result);
+
+    bunny_core_sync_stats_t stats;
+    result = bunny_core_sync_due_searches(g_core, &stats);
+    TEST_ASSERT_EQUAL(BUNNY_CORE_OK, result);
+
+    bunny_db_post_list_t posts;
+    result = bunny_core_search_list_posts(g_core, search_id, false, BUNNY_DB_RATING_MASK_ALL, BUNNY_DB_MEDIA_MASK_ALL, 1, &posts);
+    TEST_ASSERT_EQUAL(BUNNY_CORE_OK, result);
+    TEST_ASSERT_EQUAL(1, (int)posts.count);
+    TEST_ASSERT_EQUAL_STRING("artista, artistb", posts.items[0].artist);
+    bunny_db_post_list_free(&posts);
+}
+
 void test_core_search_list_posts_forwards_rating_and_media_masks_to_the_db_layer(void)
 {
     /* Not a DB-layer masking-logic test (that's covered in libs/db/tests/
@@ -2856,6 +2888,7 @@ int main(void)
 {
     UNITY_BEGIN();
     RUN_TEST(test_sync_e621_search_upserts_post);
+    RUN_TEST(test_sync_e621_filters_non_artist_tags_from_the_credited_artist);
     RUN_TEST(test_core_search_list_posts_forwards_rating_and_media_masks_to_the_db_layer);
     RUN_TEST(test_sync_e621_search_marks_a_favorited_post_locally);
     RUN_TEST(test_sync_e621_search_upserts_post_tag_categories);

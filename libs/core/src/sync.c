@@ -119,6 +119,54 @@ static char *join_string_list(const e621_string_list_t *list)
     return out;
 }
 
+/* e621 tags several administrative/meta markers under the "artist" category
+ * even though none of them name a real person -- a do-not-post notice, a
+ * third-party edit, a sound/flash/epilepsy content warning. Left unfiltered,
+ * one of these joins the credited-artist text shown throughout the UI *and*
+ * the downloaded file's own folder name (e.g. "lalamedli, third-party_edit"
+ * instead of just "lalamedli"). Kept as one list so it's a one-line change
+ * to extend if e621 adds another such tag later. */
+static const char *const NON_ARTIST_TAGS[] = {
+    "avoid_posting", "conditional_dnp", "third-party_edit", "sound_warning", "epilepsy_warning", "flash_warning", "unknown_artist", "anonymous_artist", "banned_artist",
+};
+#define NON_ARTIST_TAG_COUNT (sizeof(NON_ARTIST_TAGS) / sizeof(NON_ARTIST_TAGS[0]))
+
+static bool is_non_artist_tag(const char *tag)
+{
+    for (size_t i = 0; i < NON_ARTIST_TAG_COUNT; i++) {
+        if (strcmp(tag, NON_ARTIST_TAGS[i]) == 0) {
+            return true;
+        }
+    }
+    return false;
+}
+
+/* Filters NON_ARTIST_TAGS out of [list] before it's credited/joined anywhere.
+ * The returned list borrows [list]'s own string pointers (nothing is
+ * duplicated) -- only its `items` array is a fresh allocation, which the
+ * caller must free() itself; never pass this result to e621_string_list_free,
+ * which would double-free the borrowed strings. */
+static e621_string_list_t filter_artist_tags(const e621_string_list_t *list)
+{
+    e621_string_list_t filtered = {0};
+    if (!list || list->count == 0) {
+        return filtered;
+    }
+    char **items = malloc(list->count * sizeof(char *));
+    if (!items) {
+        return filtered;
+    }
+    size_t out_count = 0;
+    for (size_t i = 0; i < list->count; i++) {
+        if (!is_non_artist_tag(list->items[i])) {
+            items[out_count++] = list->items[i];
+        }
+    }
+    filtered.items = items;
+    filtered.count = out_count;
+    return filtered;
+}
+
 static flat_tag_list_t flatten_e621_tags(const e621_post_t *post)
 {
     const e621_string_list_t *lists[] = {
@@ -198,7 +246,9 @@ static const char *e621_rating_to_text(e621_rating_t rating)
 
 static bunny_core_result_t upsert_e621_post(bunny_db_t *db, const e621_post_t *post, int64_t *out_post_id)
 {
-    char *artist = join_string_list(&post->tags.artist);
+    e621_string_list_t filtered_artist_tags = filter_artist_tags(&post->tags.artist);
+    char *artist = join_string_list(&filtered_artist_tags);
+    free(filtered_artist_tags.items);
     flat_tag_list_t tags = flatten_e621_tags(post);
 
     bunny_db_post_upsert_t upsert;
