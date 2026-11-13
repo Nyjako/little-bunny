@@ -101,8 +101,12 @@ class DownloadManager {
   /// creates of the same name.
   static final Map<String, Future<SafDocumentFile>> _safFolderCache = {};
 
+  /// [folder] is split on `/` into separate path segments before being
+  /// handed to [SafUtil.mkdirp] (M78) -- a nested multi-artist folder (e.g.
+  /// `artista/artistb`) needs each level created as its own segment, not
+  /// one segment whose display name literally contains a slash.
   static Future<SafDocumentFile> _resolveSafFolder(String destinationFolder, String folder) =>
-      _safFolderCache.putIfAbsent('$destinationFolder/$folder', () => SafUtil().mkdirp(destinationFolder, [folder]));
+      _safFolderCache.putIfAbsent('$destinationFolder/$folder', () => SafUtil().mkdirp(destinationFolder, folder.split('/')));
 
   /// Same purpose as [AppWakelock.resetForTesting] -- [_safFolderCache] is
   /// static (every `const DownloadManager()` is the same canonical
@@ -113,11 +117,18 @@ class DownloadManager {
   /// test asserts on [SafUtil.mkdirp] call counts.
   static void resetSafFolderCacheForTesting() => _safFolderCache.clear();
 
+  /// [artist] may credit more than one real artist (M78 filters e621's own
+  /// non-artist meta tags -- "third-party_edit", "avoid_posting", etc. --
+  /// out of it well before this ever sees it, at the C sync layer), joined
+  /// with ", ". Each one becomes its own nested subfolder level (e.g.
+  /// `artista/artistb`) instead of one folder literally named
+  /// "artista, artistb".
   static String _sanitizeArtist(String? artist) {
-    if (artist == null || artist.trim().isEmpty) {
+    final names = (artist ?? '').split(', ').map((name) => name.trim()).where((name) => name.isNotEmpty).toList();
+    if (names.isEmpty) {
       return 'unknown';
     }
-    return artist.replaceAll(RegExp(r'[\\/:*?"<>|]'), '_');
+    return names.map((name) => name.replaceAll(RegExp(r'[\\/:*?"<>|]'), '_')).join('/');
   }
 
   static String _sanitizePoolName(String? name) {

@@ -71,6 +71,20 @@ void main() {
     expect(await File(result.filePath!).readAsBytes(), bytes);
   });
 
+  test('a multi-artist post nests each artist as its own subfolder (M78)', () async {
+    // The C sync layer already filters non-artist meta tags out of this
+    // joined string before Dart ever sees it -- this is purely about
+    // turning "artista, artistb" into nested folders, not re-filtering.
+    const manager = DownloadManager();
+    final repository = FakeBunnyRepository();
+    repository.downloadFileFetchImpl = (_) async => http.Response.bytes([1], 200);
+
+    final result = await manager.downloadPost(_post(artist: 'artista, artistb'), repository, tempDir.path);
+
+    expect(result.filePath, '${tempDir.path}/artista/artistb/42.png');
+    expect(await File(result.filePath!).exists(), isTrue);
+  });
+
   test('onProgress (M62) reports bytes received against the response\'s own content length', () async {
     final bytes = List.generate(1000, (i) => i % 256);
     const manager = DownloadManager();
@@ -417,6 +431,20 @@ void main() {
       expect(fakeSafUtil.mkdirpCalls, [('content://com.android.externalstorage.documents/tree/primary%3ADownload', 'some_bad_artist')]);
       expect(fakeSafStream.writeFileBytesCalls, [('content://com.android.externalstorage.documents/tree/primary%3ADownload/some_bad_artist', '42.png', 'image/png')]);
       expect(result.filePath, 'content://com.android.externalstorage.documents/tree/primary%3ADownload/some_bad_artist/42.png');
+    });
+
+    test('a multi-artist post creates each artist as its own nested SAF directory level (M78)', () async {
+      final manager = DownloadManager(client: MockClient((_) async => http.Response.bytes([1, 2, 3], 200)));
+      final repository = FakeBunnyRepository();
+      const treeUri = 'content://com.android.externalstorage.documents/tree/primary%3ADownload';
+
+      final result = await manager.downloadPost(_post(artist: 'artista, artistb'), repository, treeUri);
+
+      expect(result.outcome, DownloadOutcome.verified);
+      // mkdirp is given each artist as its own path segment, not one
+      // segment whose display name literally contains a slash.
+      expect(fakeSafUtil.mkdirpCalls, [(treeUri, 'artista/artistb')]);
+      expect(result.filePath, '$treeUri/artista/artistb/42.png');
     });
 
     test('isDownloaded checks for the file as a SAF child of the artist subfolder, not dart:io', () async {
