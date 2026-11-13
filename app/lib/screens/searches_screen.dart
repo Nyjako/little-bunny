@@ -464,11 +464,19 @@ class _SearchesScreenState extends State<SearchesScreen> with SingleTickerProvid
   /// starting from this screen's own multi-search selection instead of one
   /// already-open search. Pages through [BunnyRepository.listSearchPosts]
   /// until an empty page, per search, sequentially -- same stopping
-  /// condition [PostGridScreen._selectEntireSearch] already uses. One
-  /// combined [DownloadQueueService.enqueueAll] call across every selected
-  /// search's posts at the end, so enqueueAll's own dedup (a post could
-  /// legitimately appear in more than one of the selected searches) only
-  /// ever queues it once.
+  /// condition [PostGridScreen._selectEntireSearch] already uses.
+  ///
+  /// A pool search ([BunnySearch.isPool]) gets its own
+  /// [DownloadQueueService.enqueuePool] call, with page numbers computed
+  /// from that search's own full post order -- same as
+  /// [PostGridScreen._massDownload]'s pool branch -- so [DownloadManager]
+  /// still files it under a pool-named folder instead of falling back to a
+  /// per-artist one (M78; this bulk multi-search path used to always call
+  /// plain [DownloadQueueService.enqueueAll] regardless of pool status).
+  /// Every non-pool search is still combined into one [enqueueAll] call at
+  /// the end, so that call's own dedup (a post could legitimately appear in
+  /// more than one of the selected non-pool searches) only ever queues it
+  /// once.
   ///
   /// This can take a while for several large searches, and the old bare
   /// AppBar spinner gave no sense of how far along it was -- [_loadProgress]
@@ -476,10 +484,10 @@ class _SearchesScreenState extends State<SearchesScreen> with SingleTickerProvid
   /// selected) is loading right now and how many of its posts (each
   /// [BunnySearch.totalCount] is already known) have come in so far, rather
   /// than leaving the user staring at an un-cancellable spinner with no
-  /// feedback. [enqueueAll] is awaited (M67 follow-up) so the "N queued"
-  /// confirmation -- and the selection actually clearing -- only happens
-  /// once every row is durably persisted, closing the window where closing
-  /// the app right after that confirmation could lose some of them.
+  /// feedback. Every enqueue call is awaited (M67 follow-up) so the "N
+  /// queued" confirmation -- and the selection actually clearing -- only
+  /// happens once every row is durably persisted, closing the window where
+  /// closing the app right after that confirmation could lose some of them.
   Future<void> _downloadSelectedSearches(AppLocalizations l10n) async {
     final selectedIds = _selectedSearchIds.toSet();
     if (selectedIds.isEmpty || _dataFuture == null) {
@@ -491,26 +499,53 @@ class _SearchesScreenState extends State<SearchesScreen> with SingleTickerProvid
     try {
       final data = await _dataFuture!;
       final selectedSearches = data.searches.where((search) => selectedIds.contains(search.id)).toList();
-      final allPosts = <BunnyPost>[];
+      // Kept per-search, not flattened into one list up front -- a pool
+      // search's page numbers (below) are each post's position within its
+      // *own* full pool order, the same way PostGridScreen._massDownload
+      // computes them; flattening first would lose that.
+      final postsBySearchId = <int, List<BunnyPost>>{};
       for (final (index, search) in selectedSearches.indexed) {
         loadProgress.startSearch(index: index + 1, count: selectedSearches.length, label: search.label, total: search.totalCount);
         var page = 1;
         var searchLoaded = 0;
+        final searchPosts = <BunnyPost>[];
         while (true) {
           final pageItems = await _repository!.listSearchPosts(search.id, page: page);
           if (pageItems.isEmpty) {
             break;
           }
-          allPosts.addAll(pageItems);
+          searchPosts.addAll(pageItems);
           searchLoaded += pageItems.length;
           loadProgress.setLoaded(searchLoaded);
           page++;
         }
+        postsBySearchId[search.id] = searchPosts;
       }
       if (!mounted) {
         return;
       }
-      await widget.downloadQueueService.enqueueAll(allPosts, _repository!);
+      // A pool search gets its own enqueuePool call (so DownloadManager
+      // files it under a pool-named folder with page-numbered filenames,
+      // same as a single pool's own dedicated download button) -- every
+      // non-pool search is still combined into one enqueueAll call, which
+      // keeps today's cross-search dedup for those (a post could
+      // legitimately appear in more than one of the selected searches).
+      var totalQueued = 0;
+      final nonPoolPosts = <BunnyPost>[];
+      for (final search in selectedSearches) {
+        final searchPosts = postsBySearchId[search.id] ?? const [];
+        totalQueued += searchPosts.length;
+        if (search.isPool) {
+          final poolId = int.parse(search.query.substring(5));
+          final pageByPostId = {for (final (pageIndex, post) in searchPosts.indexed) post.id: pageIndex + 1};
+          await widget.downloadQueueService.enqueuePool(searchPosts, _repository!, poolId: poolId, poolName: search.label, pageByPostId: pageByPostId);
+        } else {
+          nonPoolPosts.addAll(searchPosts);
+        }
+      }
+      if (nonPoolPosts.isNotEmpty) {
+        await widget.downloadQueueService.enqueueAll(nonPoolPosts, _repository!);
+      }
       if (!mounted) {
         return;
       }
@@ -519,7 +554,7 @@ class _SearchesScreenState extends State<SearchesScreen> with SingleTickerProvid
         _selectionMode = false;
         _selectedSearchIds.clear();
       });
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(l10n.searchesMassDownloadQueued(allPosts.length))));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(l10n.searchesMassDownloadQueued(totalQueued))));
     } catch (_) {
       if (!mounted) {
         return;
