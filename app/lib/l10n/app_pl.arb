@@ -460,6 +460,11 @@
   "settingsAppLockEntry": "Zarządzaj blokadą aplikacji",
   "settingsAboutSection": "O aplikacji",
   "settingsAboutEntry": "O LittleBunny",
+  "settingsDebugSection": "Debugowanie",
+  "settingsOpenPostByIdEntry": "Otwórz post po ID",
+  "settingsOpenPostByIdDialogTitle": "Otwórz post po ID",
+  "settingsOpenPostByIdFieldLabel": "ID posta",
+  "settingsOpenPostByIdOpenButton": "Otwórz",
 
   "aboutScreenTitle": "O aplikacji",
   "aboutAppDescription": "Przeglądarka i menedżer e621 + Inkbunny: zapisane wyszukiwania aktualizowane według harmonogramu, oznaczanie niewidzianych postów, masowe polubienia/ulubione/pobieranie, komentowanie oraz synchronizacja między urządzeniami — z pełnym trybem offline.",
