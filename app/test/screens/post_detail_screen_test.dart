@@ -1770,4 +1770,19 @@ void main() {
       expect(find.byIcon(Icons.download_done), findsOneWidget);
     });
   });
+
+  // No widget test covers the image branch's local-file switch itself (M78:
+  // PostDetailScreen preferring an already-downloaded post's local copy over
+  // refetching it) -- confirmed via a direct repro that Image.file's own
+  // real dart:io read never settles under this project's flutter_test
+  // environment (pumpAndSettle hangs indefinitely, regardless of whether the
+  // file's bytes are even valid), same already-documented limitation
+  // slideshow_edit_screen_test.dart hit for DownloadManager's own real
+  // filesystem checks. The underlying mechanism this depends on --
+  // DownloadManager.localFilePathFor resolving to the right path once a
+  // file is actually there -- is fully covered by plain test()s in
+  // download_manager_test.dart, which use real temp files without a
+  // widget-test binding, so without hitting this limitation; _buildSingleFileMedia's
+  // branch-selection logic itself (use localFilePath when the FutureBuilder's
+  // snapshot carries one) is simple enough to verify by reading.
 }

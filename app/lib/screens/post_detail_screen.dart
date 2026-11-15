@@ -25,6 +25,7 @@ import '../util/tag_query.dart';
 import '../widgets/audio_player_widget.dart';
 import '../widgets/download_progress_indicator.dart';
 import '../widgets/gif_player.dart';
+import '../widgets/local_file_image.dart';
 import '../widgets/rating_badge.dart';
 import '../widgets/rich_markup_text.dart';
 import '../widgets/text_document_viewer.dart';
@@ -67,20 +68,32 @@ const _animatedViaGifPlayerExtensions = {'gif', 'webp'};
 /// `_PostDetailPageState` method) so [_ExtraFileMedia] below -- a separate
 /// widget/state, not an instance of that class -- can render an image file
 /// the exact same way the primary one does.
-Widget buildFileImageContent(String fileUrl, String ext, BunnySite site, {String? previewUrl}) {
-  return _animatedViaGifPlayerExtensions.contains(ext)
-      ? GifPlayer(imageUrl: fileUrl, httpHeaders: imageHeadersFor(site), previewUrl: previewUrl)
-      : Image(
-          image: CachedNetworkImageProvider(fileUrl, headers: imageHeadersFor(site)),
-          fit: BoxFit.contain,
-          loadingBuilder: (context, child, loadingProgress) {
-            if (loadingProgress == null) {
-              return child;
-            }
-            final total = loadingProgress.expectedTotalBytes;
-            return DownloadProgressIndicator(progress: total != null ? loadingProgress.cumulativeBytesLoaded / total : null);
-          },
-        );
+/// [localFilePath] (M78), when set, means this exact post is already sitting
+/// on disk (resolved once per page via [_PostDetailPageState]'s own
+/// [DownloadManager.localFilePathFor] check) -- reads it from there instead
+/// of refetching the same bytes over the network. Still goes through
+/// [GifPlayer] for an animated extension either way (it already has its own
+/// local/network branch); a plain image routes through
+/// [buildLocalImageContent], the same local-file reader [PostMediaPage]
+/// (the slideshow) uses.
+Widget buildFileImageContent(String fileUrl, String ext, BunnySite site, {String? previewUrl, String? localFilePath}) {
+  if (_animatedViaGifPlayerExtensions.contains(ext)) {
+    return GifPlayer(imageUrl: fileUrl, localFilePath: localFilePath, httpHeaders: imageHeadersFor(site), previewUrl: previewUrl);
+  }
+  if (localFilePath != null) {
+    return buildLocalImageContent(localFilePath);
+  }
+  return Image(
+    image: CachedNetworkImageProvider(fileUrl, headers: imageHeadersFor(site)),
+    fit: BoxFit.contain,
+    loadingBuilder: (context, child, loadingProgress) {
+      if (loadingProgress == null) {
+        return child;
+      }
+      final total = loadingProgress.expectedTotalBytes;
+      return DownloadProgressIndicator(progress: total != null ? loadingProgress.cumulativeBytesLoaded / total : null);
+    },
+  );
 }
 
 /// The generic "this file format isn't supported yet" fallback -- shared by
@@ -456,6 +469,16 @@ class _PostDetailPageState extends State<_PostDetailPage> {
   /// final" reasoning as [_commentsFuture].
   late Future<bool> _isDownloadedFuture;
 
+  /// Resolved once per page (M78) -- null until this already sits on disk
+  /// at [DownloadManager.localFilePathFor]'s deterministic path, same check
+  /// [_isDownloadedFuture] does, just returning the path instead of a bool.
+  /// [_buildSingleFileMedia]'s image branch gates on this (a `FutureBuilder`,
+  /// not reading a resolved field directly) so the network fetch never even
+  /// starts when a local copy is already there -- resolving this, then
+  /// deciding, instead of starting the network image first and swapping
+  /// underneath it once this resolves.
+  late Future<String?> _localFilePathFuture;
+
   /// Mutable local copy of [widget.post], so favorite/vote taps can update
   /// the displayed score/favCount/isFavorited immediately (M8.5.14) without
   /// a round trip. Identity-ish fields (site/externalId/fileExt/...) never
@@ -486,6 +509,7 @@ class _PostDetailPageState extends State<_PostDetailPage> {
     _tagsFuture = refreshedPost.then((_) => widget.repository.getPostTagsByCategory(widget.post.id));
     _sourcesFuture = refreshedPost.then((_) => widget.repository.getPostSources(widget.post.id));
     _isDownloadedFuture = _checkIsDownloaded();
+    _localFilePathFuture = _resolveLocalFilePath();
     if (widget.post.site == BunnySite.e621) {
       _relationshipsFuture = widget.repository.getPostRelationships(widget.post.id);
       _poolIdsFuture = widget.repository.getPostPoolIds(widget.post.id);
@@ -674,6 +698,21 @@ class _PostDetailPageState extends State<_PostDetailPage> {
       return false;
     }
     return widget.downloadManager.isDownloaded(_post, folder);
+  }
+
+  Future<String?> _resolveLocalFilePath() async {
+    try {
+      final folder = await widget.downloadSettingsStore.loadDestinationFolder();
+      if (folder == null) {
+        return null;
+      }
+      return await widget.downloadManager.localFilePathFor(_post, folder);
+    } catch (_) {
+      // Best-effort, same tolerance as every other local-filesystem check
+      // in this app -- a failure here (e.g. no Downloads directory on this
+      // platform) just means falling back to the network, not a crash.
+      return null;
+    }
   }
 
   /// Enqueues -- the actual fetch/write/checksum work lives entirely inside
@@ -910,7 +949,21 @@ class _PostDetailPageState extends State<_PostDetailPage> {
     final maxHeight = MediaQuery.sizeOf(context).height * 0.6;
     Widget bounded(Widget child) => ConstrainedBox(constraints: BoxConstraints(maxHeight: maxHeight), child: AspectRatio(aspectRatio: aspectRatio, child: child));
     if (_imageExtensions.contains(ext)) {
-      final content = buildFileImageContent(post.fileUrl!, ext, post.site, previewUrl: post.previewUrl);
+      // No perpetual-animation placeholder (e.g. CircularProgressIndicator)
+      // for the still-resolving case -- same reasoning as _downloadButton's
+      // own FutureBuilder below, which renders a plain default icon rather
+      // than a spinner while _isDownloadedFuture is pending: an
+      // indeterminate spinner keeps scheduling frames forever, which both
+      // fights pumpAndSettle in tests and is pointless UI churn for a
+      // local disk check that resolves in microseconds in practice. Content
+      // briefly builds as if there's no local copy (localFilePath: null)
+      // until this resolves, then rebuilds with it -- a strictly better
+      // outcome than always fetching over the network, even though that
+      // first frame's own image load may have already started.
+      final content = FutureBuilder<String?>(
+        future: _localFilePathFuture,
+        builder: (context, snapshot) => buildFileImageContent(post.fileUrl!, ext, post.site, previewUrl: post.previewUrl, localFilePath: snapshot.data),
+      );
       return GestureDetector(key: const Key('postDetailImageTapTarget'), onTap: _openFullScreenViewer, child: bounded(content));
     }
     if (isVideoExt(ext)) {
