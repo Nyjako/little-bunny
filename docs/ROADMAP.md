@@ -3450,3 +3450,61 @@ this file is the single source of truth for "what's done" across sessions.
   favorites would've gone out back-to-back unpaced regardless of drain frequency. Now
   every website request waits on the limiter, and one logged-in client is reused across
   a whole drain pass, mirroring how the e621 client was already reused.
+
+- [x] **M80 — Fix pool folder creation failing on Android, with a cross-platform
+  filename sanitizer**
+  A pool download's folder name was hardcoded as `"pool:<id> - <title>"` -- harmless on
+  Linux, but the literal `:` either made Android's SAF refuse to create the directory
+  outright or silently substitute `_` for it depending on the provider (confirmed live:
+  every pool download failing with a `PluginError`), and Windows can't use `:` in a
+  filename either. Fixed at the root rather than patching just that one character: a new
+  C sanitizer (`bunny_sanitize_filename_segment`, `libs/core/src/sanitize.c`) replaces
+  every byte Windows reserves for path syntax (`< > : " / \ | ? *`) plus ASCII control
+  bytes with `_` -- satisfying Windows' stricter rule automatically satisfies Linux/
+  macOS too, since their own forbidden characters are a subset of Windows'. `ascii_only`
+  additionally rejects non-ASCII bytes for free-text site data like a pool title;
+  artist/author folder names are deliberately left out of this (kept verbatim, non-ASCII
+  included). Trims a trailing `.`/` ` (Windows can't create a name ending in either) and
+  truncates to fit a caller-given buffer without ever splitting a multi-byte sequence.
+  `bunny_filename_max_len()` exposes one shared length budget (200 bytes) used
+  everywhere, instead of a separate per-platform guess nothing could verify live on
+  every target. Exposed to Dart as a synchronous call (`bunnySanitizeFilenameSegment`/
+  `bunnyFilenameMaxLen`) that deliberately bypasses `BunnyCoreNative`'s isolate dispatch
+  pipe -- this function has no `bunny_core_t*` and does no I/O or locking, so there's
+  nothing to serialize against, and networked mode never opens a `BunnyCoreNative` core/
+  isolate at all, so a call that depended on one wouldn't work there regardless.
+  `DownloadManager`'s pool folder is now `"pool_<id> - <title>"`, with the title
+  ASCII-sanitized and truncated to the shared budget -- the `"pool_<id> - "` prefix
+  itself is never truncated.
+  **Follow-up: upstreamed into GOBLIN, with diacritic transliteration added**: the
+  sanitizer's hand-rolled implementation moved into GOBLIN itself
+  (`goblin/sanitize_filename.h`) with proper UTF-8 validation (rejects overlong
+  encodings/encoded surrogates/out-of-range codepoints as one bad byte instead of
+  naively counting continuation bytes, which could swallow an unbounded malformed run)
+  and a new check against Windows' reserved device names (`CON`, `PRN`, `NUL`,
+  `COM1-9`, `LPT1-9` -- `"con.txt"` is just as blocked on Windows as `"CON"` itself). A
+  new companion header, `goblin/ascii_transliterate.h`, best-effort folds Latin-1/Latin
+  Extended-A diacritics to their plain-ASCII base letter (Polish `a/c/s`, German `u`,
+  French `e`, ...); `bunny_sanitize_filename_segment`'s `ascii_only` path now runs input
+  through this first, so a known diacritic folds to its base letter instead of
+  collapsing straight to `_` -- `"Café Comíc"` now sanitizes to `"Cafe Comic"` instead
+  of `"Caf_ Com_c"`. Both headers' `*_IMPLEMENTATION` macros are defined once in
+  `bunny_common`'s `goblin_impl.c`, this project's existing single-instantiation point
+  for every GOBLIN header-only implementation.
+
+- [x] **M81 — Capture dtext-link pool references, not just `"pool #<id>"`**
+  A pool description can cross-reference another pool three different ways on e621, but
+  this app only recognized one of them. Fixed in both places that independently parse
+  pool references out of description text: `libs/core/src/sync.c`'s
+  `parse_pool_references` (feeds `bunny_core_pool_info_t.referenced_pool_ids`) now also
+  matches a bare dtext link (`"label":/pools/<id>`, confirmed live on pool 37143) and a
+  full permalink URL (`https://e621.net/pools/<id>`, confirmed live on pool 20621) --
+  both share the same `/pools/<id>` substring, so one additional marker check covers
+  both, checked at every position in the same linear pass as the existing `pool #<id>`
+  marker so combined matches stay in true first-seen order. The actual UI-facing
+  renderer, `app/lib/util/rich_markup.dart` (used by every pool/post description
+  screen), already linkified the full-URL form generically as a permalink, but had no
+  pattern at all for the bare dtext-link form -- it rendered as inert plain text,
+  quotes and raw path included. Now renders just the quoted label as the clickable pool
+  chip, matching what dtext actually intends -- unlike every other marker there, which
+  renders its own matched text verbatim.

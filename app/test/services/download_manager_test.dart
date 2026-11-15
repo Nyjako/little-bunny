@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:bunny_core_ffi/bunny_core_ffi.dart';
 import 'package:crypto/crypto.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
@@ -214,7 +215,7 @@ void main() {
       final result = await manager.downloadPost(_post(artist: 'someartist'), repository, tempDir.path, poolId: 1234, poolName: 'My Comic', poolPage: 7);
 
       expect(result.outcome, DownloadOutcome.verified);
-      expect(result.filePath, '${tempDir.path}/pool:1234 - My Comic/1234 - p0007 [42].png');
+      expect(result.filePath, '${tempDir.path}/pool_1234 - My Comic/1234 - p0007 [42].png');
     });
 
     test('sanitizes illegal filesystem characters out of the pool name, same as the artist folder', () async {
@@ -223,7 +224,7 @@ void main() {
 
       final result = await manager.downloadPost(_post(), repository, tempDir.path, poolId: 5, poolName: 'Some/Bad:Comic', poolPage: 1);
 
-      expect(result.filePath, '${tempDir.path}/pool:5 - Some_Bad_Comic/5 - p0001 [42].png');
+      expect(result.filePath, '${tempDir.path}/pool_5 - Some_Bad_Comic/5 - p0001 [42].png');
     });
 
     test('falls back to "untitled" when poolName is null', () async {
@@ -232,7 +233,37 @@ void main() {
 
       final result = await manager.downloadPost(_post(), repository, tempDir.path, poolId: 5, poolName: null, poolPage: 1);
 
-      expect(result.filePath, '${tempDir.path}/pool:5 - untitled/5 - p0001 [42].png');
+      expect(result.filePath, '${tempDir.path}/pool_5 - untitled/5 - p0001 [42].png');
+    });
+
+    test('transliterates Latin diacritics in the pool title to plain ASCII (M80)', () async {
+      final manager = DownloadManager(client: MockClient((_) async => http.Response.bytes([1], 200)));
+      final repository = FakeBunnyRepository();
+
+      final result = await manager.downloadPost(_post(), repository, tempDir.path, poolId: 5, poolName: 'Café Comíc', poolPage: 1);
+
+      expect(result.filePath, '${tempDir.path}/pool_5 - Cafe Comic/5 - p0001 [42].png');
+    });
+
+    test('falls back to underscore for non-Latin text with no ASCII transliteration (M80)', () async {
+      final manager = DownloadManager(client: MockClient((_) async => http.Response.bytes([1], 200)));
+      final repository = FakeBunnyRepository();
+
+      final result = await manager.downloadPost(_post(), repository, tempDir.path, poolId: 5, poolName: 'ab中cd', poolPage: 1);
+
+      expect(result.filePath, '${tempDir.path}/pool_5 - ab_cd/5 - p0001 [42].png');
+    });
+
+    test('truncates a very long pool title so the folder name stays within the shared length budget (M80)', () async {
+      final manager = DownloadManager(client: MockClient((_) async => http.Response.bytes([1], 200)));
+      final repository = FakeBunnyRepository();
+      final longTitle = 'A' * 500;
+
+      final result = await manager.downloadPost(_post(), repository, tempDir.path, poolId: 5, poolName: longTitle, poolPage: 1);
+
+      final folderName = result.filePath!.split('/').reversed.skip(1).first;
+      expect(folderName.length, bunnyFilenameMaxLen());
+      expect(folderName, startsWith('pool_5 - AAA'));
     });
 
     test('a page number past 999 still works without truncating (only pads up to 4 digits)', () async {
@@ -241,7 +272,7 @@ void main() {
 
       final result = await manager.downloadPost(_post(), repository, tempDir.path, poolId: 5, poolName: 'Comic', poolPage: 1000);
 
-      expect(result.filePath, '${tempDir.path}/pool:5 - Comic/5 - p1000 [42].png');
+      expect(result.filePath, '${tempDir.path}/pool_5 - Comic/5 - p1000 [42].png');
     });
 
     test('falls back to the plain artist-based scheme when poolId is 0 (not a pool download)', () async {
@@ -267,8 +298,8 @@ void main() {
 
       expect(await manager.isDownloaded(_post(), tempDir.path, poolId: 5, poolName: 'Comic', poolPage: 1), isFalse);
 
-      await Directory('${tempDir.path}/pool:5 - Comic').create(recursive: true);
-      await File('${tempDir.path}/pool:5 - Comic/5 - p0001 [42].png').writeAsBytes([1]);
+      await Directory('${tempDir.path}/pool_5 - Comic').create(recursive: true);
+      await File('${tempDir.path}/pool_5 - Comic/5 - p0001 [42].png').writeAsBytes([1]);
 
       expect(await manager.isDownloaded(_post(), tempDir.path, poolId: 5, poolName: 'Comic', poolPage: 1), isTrue);
     });
@@ -276,15 +307,15 @@ void main() {
     test('a second download of the same pool post with a matching checksum skips the network fetch', () async {
       final bytes = [1, 2, 3, 4];
       final expectedMd5 = md5.convert(bytes).toString();
-      await Directory('${tempDir.path}/pool:5 - Comic').create(recursive: true);
-      await File('${tempDir.path}/pool:5 - Comic/5 - p0001 [42].png').writeAsBytes(bytes);
+      await Directory('${tempDir.path}/pool_5 - Comic').create(recursive: true);
+      await File('${tempDir.path}/pool_5 - Comic/5 - p0001 [42].png').writeAsBytes(bytes);
       final manager = DownloadManager(client: MockClient((_) async => fail('should not have made a network request')));
       final repository = FakeBunnyRepository();
 
       final result = await manager.downloadPost(_post(fileMd5: expectedMd5), repository, tempDir.path, poolId: 5, poolName: 'Comic', poolPage: 1);
 
       expect(result.outcome, DownloadOutcome.verified);
-      expect(result.filePath, '${tempDir.path}/pool:5 - Comic/5 - p0001 [42].png');
+      expect(result.filePath, '${tempDir.path}/pool_5 - Comic/5 - p0001 [42].png');
     });
 
     test('SAF (content:// destination): writes under the pool folder via SafStream', () async {
@@ -299,8 +330,8 @@ void main() {
       final result = await manager.downloadPost(_post(), repository, treeUri, poolId: 5, poolName: 'Comic', poolPage: 1);
 
       expect(result.outcome, DownloadOutcome.verified);
-      expect(fakeSafUtil.mkdirpCalls, [(treeUri, 'pool:5 - Comic')]);
-      expect(fakeSafStream.writeFileBytesCalls, [('$treeUri/pool:5 - Comic', '5 - p0001 [42].png', 'image/png')]);
+      expect(fakeSafUtil.mkdirpCalls, [(treeUri, 'pool_5 - Comic')]);
+      expect(fakeSafStream.writeFileBytesCalls, [('$treeUri/pool_5 - Comic', '5 - p0001 [42].png', 'image/png')]);
     });
 
     test('SAF (content:// destination): concurrent downloads into the same pool folder only call mkdirp once (M78)', () async {
@@ -323,12 +354,12 @@ void main() {
       ]);
 
       expect(results.map((r) => r.outcome), [DownloadOutcome.verified, DownloadOutcome.verified]);
-      expect(fakeSafUtil.mkdirpCalls, [(treeUri, 'pool:5 - Comic')]);
+      expect(fakeSafUtil.mkdirpCalls, [(treeUri, 'pool_5 - Comic')]);
       // Both files still actually landed under that one shared folder --
       // the dedup only avoids the redundant mkdirp calls, not the writes.
       expect(
         fakeSafStream.writeFileBytesCalls.toSet(),
-        {('$treeUri/pool:5 - Comic', '5 - p0001 [42].png', 'image/png'), ('$treeUri/pool:5 - Comic', '5 - p0002 [43].png', 'image/png')},
+        {('$treeUri/pool_5 - Comic', '5 - p0001 [42].png', 'image/png'), ('$treeUri/pool_5 - Comic', '5 - p0002 [43].png', 'image/png')},
       );
     });
   });

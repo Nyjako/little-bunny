@@ -1179,12 +1179,16 @@ void bunny_core_pool_info_free(bunny_core_pool_info_t *info)
     memset(info, 0, sizeof(*info));
 }
 
-/* e621's own dtext convention for cross-referencing another pool from free
- * text (a pool's description, M26) -- the literal substring "pool #"
- * followed by one or more digits, however it's wrapped (plain text, inside
- * a "label":url link, mid-sentence, ...). Matches are returned in
- * first-seen order, duplicates included -- out_ids is NULL/out_count 0 for
- * no matches (including a NULL description), never an error, since "no
+/* e621's own dtext conventions for cross-referencing another pool from free
+ * text (a pool's description, M26/M81) -- either the literal substring
+ * "pool #" followed by one or more digits, or a dtext link's path,
+ * "/pools/" followed by one or more digits, however either is wrapped
+ * (plain text, inside a "label":url link, a full https://e621.net/pools/<N>
+ * URL, mid-sentence, ...). Both markers are checked at every position in
+ * one linear pass, so matches come out in true first-seen (textual) order
+ * across both conventions, not every "pool #" match followed by every
+ * "/pools/" one. Duplicates included -- out_ids is NULL/out_count 0 for no
+ * matches (including a NULL description), never an error, since "no
  * references" is the overwhelmingly common, entirely valid case. */
 static void parse_pool_references(const char *description, int64_t **out_ids, size_t *out_count)
 {
@@ -1194,24 +1198,34 @@ static void parse_pool_references(const char *description, int64_t **out_ids, si
         return;
     }
 
-    static const char *MARKER = "pool #";
-    const size_t marker_len = 6; /* strlen("pool #") */
+    static const char *HASH_MARKER = "pool #";
+    static const char *PATH_MARKER = "/pools/";
+    const size_t hash_marker_len = 6; /* strlen("pool #") */
+    const size_t path_marker_len = 7; /* strlen("/pools/") */
 
     bunny_core_int64_array arr;
     bunny_core_int64_array_init(&arr);
 
-    const char *cursor = description;
-    while ((cursor = strstr(cursor, MARKER)) != NULL) {
-        cursor += marker_len;
-        if (!isdigit((unsigned char)*cursor)) {
-            continue; /* "pool #" without a number after it isn't a real reference */
+    for (const char *cursor = description; *cursor; cursor++) {
+        const char *digits;
+        if (strncmp(cursor, HASH_MARKER, hash_marker_len) == 0) {
+            digits = cursor + hash_marker_len;
+        } else if (strncmp(cursor, PATH_MARKER, path_marker_len) == 0) {
+            digits = cursor + path_marker_len;
+        } else {
+            continue;
         }
+        if (!isdigit((unsigned char)*digits)) {
+            continue; /* a marker with no number after it isn't a real reference */
+        }
+
         int64_t id = 0;
-        while (isdigit((unsigned char)*cursor)) {
-            id = id * 10 + (*cursor - '0');
-            cursor++;
+        while (isdigit((unsigned char)*digits)) {
+            id = id * 10 + (*digits - '0');
+            digits++;
         }
         bunny_core_int64_array_push(&arr, id); /* best-effort: a push failure here just drops one reference, not a real failure */
+        cursor = digits - 1;                   /* the for loop's cursor++ resumes scanning right after the digits just consumed */
     }
 
     *out_ids = arr.items;
