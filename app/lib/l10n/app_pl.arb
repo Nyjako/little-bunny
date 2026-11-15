@@ -568,6 +568,12 @@
   "downloadQueueRetryTooltip": "Ponów",
   "downloadQueueRetryAllTooltip": "Ponów wszystkie",
   "downloadQueueClearFinishedTooltip": "Wyczyść zakończone",
+  "downloadQueueClearQueuedTooltip": "Wyczyść oczekujące",
+  "downloadQueueClearQueuedDialogTitle": "Wyczyścić oczekujące pobierania?",
+  "downloadQueueClearQueuedDialogContent": "{count} oczekujących pobierań zostanie usuniętych. To, co już się pobiera, będzie kontynuowane.",
+  "@downloadQueueClearQueuedDialogContent": {
+    "placeholders": {"count": {"type": "int"}}
+  },
   "downloadQueueResumeTooltip": "Wznów pobieranie",
   "downloadQueuePauseTooltip": "Wstrzymaj pobieranie",
   "downloadQueueChecksumMismatchReason": "Pobrano, ale suma kontrolna się nie zgadza",

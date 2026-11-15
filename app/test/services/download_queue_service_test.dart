@@ -790,6 +790,43 @@ void main() {
       await waitUntilIdle(service);
     });
 
+    test('clearQueued (M79) cancels only not-yet-started items, leaving downloading ones to finish', () async {
+      final gates = List.generate(3, (_) => Completer<void>());
+      var requestCount = 0;
+      final service = buildService(
+        client: MockClient((_) async {
+          final index = requestCount;
+          requestCount++;
+          if (index < gates.length) {
+            await gates[index].future;
+          }
+          return http.Response.bytes([1, 2, 3], 200);
+        }),
+      );
+
+      service.enqueueAll([_post(id: 1), _post(id: 2), _post(id: 3), _post(id: 4)], repository);
+      while (service.downloadingItems.length < 3) {
+        await Future<void>.delayed(const Duration(milliseconds: 1));
+      }
+      // All 3 concurrency slots are taken by items 1-3; item 4 has nowhere
+      // to go yet -- it's the one and only queued item clearQueued should
+      // touch.
+      expect(service.pendingCount, 1);
+
+      await service.clearQueued();
+
+      expect(service.pendingCount, 0);
+      expect(service.items.map((item) => item.post.id).toSet(), {1, 2, 3});
+      final rows = await repository.downloadQueueList();
+      expect(rows.where((row) => row.postId == 4), isEmpty);
+
+      gates[0].complete();
+      gates[1].complete();
+      gates[2].complete();
+      await waitUntilIdle(service);
+      expect(service.succeededCount, 3);
+    });
+
     test('restore brings back a failed item\'s status/reason without auto-retrying it', () async {
       final post = _post(id: 1);
       repository.postsById[1] = post;

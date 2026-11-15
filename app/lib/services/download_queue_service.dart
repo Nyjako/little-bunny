@@ -399,6 +399,34 @@ class DownloadQueueService extends ChangeNotifier {
     _ensureWorkersRunning();
   }
 
+  /// Cancels every item that hasn't started downloading yet (M79) -- lets a
+  /// mass-enqueue added by mistake be wiped out before it consumes any
+  /// bandwidth. Leaves an already-downloading item alone, same "no
+  /// cancellation hook to abort an in-flight fetch through" limitation
+  /// [pause] already has -- only [queuedItems] are affected.
+  ///
+  /// Marks each cancelled item failed and persists that first (awaited,
+  /// not fire-and-forget -- [clearFinished] below reads [_items] by status
+  /// synchronously right after, so the DB write must already be durable or
+  /// its own `DELETE ... WHERE status IN (...)` could run before the
+  /// `UPDATE` that puts a row into one of those statuses, leaving a stale
+  /// `queued` row behind), then reuses [clearFinished] itself to actually
+  /// drop them from both [_items] and the DB -- same removal path a
+  /// finished item's own "Clear" action already takes, not a second one.
+  Future<void> clearQueued() async {
+    final toCancel = queuedItems.toList(growable: false);
+    if (toCancel.isEmpty) {
+      return;
+    }
+    for (final item in toCancel) {
+      item.status = DownloadQueueItemStatus.failed;
+      item.failureReason = 'Cancelled';
+    }
+    notifyListeners();
+    await Future.wait(toCancel.map(_persistStatus));
+    clearFinished();
+  }
+
   /// Drops every item in a terminal state (succeeded/mismatched/failed),
   /// leaving queued/downloading ones untouched -- the "persist until
   /// cleared" half of the queue being a real, viewable history rather than

@@ -119,6 +119,27 @@ class DownloadQueueScreen extends StatelessWidget {
     trailing: IconButton(icon: const Icon(Icons.replay), tooltip: l10n.downloadQueueRetryTooltip, onPressed: () => downloadQueueService.retryFailed(item)),
   );
 
+  /// Confirms before cancelling (M79) -- unlike [DownloadQueueService.clearFinished]
+  /// (already-finished items, nothing lost by clearing them), this removes
+  /// work that hasn't happened yet, so a mis-selected mass-enqueue needs a
+  /// deliberate "yes" before it's gone.
+  Future<void> _confirmClearQueued(BuildContext context, AppLocalizations l10n, int queuedCount) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(l10n.downloadQueueClearQueuedDialogTitle),
+        content: Text(l10n.downloadQueueClearQueuedDialogContent(queuedCount)),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: Text(l10n.commonCancel)),
+          TextButton(onPressed: () => Navigator.pop(context, true), child: Text(l10n.commonRemove)),
+        ],
+      ),
+    );
+    if (confirmed == true) {
+      await downloadQueueService.clearQueued();
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
@@ -131,6 +152,16 @@ class DownloadQueueScreen extends StatelessWidget {
             builder: (context, child) => downloadQueueService.failedItems.isEmpty
                 ? const SizedBox.shrink()
                 : IconButton(icon: const Icon(Icons.replay), tooltip: l10n.downloadQueueRetryAllTooltip, onPressed: downloadQueueService.retryAllFailed),
+          ),
+          AnimatedBuilder(
+            animation: downloadQueueService,
+            builder: (context, child) => downloadQueueService.pendingCount == 0
+                ? const SizedBox.shrink()
+                : IconButton(
+                    icon: const Icon(Icons.playlist_remove),
+                    tooltip: l10n.downloadQueueClearQueuedTooltip,
+                    onPressed: () => _confirmClearQueued(context, l10n, downloadQueueService.pendingCount),
+                  ),
           ),
           AnimatedBuilder(
             animation: downloadQueueService,

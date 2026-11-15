@@ -568,6 +568,12 @@
   "downloadQueueRetryTooltip": "Retry",
   "downloadQueueRetryAllTooltip": "Retry all",
   "downloadQueueClearFinishedTooltip": "Clear finished",
+  "downloadQueueClearQueuedTooltip": "Clear queued",
+  "downloadQueueClearQueuedDialogTitle": "Clear queued downloads?",
+  "downloadQueueClearQueuedDialogContent": "{count} queued downloads will be removed. Anything already downloading keeps going.",
+  "@downloadQueueClearQueuedDialogContent": {
+    "placeholders": {"count": {"type": "int"}}
+  },
   "downloadQueueResumeTooltip": "Resume downloads",
   "downloadQueuePauseTooltip": "Pause downloads",
   "downloadQueueChecksumMismatchReason": "Downloaded, but the checksum didn't match",
