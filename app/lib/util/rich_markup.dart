@@ -52,8 +52,9 @@ class RichMarkupPostSegment extends RichMarkupSegment {
   const RichMarkupPostSegment(this.site, this.postId, this.matchedText);
 }
 
-/// A reference to a pool -- either `pool #<id>` (M44's own convention) or a
-/// bare URL recognized as an e621 pool permalink. Always e621: pool
+/// A reference to a pool -- `pool #<id>` (M44's own convention), a bare URL
+/// recognized as an e621 pool permalink, or a dtext link whose path is
+/// `/pools/<id>` (M81, e.g. `"Called out":/pools/41263`). Always e621: pool
 /// metadata/descriptions in this app only ever come from e621's pool
 /// endpoint (see [BunnyPoolInfo]), so a pool reference is never meaningfully
 /// Inkbunny's.
@@ -63,15 +64,23 @@ class RichMarkupPoolSegment extends RichMarkupSegment {
   const RichMarkupPoolSegment(this.poolId, this.matchedText);
 }
 
-/// `{{author}}`, `[[title]]`, `thumb #<id>`, `pool #<id>`, or a bare
-/// `http(s)://` URL -- whichever starts earliest wins at each position,
-/// same single-pass left-to-right scan this app's own pool-description
-/// parser (M44) originally used for its one pattern, generalized here to
-/// cover all of them in one shared parser. Trailing sentence punctuation
-/// (`.,;:!?)]}`) immediately after a URL match is excluded from the link --
-/// "see https://example.com." should link just the URL, not swallow the
-/// period into it.
-final RegExp _markupPattern = RegExp(r'(\{\{[^{}]*\}\})|(\[\[[^\[\]]*\]\])|(thumb #\d+)|(pool #\d+)|(https?://\S+)');
+/// `{{author}}`, `[[title]]`, `thumb #<id>`, `pool #<id>`, a dtext link to
+/// another pool (`"label":/pools/<id>`, M81), or a bare `http(s)://` URL --
+/// whichever starts earliest wins at each position, same single-pass
+/// left-to-right scan this app's own pool-description parser (M44)
+/// originally used for its one pattern, generalized here to cover all of
+/// them in one shared parser. Trailing sentence punctuation (`.,;:!?)]}`)
+/// immediately after a URL match is excluded from the link -- "see
+/// https://example.com." should link just the URL, not swallow the period
+/// into it.
+///
+/// Group numbering: 1=author, 2=wiki, 3=thumb, 4=pool#, 5=the whole dtext
+/// pool-link match, 6=its label, 7=its pool id, 8=a bare URL. The dtext
+/// link's label/id are captured directly here (rather than re-matched with
+/// a second regex afterward) since its "visible text" is the quoted label,
+/// not the raw markup -- unlike every other pattern here, which is short
+/// enough to just render its own matched text verbatim.
+final RegExp _markupPattern = RegExp(r'(\{\{[^{}]*\}\})|(\[\[[^\[\]]*\]\])|(thumb #\d+)|(pool #\d+)|("([^"\n]*)":/pools/(\d+))|(https?://\S+)');
 
 bool _isTrailingPunctuation(String char) => '.,;:!?)]}'.contains(char);
 
@@ -115,7 +124,9 @@ List<RichMarkupSegment> parseRichMarkup(String text) {
     final wikiMatch = match.group(2);
     final thumbMatch = match.group(3);
     final poolMatch = match.group(4);
-    final urlMatch = match.group(5);
+    final dtextPoolLinkLabel = match.group(6);
+    final dtextPoolLinkId = match.group(7);
+    final urlMatch = match.group(8);
 
     if (authorMatch != null) {
       segments.add(RichMarkupAuthorSegment(authorMatch.substring(2, authorMatch.length - 2), authorMatch));
@@ -128,6 +139,12 @@ List<RichMarkupSegment> parseRichMarkup(String text) {
       cursor = match.end;
     } else if (poolMatch != null) {
       segments.add(RichMarkupPoolSegment(int.parse(poolMatch.substring('pool #'.length)), poolMatch));
+      cursor = match.end;
+    } else if (dtextPoolLinkId != null) {
+      // Unlike every other branch here, the "visible text" for a dtext
+      // link is its quoted label, not the raw "label":/pools/<id> markup --
+      // matchedText is the label so RichMarkupText renders that instead.
+      segments.add(RichMarkupPoolSegment(int.parse(dtextPoolLinkId), dtextPoolLinkLabel!));
       cursor = match.end;
     } else if (urlMatch != null) {
       var end = match.end;
