@@ -162,6 +162,105 @@ void main() {
     expect(repository.markPostSeenCalls, hasLength(2));
   });
 
+  /// Grabs the middle zone's own onTap and calls it directly -- same
+  /// established workaround this codebase already uses elsewhere for a
+  /// gesture that's unreliable through tester.tap()/tapAt() (see
+  /// post_detail_screen_test.dart's own precedent); tapping the exact same
+  /// coordinate twice in a row was flaky specifically when this test ran
+  /// after others in the same file (gesture-arena/timing-sensitive, not a
+  /// real app bug), which this sidesteps entirely.
+  void tapPauseZone(WidgetTester tester) => tester.widget<GestureDetector>(find.byKey(const Key('slideshowPauseZone'))).onTap!();
+
+  testWidgets('tapping the middle zone pauses autoplay, and tapping it again resumes (M78)', (WidgetTester tester) async {
+    final repository = FakeBunnyRepository();
+    final posts = [_post(1, fileExt: 'jpg'), _post(2, fileExt: 'mp4')];
+
+    await tester.pumpWidget(wrapWithLocalization(SlideshowScreen(posts: posts, localFilePaths: const {}, interval: const Duration(seconds: 1), repository: repository)));
+    await tester.pumpAndSettle();
+
+    tapPauseZone(tester);
+    await tester.pumpAndSettle();
+
+    // Paused: a tick at the interval must not advance.
+    await tester.pump(const Duration(seconds: 1));
+    expect(repository.markPostSeenCalls, hasLength(1)); // just the initial open
+
+    // Tapping the middle zone again resumes -- the next tick advances.
+    tapPauseZone(tester);
+    await tester.pumpAndSettle();
+    await tester.pump(const Duration(seconds: 1));
+    expect(repository.markPostSeenCalls, hasLength(2));
+  });
+
+  testWidgets('spacebar pauses/resumes autoplay the same way the middle zone does (M78)', (WidgetTester tester) async {
+    final repository = FakeBunnyRepository();
+    final posts = [_post(1, fileExt: 'jpg'), _post(2, fileExt: 'mp4')];
+
+    await tester.pumpWidget(wrapWithLocalization(SlideshowScreen(posts: posts, localFilePaths: const {}, interval: const Duration(seconds: 1), repository: repository)));
+    await tester.pumpAndSettle();
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.space);
+    await tester.pumpAndSettle();
+    await tester.pump(const Duration(seconds: 1));
+    expect(repository.markPostSeenCalls, hasLength(1));
+
+    await tester.sendKeyEvent(LogicalKeyboardKey.space);
+    await tester.pumpAndSettle();
+    await tester.pump(const Duration(seconds: 1));
+    expect(repository.markPostSeenCalls, hasLength(2));
+  });
+
+  testWidgets('manual next while paused still steps once, but stays paused (M78)', (WidgetTester tester) async {
+    final repository = FakeBunnyRepository();
+    final posts = [_post(1, fileExt: 'jpg'), _post(2, fileExt: 'mp4')];
+
+    await tester.pumpWidget(wrapWithLocalization(SlideshowScreen(posts: posts, localFilePaths: const {}, interval: const Duration(seconds: 1), repository: repository)));
+    await tester.pumpAndSettle();
+
+    tapPauseZone(tester);
+    await tester.pumpAndSettle();
+
+    tester.widget<GestureDetector>(find.byKey(const Key('slideshowNextZone'))).onTap!();
+    await tester.pumpAndSettle();
+    expect(repository.markPostSeenCalls, hasLength(2)); // open + this one step
+
+    // Still paused afterward -- a tick at the interval doesn't advance again.
+    await tester.pump(const Duration(seconds: 1));
+    expect(repository.markPostSeenCalls, hasLength(2));
+  });
+
+  testWidgets('tapping favorite queues the action and fills the heart (M78)', (WidgetTester tester) async {
+    final repository = FakeBunnyRepository();
+    final posts = [_post(1, fileExt: 'jpg')];
+
+    await tester.pumpWidget(wrapWithLocalization(SlideshowScreen(posts: posts, localFilePaths: const {}, interval: const Duration(seconds: 5), repository: repository)));
+    await tester.pumpAndSettle();
+
+    expect(find.byIcon(Icons.favorite_border), findsOneWidget);
+    await tester.tap(find.byIcon(Icons.favorite_border));
+    await tester.pumpAndSettle();
+
+    expect(repository.favoriteAddCalls, [1]);
+    expect(find.byIcon(Icons.favorite), findsOneWidget);
+    // Tapping/pausing doesn't itself advance or get blocked by the favorite action.
+    expect(repository.markPostSeenCalls, hasLength(1));
+  });
+
+  testWidgets('tapping upvote queues the vote and highlights the arrow, e621 only (M78)', (WidgetTester tester) async {
+    final repository = FakeBunnyRepository();
+    final posts = [_post(1, fileExt: 'jpg')];
+
+    await tester.pumpWidget(wrapWithLocalization(SlideshowScreen(posts: posts, localFilePaths: const {}, interval: const Duration(seconds: 5), repository: repository)));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byIcon(Icons.arrow_upward));
+    await tester.pumpAndSettle();
+
+    expect(repository.voteCalls, [(1, 1)]);
+    final icon = tester.widget<Icon>(find.byIcon(Icons.arrow_upward));
+    expect(icon.color, Colors.green);
+  });
+
   testWidgets('Right/Left arrow keys step forward/back the same way the tap zones do (M76)', (WidgetTester tester) async {
     final repository = FakeBunnyRepository();
     final posts = [_post(1, fileExt: 'jpg'), _post(2, fileExt: 'mp4')];
