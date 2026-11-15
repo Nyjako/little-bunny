@@ -703,7 +703,15 @@ void bunny_core_download_release(int64_t handle);
 #define BUNNY_FILENAME_MAX_LEN 200
 size_t bunny_filename_max_len(void);
 
-/* Allowed bytes: every printable ASCII byte (0x20-0x7E) except the nine
+/* A thin wrapper over GOBLIN's goblin_sanitize_filename_segment
+ * (goblin/sanitize_filename.h) -- this used to be hand-rolled here (naive
+ * UTF-8 continuation-byte counting, no Windows reserved-device-name check),
+ * now upstreamed into GOBLIN with proper UTF-8 validation (rejects overlong
+ * encodings/encoded surrogates/out-of-range codepoints as a single bad
+ * byte, never swallows an unbounded malformed run) and a check against
+ * Windows' reserved device names (CON, PRN, NUL, COM1-9, LPT1-9).
+ *
+ * Allowed bytes: every printable ASCII byte (0x20-0x7E) except the nine
  * Windows reserves for path syntax (< > : " / \ | ? *) -- Linux/macOS only
  * additionally forbid '/' (macOS also ':'), already covered by that same
  * set, so satisfying Windows' stricter rule satisfies all three. Every
@@ -712,15 +720,21 @@ size_t bunny_filename_max_len(void);
  * built from free-text site data (pool/post titles); artist/author names
  * are deliberately not routed through this at all (kept verbatim, non-ASCII
  * included, by the Dart side) since they're expected to carry non-ASCII
- * text as-is.
+ * text as-is. When ascii_only is true, this ALSO runs the input through
+ * GOBLIN's goblin_transliterate_to_ascii (goblin/ascii_transliterate.h)
+ * first, so a known Latin diacritic folds to its plain-ASCII base letter
+ * (e.g. "e" for a pool title) instead of collapsing straight to '_' --
+ * composing GOBLIN's two headers exactly as their own doc comments
+ * recommend. Not done when ascii_only is false, since transliteration
+ * would replace every non-Latin codepoint too, defeating the point of
+ * keeping non-ASCII text verbatim.
  *
- * Every disallowed byte is replaced with '_' -- a run of disallowed
- * continuation bytes belonging to the same non-ASCII codepoint (ascii_only
- * case) collapses to exactly one '_', not one per byte. A trailing run of
- * '.'/' ' is trimmed afterward (Windows can't create a name ending in
- * either); an empty result (nothing left after trimming, or empty/NULL
- * input) falls back to "_" rather than ever producing an unusable empty
- * name.
+ * Every byte this still can't make sense of is replaced with '_' -- a run
+ * of bytes belonging to the same disallowed codepoint collapses to exactly
+ * one '_', not one per byte. A trailing run of '.'/' ' is trimmed
+ * afterward (Windows can't create a name ending in either); an empty
+ * result (nothing left after trimming, or empty/NULL input) falls back to
+ * "_" rather than ever producing an unusable empty name.
  *
  * Writes at most out_buf_size - 1 bytes plus a NUL terminator into out_buf,
  * truncating the input if it doesn't fit -- safe at any byte boundary when

@@ -236,13 +236,22 @@ void main() {
       expect(result.filePath, '${tempDir.path}/pool_5 - untitled/5 - p0001 [42].png');
     });
 
-    test('strips non-ASCII characters from the pool title (M80)', () async {
+    test('transliterates Latin diacritics in the pool title to plain ASCII (M80)', () async {
       final manager = DownloadManager(client: MockClient((_) async => http.Response.bytes([1], 200)));
       final repository = FakeBunnyRepository();
 
       final result = await manager.downloadPost(_post(), repository, tempDir.path, poolId: 5, poolName: 'Café Comíc', poolPage: 1);
 
-      expect(result.filePath, '${tempDir.path}/pool_5 - Caf_ Com_c/5 - p0001 [42].png');
+      expect(result.filePath, '${tempDir.path}/pool_5 - Cafe Comic/5 - p0001 [42].png');
+    });
+
+    test('falls back to underscore for non-Latin text with no ASCII transliteration (M80)', () async {
+      final manager = DownloadManager(client: MockClient((_) async => http.Response.bytes([1], 200)));
+      final repository = FakeBunnyRepository();
+
+      final result = await manager.downloadPost(_post(), repository, tempDir.path, poolId: 5, poolName: 'ab中cd', poolPage: 1);
+
+      expect(result.filePath, '${tempDir.path}/pool_5 - ab_cd/5 - p0001 [42].png');
     });
 
     test('truncates a very long pool title so the folder name stays within the shared length budget (M80)', () async {
