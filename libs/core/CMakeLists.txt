@@ -15,6 +15,7 @@ add_library(bunny_core STATIC
     src/stats_report.c
     src/diagnostics.c
     src/wiki.c
+    src/sanitize.c
 )
 
 target_include_directories(bunny_core

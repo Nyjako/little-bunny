@@ -24,6 +24,10 @@ add_executable(bunny_core_test_wiki test_wiki.c)
 target_link_libraries(bunny_core_test_wiki PRIVATE bunny_core unity::framework)
 add_test(NAME bunny_core_test_wiki COMMAND bunny_core_test_wiki)
 
+add_executable(bunny_core_test_sanitize test_sanitize.c)
+target_link_libraries(bunny_core_test_sanitize PRIVATE bunny_core unity::framework)
+add_test(NAME bunny_core_test_sanitize COMMAND bunny_core_test_sanitize)
+
 add_executable(bunny_core_test_concurrency test_concurrency.c)
 target_link_libraries(bunny_core_test_concurrency PRIVATE bunny_core unity::framework)
 if(NOT ANDROID AND NOT WIN32)
