@@ -115,6 +115,21 @@ void main() {
     await waitUntilIdle();
   });
 
+  test('a slideshow download never auto-favorites/auto-upvotes the post, even with both settings enabled (M82)', () async {
+    SharedPreferences.setMockInitialValues({'download_destination_folder': destinationDir.path, 'auto_favorite_on_download': true, 'auto_upvote_on_download': true});
+    final post = _post(id: 4);
+    final searchId = await repository.createSearch(BunnySite.e621, 'wolves', 'wolf');
+    repository.postsBySearchId[searchId] = [post];
+    final slideshowId = await repository.slideshowCreate('my slideshow');
+    await repository.slideshowSearchAdd(slideshowId, searchId);
+
+    await service.prepare(slideshowId);
+    await waitUntilIdle();
+
+    expect(repository.favoriteAddCalls, isEmpty);
+    expect(repository.voteCalls, isEmpty);
+  });
+
   test('a post actively downloading this session is classified in progress, without being re-enqueued', () async {
     final post = _post(id: 3);
     final searchId = await repository.createSearch(BunnySite.e621, 'wolves', 'wolf');
