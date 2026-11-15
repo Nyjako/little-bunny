@@ -598,7 +598,8 @@ class _SlideshowEditScreenState extends State<SlideshowEditScreen> {
             const SizedBox(height: 8),
             LinearProgressIndicator(value: report.posts.isEmpty ? 0 : report.readyCount / report.posts.length),
             const SizedBox(height: 4),
-            Text(l10n.slideshowEditPrepareSummary(report.readyCount, report.inProgressCount, report.replacedCount, report.unreplaceableCount)),
+            // missingCount wired up once SlideshowPrepareReport tracks it (M78).
+            Text(l10n.slideshowEditPrepareSummary(report.readyCount, 0, report.inProgressCount, report.replacedCount, report.unreplaceableCount)),
             for (final status in report.posts.where((status) => status.readiness == SlideshowPostReadiness.unreplaceable))
               Padding(
                 padding: const EdgeInsets.only(top: 4),
