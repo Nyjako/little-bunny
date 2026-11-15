@@ -11,6 +11,7 @@ import 'l10n/app_localizations.dart';
 import 'native_dependency_licenses.dart';
 import 'repository/bunny_repository.dart';
 import 'repository/bunny_repository_factory.dart';
+import 'repository/ffi_bunny_repository.dart';
 import 'screens/lock_screen.dart';
 import 'screens/searches_screen.dart';
 import 'screens/setup_screen.dart';
@@ -128,6 +129,25 @@ class _LittleBunnyAppState extends State<LittleBunnyApp> {
   BunnyRepository? _repository;
   bool _loading = true;
   bool _locked = false;
+
+  /// Standalone mode only (M79) -- networked mode's own server already
+  /// drains its action_queue on a short, independent background cadence
+  /// (server/src/scheduler.c), faster than this app could usefully poll it
+  /// anyway, so there's nothing for the app itself to do there. Standalone
+  /// mode has no separate server process, so without this, a queued
+  /// favorite/vote/comment would only ever get sent whenever something else
+  /// happened to call processQueue() -- this is what used to be coupled to
+  /// the download queue's own progress (DownloadQueueService's old
+  /// every-10-items drain), blocking downloads on the real site network
+  /// call. Decoupled now: this ticks on its own regardless of whether
+  /// anything is downloading, and downloads never call processQueue() at
+  /// all anymore.
+  Timer? _actionQueueDrainTimer;
+
+  void _updateActionQueueDrainTimer(BunnyRepository repository) {
+    _actionQueueDrainTimer?.cancel();
+    _actionQueueDrainTimer = repository is FfiBunnyRepository ? Timer.periodic(const Duration(seconds: 30), (_) => unawaited(repository.processQueue())) : null;
+  }
   // Instant, sensible defaults (match ThemeSettingsStore's own defaults) so
   // the very first frame doesn't flash the wrong theme before the real
   // values load.
@@ -169,6 +189,7 @@ class _LittleBunnyAppState extends State<LittleBunnyApp> {
       _loading = false;
     });
     _activeRepository = repository;
+    _updateActionQueueDrainTimer(repository);
     unawaited(widget.downloadQueueService.restore(repository));
   }
 
@@ -204,7 +225,14 @@ class _LittleBunnyAppState extends State<LittleBunnyApp> {
       _locked = locked;
     });
     _activeRepository = repository;
+    _updateActionQueueDrainTimer(repository);
     unawaited(widget.downloadQueueService.restore(repository));
+  }
+
+  @override
+  void dispose() {
+    _actionQueueDrainTimer?.cancel();
+    super.dispose();
   }
 
   void _onUnlocked() {
