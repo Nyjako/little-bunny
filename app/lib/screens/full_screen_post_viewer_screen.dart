@@ -6,7 +6,9 @@ import 'package:photo_view/photo_view_gallery.dart';
 
 import '../repository/bunny_models.dart';
 import '../repository/bunny_repository.dart';
+import '../services/download_manager.dart';
 import '../settings/display_settings_store.dart';
+import '../settings/download_settings_store.dart';
 import '../util/image_headers.dart';
 import '../util/media_type.dart';
 import '../util/mouse_drag_scroll_behavior.dart';
@@ -22,6 +24,17 @@ class FullScreenPostViewerScreen extends StatefulWidget {
   final int initialIndex;
   final BunnyRepository repository;
   final DisplaySettingsStore displaySettingsStore;
+  final DownloadManager downloadManager;
+  final DownloadSettingsStore downloadSettingsStore;
+
+  /// See [PostDetailScreen.poolId]/[PostDetailScreen.poolName]/
+  /// [PostDetailScreen.pageByPostId] -- threaded straight through from
+  /// there (M83), same reasoning: an already-downloaded pool post is filed
+  /// under its pool's own folder, not the regular per-artist one, so this
+  /// viewer's own local-file lookup needs the same pool context to find it.
+  final int? poolId;
+  final String? poolName;
+  final Map<int, int> pageByPostId;
 
   /// Called live on every swipe here (not just once on exit), so whatever
   /// opened this screen can keep its own notion of "the current post" in
@@ -35,6 +48,11 @@ class FullScreenPostViewerScreen extends StatefulWidget {
     required this.initialIndex,
     required this.repository,
     this.displaySettingsStore = const DisplaySettingsStore(),
+    this.downloadManager = const DownloadManager(),
+    this.downloadSettingsStore = const DownloadSettingsStore(),
+    this.poolId,
+    this.poolName,
+    this.pageByPostId = const {},
     this.onPageChanged,
   });
 
@@ -48,10 +66,42 @@ class _FullScreenPostViewerScreenState extends State<FullScreenPostViewerScreen>
   /// See `PostDetailScreen._preloadCount`'s doc comment -- same shape here.
   int _preloadCount = 3;
 
+  /// Resolved once up front for every post in [FullScreenPostViewerScreen.
+  /// posts] (M83), not lazily per page -- [DownloadManager.batchLocalFilePathFor]
+  /// exists specifically to avoid one slow platform-channel round trip per
+  /// post under Android's SAF (see its own doc comment), so resolving here
+  /// in one batch call keeps that guarantee instead of each
+  /// [PhotoViewGalleryPageOptions] page resolving its own. A post missing
+  /// from this map simply has no local copy yet -- [PostMediaPage] falls
+  /// back to fetching it over the network, same as before this existed.
+  /// Starts empty, same as [PostDetailScreen]'s own local-file future: the
+  /// very first frame(s) may briefly show the network path, swapping to the
+  /// local one the moment this resolves.
+  Map<int, String> _localFilePaths = {};
+
   @override
   void initState() {
     super.initState();
     _loadPreloadCountThenPreload();
+    _resolveLocalFilePaths();
+  }
+
+  Future<void> _resolveLocalFilePaths() async {
+    try {
+      final folder = await widget.downloadSettingsStore.loadDestinationFolder();
+      if (folder == null) {
+        return;
+      }
+      final paths = await widget.downloadManager.batchLocalFilePathFor(widget.posts, folder, poolId: widget.poolId ?? 0, poolName: widget.poolName, pageByPostId: widget.pageByPostId);
+      if (!mounted) {
+        return;
+      }
+      setState(() => _localFilePaths = paths);
+    } catch (_) {
+      // Best-effort, same tolerance as every other local-filesystem check
+      // in this app -- a failure here just means falling back to the
+      // network, not a crash.
+    }
   }
 
   Future<void> _loadPreloadCountThenPreload() async {
@@ -76,6 +126,11 @@ class _FullScreenPostViewerScreenState extends State<FullScreenPostViewerScreen>
     }
     final post = widget.posts[index];
     if (isVideoExt(post.fileExt) || post.fileUrl == null) {
+      return;
+    }
+    // Already resolved to a local copy (M83) -- nothing to precache over
+    // the network, and PostMediaPage reads it straight off disk either way.
+    if (_localFilePaths.containsKey(post.id)) {
       return;
     }
     precacheImage(CachedNetworkImageProvider(post.fileUrl!, headers: imageHeadersFor(post.site)), context);
@@ -146,7 +201,7 @@ class _FullScreenPostViewerScreenState extends State<FullScreenPostViewerScreen>
                   // original aspect ratio even when the platform's image
                   // codec misreports an animated GIF's true dimensions.
                   return PhotoViewGalleryPageOptions.customChild(
-                    child: PostMediaPage(post: post),
+                    child: PostMediaPage(post: post, localFilePath: _localFilePaths[post.id]),
                     childSize: post.width > 0 && post.height > 0 ? Size(post.width.toDouble(), post.height.toDouble()) : null,
                     minScale: PhotoViewComputedScale.contained,
                     maxScale: isVideo ? PhotoViewComputedScale.contained : PhotoViewComputedScale.covered * 3,

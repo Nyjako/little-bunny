@@ -231,9 +231,13 @@ class _TagBrowseScreenState extends State<TagBrowseScreen> {
   }
 
   /// Same pool-page-numbering convention as [PostGridScreen._massDownload] --
-  /// a selected post's page is its position in the full, currently-loaded
-  /// [_posts] list (not its position within just the selection), so
-  /// selecting only some of a pool's posts doesn't renumber them.
+  /// a post's page is its position in the full, currently-loaded [_posts]
+  /// list (not its position within just a selection), so selecting only
+  /// some of a pool's posts doesn't renumber them. Also used by [_openPost]
+  /// (M82) so [PostDetailScreen]'s own "already downloaded" check looks in
+  /// the exact folder [_massDownload] actually wrote this pool's posts to.
+  Map<int, int> get _poolPageByPostId => {for (final (index, post) in _posts.indexed) post.id: index + 1};
+
   Future<void> _massDownload(AppLocalizations l10n) async {
     final selected = _selectedPosts;
     if (selected.isEmpty) {
@@ -241,8 +245,7 @@ class _TagBrowseScreenState extends State<TagBrowseScreen> {
     }
     final poolId = _poolId;
     if (poolId != null) {
-      final pageByPostId = {for (final (index, post) in _posts.indexed) post.id: index + 1};
-      await widget.downloadQueueService.enqueuePool(selected, widget.repository, poolId: poolId, poolName: _poolInfo?.name ?? widget.query, pageByPostId: pageByPostId);
+      await widget.downloadQueueService.enqueuePool(selected, widget.repository, poolId: poolId, poolName: _poolInfo?.name ?? widget.query, pageByPostId: _poolPageByPostId);
     } else {
       await widget.downloadQueueService.enqueueAll(selected, widget.repository);
     }
@@ -405,6 +408,7 @@ class _TagBrowseScreenState extends State<TagBrowseScreen> {
   }
 
   Future<void> _openPost(List<BunnyPost> posts, BunnyPost post) async {
+    final poolId = _poolId;
     await Navigator.push(
       context,
       MaterialPageRoute(
@@ -423,6 +427,9 @@ class _TagBrowseScreenState extends State<TagBrowseScreen> {
           // all -- no context to fork from.
           currentSearchSite: widget.customFetch == null ? widget.site : null,
           currentSearchQuery: widget.customFetch == null ? widget.query : null,
+          poolId: poolId,
+          poolName: poolId != null ? (_poolInfo?.name ?? widget.query) : null,
+          pageByPostId: poolId != null ? _poolPageByPostId : const {},
         ),
       ),
     );

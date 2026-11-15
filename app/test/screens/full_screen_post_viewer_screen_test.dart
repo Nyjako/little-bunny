@@ -3,13 +3,33 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:little_bunny/repository/bunny_models.dart';
 import 'package:little_bunny/screens/full_screen_post_viewer_screen.dart';
+import 'package:little_bunny/services/download_manager.dart';
+import 'package:little_bunny/widgets/post_media_page.dart';
 import 'package:photo_view/photo_view_gallery.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:video_player/video_player.dart';
 import 'package:video_player_platform_interface/video_player_platform_interface.dart';
 
 import '../fakes/fake_bunny_repository.dart';
 import '../fakes/fake_video_player_platform.dart';
 import '../fakes/test_app.dart';
+
+/// Records the args [FullScreenPostViewerScreen] actually forwards into
+/// [DownloadManager.batchLocalFilePathFor] (M83) -- lets a test assert the
+/// screen threads its own pool context all the way down, same reasoning as
+/// `post_detail_screen_test.dart`'s own `_RecordingAlreadyDownloadedManager`.
+class _RecordingLocalFileManager extends DownloadManager {
+  const _RecordingLocalFileManager(this.calls, this.result);
+
+  final List<(int poolId, String? poolName, Map<int, int> pageByPostId)> calls;
+  final Map<int, String> result;
+
+  @override
+  Future<Map<int, String>> batchLocalFilePathFor(List<BunnyPost> posts, String destinationFolder, {int poolId = 0, String? poolName, Map<int, int> pageByPostId = const {}}) async {
+    calls.add((poolId, poolName, pageByPostId));
+    return result;
+  }
+}
 
 BunnyPost _post(int id, {String fileExt = 'jpg'}) => BunnyPost(
   id: id,
@@ -170,5 +190,74 @@ void main() {
     final options = gallery.builder!(context, 0);
     expect(options.childSize, const Size(640, 480));
     expect(options.imageProvider, isNull); // customChild is used instead, see M9.6.1
+  });
+
+  group('local-file preference (M83)', () {
+    testWidgets('resolves every post\'s local path up front, forwarding pool context, and feeds it into PostMediaPage', (WidgetTester tester) async {
+      SharedPreferences.setMockInitialValues({'download_destination_folder': '/fake/dest'});
+      final repository = FakeBunnyRepository();
+      final posts = [_post(1), _post(2)];
+      final calls = <(int, String?, Map<int, int>)>[];
+
+      await tester.pumpWidget(
+        wrapWithLocalization(
+          FullScreenPostViewerScreen(
+            posts: posts,
+            initialIndex: 0,
+            repository: repository,
+            downloadManager: _RecordingLocalFileManager(calls, {1: '/fake/dest/pool_42 - My Comic/42 - p0005 [1].jpg'}),
+            poolId: 42,
+            poolName: 'My Comic',
+            pageByPostId: {1: 5, 2: 6},
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // Not a single record-list `expect` -- a record's own `==` compares
+      // its Map field by identity, not by contents, so that would pass or
+      // fail for the wrong reason.
+      expect(calls, hasLength(1));
+      expect(calls.single.$1, 42);
+      expect(calls.single.$2, 'My Comic');
+      expect(calls.single.$3, {1: 5, 2: 6});
+
+      final gallery = tester.widget<PhotoViewGallery>(find.byType(PhotoViewGallery));
+      final context = tester.element(find.byType(PhotoViewGallery));
+      final post1Media = gallery.builder!(context, 0).child as PostMediaPage;
+      expect(post1Media.localFilePath, '/fake/dest/pool_42 - My Comic/42 - p0005 [1].jpg');
+      final post2Media = gallery.builder!(context, 1).child as PostMediaPage;
+      expect(post2Media.localFilePath, isNull);
+    });
+
+    testWidgets('a post with no local copy yet still falls back to the network, not a crash', (WidgetTester tester) async {
+      SharedPreferences.setMockInitialValues({'download_destination_folder': '/fake/dest'});
+      final repository = FakeBunnyRepository();
+      final posts = [_post(1)];
+
+      await tester.pumpWidget(
+        wrapWithLocalization(FullScreenPostViewerScreen(posts: posts, initialIndex: 0, repository: repository, downloadManager: _RecordingLocalFileManager([], const {}))),
+      );
+      await tester.pumpAndSettle();
+
+      final gallery = tester.widget<PhotoViewGallery>(find.byType(PhotoViewGallery));
+      final context = tester.element(find.byType(PhotoViewGallery));
+      final media = gallery.builder!(context, 0).child as PostMediaPage;
+      expect(media.localFilePath, isNull);
+    });
+
+    testWidgets('no destination folder configured never even attempts the lookup', (WidgetTester tester) async {
+      SharedPreferences.setMockInitialValues({});
+      final repository = FakeBunnyRepository();
+      final posts = [_post(1)];
+      final calls = <(int, String?, Map<int, int>)>[];
+
+      await tester.pumpWidget(
+        wrapWithLocalization(FullScreenPostViewerScreen(posts: posts, initialIndex: 0, repository: repository, downloadManager: _RecordingLocalFileManager(calls, const {}))),
+      );
+      await tester.pumpAndSettle();
+
+      expect(calls, isEmpty);
+    });
   });
 }

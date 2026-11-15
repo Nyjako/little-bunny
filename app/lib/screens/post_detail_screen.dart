@@ -200,6 +200,21 @@ class PostDetailScreen extends StatefulWidget {
   final BunnySite? currentSearchSite;
   final String? currentSearchQuery;
 
+  /// Set only when every post in [siblingPosts] was reached through a pool
+  /// browse (M82) -- the same pool-aware destination [DownloadManager.
+  /// downloadPost]/[enqueuePool] already file a pool's mass-downloaded posts
+  /// under (see [DownloadManager._destinationFor]'s own doc comment), so the
+  /// "already downloaded"/"show the local file" checks below look in the
+  /// same place a pool download actually wrote to, instead of always
+  /// assuming the regular per-artist folder. [pageByPostId] gives each
+  /// sibling post's own page within the pool (keyed by [BunnyPost.id], same
+  /// convention [DownloadQueueService.enqueuePool] already uses) -- a post
+  /// missing from it (or [poolId] `null`) is treated as not a pool download
+  /// at all, same as omitting pool context to [DownloadManager] directly.
+  final int? poolId;
+  final String? poolName;
+  final Map<int, int> pageByPostId;
+
   const PostDetailScreen({
     super.key,
     required this.post,
@@ -211,6 +226,9 @@ class PostDetailScreen extends StatefulWidget {
     this.siblingPosts,
     this.currentSearchSite,
     this.currentSearchQuery,
+    this.poolId,
+    this.poolName,
+    this.pageByPostId = const {},
   });
 
   @override
@@ -373,6 +391,9 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
             siblingPosts: widget.siblingPosts,
             currentSearchSite: widget.currentSearchSite,
             currentSearchQuery: widget.currentSearchQuery,
+            poolId: widget.poolId,
+            poolName: widget.poolName,
+            pageByPostId: widget.pageByPostId,
             onFullScreenPostChanged: _jumpToPost,
           ),
         ),
@@ -398,6 +419,13 @@ class _PostDetailPage extends StatefulWidget {
   final BunnySite? currentSearchSite;
   final String? currentSearchQuery;
 
+  /// See [PostDetailScreen.poolId]/[PostDetailScreen.poolName]/
+  /// [PostDetailScreen.pageByPostId] -- threaded straight through from the
+  /// outer shell (M82), same as currentSearchSite/currentSearchQuery above.
+  final int? poolId;
+  final String? poolName;
+  final Map<int, int> pageByPostId;
+
   /// Called live as the user swipes inside [FullScreenPostViewerScreen]
   /// (not just once on exit) so the outer [PostDetailScreen]'s own
   /// [PageView] already shows the right page the moment fullscreen is
@@ -416,6 +444,9 @@ class _PostDetailPage extends StatefulWidget {
     this.siblingPosts,
     this.currentSearchSite,
     this.currentSearchQuery,
+    this.poolId,
+    this.poolName,
+    this.pageByPostId = const {},
     this.onFullScreenPostChanged,
   });
 
@@ -692,12 +723,20 @@ class _PostDetailPageState extends State<_PostDetailPage> {
     });
   }
 
+  /// This post's page within [PostDetailScreen.poolId], if any (M82) -- 0
+  /// (treated as "not a pool download" by [DownloadManager]) when this
+  /// screen has no pool context at all, or when [_post] just isn't in
+  /// [PostDetailScreen.pageByPostId] (shouldn't normally happen when
+  /// [PostDetailScreen.poolId] is set, but failing open to the regular
+  /// per-artist path is harmless either way).
+  int get _poolPage => widget.poolId != null ? (widget.pageByPostId[_post.id] ?? 0) : 0;
+
   Future<bool> _checkIsDownloaded() async {
     final folder = await widget.downloadSettingsStore.loadDestinationFolder();
     if (folder == null) {
       return false;
     }
-    return widget.downloadManager.isDownloaded(_post, folder);
+    return widget.downloadManager.isDownloaded(_post, folder, poolId: widget.poolId ?? 0, poolName: widget.poolName, poolPage: _poolPage);
   }
 
   Future<String?> _resolveLocalFilePath() async {
@@ -706,7 +745,7 @@ class _PostDetailPageState extends State<_PostDetailPage> {
       if (folder == null) {
         return null;
       }
-      return await widget.downloadManager.localFilePathFor(_post, folder);
+      return await widget.downloadManager.localFilePathFor(_post, folder, poolId: widget.poolId ?? 0, poolName: widget.poolName, poolPage: _poolPage);
     } catch (_) {
       // Best-effort, same tolerance as every other local-filesystem check
       // in this app -- a failure here (e.g. no Downloads directory on this
@@ -735,7 +774,12 @@ class _PostDetailPageState extends State<_PostDetailPage> {
   /// after a restart, even once the mass-download race was already fixed,
   /// because this single-item path was the one call site that wasn't).
   Future<void> _queueDownload(AppLocalizations l10n) async {
-    await widget.downloadQueueService.enqueue(_post, widget.repository);
+    // poolId/poolName/poolPage (M82): a single-post download from within a
+    // pool browse must land in that pool's own folder, same as the mass
+    // download that put every *other* post from this pool there -- not the
+    // regular per-artist folder, which [_checkIsDownloaded]/
+    // [_resolveLocalFilePath] above would then never find it under.
+    await widget.downloadQueueService.enqueue(_post, widget.repository, poolId: widget.poolId ?? 0, poolName: widget.poolName, poolPage: _poolPage);
     if (!mounted) {
       return;
     }
@@ -880,6 +924,11 @@ class _PostDetailPageState extends State<_PostDetailPage> {
           initialIndex: index,
           repository: widget.repository,
           displaySettingsStore: widget.displaySettingsStore,
+          downloadManager: widget.downloadManager,
+          downloadSettingsStore: widget.downloadSettingsStore,
+          poolId: widget.poolId,
+          poolName: widget.poolName,
+          pageByPostId: widget.pageByPostId,
           onPageChanged: widget.onFullScreenPostChanged,
         ),
       ),
