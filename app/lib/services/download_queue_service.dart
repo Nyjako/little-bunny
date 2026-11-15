@@ -123,7 +123,12 @@ class DownloadQueueService extends ChangeNotifier {
   final DownloadSettingsStore downloadSettingsStore;
   final DownloadQueueNotifier notifier;
 
-  DownloadQueueService({required this.downloadManager, required this.downloadSettingsStore, this.notifier = const NoopDownloadQueueNotifier()});
+  /// Injectable clock (M78) -- only ever overridden by a test, so the
+  /// progress-notification throttle below can be proven without waiting on
+  /// real wall-clock time. Defaults to the real clock.
+  final DateTime Function() _now;
+
+  DownloadQueueService({required this.downloadManager, required this.downloadSettingsStore, this.notifier = const NoopDownloadQueueNotifier(), DateTime Function()? now}) : _now = now ?? DateTime.now;
 
   /// A modest cap (M62) -- meaningfully faster than one-at-a-time for a
   /// large batch without opening an unbounded number of simultaneous
@@ -183,6 +188,18 @@ class DownloadQueueService extends ChangeNotifier {
   Future<void>? _sessionStartFuture;
   Stopwatch? _sessionStopwatch;
   int _itemsSinceSync = 0;
+
+  /// When [notifier.showProgress] was last actually called (M78) -- `null`
+  /// means "never, this session," which always fires immediately. Calling
+  /// it once per completed item (no throttling at all) used to fire many
+  /// times per second for a fast batch of small files, which is harmless on
+  /// Android/iOS but trips Linux's desktop notification daemon's own rate
+  /// limit (`org.freedesktop.Notifications.Error.ExcessNotificationGeneration`)
+  /// and looks like the notification flashing/recreating itself. Reset to
+  /// null once the session ends, so the next session's first item always
+  /// notifies right away rather than inheriting a stale timestamp.
+  DateTime? _lastProgressNotifyAt;
+  static const _progressNotifyMinInterval = Duration(milliseconds: 750);
 
   /// Set by [pause], cleared by [resume] -- lets the user hold off on new
   /// downloads starting (e.g. right before disconnecting from wifi, to
@@ -551,9 +568,6 @@ class DownloadQueueService extends ChangeNotifier {
       // A broken notifier (any implementation, not just the real one, which
       // already swallows its own exceptions -- this is the queue's own
       // backstop) must never stop subsequent items from being processed.
-      // This keeps firing every item -- it's neither an expensive disk
-      // write nor a network round trip, so there's no reason to reduce how
-      // often the UI/notification sees progress.
       // _sessionDone > 1 (not > 0): on the very first completed item
       // there's only one data point, not a rate yet -- eta stays null for
       // that call, non-null from the second call onward.
@@ -562,10 +576,18 @@ class DownloadQueueService extends ChangeNotifier {
         final avgPerItem = _sessionStopwatch!.elapsed ~/ _sessionDone;
         eta = avgPerItem * (_sessionTotal - _sessionDone);
       }
-      try {
-        await notifier.showProgress(done: _sessionDone, total: _sessionTotal, failed: _failed, eta: eta);
-      } catch (_) {
-        // Best-effort.
+      // Throttled (M78), unlike notifyListeners() below -- the in-app UI
+      // can repaint as often as it likes (cheap, local), but the OS-level
+      // notification call itself is what trips Linux's rate limit, so only
+      // that call is gated to _progressNotifyMinInterval.
+      final notifyTime = _now();
+      if (_lastProgressNotifyAt == null || notifyTime.difference(_lastProgressNotifyAt!) >= _progressNotifyMinInterval) {
+        _lastProgressNotifyAt = notifyTime;
+        try {
+          await notifier.showProgress(done: _sessionDone, total: _sessionTotal, failed: _failed, eta: eta);
+        } catch (_) {
+          // Best-effort.
+        }
       }
       notifyListeners();
     }
@@ -598,6 +620,7 @@ class DownloadQueueService extends ChangeNotifier {
       _failed = 0;
       _sessionStopwatch = null;
       _sessionStartFuture = null;
+      _lastProgressNotifyAt = null;
     }
     notifyListeners();
   }
