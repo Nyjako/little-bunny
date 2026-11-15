@@ -2141,7 +2141,7 @@ class BunnyCoreNative {
 /// cross-platform budget `bunny_filename_max_len()` reports) -- pass a
 /// smaller value to budget for a mandatory prefix the caller builds
 /// separately and never wants truncated itself (e.g. a pool folder's
-/// "pool_<id> - " prefix). A [maxLength] <= 0 returns an empty string
+/// `"pool_<id> - "` prefix). A [maxLength] <= 0 returns an empty string
 /// without making a native call at all.
 String bunnySanitizeFilenameSegment(String input, {bool asciiOnly = false, int? maxLength}) {
   final cap = maxLength ?? bunnyFilenameMaxLen();
