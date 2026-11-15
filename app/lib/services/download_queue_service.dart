@@ -266,8 +266,14 @@ class DownloadQueueService extends ChangeNotifier {
     return (done, postIds.length);
   }
 
-  /// Enqueues [post] -- see [enqueueAll] for why the returned future matters.
-  Future<void> enqueue(BunnyPost post, BunnyRepository repository) => enqueueAll([post], repository);
+  /// Enqueues [post] -- see [enqueueAll] for why the returned future
+  /// matters. [poolId]/[poolName]/[poolPage] (M82) let a single-post
+  /// download preserve pool placement (e.g. the download button on a post
+  /// opened from within a pool browse) exactly like [enqueuePool] already
+  /// does for a batch -- [poolId] <= 0 is "not a pool download", same
+  /// sentinel convention as [DownloadManager._destinationFor].
+  Future<void> enqueue(BunnyPost post, BunnyRepository repository, {int poolId = 0, String? poolName, int poolPage = 0}) =>
+      _enqueueAll([post], repository, poolId: poolId, poolName: poolName, pageByPostId: poolId > 0 ? {post.id: poolPage} : const {});
 
   /// Same as [enqueue], for a whole mass-download selection at once. Up to
   /// [_maxConcurrentDownloads] items download in parallel underneath (M62).

@@ -121,6 +121,22 @@ void main() {
     expect(await File('${destinationDir.path}/someartist/1.png').exists(), isTrue);
   });
 
+  test('enqueue with poolId/poolName/poolPage (M82) tags the item and downloads into the pool folder, not the regular per-artist one', () async {
+    final service = buildService(client: MockClient((_) async => http.Response.bytes([1, 2, 3], 200)));
+    final post = _post(id: 1);
+    repository.postsById[1] = post;
+
+    await service.enqueue(post, repository, poolId: 123, poolName: 'My Comic', poolPage: 7);
+    final item = service.items.single;
+    expect(item.poolId, 123);
+    expect(item.poolName, 'My Comic');
+    expect(item.poolPage, 7);
+
+    await waitUntilIdle(service);
+
+    expect(await File('${destinationDir.path}/pool_123 - My Comic/123 - p0007 [1].png').exists(), isTrue);
+  });
+
   test('a DownloadQueueItem\'s bytesReceived/bytesTotal (M62) track its own progress, resetting after', () async {
     final firstChunkGate = Completer<void>();
     // Drives onProgress on its own timeline (M66 -- the native fetch
