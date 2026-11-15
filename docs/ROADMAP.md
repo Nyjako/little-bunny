@@ -3450,3 +3450,30 @@ this file is the single source of truth for "what's done" across sessions.
   favorites would've gone out back-to-back unpaced regardless of drain frequency. Now
   every website request waits on the limiter, and one logged-in client is reused across
   a whole drain pass, mirroring how the e621 client was already reused.
+
+- [x] **M80 — Fix pool folder creation failing on Android, with a cross-platform
+  filename sanitizer**
+  A pool download's folder name was hardcoded as `"pool:<id> - <title>"` -- harmless on
+  Linux, but the literal `:` either made Android's SAF refuse to create the directory
+  outright or silently substitute `_` for it depending on the provider (confirmed live:
+  every pool download failing with a `PluginError`), and Windows can't use `:` in a
+  filename either. Fixed at the root rather than patching just that one character: a new
+  C sanitizer (`bunny_sanitize_filename_segment`, `libs/core/src/sanitize.c`) replaces
+  every byte Windows reserves for path syntax (`< > : " / \ | ? *`) plus ASCII control
+  bytes with `_` -- satisfying Windows' stricter rule automatically satisfies Linux/
+  macOS too, since their own forbidden characters are a subset of Windows'. `ascii_only`
+  additionally rejects non-ASCII bytes (collapsing a whole multi-byte UTF-8 codepoint to
+  one `_`, not one per byte) for free-text site data like a pool title; artist/author
+  folder names are deliberately left out of this (kept verbatim, non-ASCII included).
+  Trims a trailing `.`/` ` (Windows can't create a name ending in either) and truncates
+  to fit a caller-given buffer without ever splitting a multi-byte sequence.
+  `bunny_filename_max_len()` exposes one shared length budget (200 bytes) used
+  everywhere, instead of a separate per-platform guess nothing could verify live on
+  every target. Exposed to Dart as a synchronous call (`bunnySanitizeFilenameSegment`/
+  `bunnyFilenameMaxLen`) that deliberately bypasses `BunnyCoreNative`'s isolate dispatch
+  pipe -- this function has no `bunny_core_t*` and does no I/O or locking, so there's
+  nothing to serialize against, and networked mode never opens a `BunnyCoreNative` core/
+  isolate at all, so a call that depended on one wouldn't work there regardless.
+  `DownloadManager`'s pool folder is now `"pool_<id> - <title>"`, with the title
+  ASCII-sanitized and truncated to the shared budget -- the `"pool_<id> - "` prefix
+  itself is never truncated.
