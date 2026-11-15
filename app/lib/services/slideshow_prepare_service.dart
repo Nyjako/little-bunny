@@ -193,7 +193,11 @@ class SlideshowPrepareService {
     }
 
     if (toEnqueue.isNotEmpty) {
-      await downloadQueueService.enqueueAll(toEnqueue, repository);
+      // suppressAutoActions (M82): these downloads exist purely so the
+      // slideshow can be watched -- they must never trigger the user's
+      // global auto-favorite/auto-upvote-on-download settings, unlike an
+      // explicit download elsewhere in the app.
+      await downloadQueueService.enqueueAll(toEnqueue, repository, suppressAutoActions: true);
     }
 
     return SlideshowPrepareReport(results);

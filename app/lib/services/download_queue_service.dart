@@ -66,6 +66,18 @@ class DownloadQueueItem {
   final String? poolName;
   final int poolPage;
 
+  /// When true, this item's download never auto-favorites/auto-upvotes the
+  /// post, regardless of the user's global "auto-favorite/upvote on
+  /// download" settings (M82) -- used for downloads that exist purely so a
+  /// post can be *viewed* (currently, slideshow prepare) rather than ones
+  /// the user explicitly asked to download, which is what those settings
+  /// are meant to react to. In-memory only: a process restart mid-download
+  /// restores this item from its `download_queue` row with the default
+  /// (`false`), the same tradeoff [poolId]/[poolName]/[poolPage] would face
+  /// if this flag were ever meaningfully long-lived instead of acted on
+  /// within moments of being enqueued.
+  final bool suppressAutoActions;
+
   DownloadQueueItem({
     required this.post,
     required this.repository,
@@ -75,6 +87,7 @@ class DownloadQueueItem {
     this.poolId = 0,
     this.poolName,
     this.poolPage = 0,
+    this.suppressAutoActions = false,
   });
 }
 
@@ -267,7 +280,8 @@ class DownloadQueueService extends ChangeNotifier {
   }
 
   /// Enqueues [post] -- see [enqueueAll] for why the returned future matters.
-  Future<void> enqueue(BunnyPost post, BunnyRepository repository) => enqueueAll([post], repository);
+  Future<void> enqueue(BunnyPost post, BunnyRepository repository, {bool suppressAutoActions = false}) =>
+      enqueueAll([post], repository, suppressAutoActions: suppressAutoActions);
 
   /// Same as [enqueue], for a whole mass-download selection at once. Up to
   /// [_maxConcurrentDownloads] items download in parallel underneath (M62).
@@ -297,7 +311,8 @@ class DownloadQueueService extends ChangeNotifier {
   /// window; the dedup/persist logic below already runs synchronously up to
   /// that point, so this adds latency to the caller, not to when downloading
   /// actually starts.
-  Future<void> enqueueAll(List<BunnyPost> posts, BunnyRepository repository) => _enqueueAll(posts, repository);
+  Future<void> enqueueAll(List<BunnyPost> posts, BunnyRepository repository, {bool suppressAutoActions = false}) =>
+      _enqueueAll(posts, repository, suppressAutoActions: suppressAutoActions);
 
   /// Same as [enqueueAll], but every item is marked as part of pool
   /// [poolId]/[poolName] (M65). [pageByPostId] gives each post's *true*
@@ -311,10 +326,23 @@ class DownloadQueueService extends ChangeNotifier {
   /// [DownloadManager.downloadPost] files each item under a pool-named
   /// folder with a page-numbered filename instead of the regular
   /// per-artist scheme.
-  Future<void> enqueuePool(List<BunnyPost> posts, BunnyRepository repository, {required int poolId, required String poolName, required Map<int, int> pageByPostId}) =>
-      _enqueueAll(posts, repository, poolId: poolId, poolName: poolName, pageByPostId: pageByPostId);
+  Future<void> enqueuePool(
+    List<BunnyPost> posts,
+    BunnyRepository repository, {
+    required int poolId,
+    required String poolName,
+    required Map<int, int> pageByPostId,
+    bool suppressAutoActions = false,
+  }) => _enqueueAll(posts, repository, poolId: poolId, poolName: poolName, pageByPostId: pageByPostId, suppressAutoActions: suppressAutoActions);
 
-  Future<void> _enqueueAll(List<BunnyPost> posts, BunnyRepository repository, {int poolId = 0, String? poolName, Map<int, int> pageByPostId = const {}}) async {
+  Future<void> _enqueueAll(
+    List<BunnyPost> posts,
+    BunnyRepository repository, {
+    int poolId = 0,
+    String? poolName,
+    Map<int, int> pageByPostId = const {},
+    bool suppressAutoActions = false,
+  }) async {
     if (posts.isEmpty) {
       return;
     }
@@ -347,6 +375,7 @@ class DownloadQueueService extends ChangeNotifier {
         poolId: poolId,
         poolName: poolName,
         poolPage: page,
+        suppressAutoActions: suppressAutoActions,
       );
     }).toList(growable: false);
     _items.addAll(newItems);
@@ -614,8 +643,11 @@ class DownloadQueueService extends ChangeNotifier {
       await _persistStatus(item);
       return;
     }
-    final autoFavorite = await downloadSettingsStore.loadAutoFavoriteOnDownload();
-    final autoUpvote = await downloadSettingsStore.loadAutoUpvoteOnDownload();
+    // See DownloadQueueItem.suppressAutoActions -- a download that only
+    // exists so a post can be viewed must never trigger these, no matter
+    // what the user's global settings say.
+    final autoFavorite = !item.suppressAutoActions && await downloadSettingsStore.loadAutoFavoriteOnDownload();
+    final autoUpvote = !item.suppressAutoActions && await downloadSettingsStore.loadAutoUpvoteOnDownload();
     final result = await downloadManager.downloadPost(
       item.post,
       item.repository,
