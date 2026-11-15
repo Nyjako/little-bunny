@@ -39,3 +39,9 @@
 
 #define GOBLIN_THREAD_IMPLEMENTATION
 #include <goblin/thread.h>
+
+#define GOBLIN_ASCII_TRANSLITERATE_IMPLEMENTATION
+#include <goblin/ascii_transliterate.h>
+
+#define GOBLIN_SANITIZE_FILENAME_IMPLEMENTATION
+#include <goblin/sanitize_filename.h>
