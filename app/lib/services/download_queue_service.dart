@@ -123,26 +123,17 @@ class DownloadQueueService extends ChangeNotifier {
   final DownloadSettingsStore downloadSettingsStore;
   final DownloadQueueNotifier notifier;
 
-  DownloadQueueService({required this.downloadManager, required this.downloadSettingsStore, this.notifier = const NoopDownloadQueueNotifier()});
+  /// Injectable clock (M78) -- only ever overridden by a test, so the
+  /// progress-notification throttle below can be proven without waiting on
+  /// real wall-clock time. Defaults to the real clock.
+  final DateTime Function() _now;
+
+  DownloadQueueService({required this.downloadManager, required this.downloadSettingsStore, this.notifier = const NoopDownloadQueueNotifier(), DateTime Function()? now}) : _now = now ?? DateTime.now;
 
   /// A modest cap (M62) -- meaningfully faster than one-at-a-time for a
   /// large batch without opening an unbounded number of simultaneous
   /// connections to a site's CDN.
   static const _maxConcurrentDownloads = 3;
-
-  /// Draining the favorite/upvote action queue (a blocking network/FFI
-  /// round trip) used to happen after *every single item* -- fine for a
-  /// handful of items, but for a multi-thousand-item batch that's a full
-  /// network round trip on the critical path of every single download.
-  /// Throttling to once every N items divides the total cost by a constant
-  /// factor (it doesn't change the shape -- pair with occasional
-  /// [clearFinished] if multi-thousand-item batches become routine), and
-  /// gets the drain off the per-item path entirely except for this periodic
-  /// catch-up plus the unconditional final flush below. Shared across every
-  /// concurrent worker (M62) -- the increment-then-maybe-reset below never
-  /// has an `await` in between, so this stays race-free the same way
-  /// claiming an item does.
-  static const _syncEveryNItems = 10;
 
   /// Every item the queue currently knows about, regardless of status --
   /// only [clearFinished] ever removes one. Use [queuedItems]/[currentItem]/
@@ -182,7 +173,18 @@ class DownloadQueueService extends ChangeNotifier {
   /// 0) so the next one creates its own fresh setup.
   Future<void>? _sessionStartFuture;
   Stopwatch? _sessionStopwatch;
-  int _itemsSinceSync = 0;
+
+  /// When [notifier.showProgress] was last actually called (M78) -- `null`
+  /// means "never, this session," which always fires immediately. Calling
+  /// it once per completed item (no throttling at all) used to fire many
+  /// times per second for a fast batch of small files, which is harmless on
+  /// Android/iOS but trips Linux's desktop notification daemon's own rate
+  /// limit (`org.freedesktop.Notifications.Error.ExcessNotificationGeneration`)
+  /// and looks like the notification flashing/recreating itself. Reset to
+  /// null once the session ends, so the next session's first item always
+  /// notifies right away rather than inheriting a stale timestamp.
+  DateTime? _lastProgressNotifyAt;
+  static const _progressNotifyMinInterval = Duration(milliseconds: 750);
 
   /// Set by [pause], cleared by [resume] -- lets the user hold off on new
   /// downloads starting (e.g. right before disconnecting from wifi, to
@@ -214,13 +216,6 @@ class DownloadQueueService extends ChangeNotifier {
   int _succeeded = 0;
   int _mismatched = 0;
   int _failed = 0;
-
-  /// Set by [_processItem] whenever a download actually queues a
-  /// favorite/upvote action -- lets [_runWorkerSlot] skip [_drainActionQueue]
-  /// entirely (not just skip it cheaply) when auto-favorite/auto-upvote are
-  /// both off, the common case, instead of firing an empty-queue network
-  /// round trip every [_syncEveryNItems] items for nothing.
-  bool _actionsQueuedSinceSync = false;
 
   int get pendingCount => queuedItems.length;
 
@@ -404,6 +399,34 @@ class DownloadQueueService extends ChangeNotifier {
     _ensureWorkersRunning();
   }
 
+  /// Cancels every item that hasn't started downloading yet (M79) -- lets a
+  /// mass-enqueue added by mistake be wiped out before it consumes any
+  /// bandwidth. Leaves an already-downloading item alone, same "no
+  /// cancellation hook to abort an in-flight fetch through" limitation
+  /// [pause] already has -- only [queuedItems] are affected.
+  ///
+  /// Marks each cancelled item failed and persists that first (awaited,
+  /// not fire-and-forget -- [clearFinished] below reads [_items] by status
+  /// synchronously right after, so the DB write must already be durable or
+  /// its own `DELETE ... WHERE status IN (...)` could run before the
+  /// `UPDATE` that puts a row into one of those statuses, leaving a stale
+  /// `queued` row behind), then reuses [clearFinished] itself to actually
+  /// drop them from both [_items] and the DB -- same removal path a
+  /// finished item's own "Clear" action already takes, not a second one.
+  Future<void> clearQueued() async {
+    final toCancel = queuedItems.toList(growable: false);
+    if (toCancel.isEmpty) {
+      return;
+    }
+    for (final item in toCancel) {
+      item.status = DownloadQueueItemStatus.failed;
+      item.failureReason = 'Cancelled';
+    }
+    notifyListeners();
+    await Future.wait(toCancel.map(_persistStatus));
+    clearFinished();
+  }
+
   /// Drops every item in a terminal state (succeeded/mismatched/failed),
   /// leaving queued/downloading ones untouched -- the "persist until
   /// cleared" half of the queue being a real, viewable history rather than
@@ -535,25 +558,9 @@ class DownloadQueueService extends ChangeNotifier {
         await _persistStatus(item);
       }
       _sessionDone++;
-      _itemsSinceSync++;
-      // The reset happens in the same synchronous step as the check
-      // (nothing awaited in between), so two slots finishing an item
-      // around the same time can never both see the threshold crossed and
-      // both trigger a sync.
-      final shouldSync = _itemsSinceSync >= _syncEveryNItems;
-      if (shouldSync) {
-        _itemsSinceSync = 0;
-      }
-      if (shouldSync && _actionsQueuedSinceSync) {
-        await _drainActionQueue(item.repository);
-        _actionsQueuedSinceSync = false;
-      }
       // A broken notifier (any implementation, not just the real one, which
       // already swallows its own exceptions -- this is the queue's own
       // backstop) must never stop subsequent items from being processed.
-      // This keeps firing every item -- it's neither an expensive disk
-      // write nor a network round trip, so there's no reason to reduce how
-      // often the UI/notification sees progress.
       // _sessionDone > 1 (not > 0): on the very first completed item
       // there's only one data point, not a rate yet -- eta stays null for
       // that call, non-null from the second call onward.
@@ -562,29 +569,24 @@ class DownloadQueueService extends ChangeNotifier {
         final avgPerItem = _sessionStopwatch!.elapsed ~/ _sessionDone;
         eta = avgPerItem * (_sessionTotal - _sessionDone);
       }
-      try {
-        await notifier.showProgress(done: _sessionDone, total: _sessionTotal, failed: _failed, eta: eta);
-      } catch (_) {
-        // Best-effort.
+      // Throttled (M78), unlike notifyListeners() below -- the in-app UI
+      // can repaint as often as it likes (cheap, local), but the OS-level
+      // notification call itself is what trips Linux's rate limit, so only
+      // that call is gated to _progressNotifyMinInterval.
+      final notifyTime = _now();
+      if (_lastProgressNotifyAt == null || notifyTime.difference(_lastProgressNotifyAt!) >= _progressNotifyMinInterval) {
+        _lastProgressNotifyAt = notifyTime;
+        try {
+          await notifier.showProgress(done: _sessionDone, total: _sessionTotal, failed: _failed, eta: eta);
+        } catch (_) {
+          // Best-effort.
+        }
       }
       notifyListeners();
     }
 
     _activeWorkers--;
     if (_activeWorkers == 0) {
-      // Unconditional final drain -- covers both a batch smaller than the
-      // threshold above (today's common case: a single download, or a
-      // small mass-selection, which never reaches _syncEveryNItems) and the
-      // tail of a large batch that didn't land exactly on a multiple of
-      // it. Any item's own repository works here -- there's exactly one
-      // live BunnyRepository instance app-wide at any moment (this class's
-      // own doc comment), and _items is guaranteed non-empty here
-      // (everything that was ever enqueued this run is still sitting in
-      // it, just no longer queued/downloading).
-      if (_sessionDone > 0 && _actionsQueuedSinceSync) {
-        await _drainActionQueue(_items.first.repository);
-        _actionsQueuedSinceSync = false;
-      }
       try {
         await notifier.showSummary(succeeded: _succeeded, mismatched: _mismatched, failed: _failed);
       } catch (_) {
@@ -598,6 +600,7 @@ class DownloadQueueService extends ChangeNotifier {
       _failed = 0;
       _sessionStopwatch = null;
       _sessionStartFuture = null;
+      _lastProgressNotifyAt = null;
     }
     notifyListeners();
   }
@@ -632,15 +635,9 @@ class DownloadQueueService extends ChangeNotifier {
       case DownloadOutcome.verified:
         _succeeded++;
         item.status = DownloadQueueItemStatus.succeeded;
-        if (autoFavorite || autoUpvote) {
-          _actionsQueuedSinceSync = true;
-        }
       case DownloadOutcome.checksumMismatch:
         _mismatched++;
         item.status = DownloadQueueItemStatus.checksumMismatch;
-        if (autoFavorite || autoUpvote) {
-          _actionsQueuedSinceSync = true;
-        }
       case DownloadOutcome.noFileUrl:
         _failed++;
         item.status = DownloadQueueItemStatus.failed;
@@ -670,27 +667,6 @@ class DownloadQueueService extends ChangeNotifier {
       // a write failure here doesn't stop the queue itself from processing,
       // it just means a crash right after would show this one item's
       // previous status on the next launch instead of its latest.
-    }
-  }
-
-  /// Best-effort drain of the action queue for whichever [BunnyRepository]
-  /// is passed in -- called periodically from each worker (see
-  /// [_syncEveryNItems]) and once more unconditionally after every worker
-  /// finishes, never per-item: `processQueue()` is a blocking network/FFI
-  /// round trip, and putting it on every single item's critical path (the
-  /// old M43 behavior) made a whole batch's wall-clock time include one
-  /// such round trip per item for no benefit -- [DownloadManager.
-  /// downloadPost]'s own doc comment already says draining "is left to the
-  /// caller," which decides its own batching needs. Takes a bare
-  /// [BunnyRepository] rather than a [DownloadQueueItem] since any item's
-  /// repository is equally valid (this class's own doc comment) and the
-  /// unconditional final flush (M62) no longer has one single "last item"
-  /// once several can finish at once.
-  Future<void> _drainActionQueue(BunnyRepository repository) async {
-    try {
-      await repository.processQueue();
-    } catch (_) {
-      // Best-effort, same as every other notifier/drain call in this class.
     }
   }
 

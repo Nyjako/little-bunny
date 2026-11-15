@@ -71,11 +71,11 @@ void main() {
   // every existing MockClient handler here still works unchanged by
   // feeding it through FakeBunnyRepository.downloadFileFetchImpl instead,
   // preserving each test's own per-URL branching logic.
-  DownloadQueueService buildService({http.Client? client}) {
+  DownloadQueueService buildService({http.Client? client, DateTime Function()? now}) {
     if (client != null) {
       repository.downloadFileFetchImpl = (url) => client.send(http.Request('GET', Uri.parse(url))).then(http.Response.fromStream);
     }
-    return DownloadQueueService(downloadManager: const DownloadManager(), downloadSettingsStore: const DownloadSettingsStore(), notifier: notifier);
+    return DownloadQueueService(downloadManager: const DownloadManager(), downloadSettingsStore: const DownloadSettingsStore(), notifier: notifier, now: now);
   }
 
   Future<void> waitUntilIdle(DownloadQueueService service) async {
@@ -158,7 +158,17 @@ void main() {
   });
 
   test('enqueueAll processes every item, reporting progress through to completion (M62: concurrently, order not guaranteed)', () async {
-    final service = buildService(client: MockClient((_) async => http.Response.bytes([1, 2, 3], 200)));
+    // A self-advancing fake clock -- every call to it is a full second past
+    // the previous one, so the M78 progress-notification throttle (below,
+    // its own dedicated test) never suppresses any of this test's 3 calls;
+    // this test is about per-item total/failed/eta, not about throttling.
+    var fakeNow = DateTime(2026, 1, 1);
+    DateTime nextFakeNow() {
+      fakeNow = fakeNow.add(const Duration(seconds: 1));
+      return fakeNow;
+    }
+
+    final service = buildService(client: MockClient((_) async => http.Response.bytes([1, 2, 3], 200)), now: nextFakeNow);
     final posts = [_post(id: 1), _post(id: 2), _post(id: 3)];
 
     service.enqueueAll(posts, repository);
@@ -216,6 +226,54 @@ void main() {
     gates[2].complete();
     await waitUntilIdle(service);
     expect(service.succeededCount, 4);
+  });
+
+  test('OS progress notifications are throttled to once per interval, not once per completed item (M78)', () async {
+    var fakeNow = DateTime(2026, 1, 1);
+    final gates = List.generate(3, (_) => Completer<void>());
+    var requestCount = 0;
+    final service = buildService(
+      client: MockClient((_) async {
+        final index = requestCount;
+        requestCount++;
+        await gates[index].future;
+        return http.Response.bytes([1, 2, 3], 200);
+      }),
+      now: () => fakeNow,
+    );
+
+    service.enqueueAll([_post(id: 1), _post(id: 2), _post(id: 3)], repository);
+    while (service.downloadingItems.length < 3) {
+      await Future<void>.delayed(const Duration(milliseconds: 1));
+    }
+
+    // Item 1 finishes: the very first notification this session, so it
+    // always fires regardless of the clock.
+    gates[0].complete();
+    while (notifier.progressCalls.isEmpty) {
+      await Future<void>.delayed(const Duration(milliseconds: 1));
+    }
+    expect(notifier.progressCalls, hasLength(1));
+
+    // Item 2 finishes at the exact same fake instant -- well inside the
+    // throttle window, so this completion must not add a second OS call,
+    // even though the item itself still finishes normally.
+    gates[1].complete();
+    while (service.succeededCount < 2) {
+      await Future<void>.delayed(const Duration(milliseconds: 1));
+    }
+    expect(notifier.progressCalls, hasLength(1));
+
+    // Advance the fake clock past the throttle window, then let item 3
+    // finish -- now due again.
+    fakeNow = fakeNow.add(const Duration(seconds: 1));
+    gates[2].complete();
+    await waitUntilIdle(service);
+    expect(notifier.progressCalls, hasLength(2));
+    // The final call still reports the real, un-throttled totals -- nothing
+    // about the throttled-away item 2 was lost from the queue's own state.
+    expect(notifier.progressCalls.last.$1, 3);
+    expect(service.succeededCount, 3);
   });
 
   group('enqueue dedup -- a post already active in the queue is not added twice', () {
@@ -294,23 +352,15 @@ void main() {
     });
   });
 
-  test('auto-favorite drains the action queue once via the final flush, for a batch under the sync threshold', () async {
-    SharedPreferences.setMockInitialValues({'download_destination_folder': destinationDir.path, 'auto_favorite_on_download': true});
-    final service = buildService(client: MockClient((_) async => http.Response.bytes([1, 2, 3], 200)));
-    // Fewer than the throttle threshold -- exercises the "final flush covers
-    // a batch that never hit the threshold" path.
-    final posts = List.generate(9, (i) => _post(id: i + 1));
-
-    service.enqueueAll(posts, repository);
-    await waitUntilIdle(service);
-
-    // Set, not list, equality -- which item finishes first is no longer
-    // guaranteed now that up to 3 download concurrently (M62).
-    expect(repository.favoriteAddCalls.toSet(), posts.map((p) => p.id).toSet());
-    expect(repository.processQueueCallCount, 1);
-  });
-
-  test('a batch larger than the sync threshold does not drain the action queue once per item', () async {
+  test('auto-favorite still queues the action, but DownloadQueueService never drains it itself (M79)', () async {
+    // Draining (the real site network call) is never this class's concern
+    // any more, regardless of batch size or auto-favorite/auto-upvote
+    // settings -- a download must never block on it. Networked mode's own
+    // server now drains action_queue on its own short background cadence
+    // (server/src/scheduler.c); standalone mode gets an equivalent
+    // app-level periodic timer (main.dart), decoupled from downloads
+    // entirely. queueFavoriteAdd itself (the cheap enqueue, not the drain)
+    // still happens per item, same as always.
     SharedPreferences.setMockInitialValues({'download_destination_folder': destinationDir.path, 'auto_favorite_on_download': true});
     final service = buildService(client: MockClient((_) async => http.Response.bytes([1, 2, 3], 200)));
     final posts = List.generate(25, (i) => _post(id: i + 1));
@@ -318,42 +368,21 @@ void main() {
     service.enqueueAll(posts, repository);
     await waitUntilIdle(service);
 
-    expect(repository.favoriteAddCalls, hasLength(25));
-    // Far fewer than one-per-item (25) -- the exact count depends on the
-    // throttle threshold, deliberately not hardcoded here so this test isn't
-    // coupled to that literal constant.
-    expect(repository.processQueueCallCount, greaterThan(0));
-    expect(repository.processQueueCallCount, lessThan(10));
+    // Set, not list, equality -- which item finishes first is no longer
+    // guaranteed now that up to 3 download concurrently (M62).
+    expect(repository.favoriteAddCalls.toSet(), posts.map((p) => p.id).toSet());
+    expect(repository.processQueueCallCount, 0);
   });
 
-  test('auto-favorite off never drains the action queue at all', () async {
+  test('auto-favorite off never queues or drains anything', () async {
     SharedPreferences.setMockInitialValues({'download_destination_folder': destinationDir.path});
     final service = buildService(client: MockClient((_) async => http.Response.bytes([1, 2, 3], 200)));
 
     service.enqueueAll(List.generate(12, (i) => _post(id: i + 1)), repository);
     await waitUntilIdle(service);
 
+    expect(repository.favoriteAddCalls, isEmpty);
     expect(repository.processQueueCallCount, 0);
-  });
-
-  test('a slow action-queue drain does not block the next item\'s download', () async {
-    SharedPreferences.setMockInitialValues({'download_destination_folder': destinationDir.path, 'auto_favorite_on_download': true});
-    final drainGate = Completer<void>();
-    repository.processQueueImpl = () async {
-      await drainGate.future;
-      return repository.processQueueResult;
-    };
-    final service = buildService(client: MockClient((_) async => http.Response.bytes([1, 2, 3], 200)));
-
-    service.enqueue(_post(id: 1), repository);
-    // The download itself (file write) completes independent of the gated
-    // final-flush drain -- proving the drain isn't on the download's own
-    // critical path. If it were, this would hang until drainGate completes.
-    while (!await File('${destinationDir.path}/someartist/1.png').exists()) {
-      await Future<void>.delayed(const Duration(milliseconds: 1));
-    }
-    drainGate.complete();
-    await waitUntilIdle(service);
   });
 
   test('enqueueing more items mid-flight extends the total without losing progress', () async {
@@ -759,6 +788,43 @@ void main() {
 
       thirdItemGate.complete();
       await waitUntilIdle(service);
+    });
+
+    test('clearQueued (M79) cancels only not-yet-started items, leaving downloading ones to finish', () async {
+      final gates = List.generate(3, (_) => Completer<void>());
+      var requestCount = 0;
+      final service = buildService(
+        client: MockClient((_) async {
+          final index = requestCount;
+          requestCount++;
+          if (index < gates.length) {
+            await gates[index].future;
+          }
+          return http.Response.bytes([1, 2, 3], 200);
+        }),
+      );
+
+      service.enqueueAll([_post(id: 1), _post(id: 2), _post(id: 3), _post(id: 4)], repository);
+      while (service.downloadingItems.length < 3) {
+        await Future<void>.delayed(const Duration(milliseconds: 1));
+      }
+      // All 3 concurrency slots are taken by items 1-3; item 4 has nowhere
+      // to go yet -- it's the one and only queued item clearQueued should
+      // touch.
+      expect(service.pendingCount, 1);
+
+      await service.clearQueued();
+
+      expect(service.pendingCount, 0);
+      expect(service.items.map((item) => item.post.id).toSet(), {1, 2, 3});
+      final rows = await repository.downloadQueueList();
+      expect(rows.where((row) => row.postId == 4), isEmpty);
+
+      gates[0].complete();
+      gates[1].complete();
+      gates[2].complete();
+      await waitUntilIdle(service);
+      expect(service.succeededCount, 3);
     });
 
     test('restore brings back a failed item\'s status/reason without auto-retrying it', () async {

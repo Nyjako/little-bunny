@@ -190,6 +190,57 @@ void main() {
     expect(committed.map((p) => p.post.id), [6]);
   });
 
+  test('a quiet refresh (enqueueMissing: false) classifies a never-attempted post as missing without enqueueing it (M78)', () async {
+    final post = _post(id: 8);
+    final searchId = await repository.createSearch(BunnySite.e621, 'wolves', 'wolf');
+    repository.postsBySearchId[searchId] = [post];
+    final slideshowId = await repository.slideshowCreate('my slideshow');
+    await repository.slideshowSearchAdd(slideshowId, searchId);
+
+    final report = await service.prepare(slideshowId, enqueueMissing: false);
+
+    expect(report.posts.single.readiness, SlideshowPostReadiness.missing);
+    expect(report.missingCount, 1);
+    final rows = await repository.downloadQueueList();
+    expect(rows.where((row) => row.postId == 8), isEmpty);
+  });
+
+  test('a quiet refresh never re-enqueues a post whose file was deleted after an earlier successful download (M78)', () async {
+    final post = _post(id: 9);
+    final searchId = await repository.createSearch(BunnySite.e621, 'wolves', 'wolf');
+    repository.postsBySearchId[searchId] = [post];
+    final slideshowId = await repository.slideshowCreate('my slideshow');
+    await repository.slideshowSearchAdd(slideshowId, searchId);
+    // Simulates a post that was genuinely downloaded once (a 'succeeded' row
+    // exists) and whose file was then deleted out-of-band -- exactly the
+    // repro that used to make the very next quiet refresh silently
+    // redownload it.
+    repository.seedDownloadQueueRow(postId: post.id, status: 'succeeded');
+
+    final report = await service.prepare(slideshowId, enqueueMissing: false);
+
+    expect(report.posts.single.readiness, SlideshowPostReadiness.missing);
+    final rows = await repository.downloadQueueList();
+    expect(rows.where((row) => row.postId == 9 && row.status != 'succeeded'), isEmpty);
+  });
+
+  test('a quiet refresh leaves a stuck (persistently failed) post missing rather than attempting a replace (M78)', () async {
+    final deadPost = _post(id: 10);
+    final otherPost = _post(id: 11);
+    final searchId = await repository.createSearch(BunnySite.e621, 'wolves', 'wolf');
+    repository.postsBySearchId[searchId] = [deadPost, otherPost];
+    final slideshowId = await repository.slideshowCreate('my slideshow');
+    await repository.slideshowSearchAdd(slideshowId, searchId, overrideCount: 1);
+    repository.seedDownloadQueueRow(postId: deadPost.id, status: 'failed', failureReason: 'HTTP 404');
+
+    final report = await service.prepare(slideshowId, enqueueMissing: false);
+
+    expect(report.posts.single.readiness, SlideshowPostReadiness.missing);
+    // Never replaced -- the dead post is still the one committed.
+    final committed = await repository.slideshowPostsList(slideshowId);
+    expect(committed.map((p) => p.post.id), [10]);
+  });
+
   test('prepare throws when no destination folder is configured and the OS has no Downloads directory either', () async {
     // Mirrors loadDestinationFolder's own fallback chain: nothing saved,
     // *and* no OS Downloads directory to fall back to (FakePathProviderPlatform

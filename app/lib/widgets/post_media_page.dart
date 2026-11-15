@@ -1,5 +1,4 @@
 import 'dart:io';
-import 'dart:typed_data';
 
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:chewie/chewie.dart';
@@ -8,10 +7,10 @@ import 'package:video_player/video_player.dart';
 
 import '../repository/bunny_models.dart';
 import '../util/image_headers.dart';
-import '../util/local_media_bytes.dart';
 import '../util/media_type.dart';
 import 'download_progress_indicator.dart';
 import 'gif_player.dart';
+import 'local_file_image.dart';
 
 /// A single post's media -- image/gif/video, picked by [BunnyPost.fileExt] --
 /// with no viewer-specific wrapping (no PhotoView, no fullscreen chrome).
@@ -39,10 +38,7 @@ class PostMediaPage extends StatelessWidget {
       return GifPlayer(imageUrl: post.fileUrl ?? '', localFilePath: path, httpHeaders: imageHeadersFor(post.site), previewUrl: post.previewUrl);
     }
     if (path != null) {
-      // A `content://` SAF uri (Android) can't be opened as a plain `File`
-      // -- see readLocalMediaBytes's own doc comment -- so it needs the
-      // bytes-read-then-decode path below instead of Image.file's.
-      return path.startsWith('content://') ? _LocalContentUriImage(path: path) : Image.file(File(path), fit: BoxFit.contain);
+      return buildLocalImageContent(path);
     }
     // Image's own loadingBuilder, not CachedNetworkImage's
     // progressIndicatorBuilder -- see PostDetailScreen's _buildMedia for why
@@ -58,44 +54,6 @@ class PostMediaPage extends StatelessWidget {
         return DownloadProgressIndicator(progress: total != null ? loadingProgress.cumulativeBytesLoaded / total : null);
       },
     );
-  }
-}
-
-/// Reads a `content://` SAF uri's bytes before handing them to [Image.memory]
-/// -- [Image.file] (the plain-path branch above) can't open one directly.
-class _LocalContentUriImage extends StatefulWidget {
-  final String path;
-
-  const _LocalContentUriImage({required this.path});
-
-  @override
-  State<_LocalContentUriImage> createState() => _LocalContentUriImageState();
-}
-
-class _LocalContentUriImageState extends State<_LocalContentUriImage> {
-  Uint8List? _bytes;
-
-  @override
-  void initState() {
-    super.initState();
-    _load();
-  }
-
-  Future<void> _load() async {
-    try {
-      final bytes = await readLocalMediaBytes(widget.path);
-      if (mounted) {
-        setState(() => _bytes = bytes);
-      }
-    } catch (_) {
-      // Best-effort, same tolerance as GifPlayer's own local-read failure.
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final bytes = _bytes;
-    return bytes == null ? const Center(child: CircularProgressIndicator()) : Image.memory(bytes, fit: BoxFit.contain);
   }
 }
 

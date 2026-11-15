@@ -153,6 +153,15 @@ static void backup_due_and_prune(server_context_t *ctx, const char *backups_dir)
     }
 }
 
+/* The action-queue drain (favorite/vote/comment, M79) runs on its own,
+ * much shorter cadence than the rest of this loop's work below -- a
+ * favorite/upvote queued from a download should land within moments, not
+ * wait out the same multi-minute interval due-search-sync/Inkbunny
+ * backfill/backups use. task_queue_enqueue_background_action_queue already
+ * no-ops if a drain is still pending/running (task_queue.c's own dedup), so
+ * ticking this often costs nothing when there's no queued action to drain. */
+#define BUNNY_ACTION_QUEUE_DRAIN_INTERVAL_SEC 10
+
 static void *scheduler_loop(void *arg)
 {
     server_scheduler_t *scheduler = (server_scheduler_t *)arg;
@@ -163,20 +172,31 @@ static void *scheduler_loop(void *arg)
      * own search's next sync. */
     bunny_core_backfill_pool_positions_once(scheduler->ctx->core);
 
+    int seconds_until_full_tick = scheduler->poll_interval_sec;
+    int seconds_until_action_queue_drain = BUNNY_ACTION_QUEUE_DRAIN_INTERVAL_SEC;
+
     while (!scheduler->stop_requested) {
-        /* Sleep in 1-second increments so a shutdown request is picked up
-         * quickly instead of waiting out the full poll interval. */
-        for (int i = 0; i < scheduler->poll_interval_sec && !scheduler->stop_requested; i++) {
-            bunny_sleep_seconds(1);
-        }
+        /* Sleeps in 1-second increments regardless of either interval
+         * below, same as before -- a shutdown request is picked up
+         * quickly, never waiting out a full interval. */
+        bunny_sleep_seconds(1);
         if (scheduler->stop_requested) {
             break;
         }
 
-        server_log("INFO", "scheduler: tick started, enqueuing due-search sync + action-queue drain + Inkbunny details backfill");
+        if (--seconds_until_action_queue_drain <= 0) {
+            seconds_until_action_queue_drain = BUNNY_ACTION_QUEUE_DRAIN_INTERVAL_SEC;
+            task_queue_enqueue_background_action_queue(scheduler->ctx->task_queue);
+        }
+
+        if (--seconds_until_full_tick > 0) {
+            continue;
+        }
+        seconds_until_full_tick = scheduler->poll_interval_sec;
+
+        server_log("INFO", "scheduler: tick started, enqueuing due-search sync + Inkbunny details backfill");
 
         task_queue_enqueue_background_due_sync(scheduler->ctx->task_queue);
-        task_queue_enqueue_background_action_queue(scheduler->ctx->task_queue);
         task_queue_enqueue_background_inkbunny_backfill(scheduler->ctx->task_queue);
 
         if (scheduler->backups_dir) {

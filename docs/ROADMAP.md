@@ -3368,3 +3368,85 @@ this file is the single source of truth for "what's done" across sessions.
   `slideshow_edit_screen_test.dart` already had to for a different long Inkbunny-only
   form, by enlarging the test surface (`tester.view.physicalSize`) for those specific
   tests.
+
+- [x] **M78 — Slideshow/download fixes, and pause + favorite/upvote in the slideshow**
+  Six separate problems reported from real on-device use, each its own PR.
+  **Slideshow Prepare no longer auto-downloads**: `SlideshowEditScreen`'s quiet
+  background refresh (on screen open, and on every download-queue change) called the
+  same `SlideshowPrepareService.prepare()` an explicit "Prepare" tap does, including
+  its enqueue/self-heal side effects -- deleting an already-downloaded file made the
+  very next quiet refresh silently redownload it, the only non-explicit-click download
+  trigger anywhere in the app. `prepare()` now takes `enqueueMissing` (default `true`,
+  unchanged for the explicit button); the quiet refresh passes `false`, classifying a
+  non-ready post as a new `SlideshowPostReadiness.missing` instead of touching it.
+  **Download notification throttle**: `DownloadQueueService` called
+  `notifier.showProgress` once per completed item with no throttling -- harmless on
+  Android/iOS, but calling `.show()` many times a second for a fast batch trips Linux's
+  desktop notification daemon rate limit
+  (`org.freedesktop.Notifications.Error.ExcessNotificationGeneration`) and looks like
+  the notification flashing/recreating. Throttled to at most once per 750ms of
+  wall-clock time (an injectable clock makes this provable in a test without waiting
+  real time); `showStarting`/`showSummary` at session start/end stay unconditional.
+  **Pool download bugs**: `SearchesScreen._downloadSelectedSearches` (the bulk
+  "select N searches, download" action) always called plain `enqueueAll` regardless of
+  `isPool`, landing a pool's posts under a per-artist folder instead of its own --
+  now branches per search, computing each pool's own page numbers from its full post
+  order (same math `PostGridScreen._massDownload` already uses) and calling
+  `enqueuePool`. Separately, `DownloadManager`'s Android SAF branch called
+  `SafUtil().mkdirp()` fresh for every file with no caching, so several concurrent
+  workers downloading one pool could race to create the same-named folder --
+  confirmed live as the cause of several duplicate, mostly-empty pool folders on
+  Android; now caches the resolved/created folder per destination/folder pair.
+  **Non-artist tags excluded from credited artists/folders**: e621 tags several
+  administrative markers (`avoid_posting`, `conditional_dnp`, `third-party_edit`,
+  `sound_warning`, `epilepsy_warning`, `flash_warning`, `unknown_artist`,
+  `anonymous_artist`, `banned_artist`) under the "artist" category even though none
+  name a real person -- filtered out in `libs/core/src/sync.c` before the per-post
+  `artist` field is ever joined, fixing the credited artist everywhere (not just
+  downloads). A post crediting more than one real artist now nests each as its own
+  download subfolder (`artista/artistb/post.ext`) instead of one folder literally
+  named `"artista, artistb"`.
+  **View an already-downloaded post from disk**: `PostDetailScreen` always built its
+  primary image from the network, even for a post already sitting on disk --
+  `PostMediaPage` (the slideshow) already had a `localFilePath` branch for this,
+  extracted into a shared `buildLocalImageContent` so both screens read a local file
+  the same way; `PostDetailScreen` now resolves `DownloadManager.localFilePathFor`
+  once per page and prefers it, gated behind a `FutureBuilder` with no
+  perpetual-animation placeholder for the pending case (that fights `pumpAndSettle` in
+  tests, and is needless churn for a disk check that resolves in microseconds in
+  practice). Scoped to the single primary image; video/audio/the multi-file gallery
+  are a follow-up.
+  **Slideshow pause + favorite/upvote**: the left/right tap halves became
+  left/middle/right (flex 2:1:2) -- the new middle zone, and the spacebar, pause/resume
+  only the automatic interval timer; manual prev/next keeps working while paused and
+  deliberately doesn't resume it on its own. A bottom bar (clear of the image) adds
+  favorite/upvote buttons reusing `PostDetailScreen`'s own
+  `queueFavoriteAdd`/`queueFavoriteRemove`/`queueVote` + immediate `processQueue`
+  drain, tracked via local per-post-id overrides since this screen's `posts` list is
+  immutable, unlike a post detail page's own mutable copy.
+
+- [x] **M79 — Clear queued downloads, and decoupling the favorite/upvote drain from downloads**
+  Two more asks from the same round of on-device feedback.
+  **Clear queued downloads**: a mass-download added by mistake had no way back out --
+  new `DownloadQueueService.clearQueued()` cancels every not-yet-started item (an
+  already-downloading item is left alone, same limitation `pause()` already has: no
+  cancellation hook into an in-flight fetch), reusing `clearFinished()`'s own removal
+  path. A confirmed-dialog AppBar action (`Icons.playlist_remove`) on the download queue
+  screen, shown only when something is actually queued.
+  **Favorite/upvote no longer blocks downloads**: auto-favorite/upvote-on-download sent
+  each action to the server immediately (cheap -- just a DB insert + 202), but then
+  `DownloadQueueService` waited on a synchronous `processQueue()` drain every 10 items
+  and again at the end of a batch -- the drain itself, which can make a real site API
+  call per queued action, was the actual slow part, and it blocked the next download
+  behind it. Draining is now exclusively the server/app's job: the scheduler drains the
+  action queue on its own dedicated 10s cadence instead of waiting out the full
+  (default 15 min) sync tick, and the app itself runs a 30s periodic drain timer for
+  standalone mode (no separate server process). `DownloadQueueService` no longer drains
+  anything itself.
+  **Inkbunny request pacing fixed along the way**: the faster drain cadence exposed a
+  latent gap -- Inkbunny's unofficial-favorites flow (website login + favorite/
+  unfavorite) never consulted its rate limiter at all, and built a brand-new client
+  (so a brand-new, never-yet-waited rate limiter) per queued action, meaning a batch of
+  favorites would've gone out back-to-back unpaced regardless of drain frequency. Now
+  every website request waits on the limiter, and one logged-in client is reused across
+  a whole drain pass, mirroring how the e621 client was already reused.

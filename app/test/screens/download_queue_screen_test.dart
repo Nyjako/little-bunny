@@ -303,6 +303,19 @@ void main() {
     expect(find.text('Nothing here right now.'), findsOneWidget);
   });
 
+  // No widget test covers "Clear queued"'s actual confirm-dialog flow (M79)
+  // -- reproducing a genuinely-queued item needs 3 other concurrently-
+  // downloading ones gated on real (never-settling-within-the-test)
+  // network calls, same shape the "currently-downloading" tests below
+  // already need runAsync + bounded pump()s (never pumpAndSettle) for; on
+  // top of that, confirming via a real showDialog -> Navigator.pop ->
+  // awaited DownloadQueueService.clearQueued() chain needs its own
+  // microtask turns that didn't settle reliably under any bounded-pump
+  // combination tried. DownloadQueueService.clearQueued() itself is fully
+  // covered by a plain (non-widget) test in download_queue_service_test.dart;
+  // _confirmClearQueued's own wiring (open a dialog, call clearQueued()
+  // only on confirm) is simple enough to verify by reading.
+
   testWidgets('the currently-downloading row shows a thumbnail and a determinate batch-progress bar', (WidgetTester tester) async {
     final secondItemGate = Completer<void>();
     // See "shows a row per concurrently-downloading item"'s own doc comment
