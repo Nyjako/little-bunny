@@ -3462,11 +3462,10 @@ this file is the single source of truth for "what's done" across sessions.
   every byte Windows reserves for path syntax (`< > : " / \ | ? *`) plus ASCII control
   bytes with `_` -- satisfying Windows' stricter rule automatically satisfies Linux/
   macOS too, since their own forbidden characters are a subset of Windows'. `ascii_only`
-  additionally rejects non-ASCII bytes (collapsing a whole multi-byte UTF-8 codepoint to
-  one `_`, not one per byte) for free-text site data like a pool title; artist/author
-  folder names are deliberately left out of this (kept verbatim, non-ASCII included).
-  Trims a trailing `.`/` ` (Windows can't create a name ending in either) and truncates
-  to fit a caller-given buffer without ever splitting a multi-byte sequence.
+  additionally rejects non-ASCII bytes for free-text site data like a pool title;
+  artist/author folder names are deliberately left out of this (kept verbatim, non-ASCII
+  included). Trims a trailing `.`/` ` (Windows can't create a name ending in either) and
+  truncates to fit a caller-given buffer without ever splitting a multi-byte sequence.
   `bunny_filename_max_len()` exposes one shared length budget (200 bytes) used
   everywhere, instead of a separate per-platform guess nothing could verify live on
   every target. Exposed to Dart as a synchronous call (`bunnySanitizeFilenameSegment`/
@@ -3477,3 +3476,18 @@ this file is the single source of truth for "what's done" across sessions.
   `DownloadManager`'s pool folder is now `"pool_<id> - <title>"`, with the title
   ASCII-sanitized and truncated to the shared budget -- the `"pool_<id> - "` prefix
   itself is never truncated.
+  **Follow-up: upstreamed into GOBLIN, with diacritic transliteration added**: the
+  sanitizer's hand-rolled implementation moved into GOBLIN itself
+  (`goblin/sanitize_filename.h`) with proper UTF-8 validation (rejects overlong
+  encodings/encoded surrogates/out-of-range codepoints as one bad byte instead of
+  naively counting continuation bytes, which could swallow an unbounded malformed run)
+  and a new check against Windows' reserved device names (`CON`, `PRN`, `NUL`,
+  `COM1-9`, `LPT1-9` -- `"con.txt"` is just as blocked on Windows as `"CON"` itself). A
+  new companion header, `goblin/ascii_transliterate.h`, best-effort folds Latin-1/Latin
+  Extended-A diacritics to their plain-ASCII base letter (Polish `a/c/s`, German `u`,
+  French `e`, ...); `bunny_sanitize_filename_segment`'s `ascii_only` path now runs input
+  through this first, so a known diacritic folds to its base letter instead of
+  collapsing straight to `_` -- `"Café Comíc"` now sanitizes to `"Cafe Comic"` instead
+  of `"Caf_ Com_c"`. Both headers' `*_IMPLEMENTATION` macros are defined once in
+  `bunny_common`'s `goblin_impl.c`, this project's existing single-instantiation point
+  for every GOBLIN header-only implementation.
