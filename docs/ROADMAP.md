@@ -3491,3 +3491,20 @@ this file is the single source of truth for "what's done" across sessions.
   of `"Caf_ Com_c"`. Both headers' `*_IMPLEMENTATION` macros are defined once in
   `bunny_common`'s `goblin_impl.c`, this project's existing single-instantiation point
   for every GOBLIN header-only implementation.
+
+- [x] **M81 — Capture dtext-link pool references, not just `"pool #<id>"`**
+  A pool description can cross-reference another pool three different ways on e621, but
+  this app only recognized one of them. Fixed in both places that independently parse
+  pool references out of description text: `libs/core/src/sync.c`'s
+  `parse_pool_references` (feeds `bunny_core_pool_info_t.referenced_pool_ids`) now also
+  matches a bare dtext link (`"label":/pools/<id>`, confirmed live on pool 37143) and a
+  full permalink URL (`https://e621.net/pools/<id>`, confirmed live on pool 20621) --
+  both share the same `/pools/<id>` substring, so one additional marker check covers
+  both, checked at every position in the same linear pass as the existing `pool #<id>`
+  marker so combined matches stay in true first-seen order. The actual UI-facing
+  renderer, `app/lib/util/rich_markup.dart` (used by every pool/post description
+  screen), already linkified the full-URL form generically as a permalink, but had no
+  pattern at all for the bare dtext-link form -- it rendered as inert plain text,
+  quotes and raw path included. Now renders just the quoted label as the clickable pool
+  chip, matching what dtext actually intends -- unlike every other marker there, which
+  renders its own matched text verbatim.
