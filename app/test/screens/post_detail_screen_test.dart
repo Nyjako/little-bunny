@@ -1600,7 +1600,7 @@ void main() {
       expect(downloadQueueService.totalCount, 1);
     });
 
-    testWidgets('queues and drains a favorite after a successful download when auto-favorite-on-download is on (M10.1)', (WidgetTester tester) async {
+    testWidgets('queues a favorite after a successful download when auto-favorite-on-download is on, but does not itself drain it (M10.1/M79)', (WidgetTester tester) async {
       SharedPreferences.setMockInitialValues({'download_destination_folder': tempDir.path, 'auto_favorite_on_download': true});
       final repository = FakeBunnyRepository();
       final post = _post(fileExt: 'jpg');
@@ -1635,7 +1635,7 @@ void main() {
       });
 
       expect(repository.favoriteAddCalls, [post.id]);
-      expect(repository.processQueueCallCount, 1);
+      expect(repository.processQueueCallCount, 0);
     });
 
     testWidgets('does not queue a favorite when auto-favorite-on-download is off (the default)', (WidgetTester tester) async {
@@ -1675,7 +1675,7 @@ void main() {
       expect(repository.processQueueCallCount, 0);
     });
 
-    testWidgets('queues and drains an upvote after a successful download when auto-upvote-on-download is on (M14.2)', (WidgetTester tester) async {
+    testWidgets('queues an upvote after a successful download when auto-upvote-on-download is on, but does not itself drain it (M14.2/M79)', (WidgetTester tester) async {
       SharedPreferences.setMockInitialValues({'download_destination_folder': tempDir.path, 'auto_upvote_on_download': true});
       final repository = FakeBunnyRepository();
       final post = _post(fileExt: 'jpg');
@@ -1710,7 +1710,7 @@ void main() {
       });
 
       expect(repository.voteCalls, [(post.id, 1)]);
-      expect(repository.processQueueCallCount, 1);
+      expect(repository.processQueueCallCount, 0);
     });
 
     testWidgets('does not queue an upvote when auto-upvote-on-download is off (the default)', (WidgetTester tester) async {
