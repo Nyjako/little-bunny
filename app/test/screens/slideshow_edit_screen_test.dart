@@ -301,7 +301,8 @@ void main() {
   // "does tapping this button call it" wiring is unverified here. Same
   // limitation applies to _onDownloadQueueChanged's debounced background
   // refresh and initState's own startup call in edit mode (both call the
-  // exact same SlideshowPrepareService.prepare()) -- their own logic (only
+  // exact same SlideshowPrepareService.prepare(), now always with
+  // enqueueMissing: false -- M78) -- their own logic (only
   // refresh once a report already exists for the queue-driven one; always
   // for the startup one, so Watch comes back unlocked on reopen without a
   // fresh "Prepare" tap when everything's already downloaded) is simple
