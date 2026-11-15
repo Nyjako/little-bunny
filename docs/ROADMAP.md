@@ -3424,3 +3424,29 @@ this file is the single source of truth for "what's done" across sessions.
   `queueFavoriteAdd`/`queueFavoriteRemove`/`queueVote` + immediate `processQueue`
   drain, tracked via local per-post-id overrides since this screen's `posts` list is
   immutable, unlike a post detail page's own mutable copy.
+
+- [x] **M79 — Clear queued downloads, and decoupling the favorite/upvote drain from downloads**
+  Two more asks from the same round of on-device feedback.
+  **Clear queued downloads**: a mass-download added by mistake had no way back out --
+  new `DownloadQueueService.clearQueued()` cancels every not-yet-started item (an
+  already-downloading item is left alone, same limitation `pause()` already has: no
+  cancellation hook into an in-flight fetch), reusing `clearFinished()`'s own removal
+  path. A confirmed-dialog AppBar action (`Icons.playlist_remove`) on the download queue
+  screen, shown only when something is actually queued.
+  **Favorite/upvote no longer blocks downloads**: auto-favorite/upvote-on-download sent
+  each action to the server immediately (cheap -- just a DB insert + 202), but then
+  `DownloadQueueService` waited on a synchronous `processQueue()` drain every 10 items
+  and again at the end of a batch -- the drain itself, which can make a real site API
+  call per queued action, was the actual slow part, and it blocked the next download
+  behind it. Draining is now exclusively the server/app's job: the scheduler drains the
+  action queue on its own dedicated 10s cadence instead of waiting out the full
+  (default 15 min) sync tick, and the app itself runs a 30s periodic drain timer for
+  standalone mode (no separate server process). `DownloadQueueService` no longer drains
+  anything itself.
+  **Inkbunny request pacing fixed along the way**: the faster drain cadence exposed a
+  latent gap -- Inkbunny's unofficial-favorites flow (website login + favorite/
+  unfavorite) never consulted its rate limiter at all, and built a brand-new client
+  (so a brand-new, never-yet-waited rate limiter) per queued action, meaning a batch of
+  favorites would've gone out back-to-back unpaced regardless of drain frequency. Now
+  every website request waits on the limiter, and one logged-in client is reused across
+  a whole drain pass, mirroring how the e621 client was already reused.
