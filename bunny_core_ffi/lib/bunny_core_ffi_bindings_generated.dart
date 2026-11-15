@@ -3234,6 +3234,82 @@ class BunnyCoreFfiBindings {
   late final _bunny_core_download_release = _bunny_core_download_releasePtr
       .asFunction<void Function(int)>();
 
+  int bunny_filename_max_len() {
+    return _bunny_filename_max_len();
+  }
+
+  late final _bunny_filename_max_lenPtr =
+      _lookup<ffi.NativeFunction<ffi.Size Function()>>(
+        'bunny_filename_max_len',
+      );
+  late final _bunny_filename_max_len = _bunny_filename_max_lenPtr
+      .asFunction<int Function()>();
+
+  /// Allowed bytes: every printable ASCII byte (0x20-0x7E) except the nine
+  /// Windows reserves for path syntax (< > : " / \ | ? *) -- Linux/macOS only
+  /// additionally forbid '/' (macOS also ':'), already covered by that same
+  /// set, so satisfying Windows' stricter rule satisfies all three. Every
+  /// ASCII control byte (0x00-0x1F, 0x7F) is disallowed too. When ascii_only
+  /// is true, every byte >= 0x80 is disallowed as well -- used for anything
+  /// built from free-text site data (pool/post titles); artist/author names
+  /// are deliberately not routed through this at all (kept verbatim, non-ASCII
+  /// included, by the Dart side) since they're expected to carry non-ASCII
+  /// text as-is.
+  ///
+  /// Every disallowed byte is replaced with '_' -- a run of disallowed
+  /// continuation bytes belonging to the same non-ASCII codepoint (ascii_only
+  /// case) collapses to exactly one '_', not one per byte. A trailing run of
+  /// '.'/' ' is trimmed afterward (Windows can't create a name ending in
+  /// either); an empty result (nothing left after trimming, or empty/NULL
+  /// input) falls back to "_" rather than ever producing an unusable empty
+  /// name.
+  ///
+  /// Writes at most out_buf_size - 1 bytes plus a NUL terminator into out_buf,
+  /// truncating the input if it doesn't fit -- safe at any byte boundary when
+  /// ascii_only is true (the output is then pure single-byte-per-character
+  /// ASCII), and never splits a multi-byte UTF-8 sequence when ascii_only is
+  /// false (stops before a sequence that wouldn't fit whole, rather than
+  /// cutting into it). Pass a smaller out_buf_size than bunny_filename_max_len()
+  /// to budget for a mandatory prefix the caller builds separately (e.g.
+  /// "pool_<id> - ") that must never itself be truncated -- only the
+  /// sanitized portion going through this function is. Returns the output
+  /// length (excluding the NUL), same convention snprintf uses.
+  int bunny_sanitize_filename_segment(
+    ffi.Pointer<ffi.Char> input,
+    bool ascii_only,
+    ffi.Pointer<ffi.Char> out_buf,
+    int out_buf_size,
+  ) {
+    return _bunny_sanitize_filename_segment(
+      input,
+      ascii_only,
+      out_buf,
+      out_buf_size,
+    );
+  }
+
+  late final _bunny_sanitize_filename_segmentPtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.Size Function(
+            ffi.Pointer<ffi.Char>,
+            ffi.Bool,
+            ffi.Pointer<ffi.Char>,
+            ffi.Size,
+          )
+        >
+      >('bunny_sanitize_filename_segment');
+  late final _bunny_sanitize_filename_segment =
+      _bunny_sanitize_filename_segmentPtr
+          .asFunction<
+            int Function(
+              ffi.Pointer<ffi.Char>,
+              bool,
+              ffi.Pointer<ffi.Char>,
+              int,
+            )
+          >();
+
   /// --- Diagnostics ----------------------------------------------------------
   /// Backs `bunny_server --db-stats`/`--health` (server/src/main.c) -- thin
   /// read-locked pass-throughs to bunny_db_table_stats/bunny_db_integrity_check,
@@ -4657,3 +4733,5 @@ const int BUNNY_DB_MEDIA_MASK_VIDEO = 2;
 const int BUNNY_DB_MEDIA_MASK_GIF = 4;
 
 const int BUNNY_DB_MEDIA_MASK_ALL = 7;
+
+const int BUNNY_FILENAME_MAX_LEN = 200;
