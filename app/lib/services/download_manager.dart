@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:bunny_core_ffi/bunny_core_ffi.dart';
 import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart' show compute;
 import 'package:http/http.dart' as http;
@@ -131,25 +132,43 @@ class DownloadManager {
     return names.map((name) => name.replaceAll(RegExp(r'[\\/:*?"<>|]'), '_')).join('/');
   }
 
-  static String _sanitizePoolName(String? name) {
-    if (name == null || name.trim().isEmpty) {
+  /// [maxLength] is [bunnyFilenameMaxLen] minus whatever mandatory prefix
+  /// (e.g. "pool_1234 - ") the caller is about to prepend -- that prefix is
+  /// never itself sanitized/truncated (it's built from data this app
+  /// already controls: a numeric id and fixed literal text), only the
+  /// free-text title going through [bunnySanitizeFilenameSegment] is (M80).
+  /// `asciiOnly: true` here -- unlike [_sanitizeArtist] below, a pool title
+  /// is arbitrary free-text site data, not an artist/author name (which the
+  /// user asked to leave untouched, non-ASCII included).
+  static String _sanitizePoolName(String? name, {required int maxLength}) {
+    final trimmed = (name ?? '').trim();
+    if (trimmed.isEmpty) {
       return 'untitled';
     }
-    return name.replaceAll(RegExp(r'[\\/:*?"<>|]'), '_');
+    return bunnySanitizeFilenameSegment(trimmed, asciiOnly: true, maxLength: maxLength);
   }
 
   /// Where [post] lands on disk -- the regular per-artist scheme, unless
   /// [poolId]/[poolName]/[poolPage] (M65) mark this as part of a pool
   /// download, in which case it's filed under a pool-named folder with a
-  /// page-numbered filename instead, e.g. `pool:1234 - My Comic/1234 -
+  /// page-numbered filename instead, e.g. `pool_1234 - My Comic/1234 -
   /// p0007 [987654].png` for pool 1234 ("My Comic"), page 7, post external
   /// id 987654. e621 caps a pool at 1000 posts, hence the 4-digit zero-padded
   /// page width -- always enough, never excessive. [poolPage] <= 0 is
   /// treated the same as "not a pool download" (an unset/sentinel value,
   /// not a real page).
+  ///
+  /// The folder's prefix is `"pool_<id> - "`, not `"pool:<id> - "` (M80) -- a
+  /// literal ':' there used to reach Android's SAF either as an outright
+  /// directory-creation failure or a silent '_' substitution depending on
+  /// the provider, and Windows can't use ':' in a filename either; '_'
+  /// matches what [bunnySanitizeFilenameSegment] itself replaces ':' with
+  /// everywhere else, for one consistent convention.
   (String folder, String filename) _destinationFor(BunnyPost post, String ext, {int poolId = 0, String? poolName, int poolPage = 0}) {
     if (poolId > 0 && poolPage > 0) {
-      return ('pool:$poolId - ${_sanitizePoolName(poolName)}', '$poolId - p${poolPage.toString().padLeft(4, '0')} [${post.externalId}].$ext');
+      final prefix = 'pool_$poolId - ';
+      final title = _sanitizePoolName(poolName, maxLength: bunnyFilenameMaxLen() - prefix.length);
+      return ('$prefix$title', '$poolId - p${poolPage.toString().padLeft(4, '0')} [${post.externalId}].$ext');
     }
     return (_sanitizeArtist(post.artist), '${post.externalId}.$ext');
   }

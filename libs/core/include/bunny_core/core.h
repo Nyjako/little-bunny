@@ -680,6 +680,60 @@ bunny_core_result_t bunny_core_download_poll(int64_t handle, int64_t *out_receiv
  * for an already-released or never-valid handle. */
 void bunny_core_download_release(int64_t handle);
 
+/* --- Filename sanitization (M80) -------------------------------------------
+ * Cross-platform-safe filename/directory-name SEGMENT building -- pure, no
+ * bunny_core_t* needed (same reasoning as bunny_core_download_start above),
+ * declared here purely so ffigen picks it up. Confirmed live as the fix for
+ * a pool download folder's hardcoded "pool:<id> - <title>" name containing a
+ * literal ':' -- harmless on Linux, but Android's SAF either refused to
+ * create the directory at all or silently substituted '_' for it depending
+ * on the provider, and Windows can't use ':' in a filename either. Never
+ * pass a full path through this expecting '/' to survive as a separator --
+ * it's replaced exactly like every other disallowed character, since this
+ * only ever builds one path SEGMENT. */
+
+/* The one shared cross-platform length budget every sanitized filename/
+ * directory-name segment in this app is built against: comfortably under
+ * the common 255-byte/255-UTF-16-code-unit per-component limits most
+ * filesystems enforce (ext4, NTFS, APFS), with headroom left for whatever
+ * undocumented overhead of their own Android's SAF providers add on top of
+ * the raw filesystem limit. One constant, read at runtime via the function
+ * below rather than duplicated as a literal on the Dart side, so there's a
+ * single source of truth for it. */
+#define BUNNY_FILENAME_MAX_LEN 200
+size_t bunny_filename_max_len(void);
+
+/* Allowed bytes: every printable ASCII byte (0x20-0x7E) except the nine
+ * Windows reserves for path syntax (< > : " / \ | ? *) -- Linux/macOS only
+ * additionally forbid '/' (macOS also ':'), already covered by that same
+ * set, so satisfying Windows' stricter rule satisfies all three. Every
+ * ASCII control byte (0x00-0x1F, 0x7F) is disallowed too. When ascii_only
+ * is true, every byte >= 0x80 is disallowed as well -- used for anything
+ * built from free-text site data (pool/post titles); artist/author names
+ * are deliberately not routed through this at all (kept verbatim, non-ASCII
+ * included, by the Dart side) since they're expected to carry non-ASCII
+ * text as-is.
+ *
+ * Every disallowed byte is replaced with '_' -- a run of disallowed
+ * continuation bytes belonging to the same non-ASCII codepoint (ascii_only
+ * case) collapses to exactly one '_', not one per byte. A trailing run of
+ * '.'/' ' is trimmed afterward (Windows can't create a name ending in
+ * either); an empty result (nothing left after trimming, or empty/NULL
+ * input) falls back to "_" rather than ever producing an unusable empty
+ * name.
+ *
+ * Writes at most out_buf_size - 1 bytes plus a NUL terminator into out_buf,
+ * truncating the input if it doesn't fit -- safe at any byte boundary when
+ * ascii_only is true (the output is then pure single-byte-per-character
+ * ASCII), and never splits a multi-byte UTF-8 sequence when ascii_only is
+ * false (stops before a sequence that wouldn't fit whole, rather than
+ * cutting into it). Pass a smaller out_buf_size than bunny_filename_max_len()
+ * to budget for a mandatory prefix the caller builds separately (e.g.
+ * "pool_<id> - ") that must never itself be truncated -- only the
+ * sanitized portion going through this function is. Returns the output
+ * length (excluding the NUL), same convention snprintf uses. */
+size_t bunny_sanitize_filename_segment(const char *input, bool ascii_only, char *out_buf, size_t out_buf_size);
+
 /* --- Diagnostics ----------------------------------------------------------
  * Backs `bunny_server --db-stats`/`--health` (server/src/main.c) -- thin
  * read-locked pass-throughs to bunny_db_table_stats/bunny_db_integrity_check,

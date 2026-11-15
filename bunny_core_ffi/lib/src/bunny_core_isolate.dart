@@ -2124,3 +2124,40 @@ class BunnyCoreNative {
   /// thread and frees its resources.
   Future<void> downloadRelease(int handle) => _send<void>(_DownloadReleaseRequest(handle));
 }
+
+/// Pure, synchronous -- deliberately NOT routed through [BunnyCoreNative]'s
+/// isolate/dispatch pipe, unlike every method above. Those are all
+/// dispatched to keep real I/O or shared `bunny_core_t` state off the
+/// calling isolate; `bunny_sanitize_filename_segment` (M80) is neither --
+/// no `core` handle, no locking, no I/O, done in microseconds -- so calling
+/// straight into the already-loaded native library on the caller's own
+/// isolate is both correct and faster than a round trip would be. This also
+/// has to work regardless of standalone vs. networked mode: networked mode
+/// never opens a [BunnyCoreNative] core/isolate at all, but
+/// `DownloadManager` (app/lib/services/download_manager.dart) still needs a
+/// filename sanitizer in both.
+///
+/// [maxLength] caps the result's length in bytes (default: the shared
+/// cross-platform budget `bunny_filename_max_len()` reports) -- pass a
+/// smaller value to budget for a mandatory prefix the caller builds
+/// separately and never wants truncated itself (e.g. a pool folder's
+/// "pool_<id> - " prefix). A [maxLength] <= 0 returns an empty string
+/// without making a native call at all.
+String bunnySanitizeFilenameSegment(String input, {bool asciiOnly = false, int? maxLength}) {
+  final cap = maxLength ?? bunnyFilenameMaxLen();
+  if (cap <= 0) {
+    return '';
+  }
+  return using((arena) {
+    final inputPtr = input.toNativeUtf8(allocator: arena).cast<Char>();
+    final bufSize = cap + 1;
+    final outBuf = arena<Char>(bufSize);
+    _bindings.bunny_sanitize_filename_segment(inputPtr, asciiOnly, outBuf, bufSize);
+    return outBuf.cast<Utf8>().toDartString();
+  });
+}
+
+/// The shared cross-platform filename-length budget every
+/// [bunnySanitizeFilenameSegment] call is implicitly capped at by default --
+/// see `BUNNY_FILENAME_MAX_LEN`'s own doc comment in core.h.
+int bunnyFilenameMaxLen() => _bindings.bunny_filename_max_len();
