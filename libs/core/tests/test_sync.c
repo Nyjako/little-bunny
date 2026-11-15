@@ -935,6 +935,31 @@ void test_fetch_pool_parses_pool_references_out_of_the_description(void)
     free(fixture);
 }
 
+/* M81: a description can also cross-reference another pool via a dtext
+ * link's path ("/pools/<N>") instead of the "pool #<N>" marker -- either a
+ * bare dtext link ("label":/pools/<N>) or a full URL
+ * (https://e621.net/pools/<N>). Confirmed live against real pool
+ * descriptions (pool 37143 uses the bare dtext-link form, pool 20621 the
+ * full-URL form) -- both are covered by the same "/pools/<N>" substring
+ * check. */
+void test_fetch_pool_parses_dtext_link_and_url_references_out_of_the_description(void)
+{
+    char *fixture = read_fixture("e621_pool_with_link_references.json");
+    TEST_ASSERT_NOT_NULL(fixture);
+    g_e621_state.bodies[0] = fixture;
+    g_e621_state.body_count = 1;
+
+    bunny_core_pool_info_t info;
+    bunny_core_result_t result = bunny_core_fetch_pool(g_core, 37143, &info);
+    TEST_ASSERT_EQUAL(BUNNY_CORE_OK, result);
+    TEST_ASSERT_EQUAL(2, info.referenced_pool_id_count);
+    TEST_ASSERT_EQUAL(41263, info.referenced_pool_ids[0]);
+    TEST_ASSERT_EQUAL(11563, info.referenced_pool_ids[1]);
+    bunny_core_pool_info_free(&info);
+
+    free(fixture);
+}
+
 /* The actual user-facing bug (M26): e621's own pool order ([1, 2, 3] per
  * the pool fixture below) can differ from "newest post first by upload
  * date" (here, posts 3/2/1 upload in that order) whenever pages were
@@ -2909,6 +2934,7 @@ int main(void)
     RUN_TEST(test_list_comments_rejects_inkbunny_posts);
     RUN_TEST(test_fetch_pool_returns_live_pool_info);
     RUN_TEST(test_fetch_pool_parses_pool_references_out_of_the_description);
+    RUN_TEST(test_fetch_pool_parses_dtext_link_and_url_references_out_of_the_description);
     RUN_TEST(test_syncing_a_pool_search_orders_posts_by_e621s_own_pool_order);
     RUN_TEST(test_preview_search_upserts_posts_without_creating_a_search);
     RUN_TEST(test_preview_search_applies_the_tag_blacklist_for_a_plain_query);

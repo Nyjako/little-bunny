@@ -414,11 +414,12 @@ typedef struct
     char *description; /* e621's own dtext markup, verbatim; NULL if empty */
     int64_t post_count;
 
-    /* Every "pool #<N>" mention found in `description` (M26) -- e621 pool
-     * descriptions routinely cross-reference related/continuation pools
-     * this way (see bunny_core_fetch_pool's doc comment). In first-seen
-     * order, duplicates included. Empty when description has none or is
-     * NULL. */
+    /* Every "pool #<N>" mention, or dtext link ("/pools/<N>", however it's
+     * wrapped -- a bare dtext link, a full https://e621.net/pools/<N> URL,
+     * ...), found in `description` (M26/M81) -- e621 pool descriptions
+     * routinely cross-reference related/continuation pools either way (see
+     * bunny_core_fetch_pool's doc comment). In first-seen order, duplicates
+     * included. Empty when description has none or is NULL. */
     int64_t *referenced_pool_ids;
     size_t referenced_pool_id_count;
 } bunny_core_pool_info_t;
@@ -426,7 +427,8 @@ typedef struct
 void bunny_core_pool_info_free(bunny_core_pool_info_t *info);
 
 /* referenced_pool_ids (above) is populated by scanning the fetched
- * description for e621's own "pool #<N>" dtext convention -- callers don't
+ * description for both of e621's own cross-reference conventions -- the
+ * "pool #<N>" marker and a dtext link's "/pools/<N>" path -- callers don't
  * need to parse it themselves. */
 bunny_core_result_t bunny_core_fetch_pool(bunny_core_t *core, int64_t pool_id, bunny_core_pool_info_t *out_info);
 

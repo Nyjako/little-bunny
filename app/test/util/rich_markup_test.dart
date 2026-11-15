@@ -125,6 +125,31 @@ void main() {
       });
     });
 
+    group('dtext pool links ("label":/pools/<id>) are recognized (M81)', () {
+      test('a dtext pool link mid-sentence splits into text/pool/text, rendering just the label', () {
+        final segments = parseRichMarkup('See "Called out":/pools/41263 for context.');
+        expect(segments, hasLength(3));
+        expect((segments[0] as RichMarkupTextSegment).text, 'See ');
+        final pool = segments[1] as RichMarkupPoolSegment;
+        expect(pool.poolId, 41263);
+        expect(pool.matchedText, 'Called out');
+        expect((segments[2] as RichMarkupTextSegment).text, ' for context.');
+      });
+
+      test('a dtext pool link at the very start has no leading text segment', () {
+        final segments = parseRichMarkup('"Called out":/pools/41263');
+        expect(segments, hasLength(1));
+        final pool = segments[0] as RichMarkupPoolSegment;
+        expect(pool.poolId, 41263);
+        expect(pool.matchedText, 'Called out');
+      });
+
+      test('a dtext link to something other than a pool is left unrecognized', () {
+        final segments = parseRichMarkup('"the wiki":/wiki_pages/123');
+        expect(segments, [isA<RichMarkupTextSegment>()]);
+      });
+    });
+
     test('markup at the very start has no leading text segment', () {
       final segments = parseRichMarkup('{{someartist}} drew this.');
       expect(segments, hasLength(2));
