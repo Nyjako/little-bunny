@@ -315,10 +315,14 @@ class DownloadManager {
   /// since nothing was downloaded in those cases). [autoUpvote] (M14.2) does
   /// the same for an upvote, but e621-only -- Inkbunny has no vote API, same
   /// gate every other vote-related feature in this app already applies.
-  /// Both only queue the action -- draining the action queue afterward is
-  /// left to the caller, which already decides that for its own batching
-  /// needs (an immediate drain for a single download, one drain after a
-  /// whole mass-download loop).
+  /// Both only queue the action -- draining the action queue is never this
+  /// class's or `DownloadQueueService`'s concern at all (M79): a download
+  /// must never block on the real site network call a drain makes.
+  /// Networked mode's own server already drains this on its own short
+  /// background cadence (`server/src/scheduler.c`); standalone mode gets an
+  /// equivalent app-level periodic timer (`main.dart`'s
+  /// `_updateActionQueueDrainTimer`), decoupled from whether anything is
+  /// downloading.
   ///
   /// [onProgress] (M62), if given, is called as bytes arrive -- `total` is
   /// `null` whenever the server's response has no `Content-Length` (rare in

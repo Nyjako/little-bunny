@@ -142,13 +142,18 @@ static bunny_core_result_t process_e621_action(e621_client_t *client, const bunn
     return BUNNY_CORE_OK;
 }
 
-static bunny_core_result_t process_inkbunny_action(bunny_core_t *core, const bunny_db_action_t *action, int64_t external_id, char **out_error)
+/* Builds and website-logs-in a fresh Inkbunny client for the unofficial
+ * favorites flow. Callers reuse the result across every Inkbunny action in
+ * one bunny_core_process_queue pass (see its *inkbunny_client in/out param
+ * below) instead of logging in per-action -- besides saving the extra
+ * login round-trip per action, it's what lets the client's own
+ * rate_limiter (consulted by inkbunny_website_login/inkbunny_favorite_add/
+ * inkbunny_favorite_remove) actually pace consecutive requests: a
+ * freshly-created limiter's first wait is always a no-op (nothing to pace
+ * against yet), so a new client per action would mean every action's
+ * requests go out unpaced regardless. */
+static bunny_core_result_t build_inkbunny_action_client(bunny_core_t *core, inkbunny_client_t **out_client, char **out_error)
 {
-    if (action->action_type == BUNNY_DB_ACTION_VOTE || action->action_type == BUNNY_DB_ACTION_COMMENT) {
-        *out_error = goblin_copy_cstr("Inkbunny has no vote/comment API");
-        return BUNNY_CORE_ERR_INVALID_ARG;
-    }
-
     bunny_db_account_t account;
     memset(&account, 0, sizeof(account));
     bunny_core_db_lock(core);
@@ -159,10 +164,9 @@ static bunny_core_result_t process_inkbunny_action(bunny_core_t *core, const bun
         return BUNNY_CORE_ERR_INVALID_ARG;
     }
 
-    /* Everything below is network-only (client create + login + the
-     * favorite/unfavorite call itself) -- no lock held. account.username/
-     * .secret are independently-owned copies (bunny_db_column_text_dup),
-     * safe to read after unlocking. */
+    /* Everything below is network-only (client create + login) -- no lock
+     * held. account.username/.secret are independently-owned copies
+     * (bunny_db_column_text_dup), safe to read after unlocking. */
     inkbunny_config_t config;
     memset(&config, 0, sizeof(config));
     config.transport = core->inkbunny_transport;
@@ -183,6 +187,14 @@ static bunny_core_result_t process_inkbunny_action(bunny_core_t *core, const bun
         return BUNNY_CORE_ERR_SITE;
     }
 
+    *out_client = client;
+    return BUNNY_CORE_OK;
+}
+
+/* Caller has already ruled out VOTE/COMMENT (Inkbunny has no such API) --
+ * this only ever sees FAVORITE_ADD/FAVORITE_REMOVE. */
+static bunny_core_result_t process_inkbunny_action(inkbunny_client_t *client, const bunny_db_action_t *action, int64_t external_id, char **out_error)
+{
     inkbunny_result_t action_result;
     if (action->action_type == BUNNY_DB_ACTION_FAVORITE_ADD) {
         cJSON *payload = action->payload ? cJSON_Parse(action->payload) : NULL;
@@ -192,7 +204,6 @@ static bunny_core_result_t process_inkbunny_action(bunny_core_t *core, const bun
     } else {
         action_result = inkbunny_favorite_remove(client, external_id);
     }
-    inkbunny_client_destroy(client);
 
     if (action_result != INKBUNNY_OK) {
         *out_error = goblin_copy_cstr(inkbunny_result_to_string(action_result));
@@ -254,7 +265,9 @@ bunny_core_result_t bunny_core_process_queue(bunny_core_t *core, bunny_core_queu
         return bunny_core_map_db_result(list_result);
     }
 
-    e621_client_t *e621_client = NULL; /* built lazily, reused across e621 actions in this pass */
+    e621_client_t *e621_client = NULL;         /* built lazily, reused across e621 actions in this pass */
+    inkbunny_client_t *inkbunny_client = NULL; /* built lazily, reused across Inkbunny actions in this pass -- see build_inkbunny_action_client's doc comment for why reuse matters here, not just for login overhead */
+    bool inkbunny_client_failed = false;       /* once building/logging in fails, don't retry it for every remaining Inkbunny action in this pass */
 
     for (size_t i = 0; i < actions.count; i++) {
         const bunny_db_action_t *action = &actions.items[i];
@@ -284,8 +297,26 @@ bunny_core_result_t bunny_core_process_queue(bunny_core_t *core, bunny_core_queu
             } else {
                 action_result = process_e621_action(e621_client, action, post.external_id, &error); /* network call, no lock held */
             }
+        } else if (action->action_type == BUNNY_DB_ACTION_VOTE || action->action_type == BUNNY_DB_ACTION_COMMENT) {
+            /* Checked before touching the Inkbunny client at all -- Inkbunny
+             * has no vote/comment API, so there's nothing worth logging in
+             * for. */
+            error = goblin_copy_cstr("Inkbunny has no vote/comment API");
+            action_result = BUNNY_CORE_ERR_INVALID_ARG;
         } else {
-            action_result = process_inkbunny_action(core, action, post.external_id, &error); /* db read + network, split internally */
+            if (!inkbunny_client && !inkbunny_client_failed) {
+                char *client_error = NULL;
+                if (build_inkbunny_action_client(core, &inkbunny_client, &client_error) != BUNNY_CORE_OK) {
+                    inkbunny_client_failed = true;
+                    free(client_error);
+                }
+            }
+            if (inkbunny_client) {
+                action_result = process_inkbunny_action(inkbunny_client, action, post.external_id, &error);
+            } else {
+                error = goblin_copy_cstr("failed to log in to Inkbunny");
+                action_result = BUNNY_CORE_ERR_SITE;
+            }
         }
         bunny_db_post_free(&post);
 
@@ -307,6 +338,9 @@ bunny_core_result_t bunny_core_process_queue(bunny_core_t *core, bunny_core_queu
 
     if (e621_client) {
         e621_client_destroy(e621_client);
+    }
+    if (inkbunny_client) {
+        inkbunny_client_destroy(inkbunny_client);
     }
 
     bunny_db_action_list_free(&actions);

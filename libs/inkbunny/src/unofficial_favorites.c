@@ -160,6 +160,7 @@ inkbunny_result_t inkbunny_website_login(inkbunny_client_t *client, const char *
     char *encoded_login_token = NULL;
     char *login_body = NULL;
 
+    bunny_rate_limiter_wait(&client->rate_limiter);
     if (!http_get(curl, "https://inkbunny.net/login.php", &page)) {
         result = INKBUNNY_ERR_NETWORK;
         goto cleanup;
@@ -189,6 +190,7 @@ inkbunny_result_t inkbunny_website_login(inkbunny_client_t *client, const char *
         snprintf(login_body, needed, "token=%s&username=%s&password=%s", encoded_login_token, encoded_user, encoded_pass);
     }
 
+    bunny_rate_limiter_wait(&client->rate_limiter);
     if (!http_post_form(curl, "https://inkbunny.net/login_process.php", login_body, false, &page)) {
         result = INKBUNNY_ERR_NETWORK;
         goto cleanup;
@@ -233,6 +235,7 @@ static inkbunny_result_t favorite_process(inkbunny_client_t *client, int64_t sub
 
     char submission_url[256];
     snprintf(submission_url, sizeof(submission_url), "https://inkbunny.net/s/%lld", (long long)submission_id);
+    bunny_rate_limiter_wait(&client->rate_limiter);
     if (!http_get(curl, submission_url, &page)) {
         result = INKBUNNY_ERR_NETWORK;
         goto cleanup;
@@ -263,6 +266,7 @@ static inkbunny_result_t favorite_process(inkbunny_client_t *client, int64_t sub
         snprintf(fav_body, needed, "token=%s&stars=%s&add=%s&remove=%s&submission_id=%lld", encoded_global_token, stars_str, is_add ? "true" : "false", is_add ? "false" : "true", (long long)submission_id);
     }
 
+    bunny_rate_limiter_wait(&client->rate_limiter);
     if (!http_post_form(curl, "https://inkbunny.net/submissionfav_process.php", fav_body, true, &page)) {
         result = INKBUNNY_ERR_NETWORK;
         goto cleanup;
