@@ -301,6 +301,51 @@ void main() {
     expect(find.text('Searches'), findsWidgets);
   });
 
+  testWidgets('downloading a mixed selection of pool and non-pool searches files the pool one under its own pool folder (M78)', (WidgetTester tester) async {
+    final repository = FakeBunnyRepository();
+    final poolId = await repository.createSearch(BunnySite.e621, 'My Comic', 'pool:777');
+    final regularId = await repository.createSearch(BunnySite.e621, 'Foxes', 'fox');
+    repository.postsBySearchId[poolId] = [
+      BunnyPost(id: 1, site: BunnySite.e621, externalId: 11, score: 0, favCount: 0, commentCount: 0, width: 100, height: 100, cachedAt: '2026-01-01T00:00:00Z', isSeen: false, isFavorited: false),
+      BunnyPost(id: 2, site: BunnySite.e621, externalId: 12, score: 0, favCount: 0, commentCount: 0, width: 100, height: 100, cachedAt: '2026-01-01T00:00:00Z', isSeen: false, isFavorited: false),
+    ];
+    repository.postsBySearchId[regularId] = [
+      BunnyPost(id: 3, site: BunnySite.e621, externalId: 13, score: 0, favCount: 0, commentCount: 0, width: 100, height: 100, cachedAt: '2026-01-01T00:00:00Z', isSeen: false, isFavorited: false),
+    ];
+    final downloadQueueService = DownloadQueueService(downloadManager: const DownloadManager(), downloadSettingsStore: const DownloadSettingsStore());
+
+    await tester.pumpWidget(_wrap(repository, downloadQueueService: downloadQueueService));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byIcon(Icons.sort));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Select searches to download'));
+    await tester.pumpAndSettle();
+
+    // A pool search lives in the "Pools" tab, not "Searches" -- selection
+    // mode tracks ids across tabs, so switching tabs mid-selection keeps
+    // what's already picked.
+    await tester.tap(find.text('Foxes'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Pools'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('My Comic'));
+    await tester.pumpAndSettle();
+    expect(find.text('2 selected'), findsOneWidget);
+
+    await tester.tap(find.byTooltip('Download selected'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('3 queued for download'), findsOneWidget);
+    final rows = await repository.downloadQueueList();
+    final poolRows = rows.where((row) => row.postId == 1 || row.postId == 2).toList()..sort((a, b) => a.postId.compareTo(b.postId));
+    // 777, not the search's own row id -- parsed from its "pool:777" query,
+    // same as every other pool-download call site in the app.
+    expect(poolRows.map((row) => (row.poolId, row.poolName, row.poolPage)), [(777, 'My Comic', 1), (777, 'My Comic', 2)]);
+    final regularRow = rows.singleWhere((row) => row.postId == 3);
+    expect(regularRow.poolId, 0);
+  });
+
   testWidgets('long-pressing a row and choosing Add to slideshow links it to the chosen slideshow', (WidgetTester tester) async {
     final repository = FakeBunnyRepository();
     await repository.createSearch(BunnySite.e621, 'Foxes', 'fox');
