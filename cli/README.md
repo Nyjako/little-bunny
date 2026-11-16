@@ -74,23 +74,32 @@ section) -- the server's self-signed certificate is pinned by the SHA-256
 fingerprint the handshake reports (trust-on-first-use, no CA involved, same
 model as the app's own certificate pinning).
 
-`--search`, `--pool`, `--favorite`, `--unfavorite`, `--vote`,
-`--blacklist-list`, `--blacklist-add`, and `--blacklist-remove` work over the
-network today. The rest don't fit the server's REST surface the same way as
-a synchronous local call, so they're standalone-only for now:
+Every command works over the network today **except** `--stats` -- the
+server has no REST endpoint exposing table row counts/integrity (its
+`/health` only smoke-tests the HTTPS listener itself). Running `--stats`
+while your app is set up in networked mode tells you so and exits cleanly,
+rather than guessing.
 
-- `--download`/`--queue-list` -- the download queue is purely client-side
-  (the server never proxies binary downloads); a networked version needs
-  its own local queue database, which the handshake doesn't hand over yet.
-- `--sync` -- the server's own sync endpoint is an async job (enqueue, then
-  poll `GET /sync/status` for progress), not a synchronous "run it now,
-  print the stats" call.
-- `--stats` -- the server has no REST endpoint exposing table row
-  counts/integrity (its `/health` only smoke-tests the HTTPS listener
-  itself).
+Two commands work a little differently in networked mode:
 
-Running one of these while your app is set up in networked mode tells you
-so and exits cleanly, rather than guessing.
+- **`--download`/`--queue-list`**: the download queue is purely client-side
+  (the server never proxies binary downloads) -- in networked mode these
+  operate on the app's own small local queue database (the handshake's
+  `downloadQueueDbPath`, the exact same db `HttpBunnyRepository` itself
+  uses), resolving each queued post's own metadata via a real `GET
+  /posts/{id}` call before downloading its file straight from the site's
+  CDN, same as standalone mode. This is exactly what lets you continue a
+  stalled queue with the app not running at all, in either mode. If the app
+  reports no queue database path at all (an app build from before this
+  existed), these two fail with a clear error instead of guessing -- every
+  other networked command is unaffected.
+- **`--sync`**: the server's own sync (`POST /sync` or `POST
+  /searches/{id}/sync`) only enqueues the work onto the server's own task
+  queue and returns immediately -- the server runs it in the background on
+  its own. This command just triggers it and reports whether the server
+  accepted the request; it never waits for or prints sync stats the way
+  standalone mode does (those are only ever visible via `GET /sync/status`
+  or the app's own UI).
 
 ## Staying in sync with the app (low priority, not done yet)
 

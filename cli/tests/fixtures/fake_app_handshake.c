@@ -28,6 +28,10 @@
  *                            "downloadDestinationFolder":null instead of a
  *                            real path -- the rare case the app's own
  *                            OS-Downloads-directory fallback failed too.
+ *   BUNNY_CLI_TEST_NO_QUEUE_DB  if set to anything, a networked response
+ *                            omits downloadQueueDbPath/downloadQueueUserAgent
+ *                            entirely -- an app build from before those
+ *                            fields existed.
  */
 #include <stdio.h>
 #include <stdlib.h>
@@ -94,7 +98,8 @@ int main(void)
     if (strcmp(mode, "none") == 0) {
         strcpy(response, "{\"ok\":true,\"mode\":\"none\"}");
     } else if (strcmp(mode, "networked") == 0) {
-        snprintf(response, sizeof(response), "{\"ok\":true,\"mode\":\"networked\",\"serverBaseUrl\":\"https://bunny.example:9443\",\"bearerToken\":\"test-token\",\"certFingerprint\":\"abc123\",\"downloadDestinationFolder\":%s}", download_folder_json);
+        const char *queue_db_fields = getenv("BUNNY_CLI_TEST_NO_QUEUE_DB") ? "" : "\"downloadQueueDbPath\":\"/fake/downloads.db\",\"downloadQueueUserAgent\":\"LittleBunny/1.0.0\",";
+        snprintf(response, sizeof(response), "{\"ok\":true,\"mode\":\"networked\",\"serverBaseUrl\":\"https://bunny.example:9443\",\"bearerToken\":\"test-token\",\"certFingerprint\":\"abc123\",%s\"downloadDestinationFolder\":%s}", queue_db_fields, download_folder_json);
     } else {
         snprintf(response, sizeof(response), "{\"ok\":true,\"mode\":\"standalone\",\"dbPath\":\"/fake/bunny.db\",\"userAgent\":\"LittleBunny/1.0.0\",\"downloadDestinationFolder\":%s}", download_folder_json);
     }

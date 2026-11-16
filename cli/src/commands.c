@@ -184,11 +184,85 @@ typedef struct
 
 typedef struct
 {
-    bunny_core_t *core;
-    bunny_mutex_t claim_mutex; /* guards both claiming a row and the two counters below */
+    bunny_core_t *core;            /* the local download-queue db, both modes -- see bunny_cli_context_t's own doc comment */
+    bunny_cli_rest_client_t *rest; /* non-NULL in networked mode only, used to resolve each post's own metadata */
+    bunny_mutex_t claim_mutex;     /* guards both claiming a row and the two counters below */
     int succeeded;
     int failed;
 } download_shared_state_t;
+
+/* A post's metadata, however it was resolved (bunny_core_post_get_by_id
+ * locally, or GET /posts/{id} over REST) -- just the handful of fields
+ * process_claimed_item actually needs, so it doesn't have to care which
+ * path produced them. All strings owned; free with resolved_post_free. */
+typedef struct
+{
+    char *artist;
+    char *file_ext;
+    char *file_url;
+    char *file_md5;
+    int64_t external_id;
+    bunny_db_site_t site;
+} resolved_post_t;
+
+static void resolved_post_free(resolved_post_t *post)
+{
+    free(post->artist);
+    free(post->file_ext);
+    free(post->file_url);
+    free(post->file_md5);
+    memset(post, 0, sizeof(*post));
+}
+
+static bool resolve_post_standalone(bunny_core_t *core, int64_t post_id, resolved_post_t *out)
+{
+    bunny_db_post_t post;
+    if (bunny_core_post_get_by_id(core, post_id, &post) != BUNNY_CORE_OK) {
+        return false;
+    }
+    memset(out, 0, sizeof(*out));
+    out->artist = post.artist ? strdup(post.artist) : NULL;
+    out->file_ext = post.file_ext ? strdup(post.file_ext) : NULL;
+    out->file_url = post.file_url ? strdup(post.file_url) : NULL;
+    out->file_md5 = post.file_md5 ? strdup(post.file_md5) : NULL;
+    out->external_id = post.external_id;
+    out->site = post.site;
+    bunny_db_post_free(&post);
+    return true;
+}
+
+/* The local queue db (ctx->core) never stores post data in networked mode
+ * -- only the queue rows -- so this is a real network call per item,
+ * fetching the exact same JSON shape bunny_cli_cmd_search/_pool already
+ * forward as-is (json_helpers.h's own doc comment). */
+static bool resolve_post_networked(bunny_cli_rest_client_t *rest, int64_t post_id, resolved_post_t *out)
+{
+    char path[64];
+    snprintf(path, sizeof(path), "/posts/%lld", (long long)post_id);
+
+    cJSON *json = NULL;
+    bunny_cli_rest_result_t result = bunny_cli_rest_request(rest, BUNNY_HTTP_GET, path, NULL, &json);
+    if (result != BUNNY_CLI_REST_OK || !json) {
+        cJSON_Delete(json);
+        return false;
+    }
+
+    memset(out, 0, sizeof(*out));
+    const char *artist = bunny_json_get_string_or(json, "artist", NULL);
+    const char *file_ext = bunny_json_get_string_or(json, "file_ext", NULL);
+    const char *file_url = bunny_json_get_string_or(json, "file_url", NULL);
+    const char *file_md5 = bunny_json_get_string_or(json, "file_md5", NULL);
+    const char *site_text = bunny_json_get_string_or(json, "site", "");
+    out->artist = artist ? strdup(artist) : NULL;
+    out->file_ext = file_ext ? strdup(file_ext) : NULL;
+    out->file_url = file_url ? strdup(file_url) : NULL;
+    out->file_md5 = file_md5 ? strdup(file_md5) : NULL;
+    bunny_json_get_int64(json, "external_id", &out->external_id);
+    out->site = strcmp(site_text, "inkbunny") == 0 ? BUNNY_DB_SITE_INKBUNNY : BUNNY_DB_SITE_E621;
+
+    cJSON_Delete(json);
+    return true;
+}
 
 /* Finds the next BUNNY_DB_DOWNLOAD_QUEUE_QUEUED row, marks it DOWNLOADING,
  * and copies its data into *out -- the whole find+mark step happens under
@@ -247,15 +321,14 @@ static size_t extra_headers_for_site(bunny_db_site_t site, bunny_http_header_t *
  * callers must treat *item as consumed afterward. */
 static void process_claimed_item(download_shared_state_t *state, const char *download_folder, claimed_item_t *item)
 {
-    bunny_db_post_t post;
-    memset(&post, 0, sizeof(post));
-    bool have_post = bunny_core_post_get_by_id(state->core, item->post_id, &post) == BUNNY_CORE_OK;
+    resolved_post_t post;
+    bool have_post = state->rest ? resolve_post_networked(state->rest, item->post_id, &post) : resolve_post_standalone(state->core, item->post_id, &post);
 
     bunny_db_download_queue_status_t new_status = BUNNY_DB_DOWNLOAD_QUEUE_FAILED;
     char error_message[256] = "";
 
     if (!have_post) {
-        snprintf(error_message, sizeof(error_message), "post %lld not found locally", (long long)item->post_id);
+        snprintf(error_message, sizeof(error_message), "post %lld could not be resolved", (long long)item->post_id);
     } else if (!post.file_url) {
         snprintf(error_message, sizeof(error_message), "post %lld has no file to download", (long long)item->post_id);
     } else {
@@ -312,7 +385,7 @@ static void process_claimed_item(download_shared_state_t *state, const char *dow
     bunny_mutex_unlock(&state->claim_mutex);
 
     if (have_post) {
-        bunny_db_post_free(&post);
+        resolved_post_free(&post);
     }
     free(item->pool_name);
 }
@@ -337,10 +410,10 @@ static void *worker_thread_fn(void *arg_ptr)
 
 int bunny_cli_cmd_download(bunny_cli_context_t *ctx, const char *download_folder, int jobs)
 {
-    if (ctx->mode == BUNNY_CLI_MODE_NETWORKED) {
-        return report_not_supported_over_network("--download");
+    if (!ctx->core) {
+        bunny_cli_log(BUNNY_CLI_LOG_ERROR, "no local download-queue database available (the app didn't report one -- an older app build?)");
+        return 1;
     }
-    bunny_core_t *core = ctx->core;
     if (!download_folder) {
         bunny_cli_log(BUNNY_CLI_LOG_ERROR, "no download destination folder configured in the app yet");
         return 1;
@@ -353,7 +426,8 @@ int bunny_cli_cmd_download(bunny_cli_context_t *ctx, const char *download_folder
     }
 
     download_shared_state_t state;
-    state.core = core;
+    state.core = ctx->core;
+    state.rest = ctx->mode == BUNNY_CLI_MODE_NETWORKED ? ctx->rest : NULL;
     state.succeeded = 0;
     state.failed = 0;
     bunny_mutex_init(&state.claim_mutex);
@@ -509,16 +583,46 @@ static void log_sync_stats(const bunny_core_sync_stats_t *stats)
     }
 }
 
+/* Networked: the server's own sync is async (POST /sync or POST
+ * /searches/{id}/sync just enqueue it onto the server's task queue and
+ * return -- the server runs it in the background on its own, see
+ * commands.h's own doc comment) -- this just triggers it and reports
+ * whether the server actually accepted the request, never stats it was
+ * never asked to go fetch (that's GET /sync/status's job, not this
+ * command's). */
+static int cmd_sync_networked(bunny_cli_rest_client_t *rest, int64_t search_id)
+{
+    char path[64];
+    if (search_id == 0) {
+        strcpy(path, "/sync");
+    } else {
+        snprintf(path, sizeof(path), "/searches/%lld/sync", (long long)search_id);
+    }
+
+    cJSON *response = NULL;
+    bunny_cli_rest_result_t result = bunny_cli_rest_request(rest, BUNNY_HTTP_POST, path, NULL, &response);
+    bool enqueued = bunny_json_get_bool_or(response, "enqueued", false);
+    cJSON_Delete(response);
+
+    if (result != BUNNY_CLI_REST_OK || !enqueued) {
+        bunny_cli_log(BUNNY_CLI_LOG_ERROR, "sync request was not accepted: %s", result != BUNNY_CLI_REST_OK ? bunny_cli_rest_result_to_string(result) : "the server is already busy syncing");
+        return 1;
+    }
+
+    bunny_cli_log(BUNNY_CLI_LOG_SUCCESS, "sync requested -- the server will run it in the background");
+    return 0;
+}
+
 int bunny_cli_cmd_sync(bunny_cli_context_t *ctx, int64_t search_id)
 {
     if (ctx->mode == BUNNY_CLI_MODE_NETWORKED) {
-        return report_not_supported_over_network("--sync");
+        return cmd_sync_networked(ctx->rest, search_id);
     }
-    bunny_core_t *core = ctx->core;
+
     bunny_core_sync_stats_t stats;
     memset(&stats, 0, sizeof(stats));
 
-    bunny_core_result_t result = search_id == 0 ? bunny_core_sync_due_searches(core, &stats) : bunny_core_sync_search(core, search_id, &stats);
+    bunny_core_result_t result = search_id == 0 ? bunny_core_sync_due_searches(ctx->core, &stats) : bunny_core_sync_search(ctx->core, search_id, &stats);
     if (result != BUNNY_CORE_OK) {
         bunny_cli_log(BUNNY_CLI_LOG_ERROR, "sync failed: %s", bunny_core_result_to_string(result));
         return 1;
@@ -625,8 +729,9 @@ int bunny_cli_cmd_blacklist_remove(bunny_cli_context_t *ctx, bunny_db_site_t sit
 
 int bunny_cli_cmd_queue_list(bunny_cli_context_t *ctx)
 {
-    if (ctx->mode == BUNNY_CLI_MODE_NETWORKED) {
-        return report_not_supported_over_network("--queue-list");
+    if (!ctx->core) {
+        bunny_cli_log(BUNNY_CLI_LOG_ERROR, "no local download-queue database available (the app didn't report one -- an older app build?)");
+        return 1;
     }
 
     bunny_db_download_queue_list_t list;

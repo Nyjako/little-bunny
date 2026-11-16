@@ -48,6 +48,8 @@ void bunny_cli_handshake_payload_free(bunny_cli_handshake_payload_t *payload)
     free(payload->server_base_url);
     free(payload->bearer_token);
     free(payload->cert_fingerprint);
+    free(payload->download_queue_db_path);
+    free(payload->download_queue_user_agent);
     free(payload->download_destination_folder);
     memset(payload, 0, sizeof(*payload));
 }
@@ -136,6 +138,8 @@ static bunny_cli_handshake_result_t parse_response_line(const char *line, bunny_
             out->server_base_url = dup_string(server_base_url->valuestring);
             out->bearer_token = dup_string(bearer_token->valuestring);
             out->cert_fingerprint = dup_string(cert_fingerprint->valuestring);
+            out->download_queue_db_path = dup_optional_string_field(json, "downloadQueueDbPath");
+            out->download_queue_user_agent = dup_optional_string_field(json, "downloadQueueUserAgent");
             out->download_destination_folder = dup_optional_string_field(json, "downloadDestinationFolder");
         }
     } else {

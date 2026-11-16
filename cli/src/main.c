@@ -43,8 +43,9 @@ static void print_usage(const char *argv0)
     printf("it briefly launches the app to learn its current repository config, which\n");
     printf("never touches disk or becomes visible to any other process.\n");
     printf("\n");
-    printf("In networked mode, --download/--sync/--queue-list/--stats aren't supported\n");
-    printf("yet (they don't fit the server's REST surface the same way) -- see cli/README.md.\n");
+    printf("In networked mode, --stats isn't supported (the server has no REST endpoint\n");
+    printf("for it) -- --download/--queue-list additionally need the app to report a\n");
+    printf("local download-queue database path, see cli/README.md.\n");
 }
 
 static bool has_flag(int argc, char **argv, const char *flag)
@@ -201,14 +202,17 @@ int main(int argc, char **argv)
         return 1;
     }
 
-    /* Builds whichever half of bunny_cli_context_t this mode actually
-     * needs -- standalone opens the local bunny_core_t* exactly once
-     * (cheaper and simpler than each command opening/closing its own, and
-     * keeps the "failed to open the database" error in one place);
-     * networked builds the REST client (bearer token + pinned certificate)
-     * instead. A command with no networked implementation yet reports that
-     * itself (see commands.h) rather than this blanket-rejecting every
-     * command the way it used to. */
+    /* Builds whichever half(s) of bunny_cli_context_t this mode actually
+     * needs. `ctx.core` is the local download-queue db in BOTH modes
+     * (standalone's one real database; networked's small queue-only db,
+     * handshake's download_queue_db_path -- see bunny_cli_context_t's own
+     * doc comment for why networked mode still needs one) -- opened
+     * exactly once here rather than each command opening/closing its own,
+     * and keeps the "failed to open the database" error in one place.
+     * `ctx.rest` is additionally built for networked mode (bearer token +
+     * pinned certificate), used for everything that actually needs the
+     * server. A command with no networked implementation at all (--stats)
+     * reports that itself (see commands.h). */
     bunny_cli_context_t ctx;
     memset(&ctx, 0, sizeof(ctx));
 
@@ -222,6 +226,25 @@ int main(int argc, char **argv)
             return 1;
         }
         ctx.rest = &rest_client;
+
+        if (payload.download_queue_db_path) {
+            bunny_core_config_t queue_config;
+            memset(&queue_config, 0, sizeof(queue_config));
+            queue_config.db_path = payload.download_queue_db_path;
+            queue_config.user_agent = payload.download_queue_user_agent ? payload.download_queue_user_agent : "bunny_cli/1.0";
+            queue_config.log_callback = bunny_cli_log_bunny_core_callback;
+
+            if (bunny_core_open(&queue_config, &core) != BUNNY_CORE_OK) {
+                bunny_cli_log(BUNNY_CLI_LOG_ERROR, "failed to open the download-queue database at %s", payload.download_queue_db_path);
+                bunny_cli_rest_client_free(&rest_client);
+                bunny_cli_handshake_payload_free(&payload);
+                return 1;
+            }
+            ctx.core = core;
+        }
+        /* No download_queue_db_path at all (an older app build) -- every
+         * command except --download/--queue-list still works fine with
+         * ctx.core left NULL; those two report it clearly themselves. */
     } else {
         ctx.mode = BUNNY_CLI_MODE_STANDALONE;
         bunny_core_config_t config;
@@ -332,8 +355,9 @@ int main(int argc, char **argv)
 
     if (ctx.mode == BUNNY_CLI_MODE_NETWORKED) {
         bunny_cli_rest_client_free(&rest_client);
-    } else {
-        bunny_core_close(core);
+    }
+    if (ctx.core) {
+        bunny_core_close(ctx.core);
     }
     bunny_cli_handshake_payload_free(&payload);
     return exit_code;

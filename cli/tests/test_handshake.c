@@ -36,6 +36,7 @@ void setUp(void)
     unset_env("BUNNY_CLI_TEST_MODE");
     unset_env("BUNNY_CLI_TEST_BEHAVIOR");
     unset_env("BUNNY_CLI_TEST_NO_DOWNLOAD_FOLDER");
+    unset_env("BUNNY_CLI_TEST_NO_QUEUE_DB");
 }
 
 void tearDown(void)
@@ -83,7 +84,31 @@ void test_networked_mode_round_trips_server_url_bearer_token_and_cert_fingerprin
     TEST_ASSERT_EQUAL_STRING("test-token", payload.bearer_token);
     TEST_ASSERT_EQUAL_STRING("abc123", payload.cert_fingerprint);
     TEST_ASSERT_EQUAL_STRING("/fake/downloads", payload.download_destination_folder);
+    TEST_ASSERT_EQUAL_STRING("/fake/downloads.db", payload.download_queue_db_path);
+    TEST_ASSERT_EQUAL_STRING("LittleBunny/1.0.0", payload.download_queue_user_agent);
     TEST_ASSERT_NULL(payload.db_path);
+
+    bunny_cli_handshake_payload_free(&payload);
+}
+
+/* An app build from before downloadQueueDbPath/downloadQueueUserAgent
+ * existed -- --download/--queue-list can't work against it (no local queue
+ * db to claim rows from), but every other networked command still can, so
+ * this must parse as a perfectly normal BUNNY_CLI_HANDSHAKE_OK, not a
+ * protocol error. */
+void test_networked_mode_with_no_queue_db_fields_still_parses_normally(void)
+{
+    set_env("BUNNY_CLI_TEST_MODE", "networked");
+    set_env("BUNNY_CLI_TEST_NO_QUEUE_DB", "1");
+
+    bunny_cli_handshake_payload_t payload;
+    bunny_cli_handshake_result_t result = bunny_cli_handshake_run(FAKE_APP_HANDSHAKE_PATH, NULL, &payload);
+
+    TEST_ASSERT_EQUAL(BUNNY_CLI_HANDSHAKE_OK, result);
+    TEST_ASSERT_EQUAL(BUNNY_CLI_MODE_NETWORKED, payload.mode);
+    TEST_ASSERT_EQUAL_STRING("https://bunny.example:9443", payload.server_base_url);
+    TEST_ASSERT_NULL(payload.download_queue_db_path);
+    TEST_ASSERT_NULL(payload.download_queue_user_agent);
 
     bunny_cli_handshake_payload_free(&payload);
 }
@@ -231,6 +256,7 @@ int main(void)
     RUN_TEST(test_unlocked_standalone_round_trips_the_right_payload);
     RUN_TEST(test_a_null_download_destination_folder_is_reported_as_null_not_a_protocol_error);
     RUN_TEST(test_networked_mode_round_trips_server_url_bearer_token_and_cert_fingerprint);
+    RUN_TEST(test_networked_mode_with_no_queue_db_fields_still_parses_normally);
     RUN_TEST(test_no_repository_configured_yet_reports_mode_none);
     RUN_TEST(test_correct_secret_unlocks_it);
     RUN_TEST(test_wrong_secret_reports_locked_without_ever_producing_a_config);

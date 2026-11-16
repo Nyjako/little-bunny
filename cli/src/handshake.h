@@ -40,6 +40,18 @@ typedef struct
     char *server_base_url;  /* BUNNY_CLI_MODE_NETWORKED only */
     char *bearer_token;     /* BUNNY_CLI_MODE_NETWORKED only */
     char *cert_fingerprint; /* BUNNY_CLI_MODE_NETWORKED only */
+    /* BUNNY_CLI_MODE_NETWORKED only -- the app's own small local db used
+     * purely for download-queue bookkeeping in networked mode (the server
+     * never proxies binary downloads or stores this queue itself, see
+     * docs/architecture.md's "Downloads are client-side" section), the
+     * exact same db HttpBunnyRepository's own _ensureDownloadQueueNative
+     * opens on the Dart side. `--download`/`--queue-list` need this to
+     * continue/inspect the queue without the app running; every other
+     * networked command only needs the REST client. May be NULL even in
+     * networked mode (an app build from before this field existed) --
+     * callers must check, not assume it's always set. */
+    char *download_queue_db_path;
+    char *download_queue_user_agent;
     /* Present for both BUNNY_CLI_MODE_STANDALONE and BUNNY_CLI_MODE_NETWORKED
      * (never for BUNNY_CLI_MODE_NONE) -- the app's DownloadSettingsStore
      * setting, a separate concern from the repository config above, but one
