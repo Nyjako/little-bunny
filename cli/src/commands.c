@@ -9,6 +9,9 @@
 
 #include "json_helpers.h"
 
+#include <goblin/cstr.h>
+#include <goblin/dyn_array.h>
+
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -50,11 +53,10 @@ bool bunny_cli_parse_download_spec(const char *spec, bunny_cli_spec_kind_t *out_
     };
 
     for (size_t i = 0; i < sizeof(prefixes) / sizeof(prefixes[0]); i++) {
-        size_t prefix_len = strlen(prefixes[i].prefix);
-        if (strncmp(spec, prefixes[i].prefix, prefix_len) != 0) {
+        if (!goblin_starts_with_cstr(spec, prefixes[i].prefix)) {
             continue;
         }
-        const char *id_text = spec + prefix_len;
+        const char *id_text = spec + strlen(prefixes[i].prefix);
         if (!*id_text) {
             return false;
         }
@@ -257,10 +259,10 @@ static bool resolve_post_standalone(bunny_core_t *core, int64_t post_id, resolve
         return false;
     }
     memset(out, 0, sizeof(*out));
-    out->artist = post.artist ? strdup(post.artist) : NULL;
-    out->file_ext = post.file_ext ? strdup(post.file_ext) : NULL;
-    out->file_url = post.file_url ? strdup(post.file_url) : NULL;
-    out->file_md5 = post.file_md5 ? strdup(post.file_md5) : NULL;
+    out->artist = goblin_copy_cstr(post.artist);
+    out->file_ext = goblin_copy_cstr(post.file_ext);
+    out->file_url = goblin_copy_cstr(post.file_url);
+    out->file_md5 = goblin_copy_cstr(post.file_md5);
     out->external_id = post.external_id;
     out->site = post.site;
     bunny_db_post_free(&post);
@@ -289,10 +291,10 @@ static bool resolve_post_networked(bunny_cli_rest_client_t *rest, int64_t post_i
     const char *file_url = bunny_json_get_string_or(json, "file_url", NULL);
     const char *file_md5 = bunny_json_get_string_or(json, "file_md5", NULL);
     const char *site_text = bunny_json_get_string_or(json, "site", "");
-    out->artist = artist ? strdup(artist) : NULL;
-    out->file_ext = file_ext ? strdup(file_ext) : NULL;
-    out->file_url = file_url ? strdup(file_url) : NULL;
-    out->file_md5 = file_md5 ? strdup(file_md5) : NULL;
+    out->artist = goblin_copy_cstr(artist);
+    out->file_ext = goblin_copy_cstr(file_ext);
+    out->file_url = goblin_copy_cstr(file_url);
+    out->file_md5 = goblin_copy_cstr(file_md5);
     bunny_json_get_int64(json, "external_id", &out->external_id);
     out->site = strcmp(site_text, "inkbunny") == 0 ? BUNNY_DB_SITE_INKBUNNY : BUNNY_DB_SITE_E621;
 
@@ -501,39 +503,20 @@ static void *worker_thread_fn(void *arg_ptr)
 
 /* ---- resolving --download's pool:/search:/tag specs -------------------- */
 
-/* A plain growable int64 array -- post ids collected while paginating a
- * spec, and (reused) the set of post ids already active in the queue, for
- * dedup. Linear-scan `post_id_list_contains` is O(n) per lookup, which is
- * fine at the scale a single `--download` invocation's specs actually
- * produce (hundreds to a few thousand posts) -- not worth a real hash set
- * for that. */
-typedef struct
-{
-    int64_t *ids;
-    size_t count;
-    size_t capacity;
-} post_id_list_t;
+/* Post ids collected while paginating a spec, and (reused) the set of post
+ * ids already active in the queue, for dedup -- goblin_post_id_array's own
+ * growable storage (init/push/free) stands in for a hand-rolled
+ * capacity-doubling array. Linear-scan `goblin_post_id_array_contains` is
+ * O(n) per lookup, which is fine at the scale a single `--download`
+ * invocation's specs actually produce (hundreds to a few thousand posts)
+ * -- not worth a real hash set for that, and not something the generic
+ * array macro provides anyway. */
+GOBLIN_DYN_ARRAY_DECL(goblin_post_id, int64_t)
 
-static void post_id_list_free_(post_id_list_t *list)
-{
-    free(list->ids);
-    memset(list, 0, sizeof(*list));
-}
-
-static void post_id_list_append_(post_id_list_t *list, int64_t id)
-{
-    if (list->count == list->capacity) {
-        size_t new_capacity = list->capacity == 0 ? 64 : list->capacity * 2;
-        list->ids = realloc(list->ids, new_capacity * sizeof(int64_t));
-        list->capacity = new_capacity;
-    }
-    list->ids[list->count++] = id;
-}
-
-static bool post_id_list_contains_(const post_id_list_t *list, int64_t id)
+static bool goblin_post_id_array_contains(const goblin_post_id_array *list, int64_t id)
 {
     for (size_t i = 0; i < list->count; i++) {
-        if (list->ids[i] == id) {
+        if (list->items[i] == id) {
             return true;
         }
     }
@@ -545,7 +528,7 @@ static bool post_id_list_contains_(const post_id_list_t *list, int64_t id)
  * `out`, reports how many that was via `out_page_count` so the caller
  * knows when to stop paginating. Returns false only on a genuine fetch
  * error (logged here already), never for a merely-empty page. */
-static bool fetch_live_search_page(bunny_cli_context_t *ctx, bunny_db_site_t site, const char *query, int page, post_id_list_t *out, size_t *out_page_count)
+static bool fetch_live_search_page(bunny_cli_context_t *ctx, bunny_db_site_t site, const char *query, int page, goblin_post_id_array *out, size_t *out_page_count)
 {
     if (ctx->mode == BUNNY_CLI_MODE_NETWORKED) {
         char *encoded_query = bunny_cli_rest_url_encode(query);
@@ -564,7 +547,7 @@ static bool fetch_live_search_page(bunny_cli_context_t *ctx, bunny_db_site_t sit
         for (int i = 0; i < count; i++) {
             int64_t id = 0;
             bunny_json_get_int64(cJSON_GetArrayItem(response, i), "id", &id);
-            post_id_list_append_(out, id);
+            goblin_post_id_array_push(out, id);
         }
         *out_page_count = (size_t)count;
         cJSON_Delete(response);
@@ -578,7 +561,7 @@ static bool fetch_live_search_page(bunny_cli_context_t *ctx, bunny_db_site_t sit
         return false;
     }
     for (size_t i = 0; i < list.count; i++) {
-        post_id_list_append_(out, list.items[i].id);
+        goblin_post_id_array_push(out, list.items[i].id);
     }
     *out_page_count = list.count;
     bunny_db_post_list_free(&list);
@@ -591,7 +574,7 @@ static bool fetch_live_search_page(bunny_cli_context_t *ctx, bunny_db_site_t sit
  * (see bunny_cli_cmd_download's own doc comment). A failure after at least
  * one successful page keeps whatever was already fetched rather than
  * discarding it. */
-static bool fetch_all_live_search_post_ids(bunny_cli_context_t *ctx, bunny_db_site_t site, const char *query, post_id_list_t *out)
+static bool fetch_all_live_search_post_ids(bunny_cli_context_t *ctx, bunny_db_site_t site, const char *query, goblin_post_id_array *out)
 {
     for (int page = 1;; page++) {
         size_t page_count = 0;
@@ -608,7 +591,7 @@ static bool fetch_all_live_search_post_ids(bunny_cli_context_t *ctx, bunny_db_si
  * cached posts (bunny_core_search_list_posts/GET /searches/{id}/posts) --
  * never a fresh live site query, same as SearchesScreen
  * ._downloadSelectedSearches's own "download selected searches" action. */
-static bool fetch_cached_search_page(bunny_cli_context_t *ctx, int64_t search_id, int page, post_id_list_t *out, size_t *out_page_count)
+static bool fetch_cached_search_page(bunny_cli_context_t *ctx, int64_t search_id, int page, goblin_post_id_array *out, size_t *out_page_count)
 {
     if (ctx->mode == BUNNY_CLI_MODE_NETWORKED) {
         char path[96];
@@ -625,7 +608,7 @@ static bool fetch_cached_search_page(bunny_cli_context_t *ctx, int64_t search_id
         for (int i = 0; i < count; i++) {
             int64_t id = 0;
             bunny_json_get_int64(cJSON_GetArrayItem(response, i), "id", &id);
-            post_id_list_append_(out, id);
+            goblin_post_id_array_push(out, id);
         }
         *out_page_count = (size_t)count;
         cJSON_Delete(response);
@@ -639,14 +622,14 @@ static bool fetch_cached_search_page(bunny_cli_context_t *ctx, int64_t search_id
         return false;
     }
     for (size_t i = 0; i < list.count; i++) {
-        post_id_list_append_(out, list.items[i].id);
+        goblin_post_id_array_push(out, list.items[i].id);
     }
     *out_page_count = list.count;
     bunny_db_post_list_free(&list);
     return true;
 }
 
-static bool fetch_all_cached_search_post_ids(bunny_cli_context_t *ctx, int64_t search_id, post_id_list_t *out)
+static bool fetch_all_cached_search_post_ids(bunny_cli_context_t *ctx, int64_t search_id, goblin_post_id_array *out)
 {
     for (int page = 1;; page++) {
         size_t page_count = 0;
@@ -700,8 +683,8 @@ static bool lookup_saved_search(bunny_cli_context_t *ctx, int64_t search_id, sav
             }
             const char *site_text = bunny_json_get_string_or(item, "site", "e621");
             out->site = strcmp(site_text, "inkbunny") == 0 ? BUNNY_DB_SITE_INKBUNNY : BUNNY_DB_SITE_E621;
-            out->query = strdup(bunny_json_get_string_or(item, "query", ""));
-            out->label = strdup(bunny_json_get_string_or(item, "label", ""));
+            out->query = goblin_copy_cstr(bunny_json_get_string_or(item, "query", ""));
+            out->label = goblin_copy_cstr(bunny_json_get_string_or(item, "label", ""));
             found = true;
         }
         cJSON_Delete(response);
@@ -723,8 +706,8 @@ static bool lookup_saved_search(bunny_cli_context_t *ctx, int64_t search_id, sav
             continue;
         }
         out->site = list.items[i].site;
-        out->query = strdup(list.items[i].query);
-        out->label = strdup(list.items[i].label);
+        out->query = goblin_copy_cstr(list.items[i].query);
+        out->label = goblin_copy_cstr(list.items[i].label);
         found = true;
     }
     bunny_db_search_list_free(&list);
@@ -751,7 +734,7 @@ static char *fetch_pool_name(bunny_cli_context_t *ctx, int64_t pool_id)
         char *name = NULL;
         if (result == BUNNY_CLI_REST_OK) {
             const char *name_text = bunny_json_get_string_or(response, "name", NULL);
-            name = name_text ? strdup(name_text) : NULL;
+            name = goblin_copy_cstr(name_text);
         }
         cJSON_Delete(response);
         return name;
@@ -761,7 +744,7 @@ static char *fetch_pool_name(bunny_cli_context_t *ctx, int64_t pool_id)
     if (bunny_core_fetch_pool(ctx->core, pool_id, &info) != BUNNY_CORE_OK) {
         return NULL;
     }
-    char *name = info.name ? strdup(info.name) : NULL;
+    char *name = goblin_copy_cstr(info.name);
     bunny_core_pool_info_free(&info);
     return name;
 }
@@ -776,13 +759,13 @@ static char *fetch_pool_name(bunny_cli_context_t *ctx, int64_t pool_id)
  * logged and skipped, never aborts the rest. */
 static void enqueue_resolved_specs(bunny_cli_context_t *ctx, bunny_db_site_t spec_site, const char **specs, size_t spec_count)
 {
-    post_id_list_t active;
-    memset(&active, 0, sizeof(active));
+    goblin_post_id_array active;
+    goblin_post_id_array_init(&active);
     bunny_db_download_queue_list_t existing;
     if (bunny_core_download_queue_list(ctx->core, &existing) == BUNNY_CORE_OK) {
         for (size_t i = 0; i < existing.count; i++) {
             if (existing.items[i].status == BUNNY_DB_DOWNLOAD_QUEUE_QUEUED || existing.items[i].status == BUNNY_DB_DOWNLOAD_QUEUE_DOWNLOADING) {
-                post_id_list_append_(&active, existing.items[i].post_id);
+                goblin_post_id_array_push(&active, existing.items[i].post_id);
             }
         }
         bunny_db_download_queue_list_free(&existing);
@@ -798,8 +781,8 @@ static void enqueue_resolved_specs(bunny_cli_context_t *ctx, bunny_db_site_t spe
             continue;
         }
 
-        post_id_list_t post_ids;
-        memset(&post_ids, 0, sizeof(post_ids));
+        goblin_post_id_array post_ids;
+        goblin_post_id_array_init(&post_ids);
         int64_t pool_id = 0;
         char *pool_name = NULL;
         bool ok = false;
@@ -813,7 +796,7 @@ static void enqueue_resolved_specs(bunny_cli_context_t *ctx, bunny_db_site_t spe
                 } else {
                     char fallback[32];
                     snprintf(fallback, sizeof(fallback), "pool:%lld", (long long)pool_id);
-                    pool_name = strdup(fallback);
+                    pool_name = goblin_copy_cstr(fallback);
                 }
                 char query[32];
                 snprintf(query, sizeof(query), "pool:%lld", (long long)pool_id);
@@ -825,12 +808,12 @@ static void enqueue_resolved_specs(bunny_cli_context_t *ctx, bunny_db_site_t spe
                 if (!lookup_saved_search(ctx, spec_id, &info)) {
                     break;
                 }
-                if (strncmp(info.query, "pool:", 5) == 0) {
+                if (goblin_starts_with_cstr(info.query, "pool:")) {
                     char *end = NULL;
                     long long value = strtoll(info.query + 5, &end, 10);
                     if (*end == '\0' && value > 0) {
                         pool_id = (int64_t)value;
-                        pool_name = strdup(info.label);
+                        pool_name = goblin_copy_cstr(info.label);
                     }
                 }
                 ok = fetch_all_cached_search_post_ids(ctx, spec_id, &post_ids);
@@ -844,21 +827,21 @@ static void enqueue_resolved_specs(bunny_cli_context_t *ctx, bunny_db_site_t spe
 
         if (!ok) {
             bunny_cli_log(BUNNY_CLI_LOG_ERROR, "\"%s\" could not be resolved, skipping", spec);
-            post_id_list_free_(&post_ids);
+            goblin_post_id_array_free(&post_ids);
             free(pool_name);
             continue;
         }
 
         int newly_queued = 0;
         for (size_t i = 0; i < post_ids.count; i++) {
-            int64_t post_id = post_ids.ids[i];
-            if (post_id_list_contains_(&active, post_id)) {
+            int64_t post_id = post_ids.items[i];
+            if (goblin_post_id_array_contains(&active, post_id)) {
                 continue;
             }
             int pool_page = pool_id > 0 ? (int)(i + 1) : 0;
             int64_t queue_row_id = 0;
             if (bunny_core_download_queue_add(ctx->core, post_id, pool_id, pool_name, pool_page, &queue_row_id) == BUNNY_CORE_OK) {
-                post_id_list_append_(&active, post_id);
+                goblin_post_id_array_push(&active, post_id);
                 newly_queued++;
             }
         }
@@ -866,11 +849,11 @@ static void enqueue_resolved_specs(bunny_cli_context_t *ctx, bunny_db_site_t spe
         bunny_cli_log(BUNNY_CLI_LOG_SUCCESS, "\"%s\": %zu post(s) found, %d newly queued", spec, post_ids.count, newly_queued);
         total_newly_queued += newly_queued;
 
-        post_id_list_free_(&post_ids);
+        goblin_post_id_array_free(&post_ids);
         free(pool_name);
     }
 
-    post_id_list_free_(&active);
+    goblin_post_id_array_free(&active);
     bunny_cli_log(BUNNY_CLI_LOG_INFO, "%d post(s) newly queued from %zu spec(s)", total_newly_queued, spec_count);
 }
 

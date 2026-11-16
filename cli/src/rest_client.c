@@ -5,10 +5,11 @@
 #include <openssl/ssl.h>
 #include <openssl/x509.h>
 
+#include <goblin/cstr.h>
+#include <goblin/dyn_array.h>
 #include <goblin/hex.h>
 #include <goblin/url.h>
 
-#include <ctype.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -36,12 +37,12 @@ static void normalize_fingerprint_hex(const char *input, char *out_hex65)
 {
     size_t out_len = 0;
     for (const char *p = input; *p && out_len < 64; p++) {
-        if (*p == ':') {
-            continue;
+        if (*p != ':') {
+            out_hex65[out_len++] = *p;
         }
-        out_hex65[out_len++] = (char)tolower((unsigned char)*p);
     }
     out_hex65[out_len] = '\0';
+    goblin_to_lower_cstr(out_hex65);
 }
 
 /* Pure, testable comparison: does `digest` (32 raw SHA-256 bytes) match the
@@ -96,34 +97,34 @@ static CURLcode pinned_ssl_ctx_callback(CURL *curl, void *ssl_ctx, void *parm)
  * there; see rest_client.h's doc comment on why pinning can't live in
  * bunny_common) --------------------------------------------------------- */
 
-typedef struct
-{
-    char *data;
-    size_t len;
-    size_t cap;
-} growable_buf_t;
+/* goblin_response_byte_array's own growable storage (init/push/free/reserve)
+ * stands in for a hand-rolled capacity-doubling buffer -- the NUL
+ * terminator below is this callback's own concern, not something a
+ * generic byte array would know to keep up to date on every append. */
+GOBLIN_DYN_ARRAY_DECL(goblin_response_byte, char)
 
 static size_t write_cb(char *ptr, size_t size, size_t nmemb, void *userdata)
 {
-    growable_buf_t *buf = (growable_buf_t *)userdata;
+    goblin_response_byte_array *buf = (goblin_response_byte_array *)userdata;
     size_t add = size * nmemb;
+    size_t needed = buf->count + add + 1;
 
-    if (buf->len + add + 1 > buf->cap) {
-        size_t new_cap = buf->cap == 0 ? 4096 : buf->cap * 2;
-        while (new_cap < buf->len + add + 1) {
-            new_cap *= 2;
+    if (needed > buf->capacity) {
+        /* Geometric growth, same as before -- goblin_response_byte_array
+         * _reserve itself only grows to exactly what's asked, so the
+         * doubling policy (amortizing many small curl callbacks into few
+         * reallocations) is still this callback's own job. */
+        size_t new_capacity = buf->capacity == 0 ? 4096 : buf->capacity * 2;
+        while (new_capacity < needed) {
+            new_capacity *= 2;
         }
-        char *new_data = realloc(buf->data, new_cap);
-        if (!new_data) {
+        if (!goblin_response_byte_array_reserve(buf, new_capacity)) {
             return 0;
         }
-        buf->data = new_data;
-        buf->cap = new_cap;
     }
-
-    memcpy(buf->data + buf->len, ptr, add);
-    buf->len += add;
-    buf->data[buf->len] = '\0';
+    memcpy(buf->items + buf->count, ptr, add);
+    buf->count += add;
+    buf->items[buf->count] = '\0';
     return add;
 }
 
@@ -172,7 +173,8 @@ static bunny_http_result_t pinned_curl_send(void *user_data, const bunny_http_re
         return BUNNY_HTTP_ERR_NETWORK;
     }
 
-    growable_buf_t buf = {0};
+    goblin_response_byte_array buf;
+    goblin_response_byte_array_init(&buf);
     struct curl_slist *header_list = build_header_list(request);
 
     curl_easy_setopt(curl, CURLOPT_URL, request->url);
@@ -216,7 +218,7 @@ static bunny_http_result_t pinned_curl_send(void *user_data, const bunny_http_re
     bunny_http_result_t result = BUNNY_HTTP_OK;
     if (res != CURLE_OK) {
         result = BUNNY_HTTP_ERR_NETWORK;
-        free(buf.data);
+        goblin_response_byte_array_free(&buf);
         out_response->status = 0;
         out_response->body = NULL;
         out_response->body_len = 0;
@@ -224,8 +226,8 @@ static bunny_http_result_t pinned_curl_send(void *user_data, const bunny_http_re
         long status = 0;
         curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &status);
         out_response->status = status;
-        out_response->body_len = buf.len;
-        out_response->body = buf.data ? buf.data : calloc(1, 1);
+        out_response->body_len = buf.count;
+        out_response->body = buf.items ? buf.items : calloc(1, 1);
     }
 
     if (header_list) {
@@ -257,8 +259,8 @@ bool bunny_cli_rest_client_init(bunny_cli_rest_client_t *client, const char *bas
     strncpy(g_pinned_fingerprint_hex, data->fingerprint_hex, sizeof(g_pinned_fingerprint_hex) - 1);
     g_pinned_fingerprint_hex[sizeof(g_pinned_fingerprint_hex) - 1] = '\0';
 
-    client->base_url = strdup(base_url);
-    client->bearer_token = strdup(bearer_token);
+    client->base_url = goblin_copy_cstr(base_url);
+    client->bearer_token = goblin_copy_cstr(bearer_token);
     client->transport.send = pinned_curl_send;
     client->transport.user_data = data;
     client->owns_transport_fingerprint = true;
@@ -267,8 +269,8 @@ bool bunny_cli_rest_client_init(bunny_cli_rest_client_t *client, const char *bas
 
 void bunny_cli_rest_client_init_with_transport(bunny_cli_rest_client_t *client, const char *base_url, const char *bearer_token, bunny_http_transport_t transport)
 {
-    client->base_url = strdup(base_url);
-    client->bearer_token = strdup(bearer_token);
+    client->base_url = goblin_copy_cstr(base_url);
+    client->bearer_token = goblin_copy_cstr(bearer_token);
     client->transport = transport;
     client->owns_transport_fingerprint = false;
 }
