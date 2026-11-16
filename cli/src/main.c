@@ -21,6 +21,9 @@ static void print_usage(const char *argv0)
     printf("                                    Run a live search, dumping the posts as JSON\n");
     printf("  --pool <pool_id>                  Dump an e621 pool's own metadata as JSON\n");
     printf("  --download [--jobs N]             Drain the whole download queue (default 3 workers)\n");
+    printf("  --favorite <post_id> [--stars N]  Favorite a post (N is Inkbunny's 1-3 tier, ignored on e621)\n");
+    printf("  --unfavorite <post_id>            Unfavorite a post\n");
+    printf("  --vote <post_id> <score>          Vote on a post (score: -1, 0, or 1; e621 only)\n");
     printf("  --stats                           Print row counts per database table and run an integrity check\n");
     printf("  --help                            Show this help\n");
     printf("  --version                         Show the version\n");
@@ -173,10 +176,13 @@ int main(int argc, char **argv)
 
     int search_index = find_flag_index(argc, argv, "--search");
     int pool_index = find_flag_index(argc, argv, "--pool");
+    int favorite_index = find_flag_index(argc, argv, "--favorite");
+    int unfavorite_index = find_flag_index(argc, argv, "--unfavorite");
+    int vote_index = find_flag_index(argc, argv, "--vote");
     bool wants_download = has_flag(argc, argv, "--download");
     bool wants_stats = has_flag(argc, argv, "--stats");
 
-    if (search_index < 0 && pool_index < 0 && !wants_download && !wants_stats) {
+    if (search_index < 0 && pool_index < 0 && favorite_index < 0 && unfavorite_index < 0 && vote_index < 0 && !wants_download && !wants_stats) {
         bunny_cli_log(BUNNY_CLI_LOG_ERROR, "no command given, see --help");
         bunny_cli_handshake_payload_free(&payload);
         return 1;
@@ -234,6 +240,30 @@ int main(int argc, char **argv)
         const char *jobs_str = find_flag_value(argc, argv, "--jobs");
         int jobs = jobs_str ? (int)strtol(jobs_str, NULL, 10) : 3;
         exit_code = bunny_cli_cmd_download(core, payload.download_destination_folder, jobs);
+    } else if (favorite_index >= 0) {
+        if (favorite_index + 1 >= argc) {
+            bunny_cli_log(BUNNY_CLI_LOG_ERROR, "--favorite needs <post_id>");
+        } else {
+            int64_t post_id = strtoll(argv[favorite_index + 1], NULL, 10);
+            const char *stars_str = find_flag_value(argc, argv, "--stars");
+            int stars = stars_str ? (int)strtol(stars_str, NULL, 10) : -1;
+            exit_code = bunny_cli_cmd_favorite_add(core, post_id, stars);
+        }
+    } else if (unfavorite_index >= 0) {
+        if (unfavorite_index + 1 >= argc) {
+            bunny_cli_log(BUNNY_CLI_LOG_ERROR, "--unfavorite needs <post_id>");
+        } else {
+            int64_t post_id = strtoll(argv[unfavorite_index + 1], NULL, 10);
+            exit_code = bunny_cli_cmd_favorite_remove(core, post_id);
+        }
+    } else if (vote_index >= 0) {
+        if (vote_index + 2 >= argc) {
+            bunny_cli_log(BUNNY_CLI_LOG_ERROR, "--vote needs <post_id> <score>");
+        } else {
+            int64_t post_id = strtoll(argv[vote_index + 1], NULL, 10);
+            int score = (int)strtol(argv[vote_index + 2], NULL, 10);
+            exit_code = bunny_cli_cmd_vote(core, post_id, score);
+        }
     } else {
         exit_code = bunny_cli_cmd_stats(core);
     }

@@ -36,6 +36,25 @@ int bunny_cli_cmd_stats(bunny_core_t *core);
  * a clear error rather than guessing a location. */
 int bunny_cli_cmd_download(bunny_core_t *core, const char *download_folder, int jobs);
 
+/* Queues a favorite-add for `post_id` (stars is Inkbunny's 1-3 tier, or -1
+ * for e621's plain favorite/any Inkbunny default) and immediately drains
+ * the action queue (bunny_core_process_queue) -- a CLI invocation is
+ * one-shot, so there's no reason to leave this for later the way the app's
+ * own background timer does. Reports success/failure clearly; an Inkbunny
+ * post with no Inkbunny account configured, or any post that doesn't
+ * exist, fails here with the real site/queue error. */
+int bunny_cli_cmd_favorite_add(bunny_core_t *core, int64_t post_id, int stars);
+
+/* Same shape as bunny_cli_cmd_favorite_add, for removing a favorite. */
+int bunny_cli_cmd_favorite_remove(bunny_core_t *core, int64_t post_id);
+
+/* Queues a vote (score must be -1, 0, or 1) and drains the action queue --
+ * same immediate-drain reasoning as bunny_cli_cmd_favorite_add. Inkbunny
+ * has no vote API at all; queuing one against an Inkbunny post is accepted
+ * but always fails once processed, same as bunny_core_queue_vote's own doc
+ * comment describes. */
+int bunny_cli_cmd_vote(bunny_core_t *core, int64_t post_id, int score);
+
 #ifdef __cplusplus
 }
 #endif

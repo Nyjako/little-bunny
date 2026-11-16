@@ -44,13 +44,19 @@ prompt.
 - `--download [--jobs N]` -- drains the whole download queue using up to
   `N` concurrent workers (default 3, capped at 8), writing files to the
   exact same folder/filename scheme the app itself uses.
+- `--favorite <post_id> [--stars N]` -- favorites a post and drains the
+  action queue immediately (`N` is Inkbunny's 1-3 tier; ignored on e621).
+- `--unfavorite <post_id>` -- unfavorites a post, same immediate-drain
+  behavior.
+- `--vote <post_id> <score>` -- votes on a post (`score` is `-1`, `0`, or
+  `1`). e621 only -- Inkbunny has no vote API, so a vote queued against an
+  Inkbunny post always fails once processed.
 - `--help`, `--version`.
 
 Every command above (except `--whoami`/`--help`/`--version`) needs
-standalone mode -- see the limitation below. More commands (favorite/vote
-queueing, triggering a sync, dumping the queue/blacklist as JSON, ...) are
-landing in follow-up changes, each following the same pattern established
-here.
+standalone mode -- see the limitation below. More commands (triggering a
+sync, dumping the queue/blacklist as JSON, ...) are landing in follow-up
+changes, each following the same pattern established here.
 
 ## Current limitation
 

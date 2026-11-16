@@ -299,3 +299,59 @@ int bunny_cli_cmd_download(bunny_core_t *core, const char *download_folder, int 
     bunny_cli_log(state.failed == 0 ? BUNNY_CLI_LOG_SUCCESS : BUNNY_CLI_LOG_WARN, "done: %d succeeded, %d failed", state.succeeded, state.failed);
     return state.failed == 0 ? 0 : 1;
 }
+
+/* ---- --favorite / --unfavorite / --vote -------------------------------- */
+
+/* Drains the action queue right after enqueuing one action, and reports
+ * the result -- shared by every bunny_cli_cmd_favorite_add/_remove/_vote
+ * below, which differ only in which bunny_core_queue_* call they make
+ * first and what to say on success. */
+static int drain_and_report(bunny_core_t *core, bunny_core_result_t enqueue_result, const char *action_description)
+{
+    if (enqueue_result != BUNNY_CORE_OK) {
+        bunny_cli_log(BUNNY_CLI_LOG_ERROR, "failed to queue %s: %s", action_description, bunny_core_result_to_string(enqueue_result));
+        return 1;
+    }
+
+    bunny_core_queue_stats_t stats;
+    memset(&stats, 0, sizeof(stats));
+    bunny_core_result_t process_result = bunny_core_process_queue(core, &stats);
+    if (process_result != BUNNY_CORE_OK) {
+        bunny_cli_log(BUNNY_CLI_LOG_ERROR, "failed to drain the action queue: %s", bunny_core_result_to_string(process_result));
+        return 1;
+    }
+
+    if (stats.actions_failed > 0) {
+        bunny_cli_log(BUNNY_CLI_LOG_ERROR, "%s failed (see the app/server's own log for the site's error)", action_description);
+        return 1;
+    }
+
+    bunny_cli_log(BUNNY_CLI_LOG_SUCCESS, "%s", action_description);
+    return 0;
+}
+
+int bunny_cli_cmd_favorite_add(bunny_core_t *core, int64_t post_id, int stars)
+{
+    char description[128];
+    snprintf(description, sizeof(description), "favorited post %lld", (long long)post_id);
+    return drain_and_report(core, bunny_core_queue_favorite_add(core, post_id, stars), description);
+}
+
+int bunny_cli_cmd_favorite_remove(bunny_core_t *core, int64_t post_id)
+{
+    char description[128];
+    snprintf(description, sizeof(description), "unfavorited post %lld", (long long)post_id);
+    return drain_and_report(core, bunny_core_queue_favorite_remove(core, post_id), description);
+}
+
+int bunny_cli_cmd_vote(bunny_core_t *core, int64_t post_id, int score)
+{
+    if (score < -1 || score > 1) {
+        bunny_cli_log(BUNNY_CLI_LOG_ERROR, "vote score must be -1, 0, or 1 (got %d)", score);
+        return 1;
+    }
+
+    char description[128];
+    snprintf(description, sizeof(description), "voted %+d on post %lld", score, (long long)post_id);
+    return drain_and_report(core, bunny_core_queue_vote(core, post_id, score, false), description);
+}
