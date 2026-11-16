@@ -101,15 +101,26 @@ Two commands work a little differently in networked mode:
   standalone mode does (those are only ever visible via `GET /sync/status`
   or the app's own UI).
 
-## Staying in sync with the app (low priority, not done yet)
+## Staying in sync with the app
 
 `bunny_cli` speaks a specific JSON shape over the handshake protocol, tied
-to whatever version of the app it's paired with -- it ships in the same
-release zip as the app today, but the app's own self-update mechanism
-(`UpdateApplyService`/`bunny_updater`, M23) only replaces the app's own
-Flutter bundle, not `bunny_cli` sitting next to it. If the handshake
-protocol ever changes between versions, a self-updated app paired with a
-stale `bunny_cli` could silently break. Nothing enforces or even checks
-this yet -- worth teaching the updater to also fetch/replace `bunny_cli`
-when it replaces the app, or at minimum having `bunny_cli` report a clear
-"protocol version mismatch" error instead of a confusing one.
+to whatever version of the app it's paired with -- this used to be a real
+risk, since the app's own self-update mechanism (`UpdateApplyService`,
+`app/lib/services/update_apply_service.dart`) only seemed to replace the
+app's own Flutter bundle, not `bunny_cli` sitting next to it.
+
+It's not actually a problem: on Linux, `UpdateApplyService._applyLinux`
+walks *every* file inside the downloaded update's `bundle/` directory
+recursively and copies each one over the matching path in the real install
+directory, with no filtering by name/extension -- and `bunny_cli` now ships
+packaged inside that exact same `bundle/` directory (`.github/workflows/
+release.yml`'s `build-cli-linux`/`build-app-linux` jobs). So a self-update
+already replaces `bunny_cli` in lockstep with the app, automatically,
+executable bit and all, with zero code changes needed -- verified by
+running `_extractArchive`/`_applyLinux`'s exact logic against a fake
+update tarball containing a `bunny_cli` file and confirming it lands in the
+install directory, updated and still executable. `_applyWindows` (`xcopy
+/E /Y /I`) copies its whole extracted tree the same unfiltered way, so the
+same will hold once Windows CI packaging (deferred, see the release.yml
+comment) adds `bunny_cli.exe` to that zip too -- nothing else to build for
+that side of it.
