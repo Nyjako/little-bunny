@@ -9,3 +9,7 @@ add_executable(bunny_cli_test_handshake test_handshake.c)
 target_link_libraries(bunny_cli_test_handshake PRIVATE bunny_cli_lib unity::framework)
 target_compile_definitions(bunny_cli_test_handshake PRIVATE "FAKE_APP_HANDSHAKE_PATH=\"$<TARGET_FILE:fake_app_handshake>\"")
 add_test(NAME bunny_cli_test_handshake COMMAND bunny_cli_test_handshake)
+
+add_executable(bunny_cli_test_destination test_destination.c)
+target_link_libraries(bunny_cli_test_destination PRIVATE bunny_cli_lib unity::framework)
+add_test(NAME bunny_cli_test_destination COMMAND bunny_cli_test_destination)

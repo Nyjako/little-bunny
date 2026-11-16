@@ -1,6 +1,9 @@
+#include "commands.h"
 #include "handshake.h"
 #include "log.h"
 #include "secret_prompt.h"
+
+#include <bunny_core/core.h>
 
 #include <stdbool.h>
 #include <stdio.h>
@@ -13,9 +16,14 @@ static void print_usage(const char *argv0)
 {
     printf("Usage: %s [--unlock <secret>] <command>\n\n", argv0);
     printf("Commands:\n");
-    printf("  --whoami           Show which repository config bunny_cli resolved via the app handshake\n");
-    printf("  --help             Show this help\n");
-    printf("  --version          Show the version\n");
+    printf("  --whoami                         Show which repository config bunny_cli resolved\n");
+    printf("  --search <e621|inkbunny> <query> [--page N]\n");
+    printf("                                    Run a live search, dumping the posts as JSON\n");
+    printf("  --pool <pool_id>                  Dump an e621 pool's own metadata as JSON\n");
+    printf("  --download [--jobs N]             Drain the whole download queue (default 3 workers)\n");
+    printf("  --stats                           Print row counts per database table and run an integrity check\n");
+    printf("  --help                            Show this help\n");
+    printf("  --version                         Show the version\n");
     printf("\n");
     printf("Global flags:\n");
     printf("  --unlock <secret>  The app's own app-lock PIN/password, if one is set -- prompted for\n");
@@ -24,6 +32,9 @@ static void print_usage(const char *argv0)
     printf("bunny_cli must sit in the same directory as the app's own executable --\n");
     printf("it briefly launches the app to learn its current repository config, which\n");
     printf("never touches disk or becomes visible to any other process.\n");
+    printf("\n");
+    printf("Only standalone mode (no separate server) can actually run a command today --\n");
+    printf("networked mode is recognized but not yet supported, see cli/README.md.\n");
 }
 
 static bool has_flag(int argc, char **argv, const char *flag)
@@ -44,6 +55,33 @@ static const char *find_flag_value(int argc, char **argv, const char *flag)
         }
     }
     return NULL;
+}
+
+/* Index of `flag` in argv, or -1 if not present -- for a command needing
+ * its own positional arguments right after it (--search/--pool), unlike
+ * every other flag here which is a bare switch or a single --flag value
+ * pair findable via find_flag_value. */
+static int find_flag_index(int argc, char **argv, const char *flag)
+{
+    for (int i = 1; i < argc; i++) {
+        if (strcmp(argv[i], flag) == 0) {
+            return i;
+        }
+    }
+    return -1;
+}
+
+static bool parse_site(const char *s, bunny_db_site_t *out)
+{
+    if (strcmp(s, "e621") == 0) {
+        *out = BUNNY_DB_SITE_E621;
+        return true;
+    }
+    if (strcmp(s, "inkbunny") == 0) {
+        *out = BUNNY_DB_SITE_INKBUNNY;
+        return true;
+    }
+    return false;
 }
 
 /* Runs the handshake once with `supplied_secret`; on BUNNY_CLI_HANDSHAKE_LOCKED
@@ -85,6 +123,7 @@ static void print_whoami(const bunny_cli_handshake_payload_t *payload)
             printf("certFingerprint: %s\n", payload->cert_fingerprint);
             break;
     }
+    printf("downloadDestinationFolder: %s\n", payload->download_destination_folder ? payload->download_destination_folder : "(none)");
 }
 
 int main(int argc, char **argv)
@@ -132,7 +171,74 @@ int main(int argc, char **argv)
         return 0;
     }
 
-    bunny_cli_log(BUNNY_CLI_LOG_ERROR, "no command given, see --help");
+    int search_index = find_flag_index(argc, argv, "--search");
+    int pool_index = find_flag_index(argc, argv, "--pool");
+    bool wants_download = has_flag(argc, argv, "--download");
+    bool wants_stats = has_flag(argc, argv, "--stats");
+
+    if (search_index < 0 && pool_index < 0 && !wants_download && !wants_stats) {
+        bunny_cli_log(BUNNY_CLI_LOG_ERROR, "no command given, see --help");
+        bunny_cli_handshake_payload_free(&payload);
+        return 1;
+    }
+
+    /* Every command below needs an actual bunny_core_t* -- only standalone
+     * mode has one here (bunny_cli speaks to the local database directly,
+     * exactly like the app's own FFI layer does). Networked mode would need
+     * its own REST client against bunny_server, which doesn't exist yet
+     * (see cli/README.md) -- reported clearly rather than guessed at. */
+    if (payload.mode == BUNNY_CLI_MODE_NETWORKED) {
+        bunny_cli_log(BUNNY_CLI_LOG_ERROR, "the app is set up in networked mode -- bunny_cli can only run commands against standalone mode for now, see cli/README.md");
+        bunny_cli_handshake_payload_free(&payload);
+        return 1;
+    }
+
+    /* Every command below needs the same bunny_core_t*, opened exactly
+     * once -- cheaper and simpler than each command opening/closing its
+     * own, and keeps the "failed to open the database" error in one place. */
+    bunny_core_config_t config;
+    memset(&config, 0, sizeof(config));
+    config.db_path = payload.db_path;
+    config.user_agent = payload.user_agent;
+    config.log_callback = bunny_cli_log_bunny_core_callback;
+
+    bunny_core_t *core = NULL;
+    if (bunny_core_open(&config, &core) != BUNNY_CORE_OK) {
+        bunny_cli_log(BUNNY_CLI_LOG_ERROR, "failed to open the database at %s", payload.db_path);
+        bunny_cli_handshake_payload_free(&payload);
+        return 1;
+    }
+
+    int exit_code = 1;
+    if (search_index >= 0) {
+        if (search_index + 2 >= argc) {
+            bunny_cli_log(BUNNY_CLI_LOG_ERROR, "--search needs <e621|inkbunny> <query>");
+        } else {
+            bunny_db_site_t site;
+            if (!parse_site(argv[search_index + 1], &site)) {
+                bunny_cli_log(BUNNY_CLI_LOG_ERROR, "unknown site \"%s\", expected e621 or inkbunny", argv[search_index + 1]);
+            } else {
+                const char *page_str = find_flag_value(argc, argv, "--page");
+                int page = page_str ? (int)strtol(page_str, NULL, 10) : 1;
+                exit_code = bunny_cli_cmd_search(core, site, argv[search_index + 2], page);
+            }
+        }
+    } else if (pool_index >= 0) {
+        if (pool_index + 1 >= argc) {
+            bunny_cli_log(BUNNY_CLI_LOG_ERROR, "--pool needs <pool_id>");
+        } else {
+            int64_t pool_id = strtoll(argv[pool_index + 1], NULL, 10);
+            exit_code = bunny_cli_cmd_pool(core, pool_id);
+        }
+    } else if (wants_download) {
+        const char *jobs_str = find_flag_value(argc, argv, "--jobs");
+        int jobs = jobs_str ? (int)strtol(jobs_str, NULL, 10) : 3;
+        exit_code = bunny_cli_cmd_download(core, payload.download_destination_folder, jobs);
+    } else {
+        exit_code = bunny_cli_cmd_stats(core);
+    }
+
+    bunny_core_close(core);
     bunny_cli_handshake_payload_free(&payload);
-    return 1;
+    return exit_code;
 }

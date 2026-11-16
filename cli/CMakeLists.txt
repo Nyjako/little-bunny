@@ -5,6 +5,9 @@ add_library(bunny_cli_lib STATIC
     src/log.c
     src/handshake.c
     src/secret_prompt.c
+    src/destination.c
+    src/json_helpers.c
+    src/commands.c
 )
 
 target_include_directories(bunny_cli_lib
