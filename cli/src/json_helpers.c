@@ -65,3 +65,35 @@ cJSON *bunny_cli_pool_info_to_json(const bunny_core_pool_info_t *info)
 
     return json;
 }
+
+cJSON *bunny_cli_string_list_to_json(const bunny_db_string_list_t *list)
+{
+    cJSON *array = cJSON_CreateArray();
+    for (size_t i = 0; i < list->count; i++) {
+        cJSON_AddItemToArray(array, cJSON_CreateString(list->items[i]));
+    }
+    return array;
+}
+
+cJSON *bunny_cli_download_queue_item_to_json(const bunny_db_download_queue_item_t *item)
+{
+    cJSON *json = cJSON_CreateObject();
+    cJSON_AddNumberToObject(json, "id", (double)item->id);
+    cJSON_AddNumberToObject(json, "post_id", (double)item->post_id);
+    cJSON_AddStringToObject(json, "status", bunny_db_download_queue_status_to_string(item->status));
+    add_optional_string(json, "failure_reason", item->failure_reason);
+    cJSON_AddStringToObject(json, "created_at", item->created_at);
+    cJSON_AddNumberToObject(json, "pool_id", (double)item->pool_id);
+    add_optional_string(json, "pool_name", item->pool_name);
+    cJSON_AddNumberToObject(json, "pool_page", item->pool_page);
+    return json;
+}
+
+cJSON *bunny_cli_download_queue_list_to_json(const bunny_db_download_queue_list_t *list)
+{
+    cJSON *array = cJSON_CreateArray();
+    for (size_t i = 0; i < list->count; i++) {
+        cJSON_AddItemToArray(array, bunny_cli_download_queue_item_to_json(&list->items[i]));
+    }
+    return array;
+}

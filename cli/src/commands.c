@@ -355,3 +355,94 @@ int bunny_cli_cmd_vote(bunny_core_t *core, int64_t post_id, int score)
     snprintf(description, sizeof(description), "voted %+d on post %lld", score, (long long)post_id);
     return drain_and_report(core, bunny_core_queue_vote(core, post_id, score, false), description);
 }
+
+/* ---- --sync --------------------------------------------------------------- */
+
+static void log_sync_stats(const bunny_core_sync_stats_t *stats)
+{
+    bunny_cli_log(BUNNY_CLI_LOG_INFO, "searches checked: %d, synced: %d", stats->searches_checked, stats->searches_synced);
+    bunny_cli_log(BUNNY_CLI_LOG_INFO, "posts upserted: %d (%d new)", stats->posts_upserted, stats->new_posts_found);
+    if (stats->seconds_until_next_due >= 0) {
+        bunny_cli_log(BUNNY_CLI_LOG_INFO, "next search due in %.0f seconds", stats->seconds_until_next_due);
+    }
+}
+
+int bunny_cli_cmd_sync(bunny_core_t *core, int64_t search_id)
+{
+    bunny_core_sync_stats_t stats;
+    memset(&stats, 0, sizeof(stats));
+
+    bunny_core_result_t result = search_id == 0 ? bunny_core_sync_due_searches(core, &stats) : bunny_core_sync_search(core, search_id, &stats);
+    if (result != BUNNY_CORE_OK) {
+        bunny_cli_log(BUNNY_CLI_LOG_ERROR, "sync failed: %s", bunny_core_result_to_string(result));
+        return 1;
+    }
+
+    log_sync_stats(&stats);
+    bunny_cli_log(BUNNY_CLI_LOG_SUCCESS, "sync complete");
+    return 0;
+}
+
+/* ---- --blacklist-* ---------------------------------------------------------- */
+
+int bunny_cli_cmd_blacklist_list(bunny_core_t *core, bunny_db_site_t site)
+{
+    bunny_db_string_list_t list;
+    bunny_core_result_t result = bunny_core_blacklist_list(core, site, &list);
+    if (result != BUNNY_CORE_OK) {
+        bunny_cli_log(BUNNY_CLI_LOG_ERROR, "failed to list the blacklist: %s", bunny_core_result_to_string(result));
+        return 1;
+    }
+
+    cJSON *json = bunny_cli_string_list_to_json(&list);
+    char *printed = cJSON_Print(json);
+    printf("%s\n", printed);
+
+    free(printed);
+    cJSON_Delete(json);
+    bunny_db_string_list_free(&list);
+    return 0;
+}
+
+int bunny_cli_cmd_blacklist_add(bunny_core_t *core, bunny_db_site_t site, const char *tag)
+{
+    bunny_core_result_t result = bunny_core_blacklist_add(core, site, tag);
+    if (result != BUNNY_CORE_OK) {
+        bunny_cli_log(BUNNY_CLI_LOG_ERROR, "failed to add blacklist rule \"%s\": %s", tag, bunny_core_result_to_string(result));
+        return 1;
+    }
+    bunny_cli_log(BUNNY_CLI_LOG_SUCCESS, "added blacklist rule \"%s\"", tag);
+    return 0;
+}
+
+int bunny_cli_cmd_blacklist_remove(bunny_core_t *core, bunny_db_site_t site, const char *tag)
+{
+    bunny_core_result_t result = bunny_core_blacklist_remove(core, site, tag);
+    if (result != BUNNY_CORE_OK) {
+        bunny_cli_log(BUNNY_CLI_LOG_ERROR, "failed to remove blacklist rule \"%s\": %s", tag, bunny_core_result_to_string(result));
+        return 1;
+    }
+    bunny_cli_log(BUNNY_CLI_LOG_SUCCESS, "removed blacklist rule \"%s\"", tag);
+    return 0;
+}
+
+/* ---- --queue-list ------------------------------------------------------------ */
+
+int bunny_cli_cmd_queue_list(bunny_core_t *core)
+{
+    bunny_db_download_queue_list_t list;
+    bunny_core_result_t result = bunny_core_download_queue_list(core, &list);
+    if (result != BUNNY_CORE_OK) {
+        bunny_cli_log(BUNNY_CLI_LOG_ERROR, "failed to list the download queue: %s", bunny_core_result_to_string(result));
+        return 1;
+    }
+
+    cJSON *json = bunny_cli_download_queue_list_to_json(&list);
+    char *printed = cJSON_Print(json);
+    printf("%s\n", printed);
+
+    free(printed);
+    cJSON_Delete(json);
+    bunny_db_download_queue_list_free(&list);
+    return 0;
+}

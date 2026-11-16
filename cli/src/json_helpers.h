@@ -22,6 +22,16 @@ cJSON *bunny_cli_post_list_to_json(const bunny_db_post_list_t *list);
 /* referenced_pool_ids as a plain JSON array of numbers. */
 cJSON *bunny_cli_pool_info_to_json(const bunny_core_pool_info_t *info);
 
+/* A plain JSON array of strings -- used for blacklist dumps. */
+cJSON *bunny_cli_string_list_to_json(const bunny_db_string_list_t *list);
+
+/* One download_queue row, same field names as bunny_db_download_queue_item_t
+ * itself (status printed via bunny_db_download_queue_status_to_string). */
+cJSON *bunny_cli_download_queue_item_to_json(const bunny_db_download_queue_item_t *item);
+
+/* One download_queue_item_to_json object per item, as a JSON array. */
+cJSON *bunny_cli_download_queue_list_to_json(const bunny_db_download_queue_list_t *list);
+
 #ifdef __cplusplus
 }
 #endif

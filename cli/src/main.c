@@ -24,6 +24,13 @@ static void print_usage(const char *argv0)
     printf("  --favorite <post_id> [--stars N]  Favorite a post (N is Inkbunny's 1-3 tier, ignored on e621)\n");
     printf("  --unfavorite <post_id>            Unfavorite a post\n");
     printf("  --vote <post_id> <score>          Vote on a post (score: -1, 0, or 1; e621 only)\n");
+    printf("  --sync [search_id]                Sync due saved searches, or force one search by id\n");
+    printf("  --blacklist-list <e621|inkbunny>  Dump a site's tag blacklist as JSON\n");
+    printf("  --blacklist-add <e621|inkbunny> <tag>\n");
+    printf("                                    Add a blacklist rule\n");
+    printf("  --blacklist-remove <e621|inkbunny> <tag>\n");
+    printf("                                    Remove a blacklist rule\n");
+    printf("  --queue-list                      Dump the download queue as JSON\n");
     printf("  --stats                           Print row counts per database table and run an integrity check\n");
     printf("  --help                            Show this help\n");
     printf("  --version                         Show the version\n");
@@ -179,10 +186,16 @@ int main(int argc, char **argv)
     int favorite_index = find_flag_index(argc, argv, "--favorite");
     int unfavorite_index = find_flag_index(argc, argv, "--unfavorite");
     int vote_index = find_flag_index(argc, argv, "--vote");
+    bool wants_sync = has_flag(argc, argv, "--sync");
+    int blacklist_list_index = find_flag_index(argc, argv, "--blacklist-list");
+    int blacklist_add_index = find_flag_index(argc, argv, "--blacklist-add");
+    int blacklist_remove_index = find_flag_index(argc, argv, "--blacklist-remove");
+    bool wants_queue_list = has_flag(argc, argv, "--queue-list");
     bool wants_download = has_flag(argc, argv, "--download");
     bool wants_stats = has_flag(argc, argv, "--stats");
 
-    if (search_index < 0 && pool_index < 0 && favorite_index < 0 && unfavorite_index < 0 && vote_index < 0 && !wants_download && !wants_stats) {
+    bool has_command = search_index >= 0 || pool_index >= 0 || favorite_index >= 0 || unfavorite_index >= 0 || vote_index >= 0 || wants_sync || blacklist_list_index >= 0 || blacklist_add_index >= 0 || blacklist_remove_index >= 0 || wants_queue_list || wants_download || wants_stats;
+    if (!has_command) {
         bunny_cli_log(BUNNY_CLI_LOG_ERROR, "no command given, see --help");
         bunny_cli_handshake_payload_free(&payload);
         return 1;
@@ -264,6 +277,45 @@ int main(int argc, char **argv)
             int score = (int)strtol(argv[vote_index + 2], NULL, 10);
             exit_code = bunny_cli_cmd_vote(core, post_id, score);
         }
+    } else if (wants_sync) {
+        const char *search_id_str = find_flag_value(argc, argv, "--sync");
+        int64_t search_id = search_id_str ? strtoll(search_id_str, NULL, 10) : 0;
+        exit_code = bunny_cli_cmd_sync(core, search_id);
+    } else if (blacklist_list_index >= 0) {
+        if (blacklist_list_index + 1 >= argc) {
+            bunny_cli_log(BUNNY_CLI_LOG_ERROR, "--blacklist-list needs <e621|inkbunny>");
+        } else {
+            bunny_db_site_t site;
+            if (!parse_site(argv[blacklist_list_index + 1], &site)) {
+                bunny_cli_log(BUNNY_CLI_LOG_ERROR, "unknown site \"%s\", expected e621 or inkbunny", argv[blacklist_list_index + 1]);
+            } else {
+                exit_code = bunny_cli_cmd_blacklist_list(core, site);
+            }
+        }
+    } else if (blacklist_add_index >= 0) {
+        if (blacklist_add_index + 2 >= argc) {
+            bunny_cli_log(BUNNY_CLI_LOG_ERROR, "--blacklist-add needs <e621|inkbunny> <tag>");
+        } else {
+            bunny_db_site_t site;
+            if (!parse_site(argv[blacklist_add_index + 1], &site)) {
+                bunny_cli_log(BUNNY_CLI_LOG_ERROR, "unknown site \"%s\", expected e621 or inkbunny", argv[blacklist_add_index + 1]);
+            } else {
+                exit_code = bunny_cli_cmd_blacklist_add(core, site, argv[blacklist_add_index + 2]);
+            }
+        }
+    } else if (blacklist_remove_index >= 0) {
+        if (blacklist_remove_index + 2 >= argc) {
+            bunny_cli_log(BUNNY_CLI_LOG_ERROR, "--blacklist-remove needs <e621|inkbunny> <tag>");
+        } else {
+            bunny_db_site_t site;
+            if (!parse_site(argv[blacklist_remove_index + 1], &site)) {
+                bunny_cli_log(BUNNY_CLI_LOG_ERROR, "unknown site \"%s\", expected e621 or inkbunny", argv[blacklist_remove_index + 1]);
+            } else {
+                exit_code = bunny_cli_cmd_blacklist_remove(core, site, argv[blacklist_remove_index + 2]);
+            }
+        }
+    } else if (wants_queue_list) {
+        exit_code = bunny_cli_cmd_queue_list(core);
     } else {
         exit_code = bunny_cli_cmd_stats(core);
     }

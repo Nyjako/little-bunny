@@ -51,12 +51,22 @@ prompt.
 - `--vote <post_id> <score>` -- votes on a post (`score` is `-1`, `0`, or
   `1`). e621 only -- Inkbunny has no vote API, so a vote queued against an
   Inkbunny post always fails once processed.
+- `--sync [search_id]` -- without an id, syncs every saved search that's
+  currently due (same as the app's own background timer); with an id,
+  forces that one search to sync right now regardless of due-ness. Prints a
+  colored summary (searches checked/synced, posts upserted/new).
+- `--blacklist-list <e621|inkbunny>` -- dumps a site's tag blacklist as a
+  JSON array of strings.
+- `--blacklist-add <e621|inkbunny> <tag>` / `--blacklist-remove <e621|inkbunny> <tag>`
+  -- adds/removes one blacklist rule. `tag` is validated under that site's
+  own tag-query grammar before being stored.
+- `--queue-list` -- dumps the whole download queue (every row, any status)
+  as a JSON array -- debugging/scripting, not meant for a human to read
+  directly.
 - `--help`, `--version`.
 
 Every command above (except `--whoami`/`--help`/`--version`) needs
-standalone mode -- see the limitation below. More commands (triggering a
-sync, dumping the queue/blacklist as JSON, ...) are landing in follow-up
-changes, each following the same pattern established here.
+standalone mode -- see the limitation below.
 
 ## Current limitation
 

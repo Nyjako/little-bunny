@@ -55,6 +55,26 @@ int bunny_cli_cmd_favorite_remove(bunny_core_t *core, int64_t post_id);
  * comment describes. */
 int bunny_cli_cmd_vote(bunny_core_t *core, int64_t post_id, int score);
 
+/* Syncs saved searches: `search_id == 0` runs bunny_core_sync_due_searches
+ * (every search whose interval has elapsed), otherwise forces exactly that
+ * one search via bunny_core_sync_search regardless of due-ness. Prints the
+ * resulting bunny_core_sync_stats_t as a colored human-readable summary
+ * (not JSON -- for a human, not a pipe, matching --stats). */
+int bunny_cli_cmd_sync(bunny_core_t *core, int64_t search_id);
+
+/* Dumps a site's tag blacklist as a plain JSON array of strings to stdout. */
+int bunny_cli_cmd_blacklist_list(bunny_core_t *core, bunny_db_site_t site);
+
+/* Adds/removes one blacklist rule for `site`. `tag` is validated under that
+ * site's own tag-query grammar before being stored -- an invalid rule fails
+ * with a clear error rather than being stored unusable. */
+int bunny_cli_cmd_blacklist_add(bunny_core_t *core, bunny_db_site_t site, const char *tag);
+int bunny_cli_cmd_blacklist_remove(bunny_core_t *core, bunny_db_site_t site, const char *tag);
+
+/* Dumps the whole download queue (every row, any status) as a JSON array to
+ * stdout -- debugging/scripting, not meant for a human to read directly. */
+int bunny_cli_cmd_queue_list(bunny_core_t *core);
+
 #ifdef __cplusplus
 }
 #endif
