@@ -1,0 +1,74 @@
+#ifndef BUNNY_CLI_HANDSHAKE_H
+#define BUNNY_CLI_HANDSHAKE_H
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+/* bunny_cli never reads the app's database/connection info from a flag or a
+ * file -- it asks the real app for it, briefly, over a pipe only the two of
+ * them share (see the top-level plan's "App handshake design" section for
+ * the full protocol and the reasoning behind it). This module is the C side
+ * of that protocol: spawning the app with "--cli-handshake", writing the
+ * one line it expects on stdin, and reading the one JSON line it writes
+ * back before it exits. */
+
+typedef enum
+{
+    BUNNY_CLI_HANDSHAKE_OK,             /* out is populated */
+    BUNNY_CLI_HANDSHAKE_LOCKED,         /* the app's own app-lock rejected the supplied secret */
+    BUNNY_CLI_HANDSHAKE_APP_NOT_FOUND,  /* app_exe_path doesn't exist / isn't executable */
+    BUNNY_CLI_HANDSHAKE_SPAWN_FAILED,   /* pipe()/fork()/exec() or CreateProcess() itself failed */
+    BUNNY_CLI_HANDSHAKE_PROTOCOL_ERROR, /* the app exited without ever writing one valid JSON line */
+} bunny_cli_handshake_result_t;
+
+typedef enum
+{
+    BUNNY_CLI_MODE_NONE, /* no repository configured yet in the app */
+    BUNNY_CLI_MODE_STANDALONE,
+    BUNNY_CLI_MODE_NETWORKED,
+} bunny_cli_mode_t;
+
+/* Only the fields matching `mode` are non-NULL; every string here is owned
+ * by this struct -- free with bunny_cli_handshake_payload_free. */
+typedef struct
+{
+    bunny_cli_mode_t mode;
+    char *db_path;          /* BUNNY_CLI_MODE_STANDALONE only */
+    char *user_agent;       /* BUNNY_CLI_MODE_STANDALONE only */
+    char *server_base_url;  /* BUNNY_CLI_MODE_NETWORKED only */
+    char *bearer_token;     /* BUNNY_CLI_MODE_NETWORKED only */
+    char *cert_fingerprint; /* BUNNY_CLI_MODE_NETWORKED only */
+} bunny_cli_handshake_payload_t;
+
+/* Safe to call on a zero-initialized or already-freed payload. Zeroes
+ * *payload afterward. */
+void bunny_cli_handshake_payload_free(bunny_cli_handshake_payload_t *payload);
+
+/* Spawns `app_exe_path` with the single argument "--cli-handshake" (piped
+ * stdin/stdout; the child's stderr is inherited, so a crash there is still
+ * visible to this process's own stderr). Writes `supplied_secret` (NULL
+ * treated the same as "", i.e. "no secret supplied") followed by a newline
+ * to the child's stdin, closes that pipe, reads exactly one line back from
+ * its stdout, and waits for the child to actually exit (never leaves a
+ * zombie/orphan behind) before returning. Pure plumbing -- never reads from
+ * the real terminal or retries anything itself; that's main.c's job. */
+bunny_cli_handshake_result_t bunny_cli_handshake_run(const char *app_exe_path, const char *supplied_secret, bunny_cli_handshake_payload_t *out);
+
+/* Resolves the path this CLI expects the app's own executable to sit at --
+ * right next to this process's own binary ("little_bunny"/"little_bunny.exe").
+ * Returns a newly allocated string the caller must free(), or NULL if this
+ * process's own executable path couldn't even be resolved (a different
+ * failure from the app simply not existing there -- bunny_cli_handshake_run
+ * reports that case as BUNNY_CLI_HANDSHAKE_APP_NOT_FOUND instead). */
+char *bunny_cli_find_app_executable(void);
+
+/* Human-readable string for every bunny_cli_handshake_result_t value --
+ * never NULL, same convention as bunny_core_result_to_string. */
+const char *bunny_cli_handshake_result_to_string(bunny_cli_handshake_result_t result);
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif /* BUNNY_CLI_HANDSHAKE_H */

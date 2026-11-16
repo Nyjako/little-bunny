@@ -20,6 +20,7 @@ get_filename_component(BUNNY_CORE_FFI_SRC_REAL_DIR "${CMAKE_CURRENT_SOURCE_DIR}"
 set(BUNNY_BUILD_TESTS OFF CACHE BOOL "" FORCE)
 set(BUNNY_BUILD_TOOLS OFF CACHE BOOL "" FORCE)
 set(BUNNY_BUILD_SERVER OFF CACHE BOOL "" FORCE)
+set(BUNNY_BUILD_CLI OFF CACHE BOOL "" FORCE)
 # bunny_core_ffi/src -> bunny_core_ffi -> <repo root> is only two levels up.
 # EXCLUDE_FROM_ALL: the reused project's own CPM dependencies (cJSON, curl,
 # ...) carry their own install() rules meant for a system-wide install --

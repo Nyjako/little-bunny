@@ -25,6 +25,7 @@ option(BUNNY_BUILD_TESTS "Build unit tests" OFF)
 option(BUNNY_ENABLE_ASAN "Build with AddressSanitizer/UndefinedBehaviorSanitizer" OFF)
 option(BUNNY_BUILD_TOOLS "Build developer/experimental command-line tools (not part of the shipped product)" OFF)
 option(BUNNY_BUILD_SERVER "Build the C server (civetweb, requires network to fetch). OFF for the Flutter FFI plugin's build (bunny_core_ffi/), which only needs libs/." ON)
+option(BUNNY_BUILD_CLI "Build bunny_cli, the standalone command-line tool that ships alongside the app (Windows/Linux releases only). OFF for the Flutter FFI plugin's build (bunny_core_ffi/), which only needs libs/." ON)
 
 # The release build number (release.yml's `build-${{ github.run_number }}`
 # tag) doubles as this server's own version identifier -- a monotonically
@@ -281,6 +282,10 @@ add_subdirectory(libs/db)
 add_subdirectory(libs/core)
 if(BUNNY_BUILD_SERVER)
   add_subdirectory(server)
+endif()
+
+if(BUNNY_BUILD_CLI)
+  add_subdirectory(cli)
 endif()
 
 if(BUNNY_BUILD_TOOLS)

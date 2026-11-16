@@ -21,7 +21,7 @@ HOST_GID := $(shell id -g)
 # bindings or the Dart/platform side). Was never actually defined before
 # (format/format-check ran clang-format with zero file arguments, a silent
 # no-op -- discovered 2026-11-08 while adding new C under libs/common/).
-SOURCES := $(shell find libs server tools bunny_core_ffi/src -name '*.c' -o -name '*.h')
+SOURCES := $(shell find libs server cli tools bunny_core_ffi/src -name '*.c' -o -name '*.h')
 
 .PHONY: build test test-c test-flutter release release-portable clean dockcross windows tools format format-check app-linux app-android
 
