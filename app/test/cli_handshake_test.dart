@@ -40,7 +40,7 @@ void main() {
     expect(response, {'ok': true, 'mode': 'standalone', 'dbPath': '/fake/support/bunny.db', 'userAgent': 'LittleBunny/1.0.0', 'downloadDestinationFolder': '/fake/downloads'});
   });
 
-  test('networked config reports its serverBaseUrl/bearerToken/certFingerprint plus the download destination folder', () async {
+  test('networked config reports its serverBaseUrl/bearerToken/certFingerprint plus the download queue db and destination folder', () async {
     final settingsStore = RepositorySettingsStore(FakeSecretStore());
     await settingsStore.saveNetworked(serverBaseUrl: Uri.parse('https://bunny.example:9443'), bearerToken: 'sometoken', certificateSha256Fingerprint: 'abc123');
 
@@ -51,12 +51,17 @@ void main() {
       suppliedSecret: '',
     );
 
+    // downloadQueueDbPath/downloadQueueUserAgent (M86) are what let
+    // bunny_cli --download/--queue-list continue/inspect the same local
+    // queue HttpBunnyRepository itself uses, with the app not running.
     expect(response, {
       'ok': true,
       'mode': 'networked',
       'serverBaseUrl': 'https://bunny.example:9443',
       'bearerToken': 'sometoken',
       'certFingerprint': 'abc123',
+      'downloadQueueDbPath': '/fake/support/downloads.db',
+      'downloadQueueUserAgent': 'LittleBunny/1.0.0',
       'downloadDestinationFolder': '/fake/downloads',
     });
   });

@@ -29,7 +29,17 @@ import 'settings/repository_settings_store.dart';
 /// - `{'ok': true, 'mode': 'standalone', 'dbPath': ..., 'userAgent': ...,
 ///   'downloadDestinationFolder': ...}`
 /// - `{'ok': true, 'mode': 'networked', 'serverBaseUrl': ..., 'bearerToken':
-///   ..., 'certFingerprint': ..., 'downloadDestinationFolder': ...}`
+///   ..., 'certFingerprint': ..., 'downloadQueueDbPath': ...,
+///   'downloadQueueUserAgent': ..., 'downloadDestinationFolder': ...}`
+///
+/// [NetworkedConfig.downloadQueueDbPath]/[NetworkedConfig
+/// .downloadQueueUserAgent] (M86) back [HttpBunnyRepository]'s own small
+/// local download-queue db (see that class's own doc comment) -- included
+/// so `bunny_cli --download`/`--queue-list` can continue/inspect that same
+/// queue with the app not running at all, instead of only being able to in
+/// standalone mode. The server itself never proxies downloads or stores
+/// this queue (docs/architecture.md's "Downloads are client-side" section),
+/// so there was nothing networked-mode-specific to report here until now.
 ///
 /// [downloadDestinationFolder] (M85) is [DownloadSettingsStore
 /// .loadDestinationFolder]'s own value -- a *separate* setting from
@@ -66,12 +76,14 @@ Future<Map<String, Object?>> buildCliHandshakeResponse({
       'userAgent': userAgent,
       'downloadDestinationFolder': downloadDestinationFolder,
     },
-    NetworkedConfig(:final serverBaseUrl, :final bearerToken, :final certificateSha256Fingerprint) => {
+    NetworkedConfig(:final serverBaseUrl, :final bearerToken, :final certificateSha256Fingerprint, :final downloadQueueDbPath, :final downloadQueueUserAgent) => {
       'ok': true,
       'mode': 'networked',
       'serverBaseUrl': serverBaseUrl.toString(),
       'bearerToken': bearerToken,
       'certFingerprint': certificateSha256Fingerprint,
+      'downloadQueueDbPath': downloadQueueDbPath,
+      'downloadQueueUserAgent': downloadQueueUserAgent,
       'downloadDestinationFolder': downloadDestinationFolder,
     },
   };
