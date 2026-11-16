@@ -43,8 +43,8 @@ static void print_usage(const char *argv0)
     printf("it briefly launches the app to learn its current repository config, which\n");
     printf("never touches disk or becomes visible to any other process.\n");
     printf("\n");
-    printf("Only standalone mode (no separate server) can actually run a command today --\n");
-    printf("networked mode is recognized but not yet supported, see cli/README.md.\n");
+    printf("In networked mode, --download/--sync/--queue-list/--stats aren't supported\n");
+    printf("yet (they don't fit the server's REST surface the same way) -- see cli/README.md.\n");
 }
 
 static bool has_flag(int argc, char **argv, const char *flag)
@@ -201,31 +201,41 @@ int main(int argc, char **argv)
         return 1;
     }
 
-    /* Every command below needs an actual bunny_core_t* -- only standalone
-     * mode has one here (bunny_cli speaks to the local database directly,
-     * exactly like the app's own FFI layer does). Networked mode would need
-     * its own REST client against bunny_server, which doesn't exist yet
-     * (see cli/README.md) -- reported clearly rather than guessed at. */
-    if (payload.mode == BUNNY_CLI_MODE_NETWORKED) {
-        bunny_cli_log(BUNNY_CLI_LOG_ERROR, "the app is set up in networked mode -- bunny_cli can only run commands against standalone mode for now, see cli/README.md");
-        bunny_cli_handshake_payload_free(&payload);
-        return 1;
-    }
-
-    /* Every command below needs the same bunny_core_t*, opened exactly
-     * once -- cheaper and simpler than each command opening/closing its
-     * own, and keeps the "failed to open the database" error in one place. */
-    bunny_core_config_t config;
-    memset(&config, 0, sizeof(config));
-    config.db_path = payload.db_path;
-    config.user_agent = payload.user_agent;
-    config.log_callback = bunny_cli_log_bunny_core_callback;
+    /* Builds whichever half of bunny_cli_context_t this mode actually
+     * needs -- standalone opens the local bunny_core_t* exactly once
+     * (cheaper and simpler than each command opening/closing its own, and
+     * keeps the "failed to open the database" error in one place);
+     * networked builds the REST client (bearer token + pinned certificate)
+     * instead. A command with no networked implementation yet reports that
+     * itself (see commands.h) rather than this blanket-rejecting every
+     * command the way it used to. */
+    bunny_cli_context_t ctx;
+    memset(&ctx, 0, sizeof(ctx));
 
     bunny_core_t *core = NULL;
-    if (bunny_core_open(&config, &core) != BUNNY_CORE_OK) {
-        bunny_cli_log(BUNNY_CLI_LOG_ERROR, "failed to open the database at %s", payload.db_path);
-        bunny_cli_handshake_payload_free(&payload);
-        return 1;
+    bunny_cli_rest_client_t rest_client;
+    if (payload.mode == BUNNY_CLI_MODE_NETWORKED) {
+        ctx.mode = BUNNY_CLI_MODE_NETWORKED;
+        if (!bunny_cli_rest_client_init(&rest_client, payload.server_base_url, payload.bearer_token, payload.cert_fingerprint)) {
+            bunny_cli_log(BUNNY_CLI_LOG_ERROR, "failed to set up the server connection");
+            bunny_cli_handshake_payload_free(&payload);
+            return 1;
+        }
+        ctx.rest = &rest_client;
+    } else {
+        ctx.mode = BUNNY_CLI_MODE_STANDALONE;
+        bunny_core_config_t config;
+        memset(&config, 0, sizeof(config));
+        config.db_path = payload.db_path;
+        config.user_agent = payload.user_agent;
+        config.log_callback = bunny_cli_log_bunny_core_callback;
+
+        if (bunny_core_open(&config, &core) != BUNNY_CORE_OK) {
+            bunny_cli_log(BUNNY_CLI_LOG_ERROR, "failed to open the database at %s", payload.db_path);
+            bunny_cli_handshake_payload_free(&payload);
+            return 1;
+        }
+        ctx.core = core;
     }
 
     int exit_code = 1;
@@ -239,7 +249,7 @@ int main(int argc, char **argv)
             } else {
                 const char *page_str = find_flag_value(argc, argv, "--page");
                 int page = page_str ? (int)strtol(page_str, NULL, 10) : 1;
-                exit_code = bunny_cli_cmd_search(core, site, argv[search_index + 2], page);
+                exit_code = bunny_cli_cmd_search(&ctx, site, argv[search_index + 2], page);
             }
         }
     } else if (pool_index >= 0) {
@@ -247,12 +257,12 @@ int main(int argc, char **argv)
             bunny_cli_log(BUNNY_CLI_LOG_ERROR, "--pool needs <pool_id>");
         } else {
             int64_t pool_id = strtoll(argv[pool_index + 1], NULL, 10);
-            exit_code = bunny_cli_cmd_pool(core, pool_id);
+            exit_code = bunny_cli_cmd_pool(&ctx, pool_id);
         }
     } else if (wants_download) {
         const char *jobs_str = find_flag_value(argc, argv, "--jobs");
         int jobs = jobs_str ? (int)strtol(jobs_str, NULL, 10) : 3;
-        exit_code = bunny_cli_cmd_download(core, payload.download_destination_folder, jobs);
+        exit_code = bunny_cli_cmd_download(&ctx, payload.download_destination_folder, jobs);
     } else if (favorite_index >= 0) {
         if (favorite_index + 1 >= argc) {
             bunny_cli_log(BUNNY_CLI_LOG_ERROR, "--favorite needs <post_id>");
@@ -260,14 +270,14 @@ int main(int argc, char **argv)
             int64_t post_id = strtoll(argv[favorite_index + 1], NULL, 10);
             const char *stars_str = find_flag_value(argc, argv, "--stars");
             int stars = stars_str ? (int)strtol(stars_str, NULL, 10) : -1;
-            exit_code = bunny_cli_cmd_favorite_add(core, post_id, stars);
+            exit_code = bunny_cli_cmd_favorite_add(&ctx, post_id, stars);
         }
     } else if (unfavorite_index >= 0) {
         if (unfavorite_index + 1 >= argc) {
             bunny_cli_log(BUNNY_CLI_LOG_ERROR, "--unfavorite needs <post_id>");
         } else {
             int64_t post_id = strtoll(argv[unfavorite_index + 1], NULL, 10);
-            exit_code = bunny_cli_cmd_favorite_remove(core, post_id);
+            exit_code = bunny_cli_cmd_favorite_remove(&ctx, post_id);
         }
     } else if (vote_index >= 0) {
         if (vote_index + 2 >= argc) {
@@ -275,12 +285,12 @@ int main(int argc, char **argv)
         } else {
             int64_t post_id = strtoll(argv[vote_index + 1], NULL, 10);
             int score = (int)strtol(argv[vote_index + 2], NULL, 10);
-            exit_code = bunny_cli_cmd_vote(core, post_id, score);
+            exit_code = bunny_cli_cmd_vote(&ctx, post_id, score);
         }
     } else if (wants_sync) {
         const char *search_id_str = find_flag_value(argc, argv, "--sync");
         int64_t search_id = search_id_str ? strtoll(search_id_str, NULL, 10) : 0;
-        exit_code = bunny_cli_cmd_sync(core, search_id);
+        exit_code = bunny_cli_cmd_sync(&ctx, search_id);
     } else if (blacklist_list_index >= 0) {
         if (blacklist_list_index + 1 >= argc) {
             bunny_cli_log(BUNNY_CLI_LOG_ERROR, "--blacklist-list needs <e621|inkbunny>");
@@ -289,7 +299,7 @@ int main(int argc, char **argv)
             if (!parse_site(argv[blacklist_list_index + 1], &site)) {
                 bunny_cli_log(BUNNY_CLI_LOG_ERROR, "unknown site \"%s\", expected e621 or inkbunny", argv[blacklist_list_index + 1]);
             } else {
-                exit_code = bunny_cli_cmd_blacklist_list(core, site);
+                exit_code = bunny_cli_cmd_blacklist_list(&ctx, site);
             }
         }
     } else if (blacklist_add_index >= 0) {
@@ -300,7 +310,7 @@ int main(int argc, char **argv)
             if (!parse_site(argv[blacklist_add_index + 1], &site)) {
                 bunny_cli_log(BUNNY_CLI_LOG_ERROR, "unknown site \"%s\", expected e621 or inkbunny", argv[blacklist_add_index + 1]);
             } else {
-                exit_code = bunny_cli_cmd_blacklist_add(core, site, argv[blacklist_add_index + 2]);
+                exit_code = bunny_cli_cmd_blacklist_add(&ctx, site, argv[blacklist_add_index + 2]);
             }
         }
     } else if (blacklist_remove_index >= 0) {
@@ -311,16 +321,20 @@ int main(int argc, char **argv)
             if (!parse_site(argv[blacklist_remove_index + 1], &site)) {
                 bunny_cli_log(BUNNY_CLI_LOG_ERROR, "unknown site \"%s\", expected e621 or inkbunny", argv[blacklist_remove_index + 1]);
             } else {
-                exit_code = bunny_cli_cmd_blacklist_remove(core, site, argv[blacklist_remove_index + 2]);
+                exit_code = bunny_cli_cmd_blacklist_remove(&ctx, site, argv[blacklist_remove_index + 2]);
             }
         }
     } else if (wants_queue_list) {
-        exit_code = bunny_cli_cmd_queue_list(core);
+        exit_code = bunny_cli_cmd_queue_list(&ctx);
     } else {
-        exit_code = bunny_cli_cmd_stats(core);
+        exit_code = bunny_cli_cmd_stats(&ctx);
     }
 
-    bunny_core_close(core);
+    if (ctx.mode == BUNNY_CLI_MODE_NETWORKED) {
+        bunny_cli_rest_client_free(&rest_client);
+    } else {
+        bunny_core_close(core);
+    }
     bunny_cli_handshake_payload_free(&payload);
     return exit_code;
 }

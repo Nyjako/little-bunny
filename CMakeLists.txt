@@ -43,13 +43,14 @@ endif()
 include(cmake/get_cpm.cmake)
 
 # OpenSSL is the one dependency not fetched via CPM: it's treated as a system
-# TLS provider (like the compiler), see docs/architecture.md. Only civetweb
-# and server/src/auth.c|tls.c call into it directly, and both are already
-# gated behind BUNNY_BUILD_SERVER below -- so this find_package must be too,
-# otherwise it blocks every BUNNY_BUILD_SERVER=OFF consumer (bunny_core_ffi/,
-# i.e. every Android build) from configuring at all, since the Android NDK
-# ships no prebuilt OpenSSL (M12.1).
-if(BUNNY_BUILD_SERVER)
+# TLS provider (like the compiler), see docs/architecture.md. civetweb and
+# server/src/auth.c|tls.c call into it directly (BUNNY_BUILD_SERVER); so does
+# cli/src/rest_client.c's certificate-pinning verify callback for networked
+# mode (BUNNY_BUILD_CLI) -- both gated the same way, so this find_package
+# must be too, otherwise it blocks every BUNNY_BUILD_SERVER=OFF/BUNNY_BUILD_CLI=OFF
+# consumer (bunny_core_ffi/, i.e. every Android build) from configuring at
+# all, since the Android NDK ships no prebuilt OpenSSL (M12.1).
+if(BUNNY_BUILD_SERVER OR BUNNY_BUILD_CLI)
   find_package(OpenSSL REQUIRED)
 endif()
 

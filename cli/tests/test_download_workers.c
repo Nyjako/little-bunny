@@ -32,6 +32,7 @@ typedef struct
 static fake_transport_state_t g_e621_state;
 static bunny_http_transport_t g_e621_transport;
 static bunny_core_t *g_core;
+static bunny_cli_context_t g_ctx;
 static char g_dest_dir[256];
 
 static bunny_http_result_t fake_send(void *user_data, const bunny_http_request_t *request, bunny_http_response_t *out_response)
@@ -82,6 +83,10 @@ void setUp(void)
     bunny_core_result_t result = bunny_core_open(&config, &g_core);
     TEST_ASSERT_EQUAL(BUNNY_CORE_OK, result);
 
+    g_ctx.mode = BUNNY_CLI_MODE_STANDALONE;
+    g_ctx.core = g_core;
+    g_ctx.rest = NULL;
+
     snprintf(g_dest_dir, sizeof(g_dest_dir), "/tmp/bunny_cli_test_download_%d", rand());
 }
 
@@ -124,7 +129,7 @@ void test_multiple_workers_each_claim_a_distinct_item_and_all_succeed(void)
         TEST_ASSERT_EQUAL(BUNNY_CORE_OK, result);
     }
 
-    int exit_code = bunny_cli_cmd_download(g_core, g_dest_dir, 3);
+    int exit_code = bunny_cli_cmd_download(&g_ctx, g_dest_dir, 3);
     TEST_ASSERT_EQUAL(0, exit_code);
 
     bunny_test_http_server_join(server); /* confirms exactly 4 real HTTP fetches happened, not more/fewer */
@@ -156,7 +161,7 @@ void test_posts_missing_locally_fail_gracefully_with_no_hang_and_no_duplicate_cl
         TEST_ASSERT_EQUAL(BUNNY_CORE_OK, result);
     }
 
-    int exit_code = bunny_cli_cmd_download(g_core, g_dest_dir, 4); /* more workers than items, on purpose */
+    int exit_code = bunny_cli_cmd_download(&g_ctx, g_dest_dir, 4); /* more workers than items, on purpose */
     TEST_ASSERT_EQUAL(1, exit_code);
 
     bunny_db_download_queue_list_t list;
@@ -171,7 +176,7 @@ void test_posts_missing_locally_fail_gracefully_with_no_hang_and_no_duplicate_cl
 
 void test_an_empty_queue_succeeds_immediately_with_nothing_to_do(void)
 {
-    int exit_code = bunny_cli_cmd_download(g_core, g_dest_dir, 3);
+    int exit_code = bunny_cli_cmd_download(&g_ctx, g_dest_dir, 3);
     TEST_ASSERT_EQUAL(0, exit_code);
 }
 
@@ -180,7 +185,7 @@ void test_a_null_download_folder_fails_immediately_without_touching_the_queue(vo
     int64_t queue_id = 0;
     bunny_core_download_queue_add(g_core, 1, 0, NULL, 0, &queue_id);
 
-    int exit_code = bunny_cli_cmd_download(g_core, NULL, 3);
+    int exit_code = bunny_cli_cmd_download(&g_ctx, NULL, 3);
     TEST_ASSERT_EQUAL(1, exit_code);
 
     bunny_db_download_queue_list_t list;

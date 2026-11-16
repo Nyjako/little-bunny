@@ -65,17 +65,32 @@ prompt.
   directly.
 - `--help`, `--version`.
 
-Every command above (except `--whoami`/`--help`/`--version`) needs
-standalone mode -- see the limitation below.
+## Networked mode
 
-## Current limitation
+If your app is set up against a `bunny_server` instance instead of a local
+database, `bunny_cli` talks to it over the exact same REST surface the app's
+own `HttpBunnyRepository` uses (`docs/architecture.md`'s "C server (M5)"
+section) -- the server's self-signed certificate is pinned by the SHA-256
+fingerprint the handshake reports (trust-on-first-use, no CA involved, same
+model as the app's own certificate pinning).
 
-Only standalone mode (a local database, no separate server) is actually
-usable today -- `bunny_cli` already recognizes networked mode via the
-handshake above, but talking to a `bunny_server` instance over its REST API
-needs its own HTTP client, which hasn't been built yet. Running any command
-while your app is set up in networked mode will tell you so and exit
-cleanly, rather than guessing.
+`--search`, `--pool`, `--favorite`, `--unfavorite`, `--vote`,
+`--blacklist-list`, `--blacklist-add`, and `--blacklist-remove` work over the
+network today. The rest don't fit the server's REST surface the same way as
+a synchronous local call, so they're standalone-only for now:
+
+- `--download`/`--queue-list` -- the download queue is purely client-side
+  (the server never proxies binary downloads); a networked version needs
+  its own local queue database, which the handshake doesn't hand over yet.
+- `--sync` -- the server's own sync endpoint is an async job (enqueue, then
+  poll `GET /sync/status` for progress), not a synchronous "run it now,
+  print the stats" call.
+- `--stats` -- the server has no REST endpoint exposing table row
+  counts/integrity (its `/health` only smoke-tests the HTTPS listener
+  itself).
+
+Running one of these while your app is set up in networked mode tells you
+so and exits cleanly, rather than guessing.
 
 ## Staying in sync with the app (low priority, not done yet)
 

@@ -14,6 +14,16 @@ add_executable(bunny_cli_test_destination test_destination.c)
 target_link_libraries(bunny_cli_test_destination PRIVATE bunny_cli_lib unity::framework)
 add_test(NAME bunny_cli_test_destination COMMAND bunny_cli_test_destination)
 
+# Exercises rest_client.c's request-building/response-mapping/url-encoding
+# logic against an injected fake transport, plus the fingerprint-comparison
+# math the real pinned transport's OpenSSL verify callback uses -- the
+# actual TLS handshake/pinning is manual-only (see test_rest_client.c's own
+# doc comment), same precedent as http_bunny_repository_test.dart's own
+# fake-transport-only automated coverage.
+add_executable(bunny_cli_test_rest_client test_rest_client.c)
+target_link_libraries(bunny_cli_test_rest_client PRIVATE bunny_cli_lib unity::framework)
+add_test(NAME bunny_cli_test_rest_client COMMAND bunny_cli_test_rest_client)
+
 # Exercises commands.c's own claim/process loop against a real bunny_core_t
 # and a real local HTTP server (bunny_test_http_server, the same fixture
 # bunny_core_test_download already uses) -- POSIX sockets only, same

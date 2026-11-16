@@ -3,6 +3,7 @@
 #include "destination.h"
 #include "log.h"
 
+#include <bunny_common/json.h>
 #include <bunny_common/thread.h>
 #include <cJSON.h>
 
@@ -28,7 +29,29 @@ static void sleep_ms(unsigned int ms)
 #endif
 }
 
-int bunny_cli_cmd_search(bunny_core_t *core, bunny_db_site_t site, const char *query, int page)
+/* A command with no networked implementation (--download, --sync,
+ * --queue-list, --stats) reaches this instead of guessing -- see each
+ * public function's own doc comment in commands.h for why that particular
+ * command doesn't fit the REST surface the same way. */
+static int report_not_supported_over_network(const char *command_name)
+{
+    bunny_cli_log(BUNNY_CLI_LOG_ERROR, "%s isn't supported in networked mode yet, see cli/README.md", command_name);
+    return 1;
+}
+
+/* Prints an already-parsed response body (the server's post/pool/blacklist
+ * JSON shapes are deliberately identical to bunny_cli's own, json_helpers.h's
+ * own doc comment) exactly the way the standalone path prints its own
+ * cJSON object -- re-printed via cJSON_Print rather than echoing the raw
+ * response body text, so formatting stays consistent either way. */
+static void print_json(const cJSON *json)
+{
+    char *printed = cJSON_Print(json);
+    printf("%s\n", printed);
+    free(printed);
+}
+
+static int cmd_search_standalone(bunny_core_t *core, bunny_db_site_t site, const char *query, int page)
 {
     bunny_db_post_list_t list;
     bunny_core_result_t result = bunny_core_preview_search(core, site, query, page, NULL, &list);
@@ -38,16 +61,42 @@ int bunny_cli_cmd_search(bunny_core_t *core, bunny_db_site_t site, const char *q
     }
 
     cJSON *json = bunny_cli_post_list_to_json(&list);
-    char *printed = cJSON_Print(json);
-    printf("%s\n", printed);
+    print_json(json);
 
-    free(printed);
     cJSON_Delete(json);
     bunny_db_post_list_free(&list);
     return 0;
 }
 
-int bunny_cli_cmd_pool(bunny_core_t *core, int64_t pool_id)
+static int cmd_search_networked(bunny_cli_rest_client_t *rest, bunny_db_site_t site, const char *query, int page)
+{
+    char *encoded_query = bunny_cli_rest_url_encode(query);
+    char path[1200];
+    snprintf(path, sizeof(path), "/search/preview?site=%s&query=%s&page=%d", bunny_db_site_to_string(site), encoded_query ? encoded_query : "", page);
+    free(encoded_query);
+
+    cJSON *response = NULL;
+    bunny_cli_rest_result_t result = bunny_cli_rest_request(rest, BUNNY_HTTP_POST, path, NULL, &response);
+    if (result != BUNNY_CLI_REST_OK) {
+        bunny_cli_log(BUNNY_CLI_LOG_ERROR, "search failed: %s", bunny_cli_rest_result_to_string(result));
+        cJSON_Delete(response);
+        return 1;
+    }
+
+    print_json(response);
+    cJSON_Delete(response);
+    return 0;
+}
+
+int bunny_cli_cmd_search(bunny_cli_context_t *ctx, bunny_db_site_t site, const char *query, int page)
+{
+    if (ctx->mode == BUNNY_CLI_MODE_NETWORKED) {
+        return cmd_search_networked(ctx->rest, site, query, page);
+    }
+    return cmd_search_standalone(ctx->core, site, query, page);
+}
+
+static int cmd_pool_standalone(bunny_core_t *core, int64_t pool_id)
 {
     bunny_core_pool_info_t info;
     bunny_core_result_t result = bunny_core_fetch_pool(core, pool_id, &info);
@@ -57,17 +106,45 @@ int bunny_cli_cmd_pool(bunny_core_t *core, int64_t pool_id)
     }
 
     cJSON *json = bunny_cli_pool_info_to_json(&info);
-    char *printed = cJSON_Print(json);
-    printf("%s\n", printed);
+    print_json(json);
 
-    free(printed);
     cJSON_Delete(json);
     bunny_core_pool_info_free(&info);
     return 0;
 }
 
-int bunny_cli_cmd_stats(bunny_core_t *core)
+static int cmd_pool_networked(bunny_cli_rest_client_t *rest, int64_t pool_id)
 {
+    char path[64];
+    snprintf(path, sizeof(path), "/pools/%lld", (long long)pool_id);
+
+    cJSON *response = NULL;
+    bunny_cli_rest_result_t result = bunny_cli_rest_request(rest, BUNNY_HTTP_GET, path, NULL, &response);
+    if (result != BUNNY_CLI_REST_OK) {
+        bunny_cli_log(BUNNY_CLI_LOG_ERROR, "pool fetch failed: %s", bunny_cli_rest_result_to_string(result));
+        cJSON_Delete(response);
+        return 1;
+    }
+
+    print_json(response);
+    cJSON_Delete(response);
+    return 0;
+}
+
+int bunny_cli_cmd_pool(bunny_cli_context_t *ctx, int64_t pool_id)
+{
+    if (ctx->mode == BUNNY_CLI_MODE_NETWORKED) {
+        return cmd_pool_networked(ctx->rest, pool_id);
+    }
+    return cmd_pool_standalone(ctx->core, pool_id);
+}
+
+int bunny_cli_cmd_stats(bunny_cli_context_t *ctx)
+{
+    if (ctx->mode == BUNNY_CLI_MODE_NETWORKED) {
+        return report_not_supported_over_network("--stats");
+    }
+    bunny_core_t *core = ctx->core;
     bunny_db_tag_stat_list_t table_stats;
     bunny_core_result_t result = bunny_core_table_stats(core, &table_stats);
     if (result != BUNNY_CORE_OK) {
@@ -258,8 +335,12 @@ static void *worker_thread_fn(void *arg_ptr)
 
 #define BUNNY_CLI_MAX_DOWNLOAD_JOBS 8 /* matches bunny_core's own fixed download-slot table */
 
-int bunny_cli_cmd_download(bunny_core_t *core, const char *download_folder, int jobs)
+int bunny_cli_cmd_download(bunny_cli_context_t *ctx, const char *download_folder, int jobs)
 {
+    if (ctx->mode == BUNNY_CLI_MODE_NETWORKED) {
+        return report_not_supported_over_network("--download");
+    }
+    bunny_core_t *core = ctx->core;
     if (!download_folder) {
         bunny_cli_log(BUNNY_CLI_LOG_ERROR, "no download destination folder configured in the app yet");
         return 1;
@@ -330,21 +411,71 @@ static int drain_and_report(bunny_core_t *core, bunny_core_result_t enqueue_resu
     return 0;
 }
 
-int bunny_cli_cmd_favorite_add(bunny_core_t *core, int64_t post_id, int stars)
+/* Networked counterpart to drain_and_report above: enqueues one action via
+ * `method`/`path`/`body` (POST/DELETE /posts/{id}/favorite, POST
+ * /posts/{id}/vote -- each a 202 "queued" response, server/src/routes_queue.c),
+ * then drains the server's own action queue via POST /queue/process and
+ * reports its actions_failed count, same immediate-feedback contract as the
+ * standalone path. */
+static int drain_and_report_networked(bunny_cli_rest_client_t *rest, bunny_http_method_t method, const char *path, const cJSON *body, const char *action_description)
+{
+    bunny_cli_rest_result_t enqueue_result = bunny_cli_rest_request(rest, method, path, body, NULL);
+    if (enqueue_result != BUNNY_CLI_REST_OK) {
+        bunny_cli_log(BUNNY_CLI_LOG_ERROR, "failed to queue %s: %s", action_description, bunny_cli_rest_result_to_string(enqueue_result));
+        return 1;
+    }
+
+    cJSON *stats_json = NULL;
+    bunny_cli_rest_result_t process_result = bunny_cli_rest_request(rest, BUNNY_HTTP_POST, "/queue/process", NULL, &stats_json);
+    if (process_result != BUNNY_CLI_REST_OK) {
+        bunny_cli_log(BUNNY_CLI_LOG_ERROR, "failed to drain the action queue: %s", bunny_cli_rest_result_to_string(process_result));
+        cJSON_Delete(stats_json);
+        return 1;
+    }
+
+    int actions_failed = bunny_json_get_int_or(stats_json, "actions_failed", 0);
+    cJSON_Delete(stats_json);
+
+    if (actions_failed > 0) {
+        bunny_cli_log(BUNNY_CLI_LOG_ERROR, "%s failed (see the server's own log for the site's error)", action_description);
+        return 1;
+    }
+
+    bunny_cli_log(BUNNY_CLI_LOG_SUCCESS, "%s", action_description);
+    return 0;
+}
+
+int bunny_cli_cmd_favorite_add(bunny_cli_context_t *ctx, int64_t post_id, int stars)
 {
     char description[128];
     snprintf(description, sizeof(description), "favorited post %lld", (long long)post_id);
-    return drain_and_report(core, bunny_core_queue_favorite_add(core, post_id, stars), description);
+
+    if (ctx->mode == BUNNY_CLI_MODE_NETWORKED) {
+        char path[64];
+        snprintf(path, sizeof(path), "/posts/%lld/favorite", (long long)post_id);
+        cJSON *body = cJSON_CreateObject();
+        cJSON_AddNumberToObject(body, "stars", stars);
+        int exit_code = drain_and_report_networked(ctx->rest, BUNNY_HTTP_POST, path, body, description);
+        cJSON_Delete(body);
+        return exit_code;
+    }
+    return drain_and_report(ctx->core, bunny_core_queue_favorite_add(ctx->core, post_id, stars), description);
 }
 
-int bunny_cli_cmd_favorite_remove(bunny_core_t *core, int64_t post_id)
+int bunny_cli_cmd_favorite_remove(bunny_cli_context_t *ctx, int64_t post_id)
 {
     char description[128];
     snprintf(description, sizeof(description), "unfavorited post %lld", (long long)post_id);
-    return drain_and_report(core, bunny_core_queue_favorite_remove(core, post_id), description);
+
+    if (ctx->mode == BUNNY_CLI_MODE_NETWORKED) {
+        char path[64];
+        snprintf(path, sizeof(path), "/posts/%lld/favorite", (long long)post_id);
+        return drain_and_report_networked(ctx->rest, BUNNY_HTTP_DELETE, path, NULL, description);
+    }
+    return drain_and_report(ctx->core, bunny_core_queue_favorite_remove(ctx->core, post_id), description);
 }
 
-int bunny_cli_cmd_vote(bunny_core_t *core, int64_t post_id, int score)
+int bunny_cli_cmd_vote(bunny_cli_context_t *ctx, int64_t post_id, int score)
 {
     if (score < -1 || score > 1) {
         bunny_cli_log(BUNNY_CLI_LOG_ERROR, "vote score must be -1, 0, or 1 (got %d)", score);
@@ -353,7 +484,18 @@ int bunny_cli_cmd_vote(bunny_core_t *core, int64_t post_id, int score)
 
     char description[128];
     snprintf(description, sizeof(description), "voted %+d on post %lld", score, (long long)post_id);
-    return drain_and_report(core, bunny_core_queue_vote(core, post_id, score, false), description);
+
+    if (ctx->mode == BUNNY_CLI_MODE_NETWORKED) {
+        char path[64];
+        snprintf(path, sizeof(path), "/posts/%lld/vote", (long long)post_id);
+        cJSON *body = cJSON_CreateObject();
+        cJSON_AddNumberToObject(body, "score", score);
+        cJSON_AddBoolToObject(body, "no_unvote", false);
+        int exit_code = drain_and_report_networked(ctx->rest, BUNNY_HTTP_POST, path, body, description);
+        cJSON_Delete(body);
+        return exit_code;
+    }
+    return drain_and_report(ctx->core, bunny_core_queue_vote(ctx->core, post_id, score, false), description);
 }
 
 /* ---- --sync --------------------------------------------------------------- */
@@ -367,8 +509,12 @@ static void log_sync_stats(const bunny_core_sync_stats_t *stats)
     }
 }
 
-int bunny_cli_cmd_sync(bunny_core_t *core, int64_t search_id)
+int bunny_cli_cmd_sync(bunny_cli_context_t *ctx, int64_t search_id)
 {
+    if (ctx->mode == BUNNY_CLI_MODE_NETWORKED) {
+        return report_not_supported_over_network("--sync");
+    }
+    bunny_core_t *core = ctx->core;
     bunny_core_sync_stats_t stats;
     memset(&stats, 0, sizeof(stats));
 
@@ -385,28 +531,62 @@ int bunny_cli_cmd_sync(bunny_core_t *core, int64_t search_id)
 
 /* ---- --blacklist-* ---------------------------------------------------------- */
 
-int bunny_cli_cmd_blacklist_list(bunny_core_t *core, bunny_db_site_t site)
+static int cmd_blacklist_list_networked(bunny_cli_rest_client_t *rest, bunny_db_site_t site)
 {
+    char path[64];
+    snprintf(path, sizeof(path), "/blacklist?site=%s", bunny_db_site_to_string(site));
+
+    cJSON *response = NULL;
+    bunny_cli_rest_result_t result = bunny_cli_rest_request(rest, BUNNY_HTTP_GET, path, NULL, &response);
+    if (result != BUNNY_CLI_REST_OK) {
+        bunny_cli_log(BUNNY_CLI_LOG_ERROR, "failed to list the blacklist: %s", bunny_cli_rest_result_to_string(result));
+        cJSON_Delete(response);
+        return 1;
+    }
+
+    print_json(response);
+    cJSON_Delete(response);
+    return 0;
+}
+
+int bunny_cli_cmd_blacklist_list(bunny_cli_context_t *ctx, bunny_db_site_t site)
+{
+    if (ctx->mode == BUNNY_CLI_MODE_NETWORKED) {
+        return cmd_blacklist_list_networked(ctx->rest, site);
+    }
+
     bunny_db_string_list_t list;
-    bunny_core_result_t result = bunny_core_blacklist_list(core, site, &list);
+    bunny_core_result_t result = bunny_core_blacklist_list(ctx->core, site, &list);
     if (result != BUNNY_CORE_OK) {
         bunny_cli_log(BUNNY_CLI_LOG_ERROR, "failed to list the blacklist: %s", bunny_core_result_to_string(result));
         return 1;
     }
 
     cJSON *json = bunny_cli_string_list_to_json(&list);
-    char *printed = cJSON_Print(json);
-    printf("%s\n", printed);
+    print_json(json);
 
-    free(printed);
     cJSON_Delete(json);
     bunny_db_string_list_free(&list);
     return 0;
 }
 
-int bunny_cli_cmd_blacklist_add(bunny_core_t *core, bunny_db_site_t site, const char *tag)
+int bunny_cli_cmd_blacklist_add(bunny_cli_context_t *ctx, bunny_db_site_t site, const char *tag)
 {
-    bunny_core_result_t result = bunny_core_blacklist_add(core, site, tag);
+    if (ctx->mode == BUNNY_CLI_MODE_NETWORKED) {
+        cJSON *body = cJSON_CreateObject();
+        cJSON_AddStringToObject(body, "site", bunny_db_site_to_string(site));
+        cJSON_AddStringToObject(body, "tag", tag);
+        bunny_cli_rest_result_t result = bunny_cli_rest_request(ctx->rest, BUNNY_HTTP_POST, "/blacklist", body, NULL);
+        cJSON_Delete(body);
+        if (result != BUNNY_CLI_REST_OK) {
+            bunny_cli_log(BUNNY_CLI_LOG_ERROR, "failed to add blacklist rule \"%s\": %s", tag, bunny_cli_rest_result_to_string(result));
+            return 1;
+        }
+        bunny_cli_log(BUNNY_CLI_LOG_SUCCESS, "added blacklist rule \"%s\"", tag);
+        return 0;
+    }
+
+    bunny_core_result_t result = bunny_core_blacklist_add(ctx->core, site, tag);
     if (result != BUNNY_CORE_OK) {
         bunny_cli_log(BUNNY_CLI_LOG_ERROR, "failed to add blacklist rule \"%s\": %s", tag, bunny_core_result_to_string(result));
         return 1;
@@ -415,9 +595,24 @@ int bunny_cli_cmd_blacklist_add(bunny_core_t *core, bunny_db_site_t site, const 
     return 0;
 }
 
-int bunny_cli_cmd_blacklist_remove(bunny_core_t *core, bunny_db_site_t site, const char *tag)
+int bunny_cli_cmd_blacklist_remove(bunny_cli_context_t *ctx, bunny_db_site_t site, const char *tag)
 {
-    bunny_core_result_t result = bunny_core_blacklist_remove(core, site, tag);
+    if (ctx->mode == BUNNY_CLI_MODE_NETWORKED) {
+        char *encoded_tag = bunny_cli_rest_url_encode(tag);
+        char path[512];
+        snprintf(path, sizeof(path), "/blacklist?site=%s&tag=%s", bunny_db_site_to_string(site), encoded_tag ? encoded_tag : "");
+        free(encoded_tag);
+
+        bunny_cli_rest_result_t result = bunny_cli_rest_request(ctx->rest, BUNNY_HTTP_DELETE, path, NULL, NULL);
+        if (result != BUNNY_CLI_REST_OK) {
+            bunny_cli_log(BUNNY_CLI_LOG_ERROR, "failed to remove blacklist rule \"%s\": %s", tag, bunny_cli_rest_result_to_string(result));
+            return 1;
+        }
+        bunny_cli_log(BUNNY_CLI_LOG_SUCCESS, "removed blacklist rule \"%s\"", tag);
+        return 0;
+    }
+
+    bunny_core_result_t result = bunny_core_blacklist_remove(ctx->core, site, tag);
     if (result != BUNNY_CORE_OK) {
         bunny_cli_log(BUNNY_CLI_LOG_ERROR, "failed to remove blacklist rule \"%s\": %s", tag, bunny_core_result_to_string(result));
         return 1;
@@ -428,20 +623,22 @@ int bunny_cli_cmd_blacklist_remove(bunny_core_t *core, bunny_db_site_t site, con
 
 /* ---- --queue-list ------------------------------------------------------------ */
 
-int bunny_cli_cmd_queue_list(bunny_core_t *core)
+int bunny_cli_cmd_queue_list(bunny_cli_context_t *ctx)
 {
+    if (ctx->mode == BUNNY_CLI_MODE_NETWORKED) {
+        return report_not_supported_over_network("--queue-list");
+    }
+
     bunny_db_download_queue_list_t list;
-    bunny_core_result_t result = bunny_core_download_queue_list(core, &list);
+    bunny_core_result_t result = bunny_core_download_queue_list(ctx->core, &list);
     if (result != BUNNY_CORE_OK) {
         bunny_cli_log(BUNNY_CLI_LOG_ERROR, "failed to list the download queue: %s", bunny_core_result_to_string(result));
         return 1;
     }
 
     cJSON *json = bunny_cli_download_queue_list_to_json(&list);
-    char *printed = cJSON_Print(json);
-    printf("%s\n", printed);
+    print_json(json);
 
-    free(printed);
     cJSON_Delete(json);
     bunny_db_download_queue_list_free(&list);
     return 0;
