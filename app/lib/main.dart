@@ -109,6 +109,7 @@ Future<void> _runCliHandshake() async {
   final response = await buildCliHandshakeResponse(
     lockService: AppLockService(secretStore),
     settingsStore: RepositorySettingsStore(secretStore),
+    downloadSettingsStore: const DownloadSettingsStore(),
     suppliedSecret: suppliedSecret,
   );
   stdout.writeln(jsonEncode(response));

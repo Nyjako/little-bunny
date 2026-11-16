@@ -1,5 +1,6 @@
 import 'repository/bunny_repository_factory.dart';
 import 'settings/app_lock_service.dart';
+import 'settings/download_settings_store.dart';
 import 'settings/repository_settings_store.dart';
 
 /// Pure logic behind the `--cli-handshake` entry point `main()` branches to
@@ -23,26 +24,55 @@ import 'settings/repository_settings_store.dart';
 ///   more than that it's locked.
 /// - `{'ok': true, 'mode': 'none'}` -- unlocked (or app-lock is off), but no
 ///   repository has been configured yet (first launch -- [settingsStore]'s
-///   own `load()` returned null).
-/// - `{'ok': true, 'mode': 'standalone', 'dbPath': ..., 'userAgent': ...}`
+///   own `load()` returned null). No [downloadDestinationFolder] either --
+///   there's no meaningful "the app's download folder" before setup.
+/// - `{'ok': true, 'mode': 'standalone', 'dbPath': ..., 'userAgent': ...,
+///   'downloadDestinationFolder': ...}`
 /// - `{'ok': true, 'mode': 'networked', 'serverBaseUrl': ..., 'bearerToken':
-///   ..., 'certFingerprint': ...}`
-Future<Map<String, Object?>> buildCliHandshakeResponse({required AppLockService lockService, required RepositorySettingsStore settingsStore, required String suppliedSecret}) async {
+///   ..., 'certFingerprint': ..., 'downloadDestinationFolder': ...}`
+///
+/// [downloadDestinationFolder] (M85) is [DownloadSettingsStore
+/// .loadDestinationFolder]'s own value -- a *separate* setting from
+/// [settingsStore]'s repository config, but one `bunny_cli --download`
+/// equally needs, to write files to the exact folder the app itself would
+/// (same `DownloadManager._destinationFor` scheme either side builds,
+/// ported to C as bunny_cli's own destination.c). Included alongside either
+/// mode rather than nested under it, since this setting is mode-independent.
+/// May itself be `null` in the rare case [DownloadSettingsStore
+/// .loadDestinationFolder]'s own OS-Downloads-directory fallback also
+/// fails -- bunny_cli reports that clearly rather than guessing a path.
+Future<Map<String, Object?>> buildCliHandshakeResponse({
+  required AppLockService lockService,
+  required RepositorySettingsStore settingsStore,
+  required DownloadSettingsStore downloadSettingsStore,
+  required String suppliedSecret,
+}) async {
   final locked = await lockService.isEnabled();
   if (locked && !await lockService.verify(suppliedSecret)) {
     return {'ok': false, 'error': 'locked'};
   }
 
   final config = await settingsStore.load();
+  if (config == null) {
+    return {'ok': true, 'mode': 'none'};
+  }
+
+  final downloadDestinationFolder = await downloadSettingsStore.loadDestinationFolder();
   return switch (config) {
-    null => {'ok': true, 'mode': 'none'},
-    StandaloneConfig(:final dbPath, :final userAgent) => {'ok': true, 'mode': 'standalone', 'dbPath': dbPath, 'userAgent': userAgent},
+    StandaloneConfig(:final dbPath, :final userAgent) => {
+      'ok': true,
+      'mode': 'standalone',
+      'dbPath': dbPath,
+      'userAgent': userAgent,
+      'downloadDestinationFolder': downloadDestinationFolder,
+    },
     NetworkedConfig(:final serverBaseUrl, :final bearerToken, :final certificateSha256Fingerprint) => {
       'ok': true,
       'mode': 'networked',
       'serverBaseUrl': serverBaseUrl.toString(),
       'bearerToken': bearerToken,
       'certFingerprint': certificateSha256Fingerprint,
+      'downloadDestinationFolder': downloadDestinationFolder,
     },
   };
 }
