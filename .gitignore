@@ -1,5 +1,6 @@
-# Never commit — hardcodes a GPG passphrase, exists only for local commit signing
+# Never commit — hardcodes/handles a GPG passphrase, exists only for local commit signing
 scripts/git-commit.sh
+scripts/gpg-passphrase-wrapper.sh
 
 # Never commit — holds a real deployed server's bearer token/cert fingerprint
 # for local manual testing against deploy/dump_server_info.sh's output
