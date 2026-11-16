@@ -31,3 +31,11 @@ add_test(NAME bunny_cli_test_rest_client COMMAND bunny_cli_test_rest_client)
 add_executable(bunny_cli_test_download_workers test_download_workers.c)
 target_link_libraries(bunny_cli_test_download_workers PRIVATE bunny_cli_lib bunny_test_http_server unity::framework)
 add_test(NAME bunny_cli_test_download_workers COMMAND bunny_cli_test_download_workers)
+
+# bunny_cli_parse_download_spec's own id-extraction/validation logic, in
+# isolation -- the real pool:/search: resolution (a live search, a saved-
+# search lookup) needs a real core/rest client and is covered by manual
+# end-to-end verification instead (see the PR description).
+add_executable(bunny_cli_test_download_specs test_download_specs.c)
+target_link_libraries(bunny_cli_test_download_specs PRIVATE bunny_cli_lib unity::framework)
+add_test(NAME bunny_cli_test_download_specs COMMAND bunny_cli_test_download_specs)

@@ -82,6 +82,17 @@ static char *dup_optional_string_field(cJSON *json, const char *key)
     return cJSON_IsString(field) ? dup_string(field->valuestring) : NULL;
 }
 
+/* Same "absent/wrong type = a safe default, not a protocol error" leniency
+ * as dup_optional_string_field -- an app build from before
+ * auto_favorite_on_download/auto_upvote_on_download existed simply never
+ * applies them, same as a missing download_queue_db_path just disables
+ * --download/--queue-list rather than failing the whole handshake. */
+static bool bool_field_or_false(cJSON *json, const char *key)
+{
+    cJSON *field = cJSON_GetObjectItemCaseSensitive(json, key);
+    return cJSON_IsTrue(field);
+}
+
 /* Parses one handshake response line into *out -- see handshake.h's own doc
  * comment on bunny_cli_handshake_payload_t for the field/mode shapes, and
  * the top-level plan for the exact JSON contract this mirrors
@@ -126,6 +137,8 @@ static bunny_cli_handshake_result_t parse_response_line(const char *line, bunny_
             out->db_path = dup_string(db_path->valuestring);
             out->user_agent = dup_string(user_agent->valuestring);
             out->download_destination_folder = dup_optional_string_field(json, "downloadDestinationFolder");
+            out->auto_favorite_on_download = bool_field_or_false(json, "autoFavoriteOnDownload");
+            out->auto_upvote_on_download = bool_field_or_false(json, "autoUpvoteOnDownload");
         }
     } else if (strcmp(mode->valuestring, "networked") == 0) {
         cJSON *server_base_url = cJSON_GetObjectItemCaseSensitive(json, "serverBaseUrl");
@@ -141,6 +154,8 @@ static bunny_cli_handshake_result_t parse_response_line(const char *line, bunny_
             out->download_queue_db_path = dup_optional_string_field(json, "downloadQueueDbPath");
             out->download_queue_user_agent = dup_optional_string_field(json, "downloadQueueUserAgent");
             out->download_destination_folder = dup_optional_string_field(json, "downloadDestinationFolder");
+            out->auto_favorite_on_download = bool_field_or_false(json, "autoFavoriteOnDownload");
+            out->auto_upvote_on_download = bool_field_or_false(json, "autoUpvoteOnDownload");
         }
     } else {
         result = BUNNY_CLI_HANDSHAKE_PROTOCOL_ERROR;

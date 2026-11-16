@@ -27,10 +27,22 @@ import 'settings/repository_settings_store.dart';
 ///   own `load()` returned null). No [downloadDestinationFolder] either --
 ///   there's no meaningful "the app's download folder" before setup.
 /// - `{'ok': true, 'mode': 'standalone', 'dbPath': ..., 'userAgent': ...,
+///   'autoFavoriteOnDownload': ..., 'autoUpvoteOnDownload': ...,
 ///   'downloadDestinationFolder': ...}`
 /// - `{'ok': true, 'mode': 'networked', 'serverBaseUrl': ..., 'bearerToken':
 ///   ..., 'certFingerprint': ..., 'downloadQueueDbPath': ...,
-///   'downloadQueueUserAgent': ..., 'downloadDestinationFolder': ...}`
+///   'downloadQueueUserAgent': ..., 'autoFavoriteOnDownload': ...,
+///   'autoUpvoteOnDownload': ..., 'downloadDestinationFolder': ...}`
+///
+/// [autoFavoriteOnDownload]/[autoUpvoteOnDownload] (M87) are
+/// [DownloadSettingsStore.loadAutoFavoriteOnDownload]/
+/// [DownloadSettingsStore.loadAutoUpvoteOnDownload]'s own values -- the
+/// app's global "auto favorite/upvote on download" toggles, mode-
+/// independent same as [downloadDestinationFolder], and unrelated to a
+/// saved search's own *per-search* auto-favorite/upvote (applied at sync
+/// time, not download time). `bunny_cli --download` applies them to every
+/// post it downloads, same as [DownloadQueueService]'s own worker does for
+/// the app itself.
 ///
 /// [NetworkedConfig.downloadQueueDbPath]/[NetworkedConfig
 /// .downloadQueueUserAgent] (M86) back [HttpBunnyRepository]'s own small
@@ -68,12 +80,16 @@ Future<Map<String, Object?>> buildCliHandshakeResponse({
   }
 
   final downloadDestinationFolder = await downloadSettingsStore.loadDestinationFolder();
+  final autoFavoriteOnDownload = await downloadSettingsStore.loadAutoFavoriteOnDownload();
+  final autoUpvoteOnDownload = await downloadSettingsStore.loadAutoUpvoteOnDownload();
   return switch (config) {
     StandaloneConfig(:final dbPath, :final userAgent) => {
       'ok': true,
       'mode': 'standalone',
       'dbPath': dbPath,
       'userAgent': userAgent,
+      'autoFavoriteOnDownload': autoFavoriteOnDownload,
+      'autoUpvoteOnDownload': autoUpvoteOnDownload,
       'downloadDestinationFolder': downloadDestinationFolder,
     },
     NetworkedConfig(:final serverBaseUrl, :final bearerToken, :final certificateSha256Fingerprint, :final downloadQueueDbPath, :final downloadQueueUserAgent) => {
@@ -84,6 +100,8 @@ Future<Map<String, Object?>> buildCliHandshakeResponse({
       'certFingerprint': certificateSha256Fingerprint,
       'downloadQueueDbPath': downloadQueueDbPath,
       'downloadQueueUserAgent': downloadQueueUserAgent,
+      'autoFavoriteOnDownload': autoFavoriteOnDownload,
+      'autoUpvoteOnDownload': autoUpvoteOnDownload,
       'downloadDestinationFolder': downloadDestinationFolder,
     },
   };

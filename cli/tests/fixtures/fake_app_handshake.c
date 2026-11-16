@@ -32,6 +32,14 @@
  *                            omits downloadQueueDbPath/downloadQueueUserAgent
  *                            entirely -- an app build from before those
  *                            fields existed.
+ *   BUNNY_CLI_TEST_AUTO_FAVORITE / BUNNY_CLI_TEST_AUTO_UPVOTE  if set to
+ *                            anything, standalone/networked responses
+ *                            report autoFavoriteOnDownload/
+ *                            autoUpvoteOnDownload as true instead of
+ *                            omitting them (the default -- an app build
+ *                            from before those fields existed, or the
+ *                            setting is simply off, both parse the same
+ *                            way: false).
  */
 #include <stdio.h>
 #include <stdlib.h>
@@ -93,15 +101,17 @@ int main(void)
     }
 
     const char *download_folder_json = getenv("BUNNY_CLI_TEST_NO_DOWNLOAD_FOLDER") ? "null" : "\"/fake/downloads\"";
+    char auto_action_fields[96];
+    snprintf(auto_action_fields, sizeof(auto_action_fields), "\"autoFavoriteOnDownload\":%s,\"autoUpvoteOnDownload\":%s,", getenv("BUNNY_CLI_TEST_AUTO_FAVORITE") ? "true" : "false", getenv("BUNNY_CLI_TEST_AUTO_UPVOTE") ? "true" : "false");
 
-    char response[512];
+    char response[640];
     if (strcmp(mode, "none") == 0) {
         strcpy(response, "{\"ok\":true,\"mode\":\"none\"}");
     } else if (strcmp(mode, "networked") == 0) {
         const char *queue_db_fields = getenv("BUNNY_CLI_TEST_NO_QUEUE_DB") ? "" : "\"downloadQueueDbPath\":\"/fake/downloads.db\",\"downloadQueueUserAgent\":\"LittleBunny/1.0.0\",";
-        snprintf(response, sizeof(response), "{\"ok\":true,\"mode\":\"networked\",\"serverBaseUrl\":\"https://bunny.example:9443\",\"bearerToken\":\"test-token\",\"certFingerprint\":\"abc123\",%s\"downloadDestinationFolder\":%s}", queue_db_fields, download_folder_json);
+        snprintf(response, sizeof(response), "{\"ok\":true,\"mode\":\"networked\",\"serverBaseUrl\":\"https://bunny.example:9443\",\"bearerToken\":\"test-token\",\"certFingerprint\":\"abc123\",%s%s\"downloadDestinationFolder\":%s}", queue_db_fields, auto_action_fields, download_folder_json);
     } else {
-        snprintf(response, sizeof(response), "{\"ok\":true,\"mode\":\"standalone\",\"dbPath\":\"/fake/bunny.db\",\"userAgent\":\"LittleBunny/1.0.0\",\"downloadDestinationFolder\":%s}", download_folder_json);
+        snprintf(response, sizeof(response), "{\"ok\":true,\"mode\":\"standalone\",\"dbPath\":\"/fake/bunny.db\",\"userAgent\":\"LittleBunny/1.0.0\",%s\"downloadDestinationFolder\":%s}", auto_action_fields, download_folder_json);
     }
 
     if (behavior && strcmp(behavior, "no_newline") == 0) {

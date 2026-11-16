@@ -20,7 +20,12 @@ static void print_usage(const char *argv0)
     printf("  --search <e621|inkbunny> <query> [--page N]\n");
     printf("                                    Run a live search, dumping the posts as JSON\n");
     printf("  --pool <pool_id>                  Dump an e621 pool's own metadata as JSON\n");
-    printf("  --download [--jobs N]             Drain the whole download queue (default 3 workers)\n");
+    printf("  --download [--jobs N] [--site <e621|inkbunny>] [<spec> ...]\n");
+    printf("                                    Drain the download queue (default 3 workers); each\n");
+    printf("                                    optional <spec> is \"pool:<id>\", \"search:<id>\", or a\n");
+    printf("                                    plain tag query (under --site, e621 if omitted) --\n");
+    printf("                                    every post it finds is queued first, then drained\n");
+    printf("                                    along with everything already queued\n");
     printf("  --favorite <post_id> [--stars N]  Favorite a post (N is Inkbunny's 1-3 tier, ignored on e621)\n");
     printf("  --unfavorite <post_id>            Unfavorite a post\n");
     printf("  --vote <post_id> <score>          Vote on a post (score: -1, 0, or 1; e621 only)\n");
@@ -93,6 +98,26 @@ static bool parse_site(const char *s, bunny_db_site_t *out)
         return true;
     }
     return false;
+}
+
+/* Collects every argv token after --download's own index as a spec string
+ * (see commands.h's own doc comment on bunny_cli_cmd_download for what a
+ * spec is), skipping --jobs/--site/--unlock and their own value token --
+ * both are global flags findable from anywhere in argv via find_flag_value,
+ * not just after --download, so they must never be mistaken for a spec
+ * themselves. `out_specs` must have room for at least argc entries (always
+ * enough). Returns how many specs it found. */
+static size_t collect_download_specs(int argc, char **argv, int download_index, const char **out_specs)
+{
+    size_t count = 0;
+    for (int i = download_index + 1; i < argc; i++) {
+        if (strcmp(argv[i], "--jobs") == 0 || strcmp(argv[i], "--site") == 0 || strcmp(argv[i], "--unlock") == 0) {
+            i++; /* that flag's own value isn't a spec either */
+            continue;
+        }
+        out_specs[count++] = argv[i];
+    }
+    return count;
 }
 
 /* Runs the handshake once with `supplied_secret`; on BUNNY_CLI_HANDSHAKE_LOCKED
@@ -192,7 +217,8 @@ int main(int argc, char **argv)
     int blacklist_add_index = find_flag_index(argc, argv, "--blacklist-add");
     int blacklist_remove_index = find_flag_index(argc, argv, "--blacklist-remove");
     bool wants_queue_list = has_flag(argc, argv, "--queue-list");
-    bool wants_download = has_flag(argc, argv, "--download");
+    int download_index = find_flag_index(argc, argv, "--download");
+    bool wants_download = download_index >= 0;
     bool wants_stats = has_flag(argc, argv, "--stats");
 
     bool has_command = search_index >= 0 || pool_index >= 0 || favorite_index >= 0 || unfavorite_index >= 0 || vote_index >= 0 || wants_sync || blacklist_list_index >= 0 || blacklist_add_index >= 0 || blacklist_remove_index >= 0 || wants_queue_list || wants_download || wants_stats;
@@ -215,6 +241,8 @@ int main(int argc, char **argv)
      * reports that itself (see commands.h). */
     bunny_cli_context_t ctx;
     memset(&ctx, 0, sizeof(ctx));
+    ctx.auto_favorite_on_download = payload.auto_favorite_on_download;
+    ctx.auto_upvote_on_download = payload.auto_upvote_on_download;
 
     bunny_core_t *core = NULL;
     bunny_cli_rest_client_t rest_client;
@@ -285,7 +313,17 @@ int main(int argc, char **argv)
     } else if (wants_download) {
         const char *jobs_str = find_flag_value(argc, argv, "--jobs");
         int jobs = jobs_str ? (int)strtol(jobs_str, NULL, 10) : 3;
-        exit_code = bunny_cli_cmd_download(&ctx, payload.download_destination_folder, jobs);
+
+        const char *site_str = find_flag_value(argc, argv, "--site");
+        bunny_db_site_t spec_site = BUNNY_DB_SITE_E621;
+        if (site_str && !parse_site(site_str, &spec_site)) {
+            bunny_cli_log(BUNNY_CLI_LOG_ERROR, "unknown site \"%s\", expected e621 or inkbunny", site_str);
+        } else {
+            const char **specs = malloc(sizeof(char *) * (size_t)argc);
+            size_t spec_count = collect_download_specs(argc, argv, download_index, specs);
+            exit_code = bunny_cli_cmd_download(&ctx, payload.download_destination_folder, jobs, spec_site, specs, spec_count);
+            free(specs);
+        }
     } else if (favorite_index >= 0) {
         if (favorite_index + 1 >= argc) {
             bunny_cli_log(BUNNY_CLI_LOG_ERROR, "--favorite needs <post_id>");
