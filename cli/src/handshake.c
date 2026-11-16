@@ -48,6 +48,7 @@ void bunny_cli_handshake_payload_free(bunny_cli_handshake_payload_t *payload)
     free(payload->server_base_url);
     free(payload->bearer_token);
     free(payload->cert_fingerprint);
+    free(payload->download_destination_folder);
     memset(payload, 0, sizeof(*payload));
 }
 
@@ -66,6 +67,17 @@ const char *bunny_cli_handshake_result_to_string(bunny_cli_handshake_result_t re
             return "the app did not respond with a valid handshake reply";
     }
     return "unknown handshake error";
+}
+
+/* Reads `key` from `json` as an owned copy if it's a string, or NULL if
+ * it's absent/JSON null -- for a field like downloadDestinationFolder that
+ * is legitimately allowed to be missing, unlike the required per-mode
+ * fields parse_response_line already treats as a hard protocol error when
+ * they're not real strings. */
+static char *dup_optional_string_field(cJSON *json, const char *key)
+{
+    cJSON *field = cJSON_GetObjectItemCaseSensitive(json, key);
+    return cJSON_IsString(field) ? dup_string(field->valuestring) : NULL;
 }
 
 /* Parses one handshake response line into *out -- see handshake.h's own doc
@@ -111,6 +123,7 @@ static bunny_cli_handshake_result_t parse_response_line(const char *line, bunny_
             out->mode = BUNNY_CLI_MODE_STANDALONE;
             out->db_path = dup_string(db_path->valuestring);
             out->user_agent = dup_string(user_agent->valuestring);
+            out->download_destination_folder = dup_optional_string_field(json, "downloadDestinationFolder");
         }
     } else if (strcmp(mode->valuestring, "networked") == 0) {
         cJSON *server_base_url = cJSON_GetObjectItemCaseSensitive(json, "serverBaseUrl");
@@ -123,6 +136,7 @@ static bunny_cli_handshake_result_t parse_response_line(const char *line, bunny_
             out->server_base_url = dup_string(server_base_url->valuestring);
             out->bearer_token = dup_string(bearer_token->valuestring);
             out->cert_fingerprint = dup_string(cert_fingerprint->valuestring);
+            out->download_destination_folder = dup_optional_string_field(json, "downloadDestinationFolder");
         }
     } else {
         result = BUNNY_CLI_HANDSHAKE_PROTOCOL_ERROR;

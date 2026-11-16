@@ -35,6 +35,7 @@ void setUp(void)
     unset_env("BUNNY_CLI_TEST_SECRET");
     unset_env("BUNNY_CLI_TEST_MODE");
     unset_env("BUNNY_CLI_TEST_BEHAVIOR");
+    unset_env("BUNNY_CLI_TEST_NO_DOWNLOAD_FOLDER");
 }
 
 void tearDown(void)
@@ -49,10 +50,24 @@ void test_unlocked_standalone_round_trips_the_right_payload(void)
     TEST_ASSERT_EQUAL(BUNNY_CLI_MODE_STANDALONE, payload.mode);
     TEST_ASSERT_EQUAL_STRING("/fake/bunny.db", payload.db_path);
     TEST_ASSERT_EQUAL_STRING("LittleBunny/1.0.0", payload.user_agent);
+    TEST_ASSERT_EQUAL_STRING("/fake/downloads", payload.download_destination_folder);
     TEST_ASSERT_NULL(payload.server_base_url);
 
     bunny_cli_handshake_payload_free(&payload);
     TEST_ASSERT_NULL(payload.db_path);
+}
+
+void test_a_null_download_destination_folder_is_reported_as_null_not_a_protocol_error(void)
+{
+    set_env("BUNNY_CLI_TEST_NO_DOWNLOAD_FOLDER", "1");
+
+    bunny_cli_handshake_payload_t payload;
+    bunny_cli_handshake_result_t result = bunny_cli_handshake_run(FAKE_APP_HANDSHAKE_PATH, NULL, &payload);
+
+    TEST_ASSERT_EQUAL(BUNNY_CLI_HANDSHAKE_OK, result);
+    TEST_ASSERT_EQUAL(BUNNY_CLI_MODE_STANDALONE, payload.mode);
+    TEST_ASSERT_NULL(payload.download_destination_folder);
+    bunny_cli_handshake_payload_free(&payload);
 }
 
 void test_networked_mode_round_trips_server_url_bearer_token_and_cert_fingerprint(void)
@@ -67,6 +82,7 @@ void test_networked_mode_round_trips_server_url_bearer_token_and_cert_fingerprin
     TEST_ASSERT_EQUAL_STRING("https://bunny.example:9443", payload.server_base_url);
     TEST_ASSERT_EQUAL_STRING("test-token", payload.bearer_token);
     TEST_ASSERT_EQUAL_STRING("abc123", payload.cert_fingerprint);
+    TEST_ASSERT_EQUAL_STRING("/fake/downloads", payload.download_destination_folder);
     TEST_ASSERT_NULL(payload.db_path);
 
     bunny_cli_handshake_payload_free(&payload);
@@ -213,6 +229,7 @@ int main(void)
 {
     UNITY_BEGIN();
     RUN_TEST(test_unlocked_standalone_round_trips_the_right_payload);
+    RUN_TEST(test_a_null_download_destination_folder_is_reported_as_null_not_a_protocol_error);
     RUN_TEST(test_networked_mode_round_trips_server_url_bearer_token_and_cert_fingerprint);
     RUN_TEST(test_no_repository_configured_yet_reports_mode_none);
     RUN_TEST(test_correct_secret_unlocks_it);

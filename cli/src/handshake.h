@@ -29,8 +29,9 @@ typedef enum
     BUNNY_CLI_MODE_NETWORKED,
 } bunny_cli_mode_t;
 
-/* Only the fields matching `mode` are non-NULL; every string here is owned
- * by this struct -- free with bunny_cli_handshake_payload_free. */
+/* Only the fields matching `mode` are non-NULL (download_destination_folder
+ * is the one exception -- see its own comment below); every string here is
+ * owned by this struct -- free with bunny_cli_handshake_payload_free. */
 typedef struct
 {
     bunny_cli_mode_t mode;
@@ -39,6 +40,15 @@ typedef struct
     char *server_base_url;  /* BUNNY_CLI_MODE_NETWORKED only */
     char *bearer_token;     /* BUNNY_CLI_MODE_NETWORKED only */
     char *cert_fingerprint; /* BUNNY_CLI_MODE_NETWORKED only */
+    /* Present for both BUNNY_CLI_MODE_STANDALONE and BUNNY_CLI_MODE_NETWORKED
+     * (never for BUNNY_CLI_MODE_NONE) -- the app's DownloadSettingsStore
+     * setting, a separate concern from the repository config above, but one
+     * `--download` needs just as much to write files to the exact folder
+     * the app itself would (see cli/src/destination.c). May still be NULL
+     * even then, in the rare case the app's own OS-Downloads-directory
+     * fallback also failed -- callers must check for that, not assume it's
+     * always set alongside a real mode. */
+    char *download_destination_folder;
 } bunny_cli_handshake_payload_t;
 
 /* Safe to call on a zero-initialized or already-freed payload. Zeroes

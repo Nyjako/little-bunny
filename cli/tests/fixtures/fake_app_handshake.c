@@ -23,6 +23,11 @@
  *                            own native plugins printing banner/diagnostic
  *                            text to stdout ahead of the app's own
  *                            response, confirmed live with media_kit/fvp)
+ *   BUNNY_CLI_TEST_NO_DOWNLOAD_FOLDER  if set to anything, standalone/
+ *                            networked responses report
+ *                            "downloadDestinationFolder":null instead of a
+ *                            real path -- the rare case the app's own
+ *                            OS-Downloads-directory fallback failed too.
  */
 #include <stdio.h>
 #include <stdlib.h>
@@ -83,13 +88,15 @@ int main(void)
         mode = "standalone";
     }
 
+    const char *download_folder_json = getenv("BUNNY_CLI_TEST_NO_DOWNLOAD_FOLDER") ? "null" : "\"/fake/downloads\"";
+
     char response[512];
     if (strcmp(mode, "none") == 0) {
         strcpy(response, "{\"ok\":true,\"mode\":\"none\"}");
     } else if (strcmp(mode, "networked") == 0) {
-        strcpy(response, "{\"ok\":true,\"mode\":\"networked\",\"serverBaseUrl\":\"https://bunny.example:9443\",\"bearerToken\":\"test-token\",\"certFingerprint\":\"abc123\"}");
+        snprintf(response, sizeof(response), "{\"ok\":true,\"mode\":\"networked\",\"serverBaseUrl\":\"https://bunny.example:9443\",\"bearerToken\":\"test-token\",\"certFingerprint\":\"abc123\",\"downloadDestinationFolder\":%s}", download_folder_json);
     } else {
-        strcpy(response, "{\"ok\":true,\"mode\":\"standalone\",\"dbPath\":\"/fake/bunny.db\",\"userAgent\":\"LittleBunny/1.0.0\"}");
+        snprintf(response, sizeof(response), "{\"ok\":true,\"mode\":\"standalone\",\"dbPath\":\"/fake/bunny.db\",\"userAgent\":\"LittleBunny/1.0.0\",\"downloadDestinationFolder\":%s}", download_folder_json);
     }
 
     if (behavior && strcmp(behavior, "no_newline") == 0) {
