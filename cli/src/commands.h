@@ -7,6 +7,8 @@
 #include <bunny_core/core.h>
 #include <bunny_db/types.h>
 
+#include <stdbool.h>
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -32,13 +34,46 @@ extern "C" {
  * used for everything that actually needs the server (search, pool,
  * favorite/vote, blacklist, sync, and resolving a post's own metadata
  * before downloading it, since the local queue db above only ever stores
- * post ids, never post data). */
+ * post ids, never post data).
+ *
+ * `auto_favorite_on_download`/`auto_upvote_on_download` mirror the app's
+ * own global Settings toggles of the same name (DownloadSettingsStore) --
+ * reported by the handshake for both modes, default false if the app
+ * build doesn't report them. bunny_cli_cmd_download applies them to every
+ * post it downloads, exactly like DownloadQueueService's own worker does
+ * (queues the action only, never drains per item -- see that function's
+ * own doc comment for why), the same as the app itself. */
 typedef struct
 {
     bunny_cli_mode_t mode;
     bunny_core_t *core;            /* the local download-queue db, both modes (see above) -- may be NULL in networked mode */
     bunny_cli_rest_client_t *rest; /* BUNNY_CLI_MODE_NETWORKED only */
+    bool auto_favorite_on_download;
+    bool auto_upvote_on_download;
 } bunny_cli_context_t;
+
+/* A single `--download` spec argument, parsed from its raw CLI text (e.g.
+ * "pool:115522", "search:12", or a bare tag query like "female standing")
+ * -- see bunny_cli_cmd_download's own doc comment for what each kind
+ * resolves to. Exposed (rather than kept static in commands.c) purely so
+ * the parsing itself -- id extraction, malformed input -- has direct unit
+ * test coverage without needing a real core/rest client. */
+typedef enum
+{
+    BUNNY_CLI_SPEC_POOL,   /* "pool:<id>" -- e621 only */
+    BUNNY_CLI_SPEC_SEARCH, /* "search:<id>" -- one of the app's own saved searches, by id */
+    BUNNY_CLI_SPEC_TAGS,   /* anything else -- a plain ad-hoc tag query */
+} bunny_cli_spec_kind_t;
+
+/* Parses `spec`'s kind and, for BUNNY_CLI_SPEC_POOL/BUNNY_CLI_SPEC_SEARCH,
+ * the id that follows the prefix. Returns false for a malformed
+ * "pool:"/"search:" prefix (no id, a non-numeric id, or id <= 0) -- a
+ * caller should report that as a clear per-spec error, not silently fall
+ * back to treating it as a tag query (a typo'd id prefix almost certainly
+ * wasn't meant as a literal tag). Any string not starting with "pool:" or
+ * "search:" is always BUNNY_CLI_SPEC_TAGS and always returns true;
+ * *out_id is untouched for that case. */
+bool bunny_cli_parse_download_spec(const char *spec, bunny_cli_spec_kind_t *out_kind, int64_t *out_id);
 
 /* Every bunny_cli_cmd_* function returns a process exit code (0 success,
  * non-zero failure) and does its own logging via log.h -- main.c just
@@ -80,10 +115,47 @@ int bunny_cli_cmd_stats(bunny_cli_context_t *ctx);
  * a clear error rather than guessing a location. In networked mode with no
  * local queue db available (ctx->core is NULL -- an app build from before
  * the handshake reported one), fails with a clear error instead of
- * guessing. This is exactly the command that lets `bunny_cli` continue a
- * stalled download queue with the app not running at all, in either
- * mode. */
-int bunny_cli_cmd_download(bunny_cli_context_t *ctx, const char *download_folder, int jobs);
+ * guessing.
+ *
+ * `specs`/`spec_count` (optional -- 0/NULL for the plain "just drain
+ * what's already queued" behavior above) are resolved and queued *before*
+ * draining starts, so they're included in the same drain pass -- each one
+ * is one of (bunny_cli_parse_download_spec's own doc comment):
+ * - "pool:<id>" -- an e621 pool: its real name is fetched
+ *   (bunny_core_fetch_pool/GET /pools/{id}), then every one of its posts is
+ *   found via a live, fully-paginated tag search for that literal string
+ *   (e621 supports "pool:<id>" as a search tag -- there is no separate
+ *   "list a pool's posts" API/bunny_core call) and queued as a pool
+ *   download (sequential 1-indexed page numbers in fetch order, same
+ *   convention PostGridScreen._massDownload/_poolPageByPostId uses on the
+ *   Dart side) so destination.h files them under a pool-named folder.
+ * - "search:<id>" -- one of the app's own saved searches: its site/query/
+ *   label are looked up (bunny_core_search_list/GET /searches, by id --
+ *   there is no single-search GET), then every post *already cached* for
+ *   it is read back (bunny_core_search_list_posts/GET
+ *   /searches/{id}/posts, fully paginated -- a saved search's own posts
+ *   are never re-fetched live here, same as SearchesScreen
+ *   ._downloadSelectedSearches's own "download selected searches" action).
+ *   If that search's own query itself starts with "pool:" (a pool-tracking
+ *   search, `create_pool_search_dialog.dart`'s own convention), this
+ *   queues a pool download too, using the search's own label as the pool
+ *   name (not a fresh fetch_pool call) -- exactly matching
+ *   _downloadSelectedSearches's own `search.isPool` branch.
+ * - anything else -- a plain, live, fully-paginated tag search under
+ *   `spec_site` (not per-spec -- one site applies to every plain-tag spec
+ *   in this call; `--site` on the command line, e621 if omitted).
+ *
+ * Every live/cached fetch above pages until an empty page comes back, no
+ * cap -- same exhaustive "download the entire thing" behavior
+ * PostGridScreen._selectEntireSearch/SearchesScreen
+ * ._downloadSelectedSearches already use, not a capped preview. A post
+ * already active (queued/downloading) in the queue, or resolved by more
+ * than one spec in this same call, is only ever added once -- same dedup
+ * reasoning as DownloadQueueService._enqueueAll's own activeIds set. A
+ * spec that fails outright (a bad pool/search id, a network error) is
+ * reported and skipped -- it never aborts the other specs or the drain
+ * that follows. */
+int bunny_cli_cmd_download(bunny_cli_context_t *ctx, const char *download_folder, int jobs, bunny_db_site_t spec_site, const char **specs, size_t spec_count);
 
 /* Queues a favorite-add for `post_id` (stars is Inkbunny's 1-3 tier, or -1
  * for e621's plain favorite/any Inkbunny default) and immediately drains

@@ -5,6 +5,9 @@
 #include <openssl/ssl.h>
 #include <openssl/x509.h>
 
+#include <goblin/hex.h>
+#include <goblin/url.h>
+
 #include <ctype.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -53,9 +56,7 @@ bool bunny_cli_rest_fingerprint_matches(const unsigned char *digest, size_t dige
         return false;
     }
     char actual_hex[65];
-    for (size_t i = 0; i < digest_len; i++) {
-        snprintf(actual_hex + i * 2, 3, "%02x", digest[i]);
-    }
+    goblin_bytes_to_hex(digest, digest_len, actual_hex);
     char normalized_expected[65];
     normalize_fingerprint_hex(expected_hex, normalized_expected);
     return strcmp(actual_hex, normalized_expected) == 0;
@@ -155,9 +156,16 @@ static bunny_http_result_t pinned_curl_send(void *user_data, const bunny_http_re
         return BUNNY_HTTP_ERR_INVALID_ARG;
     }
 
-    pinned_transport_data_t *data = (pinned_transport_data_t *)user_data;
-    strncpy(g_pinned_fingerprint_hex, data->fingerprint_hex, sizeof(g_pinned_fingerprint_hex) - 1);
-    g_pinned_fingerprint_hex[sizeof(g_pinned_fingerprint_hex) - 1] = '\0';
+    /* g_pinned_fingerprint_hex is written once, in bunny_cli_rest_client_init
+     * (single-threaded, before anything that could call this concurrently
+     * -- bunny_cli_cmd_download's own worker pool now makes concurrent
+     * calls through this exact client real, not just theoretical), and
+     * never again here -- seeing read-only data copied from `user_data`
+     * into it on every single request used to be harmless only because
+     * one process ever has exactly one client/fingerprint value, but it
+     * was still a genuine data race (concurrent writes of the same value
+     * are still undefined behavior in C). */
+    (void)user_data;
 
     CURL *curl = curl_easy_init();
     if (!curl) {
@@ -243,6 +251,11 @@ bool bunny_cli_rest_client_init(bunny_cli_rest_client_t *client, const char *bas
         return false;
     }
     normalize_fingerprint_hex(cert_fingerprint, data->fingerprint_hex);
+    /* Written here -- once, single-threaded, before any thread could call
+     * pinned_curl_send concurrently through this client -- not in
+     * pinned_curl_send itself. See that function's own comment. */
+    strncpy(g_pinned_fingerprint_hex, data->fingerprint_hex, sizeof(g_pinned_fingerprint_hex) - 1);
+    g_pinned_fingerprint_hex[sizeof(g_pinned_fingerprint_hex) - 1] = '\0';
 
     client->base_url = strdup(base_url);
     client->bearer_token = strdup(bearer_token);
@@ -356,27 +369,7 @@ bunny_cli_rest_result_t bunny_cli_rest_request(bunny_cli_rest_client_t *client, 
 
 char *bunny_cli_rest_url_encode(const char *value)
 {
-    if (!value) {
-        return NULL;
-    }
-    size_t len = strlen(value);
-    char *out = malloc(len * 3 + 1);
-    if (!out) {
-        return NULL;
-    }
-    size_t out_len = 0;
-    for (size_t i = 0; i < len; i++) {
-        unsigned char c = (unsigned char)value[i];
-        bool unreserved = isalnum(c) || c == '-' || c == '.' || c == '_' || c == '~';
-        if (unreserved) {
-            out[out_len++] = (char)c;
-        } else {
-            snprintf(out + out_len, 4, "%%%02X", c);
-            out_len += 3;
-        }
-    }
-    out[out_len] = '\0';
-    return out;
+    return goblin_url_encode(value);
 }
 
 const char *bunny_cli_rest_result_to_string(bunny_cli_rest_result_t result)

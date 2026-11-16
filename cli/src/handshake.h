@@ -1,6 +1,8 @@
 #ifndef BUNNY_CLI_HANDSHAKE_H
 #define BUNNY_CLI_HANDSHAKE_H
 
+#include <stdbool.h>
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -61,6 +63,16 @@ typedef struct
      * fallback also failed -- callers must check for that, not assume it's
      * always set alongside a real mode. */
     char *download_destination_folder;
+    /* Present for both modes (never BUNNY_CLI_MODE_NONE), default false if
+     * the app build doesn't report them -- the app's own global
+     * DownloadSettingsStore toggles ("auto favorite/upvote on download"),
+     * a separate concern from a saved search's own per-search auto-
+     * favorite/upvote (BunnySearch.autoFavorite/autoUpvote, M10.1/M14.2,
+     * applied at sync time, not download time -- unrelated to these).
+     * bunny_cli_cmd_download applies these to every post it downloads,
+     * same as DownloadQueueService's own worker does for the app itself. */
+    bool auto_favorite_on_download;
+    bool auto_upvote_on_download;
 } bunny_cli_handshake_payload_t;
 
 /* Safe to call on a zero-initialized or already-freed payload. Zeroes

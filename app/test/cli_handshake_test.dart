@@ -37,7 +37,31 @@ void main() {
       suppliedSecret: '',
     );
 
-    expect(response, {'ok': true, 'mode': 'standalone', 'dbPath': '/fake/support/bunny.db', 'userAgent': 'LittleBunny/1.0.0', 'downloadDestinationFolder': '/fake/downloads'});
+    expect(response, {
+      'ok': true,
+      'mode': 'standalone',
+      'dbPath': '/fake/support/bunny.db',
+      'userAgent': 'LittleBunny/1.0.0',
+      'autoFavoriteOnDownload': false,
+      'autoUpvoteOnDownload': false,
+      'downloadDestinationFolder': '/fake/downloads',
+    });
+  });
+
+  test('autoFavoriteOnDownload/autoUpvoteOnDownload are reported true when those global settings are on', () async {
+    SharedPreferences.setMockInitialValues({'auto_favorite_on_download': true, 'auto_upvote_on_download': true});
+    final settingsStore = RepositorySettingsStore(FakeSecretStore());
+    await settingsStore.saveStandalone();
+
+    final response = await buildCliHandshakeResponse(
+      lockService: AppLockService(FakeSecretStore()),
+      settingsStore: settingsStore,
+      downloadSettingsStore: const DownloadSettingsStore(),
+      suppliedSecret: '',
+    );
+
+    expect(response['autoFavoriteOnDownload'], isTrue);
+    expect(response['autoUpvoteOnDownload'], isTrue);
   });
 
   test('networked config reports its serverBaseUrl/bearerToken/certFingerprint plus the download queue db and destination folder', () async {
@@ -62,6 +86,8 @@ void main() {
       'certFingerprint': 'abc123',
       'downloadQueueDbPath': '/fake/support/downloads.db',
       'downloadQueueUserAgent': 'LittleBunny/1.0.0',
+      'autoFavoriteOnDownload': false,
+      'autoUpvoteOnDownload': false,
       'downloadDestinationFolder': '/fake/downloads',
     });
   });
@@ -111,7 +137,15 @@ void main() {
       suppliedSecret: 'my-pin',
     );
 
-    expect(response, {'ok': true, 'mode': 'standalone', 'dbPath': '/fake/support/bunny.db', 'userAgent': 'LittleBunny/1.0.0', 'downloadDestinationFolder': '/fake/downloads'});
+    expect(response, {
+      'ok': true,
+      'mode': 'standalone',
+      'dbPath': '/fake/support/bunny.db',
+      'userAgent': 'LittleBunny/1.0.0',
+      'autoFavoriteOnDownload': false,
+      'autoUpvoteOnDownload': false,
+      'downloadDestinationFolder': '/fake/downloads',
+    });
   });
 
   test('app-lock on with the wrong secret reports locked, never the real config', () async {

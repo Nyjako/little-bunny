@@ -37,6 +37,8 @@ void setUp(void)
     unset_env("BUNNY_CLI_TEST_BEHAVIOR");
     unset_env("BUNNY_CLI_TEST_NO_DOWNLOAD_FOLDER");
     unset_env("BUNNY_CLI_TEST_NO_QUEUE_DB");
+    unset_env("BUNNY_CLI_TEST_AUTO_FAVORITE");
+    unset_env("BUNNY_CLI_TEST_AUTO_UPVOTE");
 }
 
 void tearDown(void)
@@ -53,9 +55,29 @@ void test_unlocked_standalone_round_trips_the_right_payload(void)
     TEST_ASSERT_EQUAL_STRING("LittleBunny/1.0.0", payload.user_agent);
     TEST_ASSERT_EQUAL_STRING("/fake/downloads", payload.download_destination_folder);
     TEST_ASSERT_NULL(payload.server_base_url);
+    TEST_ASSERT_FALSE(payload.auto_favorite_on_download);
+    TEST_ASSERT_FALSE(payload.auto_upvote_on_download);
 
     bunny_cli_handshake_payload_free(&payload);
     TEST_ASSERT_NULL(payload.db_path);
+}
+
+/* The app's own global DownloadSettingsStore toggles -- mode-independent,
+ * so one test covers both (networked mode's own test above already covers
+ * the "reported, but both off" default for that mode). */
+void test_auto_favorite_and_upvote_on_download_are_reported_when_enabled(void)
+{
+    set_env("BUNNY_CLI_TEST_AUTO_FAVORITE", "1");
+    set_env("BUNNY_CLI_TEST_AUTO_UPVOTE", "1");
+
+    bunny_cli_handshake_payload_t payload;
+    bunny_cli_handshake_result_t result = bunny_cli_handshake_run(FAKE_APP_HANDSHAKE_PATH, NULL, &payload);
+
+    TEST_ASSERT_EQUAL(BUNNY_CLI_HANDSHAKE_OK, result);
+    TEST_ASSERT_TRUE(payload.auto_favorite_on_download);
+    TEST_ASSERT_TRUE(payload.auto_upvote_on_download);
+
+    bunny_cli_handshake_payload_free(&payload);
 }
 
 void test_a_null_download_destination_folder_is_reported_as_null_not_a_protocol_error(void)
@@ -87,6 +109,8 @@ void test_networked_mode_round_trips_server_url_bearer_token_and_cert_fingerprin
     TEST_ASSERT_EQUAL_STRING("/fake/downloads.db", payload.download_queue_db_path);
     TEST_ASSERT_EQUAL_STRING("LittleBunny/1.0.0", payload.download_queue_user_agent);
     TEST_ASSERT_NULL(payload.db_path);
+    TEST_ASSERT_FALSE(payload.auto_favorite_on_download);
+    TEST_ASSERT_FALSE(payload.auto_upvote_on_download);
 
     bunny_cli_handshake_payload_free(&payload);
 }
@@ -257,6 +281,7 @@ int main(void)
     RUN_TEST(test_a_null_download_destination_folder_is_reported_as_null_not_a_protocol_error);
     RUN_TEST(test_networked_mode_round_trips_server_url_bearer_token_and_cert_fingerprint);
     RUN_TEST(test_networked_mode_with_no_queue_db_fields_still_parses_normally);
+    RUN_TEST(test_auto_favorite_and_upvote_on_download_are_reported_when_enabled);
     RUN_TEST(test_no_repository_configured_yet_reports_mode_none);
     RUN_TEST(test_correct_secret_unlocks_it);
     RUN_TEST(test_wrong_secret_reports_locked_without_ever_producing_a_config);

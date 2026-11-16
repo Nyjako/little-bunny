@@ -41,9 +41,29 @@ prompt.
   pool-metadata endpoint.
 - `--stats` -- prints row counts per database table and runs an integrity
   check, same shape as `bunny_server --db-stats`/`--health`.
-- `--download [--jobs N]` -- drains the whole download queue using up to
-  `N` concurrent workers (default 3, capped at 8), writing files to the
-  exact same folder/filename scheme the app itself uses.
+- `--download [--jobs N] [--site <e621|inkbunny>] [<spec> ...]` -- drains
+  the download queue using up to `N` concurrent workers (default 3, capped
+  at 8), writing files to the exact same folder/filename scheme the app
+  itself uses. Each optional `<spec>` is queued first (same exhaustive
+  "download the entire thing" fetch the app's own mass-download/"download
+  selected searches" actions use, no cap), then drained along with
+  everything already in the queue:
+  - `pool:<id>` -- an e621 pool (its real name is fetched, then every one
+    of its posts is found and queued as a pool download -- page-numbered
+    filenames under a pool-named folder).
+  - `search:<id>` -- one of your saved searches, by id: every post
+    *already cached* for it is queued (never a fresh live fetch) -- if
+    that search tracks a pool (`pool:<id>` as its own query), this queues
+    a pool download too, using the search's own label as the pool name.
+  - anything else -- a plain tag query under `--site` (e621 if omitted).
+
+  Example: `bunny_cli --download pool:115522 "female standing"` queues
+  pool 115522's own posts plus every e621 post matching `female standing`,
+  then downloads all of it. A post already queued, or found by more than
+  one spec in the same call, is only ever queued once. If your app has
+  "auto favorite on download"/"auto upvote on download" turned on
+  (Settings), every post this command downloads -- found via a spec or
+  already queued -- gets that applied too, exactly like the app itself.
 - `--favorite <post_id> [--stars N]` -- favorites a post and drains the
   action queue immediately (`N` is Inkbunny's 1-3 tier; ignored on e621).
 - `--unfavorite <post_id>` -- unfavorites a post, same immediate-drain

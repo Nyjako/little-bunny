@@ -29,14 +29,47 @@ static void sleep_ms(unsigned int ms)
 #endif
 }
 
-/* A command with no networked implementation (--download, --sync,
- * --queue-list, --stats) reaches this instead of guessing -- see each
- * public function's own doc comment in commands.h for why that particular
- * command doesn't fit the REST surface the same way. */
+/* --stats is the only command with no networked implementation at all
+ * (see its own doc comment in commands.h) -- reaches this instead of
+ * guessing. */
 static int report_not_supported_over_network(const char *command_name)
 {
     bunny_cli_log(BUNNY_CLI_LOG_ERROR, "%s isn't supported in networked mode yet, see cli/README.md", command_name);
     return 1;
+}
+
+bool bunny_cli_parse_download_spec(const char *spec, bunny_cli_spec_kind_t *out_kind, int64_t *out_id)
+{
+    static const struct
+    {
+        const char *prefix;
+        bunny_cli_spec_kind_t kind;
+    } prefixes[] = {
+        {"pool:", BUNNY_CLI_SPEC_POOL},
+        {"search:", BUNNY_CLI_SPEC_SEARCH},
+    };
+
+    for (size_t i = 0; i < sizeof(prefixes) / sizeof(prefixes[0]); i++) {
+        size_t prefix_len = strlen(prefixes[i].prefix);
+        if (strncmp(spec, prefixes[i].prefix, prefix_len) != 0) {
+            continue;
+        }
+        const char *id_text = spec + prefix_len;
+        if (!*id_text) {
+            return false;
+        }
+        char *end = NULL;
+        long long value = strtoll(id_text, &end, 10);
+        if (*end != '\0' || value <= 0) {
+            return false;
+        }
+        *out_kind = prefixes[i].kind;
+        *out_id = (int64_t)value;
+        return true;
+    }
+
+    *out_kind = BUNNY_CLI_SPEC_TAGS;
+    return true;
 }
 
 /* Prints an already-parsed response body (the server's post/pool/blacklist
@@ -186,9 +219,12 @@ typedef struct
 {
     bunny_core_t *core;            /* the local download-queue db, both modes -- see bunny_cli_context_t's own doc comment */
     bunny_cli_rest_client_t *rest; /* non-NULL in networked mode only, used to resolve each post's own metadata */
-    bunny_mutex_t claim_mutex;     /* guards both claiming a row and the two counters below */
+    bunny_mutex_t claim_mutex;     /* guards both claiming a row and the counters below */
     int succeeded;
     int failed;
+    bool auto_favorite;      /* ctx->auto_favorite_on_download, read once up front */
+    bool auto_upvote;        /* ctx->auto_upvote_on_download, read once up front */
+    int auto_actions_queued; /* guarded by claim_mutex too -- drained once, after every worker finishes */
 } download_shared_state_t;
 
 /* A post's metadata, however it was resolved (bunny_core_post_get_by_id
@@ -316,6 +352,44 @@ static size_t extra_headers_for_site(bunny_db_site_t site, bunny_http_header_t *
     return 2;
 }
 
+/* Queues (never drains -- see commands.h's own doc comment on why) a
+ * favorite-add/upvote for a just-downloaded post, mirroring
+ * DownloadQueueService's own worker exactly (download_queue_service.dart:
+ * "the actual network call is never this class's or DownloadManager's
+ * concern" -- draining is something else's job entirely, the server's own
+ * scheduler or the app's periodic timer; bunny_cli has neither, so
+ * bunny_cli_cmd_download drains once itself after every worker finishes,
+ * see its own doc comment). Returns whether the action was actually
+ * queued, so the caller can count it for that one end-of-run drain. */
+static bool queue_favorite_action(download_shared_state_t *state, int64_t post_id)
+{
+    if (state->rest) {
+        char path[64];
+        snprintf(path, sizeof(path), "/posts/%lld/favorite", (long long)post_id);
+        cJSON *body = cJSON_CreateObject();
+        cJSON_AddNumberToObject(body, "stars", -1);
+        bunny_cli_rest_result_t result = bunny_cli_rest_request(state->rest, BUNNY_HTTP_POST, path, body, NULL);
+        cJSON_Delete(body);
+        return result == BUNNY_CLI_REST_OK;
+    }
+    return bunny_core_queue_favorite_add(state->core, post_id, -1) == BUNNY_CORE_OK;
+}
+
+static bool queue_upvote_action(download_shared_state_t *state, int64_t post_id)
+{
+    if (state->rest) {
+        char path[64];
+        snprintf(path, sizeof(path), "/posts/%lld/vote", (long long)post_id);
+        cJSON *body = cJSON_CreateObject();
+        cJSON_AddNumberToObject(body, "score", 1);
+        cJSON_AddBoolToObject(body, "no_unvote", false);
+        bunny_cli_rest_result_t result = bunny_cli_rest_request(state->rest, BUNNY_HTTP_POST, path, body, NULL);
+        cJSON_Delete(body);
+        return result == BUNNY_CLI_REST_OK;
+    }
+    return bunny_core_queue_vote(state->core, post_id, 1, false) == BUNNY_CORE_OK;
+}
+
 /* Downloads one already-claimed row, then reports its outcome back to the
  * queue and the shared counters. Frees item->pool_name before returning --
  * callers must treat *item as consumed afterward. */
@@ -373,6 +447,22 @@ static void process_claimed_item(download_shared_state_t *state, const char *dow
         }
     }
 
+    /* Matches DownloadManager.downloadPost's own gate exactly: queued for a
+     * verified download OR a checksum mismatch (the file still landed,
+     * just didn't match what was published) -- never for a real failure,
+     * since nothing was actually downloaded in that case. autoUpvote is
+     * e621-only, same vote-API gate every other vote feature in this app
+     * already applies. */
+    int queued_auto_actions = 0;
+    if (have_post && (new_status == BUNNY_DB_DOWNLOAD_QUEUE_SUCCEEDED || new_status == BUNNY_DB_DOWNLOAD_QUEUE_CHECKSUM_MISMATCH)) {
+        if (state->auto_favorite && queue_favorite_action(state, item->post_id)) {
+            queued_auto_actions++;
+        }
+        if (state->auto_upvote && post.site == BUNNY_DB_SITE_E621 && queue_upvote_action(state, item->post_id)) {
+            queued_auto_actions++;
+        }
+    }
+
     bunny_mutex_lock(&state->claim_mutex);
     bunny_core_download_queue_set_status(state->core, item->queue_id, new_status, error_message[0] ? error_message : NULL);
     if (new_status == BUNNY_DB_DOWNLOAD_QUEUE_SUCCEEDED) {
@@ -382,6 +472,7 @@ static void process_claimed_item(download_shared_state_t *state, const char *dow
         state->failed++;
         bunny_cli_log(BUNNY_CLI_LOG_ERROR, "post %lld: %s", (long long)item->post_id, error_message[0] ? error_message : bunny_db_download_queue_status_to_string(new_status));
     }
+    state->auto_actions_queued += queued_auto_actions;
     bunny_mutex_unlock(&state->claim_mutex);
 
     if (have_post) {
@@ -408,7 +499,418 @@ static void *worker_thread_fn(void *arg_ptr)
 
 #define BUNNY_CLI_MAX_DOWNLOAD_JOBS 8 /* matches bunny_core's own fixed download-slot table */
 
-int bunny_cli_cmd_download(bunny_cli_context_t *ctx, const char *download_folder, int jobs)
+/* ---- resolving --download's pool:/search:/tag specs -------------------- */
+
+/* A plain growable int64 array -- post ids collected while paginating a
+ * spec, and (reused) the set of post ids already active in the queue, for
+ * dedup. Linear-scan `post_id_list_contains` is O(n) per lookup, which is
+ * fine at the scale a single `--download` invocation's specs actually
+ * produce (hundreds to a few thousand posts) -- not worth a real hash set
+ * for that. */
+typedef struct
+{
+    int64_t *ids;
+    size_t count;
+    size_t capacity;
+} post_id_list_t;
+
+static void post_id_list_free_(post_id_list_t *list)
+{
+    free(list->ids);
+    memset(list, 0, sizeof(*list));
+}
+
+static void post_id_list_append_(post_id_list_t *list, int64_t id)
+{
+    if (list->count == list->capacity) {
+        size_t new_capacity = list->capacity == 0 ? 64 : list->capacity * 2;
+        list->ids = realloc(list->ids, new_capacity * sizeof(int64_t));
+        list->capacity = new_capacity;
+    }
+    list->ids[list->count++] = id;
+}
+
+static bool post_id_list_contains_(const post_id_list_t *list, int64_t id)
+{
+    for (size_t i = 0; i < list->count; i++) {
+        if (list->ids[i] == id) {
+            return true;
+        }
+    }
+    return false;
+}
+
+/* One page of a live site search (POST /search/preview over REST, or
+ * bunny_core_preview_search locally) -- appends every post id found to
+ * `out`, reports how many that was via `out_page_count` so the caller
+ * knows when to stop paginating. Returns false only on a genuine fetch
+ * error (logged here already), never for a merely-empty page. */
+static bool fetch_live_search_page(bunny_cli_context_t *ctx, bunny_db_site_t site, const char *query, int page, post_id_list_t *out, size_t *out_page_count)
+{
+    if (ctx->mode == BUNNY_CLI_MODE_NETWORKED) {
+        char *encoded_query = bunny_cli_rest_url_encode(query);
+        char path[1200];
+        snprintf(path, sizeof(path), "/search/preview?site=%s&query=%s&page=%d", bunny_db_site_to_string(site), encoded_query ? encoded_query : "", page);
+        free(encoded_query);
+
+        cJSON *response = NULL;
+        bunny_cli_rest_result_t result = bunny_cli_rest_request(ctx->rest, BUNNY_HTTP_POST, path, NULL, &response);
+        if (result != BUNNY_CLI_REST_OK) {
+            bunny_cli_log(BUNNY_CLI_LOG_ERROR, "search failed: %s", bunny_cli_rest_result_to_string(result));
+            cJSON_Delete(response);
+            return false;
+        }
+        int count = cJSON_GetArraySize(response);
+        for (int i = 0; i < count; i++) {
+            int64_t id = 0;
+            bunny_json_get_int64(cJSON_GetArrayItem(response, i), "id", &id);
+            post_id_list_append_(out, id);
+        }
+        *out_page_count = (size_t)count;
+        cJSON_Delete(response);
+        return true;
+    }
+
+    bunny_db_post_list_t list;
+    bunny_core_result_t result = bunny_core_preview_search(ctx->core, site, query, page, NULL, &list);
+    if (result != BUNNY_CORE_OK) {
+        bunny_cli_log(BUNNY_CLI_LOG_ERROR, "search failed: %s", bunny_core_result_to_string(result));
+        return false;
+    }
+    for (size_t i = 0; i < list.count; i++) {
+        post_id_list_append_(out, list.items[i].id);
+    }
+    *out_page_count = list.count;
+    bunny_db_post_list_free(&list);
+    return true;
+}
+
+/* Pages fetch_live_search_page until an empty page comes back, no cap --
+ * same exhaustive "download the entire search/pool" behavior
+ * PostGridScreen._selectEntireSearch already uses, not a capped preview
+ * (see bunny_cli_cmd_download's own doc comment). A failure after at least
+ * one successful page keeps whatever was already fetched rather than
+ * discarding it. */
+static bool fetch_all_live_search_post_ids(bunny_cli_context_t *ctx, bunny_db_site_t site, const char *query, post_id_list_t *out)
+{
+    for (int page = 1;; page++) {
+        size_t page_count = 0;
+        if (!fetch_live_search_page(ctx, site, query, page, out, &page_count)) {
+            return page > 1;
+        }
+        if (page_count == 0) {
+            return true;
+        }
+    }
+}
+
+/* Same shape as fetch_live_search_page, for a saved search's own already-
+ * cached posts (bunny_core_search_list_posts/GET /searches/{id}/posts) --
+ * never a fresh live site query, same as SearchesScreen
+ * ._downloadSelectedSearches's own "download selected searches" action. */
+static bool fetch_cached_search_page(bunny_cli_context_t *ctx, int64_t search_id, int page, post_id_list_t *out, size_t *out_page_count)
+{
+    if (ctx->mode == BUNNY_CLI_MODE_NETWORKED) {
+        char path[96];
+        snprintf(path, sizeof(path), "/searches/%lld/posts?page=%d", (long long)search_id, page);
+
+        cJSON *response = NULL;
+        bunny_cli_rest_result_t result = bunny_cli_rest_request(ctx->rest, BUNNY_HTTP_GET, path, NULL, &response);
+        if (result != BUNNY_CLI_REST_OK) {
+            bunny_cli_log(BUNNY_CLI_LOG_ERROR, "failed to list search #%lld's posts: %s", (long long)search_id, bunny_cli_rest_result_to_string(result));
+            cJSON_Delete(response);
+            return false;
+        }
+        int count = cJSON_GetArraySize(response);
+        for (int i = 0; i < count; i++) {
+            int64_t id = 0;
+            bunny_json_get_int64(cJSON_GetArrayItem(response, i), "id", &id);
+            post_id_list_append_(out, id);
+        }
+        *out_page_count = (size_t)count;
+        cJSON_Delete(response);
+        return true;
+    }
+
+    bunny_db_post_list_t list;
+    bunny_core_result_t result = bunny_core_search_list_posts(ctx->core, search_id, false, BUNNY_DB_RATING_MASK_ALL, BUNNY_DB_MEDIA_MASK_ALL, page, &list);
+    if (result != BUNNY_CORE_OK) {
+        bunny_cli_log(BUNNY_CLI_LOG_ERROR, "failed to list search #%lld's posts: %s", (long long)search_id, bunny_core_result_to_string(result));
+        return false;
+    }
+    for (size_t i = 0; i < list.count; i++) {
+        post_id_list_append_(out, list.items[i].id);
+    }
+    *out_page_count = list.count;
+    bunny_db_post_list_free(&list);
+    return true;
+}
+
+static bool fetch_all_cached_search_post_ids(bunny_cli_context_t *ctx, int64_t search_id, post_id_list_t *out)
+{
+    for (int page = 1;; page++) {
+        size_t page_count = 0;
+        if (!fetch_cached_search_page(ctx, search_id, page, out, &page_count)) {
+            return page > 1;
+        }
+        if (page_count == 0) {
+            return true;
+        }
+    }
+}
+
+typedef struct
+{
+    bunny_db_site_t site;
+    char *query; /* owned */
+    char *label; /* owned */
+} saved_search_info_t;
+
+static void saved_search_info_free(saved_search_info_t *info)
+{
+    free(info->query);
+    free(info->label);
+    memset(info, 0, sizeof(*info));
+}
+
+/* No single-search REST lookup exists (server/src/routes_searches.c only
+ * takes a bare id for PUT/DELETE) -- lists every saved search and finds
+ * the one with this id, same cost either mode (a user's saved-search list
+ * is small; this is not something called in a hot loop). */
+static bool lookup_saved_search(bunny_cli_context_t *ctx, int64_t search_id, saved_search_info_t *out)
+{
+    memset(out, 0, sizeof(*out));
+
+    if (ctx->mode == BUNNY_CLI_MODE_NETWORKED) {
+        cJSON *response = NULL;
+        bunny_cli_rest_result_t result = bunny_cli_rest_request(ctx->rest, BUNNY_HTTP_GET, "/searches", NULL, &response);
+        if (result != BUNNY_CLI_REST_OK) {
+            bunny_cli_log(BUNNY_CLI_LOG_ERROR, "failed to list saved searches: %s", bunny_cli_rest_result_to_string(result));
+            cJSON_Delete(response);
+            return false;
+        }
+        bool found = false;
+        int count = cJSON_GetArraySize(response);
+        for (int i = 0; i < count && !found; i++) {
+            cJSON *item = cJSON_GetArrayItem(response, i);
+            int64_t id = 0;
+            bunny_json_get_int64(item, "id", &id);
+            if (id != search_id) {
+                continue;
+            }
+            const char *site_text = bunny_json_get_string_or(item, "site", "e621");
+            out->site = strcmp(site_text, "inkbunny") == 0 ? BUNNY_DB_SITE_INKBUNNY : BUNNY_DB_SITE_E621;
+            out->query = strdup(bunny_json_get_string_or(item, "query", ""));
+            out->label = strdup(bunny_json_get_string_or(item, "label", ""));
+            found = true;
+        }
+        cJSON_Delete(response);
+        if (!found) {
+            bunny_cli_log(BUNNY_CLI_LOG_ERROR, "saved search #%lld not found", (long long)search_id);
+        }
+        return found;
+    }
+
+    bunny_db_search_list_t list;
+    bunny_core_result_t result = bunny_core_search_list(ctx->core, &list);
+    if (result != BUNNY_CORE_OK) {
+        bunny_cli_log(BUNNY_CLI_LOG_ERROR, "failed to list saved searches: %s", bunny_core_result_to_string(result));
+        return false;
+    }
+    bool found = false;
+    for (size_t i = 0; i < list.count && !found; i++) {
+        if (list.items[i].id != search_id) {
+            continue;
+        }
+        out->site = list.items[i].site;
+        out->query = strdup(list.items[i].query);
+        out->label = strdup(list.items[i].label);
+        found = true;
+    }
+    bunny_db_search_list_free(&list);
+    if (!found) {
+        bunny_cli_log(BUNNY_CLI_LOG_ERROR, "saved search #%lld not found", (long long)search_id);
+    }
+    return found;
+}
+
+/* The real pool name (bunny_core_fetch_pool/GET /pools/{id}) for a direct
+ * "pool:<id>" spec -- NULL if the fetch fails (the caller falls back to
+ * "pool:<id>" itself, the same default label create_pool_search_dialog
+ * .dart gives a brand-new pool-tracking search before any live fetch ever
+ * improves it). A "search:<id>" spec never calls this at all -- it uses
+ * that search's own label instead, matching SearchesScreen
+ * ._downloadSelectedSearches exactly. */
+static char *fetch_pool_name(bunny_cli_context_t *ctx, int64_t pool_id)
+{
+    if (ctx->mode == BUNNY_CLI_MODE_NETWORKED) {
+        char path[48];
+        snprintf(path, sizeof(path), "/pools/%lld", (long long)pool_id);
+        cJSON *response = NULL;
+        bunny_cli_rest_result_t result = bunny_cli_rest_request(ctx->rest, BUNNY_HTTP_GET, path, NULL, &response);
+        char *name = NULL;
+        if (result == BUNNY_CLI_REST_OK) {
+            const char *name_text = bunny_json_get_string_or(response, "name", NULL);
+            name = name_text ? strdup(name_text) : NULL;
+        }
+        cJSON_Delete(response);
+        return name;
+    }
+
+    bunny_core_pool_info_t info;
+    if (bunny_core_fetch_pool(ctx->core, pool_id, &info) != BUNNY_CORE_OK) {
+        return NULL;
+    }
+    char *name = info.name ? strdup(info.name) : NULL;
+    bunny_core_pool_info_free(&info);
+    return name;
+}
+
+/* Resolves and queues every spec in `specs` -- see bunny_cli_cmd_download's
+ * own doc comment for what each spec kind means and where its posts come
+ * from. Dedupes against whatever's already QUEUED/DOWNLOADING in the
+ * queue, and across specs within this same call, exactly like
+ * DownloadQueueService._enqueueAll's own activeIds set -- a post already
+ * in a terminal state (succeeded/failed/checksumMismatch) is still
+ * re-queued, same as that function allows. A spec that fails outright is
+ * logged and skipped, never aborts the rest. */
+static void enqueue_resolved_specs(bunny_cli_context_t *ctx, bunny_db_site_t spec_site, const char **specs, size_t spec_count)
+{
+    post_id_list_t active;
+    memset(&active, 0, sizeof(active));
+    bunny_db_download_queue_list_t existing;
+    if (bunny_core_download_queue_list(ctx->core, &existing) == BUNNY_CORE_OK) {
+        for (size_t i = 0; i < existing.count; i++) {
+            if (existing.items[i].status == BUNNY_DB_DOWNLOAD_QUEUE_QUEUED || existing.items[i].status == BUNNY_DB_DOWNLOAD_QUEUE_DOWNLOADING) {
+                post_id_list_append_(&active, existing.items[i].post_id);
+            }
+        }
+        bunny_db_download_queue_list_free(&existing);
+    }
+
+    int total_newly_queued = 0;
+    for (size_t spec_index = 0; spec_index < spec_count; spec_index++) {
+        const char *spec = specs[spec_index];
+        bunny_cli_spec_kind_t kind;
+        int64_t spec_id = 0;
+        if (!bunny_cli_parse_download_spec(spec, &kind, &spec_id)) {
+            bunny_cli_log(BUNNY_CLI_LOG_ERROR, "\"%s\" isn't a valid pool:/search: spec (expected a positive numeric id)", spec);
+            continue;
+        }
+
+        post_id_list_t post_ids;
+        memset(&post_ids, 0, sizeof(post_ids));
+        int64_t pool_id = 0;
+        char *pool_name = NULL;
+        bool ok = false;
+
+        switch (kind) {
+            case BUNNY_CLI_SPEC_POOL: {
+                pool_id = spec_id;
+                char *fetched_name = fetch_pool_name(ctx, pool_id);
+                if (fetched_name) {
+                    pool_name = fetched_name;
+                } else {
+                    char fallback[32];
+                    snprintf(fallback, sizeof(fallback), "pool:%lld", (long long)pool_id);
+                    pool_name = strdup(fallback);
+                }
+                char query[32];
+                snprintf(query, sizeof(query), "pool:%lld", (long long)pool_id);
+                ok = fetch_all_live_search_post_ids(ctx, BUNNY_DB_SITE_E621, query, &post_ids);
+                break;
+            }
+            case BUNNY_CLI_SPEC_SEARCH: {
+                saved_search_info_t info;
+                if (!lookup_saved_search(ctx, spec_id, &info)) {
+                    break;
+                }
+                if (strncmp(info.query, "pool:", 5) == 0) {
+                    char *end = NULL;
+                    long long value = strtoll(info.query + 5, &end, 10);
+                    if (*end == '\0' && value > 0) {
+                        pool_id = (int64_t)value;
+                        pool_name = strdup(info.label);
+                    }
+                }
+                ok = fetch_all_cached_search_post_ids(ctx, spec_id, &post_ids);
+                saved_search_info_free(&info);
+                break;
+            }
+            case BUNNY_CLI_SPEC_TAGS:
+                ok = fetch_all_live_search_post_ids(ctx, spec_site, spec, &post_ids);
+                break;
+        }
+
+        if (!ok) {
+            bunny_cli_log(BUNNY_CLI_LOG_ERROR, "\"%s\" could not be resolved, skipping", spec);
+            post_id_list_free_(&post_ids);
+            free(pool_name);
+            continue;
+        }
+
+        int newly_queued = 0;
+        for (size_t i = 0; i < post_ids.count; i++) {
+            int64_t post_id = post_ids.ids[i];
+            if (post_id_list_contains_(&active, post_id)) {
+                continue;
+            }
+            int pool_page = pool_id > 0 ? (int)(i + 1) : 0;
+            int64_t queue_row_id = 0;
+            if (bunny_core_download_queue_add(ctx->core, post_id, pool_id, pool_name, pool_page, &queue_row_id) == BUNNY_CORE_OK) {
+                post_id_list_append_(&active, post_id);
+                newly_queued++;
+            }
+        }
+
+        bunny_cli_log(BUNNY_CLI_LOG_SUCCESS, "\"%s\": %zu post(s) found, %d newly queued", spec, post_ids.count, newly_queued);
+        total_newly_queued += newly_queued;
+
+        post_id_list_free_(&post_ids);
+        free(pool_name);
+    }
+
+    post_id_list_free_(&active);
+    bunny_cli_log(BUNNY_CLI_LOG_INFO, "%d post(s) newly queued from %zu spec(s)", total_newly_queued, spec_count);
+}
+
+/* Drains only the favorite/upvote actions bunny_cli_cmd_download's own
+ * workers queued (process_claimed_item's own doc comment on why that's
+ * never done per-item) -- once, after every worker has already finished,
+ * so a big batch's auto-actions cost one round trip instead of N. */
+static void drain_auto_actions(bunny_cli_context_t *ctx, int count)
+{
+    if (count <= 0) {
+        return;
+    }
+    bunny_cli_log(BUNNY_CLI_LOG_INFO, "draining %d auto-favorite/upvote action(s)...", count);
+
+    if (ctx->mode == BUNNY_CLI_MODE_NETWORKED) {
+        cJSON *stats_json = NULL;
+        bunny_cli_rest_result_t result = bunny_cli_rest_request(ctx->rest, BUNNY_HTTP_POST, "/queue/process", NULL, &stats_json);
+        if (result != BUNNY_CLI_REST_OK) {
+            bunny_cli_log(BUNNY_CLI_LOG_WARN, "failed to drain auto-actions: %s", bunny_cli_rest_result_to_string(result));
+        } else {
+            int failed_count = bunny_json_get_int_or(stats_json, "actions_failed", 0);
+            if (failed_count > 0) {
+                bunny_cli_log(BUNNY_CLI_LOG_WARN, "%d auto-action(s) failed (see the server's own log for the site's error)", failed_count);
+            }
+        }
+        cJSON_Delete(stats_json);
+        return;
+    }
+
+    bunny_core_queue_stats_t stats;
+    memset(&stats, 0, sizeof(stats));
+    bunny_core_result_t result = bunny_core_process_queue(ctx->core, &stats);
+    if (result != BUNNY_CORE_OK) {
+        bunny_cli_log(BUNNY_CLI_LOG_WARN, "failed to drain auto-actions: %s", bunny_core_result_to_string(result));
+    } else if (stats.actions_failed > 0) {
+        bunny_cli_log(BUNNY_CLI_LOG_WARN, "%d auto-action(s) failed (see the app/server's own log for the site's error)", stats.actions_failed);
+    }
+}
+
+int bunny_cli_cmd_download(bunny_cli_context_t *ctx, const char *download_folder, int jobs, bunny_db_site_t spec_site, const char **specs, size_t spec_count)
 {
     if (!ctx->core) {
         bunny_cli_log(BUNNY_CLI_LOG_ERROR, "no local download-queue database available (the app didn't report one -- an older app build?)");
@@ -425,11 +927,18 @@ int bunny_cli_cmd_download(bunny_cli_context_t *ctx, const char *download_folder
         jobs = BUNNY_CLI_MAX_DOWNLOAD_JOBS;
     }
 
+    if (spec_count > 0) {
+        enqueue_resolved_specs(ctx, spec_site, specs, spec_count);
+    }
+
     download_shared_state_t state;
     state.core = ctx->core;
     state.rest = ctx->mode == BUNNY_CLI_MODE_NETWORKED ? ctx->rest : NULL;
     state.succeeded = 0;
     state.failed = 0;
+    state.auto_favorite = ctx->auto_favorite_on_download;
+    state.auto_upvote = ctx->auto_upvote_on_download;
+    state.auto_actions_queued = 0;
     bunny_mutex_init(&state.claim_mutex);
 
     worker_arg_t arg;
@@ -450,6 +959,8 @@ int bunny_cli_cmd_download(bunny_cli_context_t *ctx, const char *download_folder
     }
 
     bunny_mutex_destroy(&state.claim_mutex);
+
+    drain_auto_actions(ctx, state.auto_actions_queued);
 
     bunny_cli_log(state.failed == 0 ? BUNNY_CLI_LOG_SUCCESS : BUNNY_CLI_LOG_WARN, "done: %d succeeded, %d failed", state.succeeded, state.failed);
     return state.failed == 0 ? 0 : 1;
