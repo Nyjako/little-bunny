@@ -560,7 +560,19 @@ class _PostGridScreenState extends State<PostGridScreen> {
     }
   }
 
+  /// Same pool-page-numbering convention as [_massDownload] -- a post's page
+  /// is its position in the full, currently-loaded pool order, not its
+  /// position within whatever subset [posts] happens to be. Used by
+  /// [_openPost] (M82) so [PostDetailScreen]'s own "already downloaded"
+  /// check looks in the exact folder [_massDownload] actually wrote this
+  /// pool's posts to, instead of always assuming the regular per-artist one.
+  Map<int, int> get _poolPageByPostId {
+    final fullOrder = _entireSearchSelection ?? _posts;
+    return {for (final (index, post) in fullOrder.indexed) post.id: index + 1};
+  }
+
   Future<void> _openPost(List<BunnyPost> posts, BunnyPost post) async {
+    final poolId = _poolId;
     await Navigator.push(
       context,
       MaterialPageRoute(
@@ -576,6 +588,9 @@ class _PostGridScreenState extends State<PostGridScreen> {
           // TagBrowseScreen -- this saved search itself is never altered.
           currentSearchSite: widget.search.site,
           currentSearchQuery: widget.search.query,
+          poolId: poolId,
+          poolName: poolId != null ? (_poolInfo?.name ?? widget.search.label) : null,
+          pageByPostId: poolId != null ? _poolPageByPostId : const {},
         ),
       ),
     );
@@ -675,9 +690,7 @@ class _PostGridScreenState extends State<PostGridScreen> {
     // inserts for a large selection, silently dropping whatever hadn't
     // landed yet (see DownloadQueueService.enqueueAll's own doc comment).
     if (poolId != null) {
-      final fullOrder = _entireSearchSelection ?? _posts;
-      final pageByPostId = {for (final (index, post) in fullOrder.indexed) post.id: index + 1};
-      await widget.downloadQueueService.enqueuePool(selected, widget.repository, poolId: poolId, poolName: _poolInfo?.name ?? widget.search.label, pageByPostId: pageByPostId);
+      await widget.downloadQueueService.enqueuePool(selected, widget.repository, poolId: poolId, poolName: _poolInfo?.name ?? widget.search.label, pageByPostId: _poolPageByPostId);
     } else {
       await widget.downloadQueueService.enqueueAll(selected, widget.repository);
     }

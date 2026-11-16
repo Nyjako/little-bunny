@@ -81,6 +81,23 @@ class _AlreadyDownloadedManager extends DownloadManager {
   Future<bool> isDownloaded(BunnyPost post, String destinationFolder, {int poolId = 0, String? poolName, int poolPage = 0}) async => true;
 }
 
+/// Records the `poolId`/`poolName`/`poolPage` [PostDetailScreen] actually
+/// forwards into [isDownloaded] (M82) -- lets a test assert the screen
+/// threads its own pool context all the way down, not just that some
+/// already-downloaded icon ends up showing regardless of which folder was
+/// actually checked.
+class _RecordingAlreadyDownloadedManager extends DownloadManager {
+  const _RecordingAlreadyDownloadedManager(this.calls);
+
+  final List<(int poolId, String? poolName, int poolPage)> calls;
+
+  @override
+  Future<bool> isDownloaded(BunnyPost post, String destinationFolder, {int poolId = 0, String? poolName, int poolPage = 0}) async {
+    calls.add((poolId, poolName, poolPage));
+    return true;
+  }
+}
+
 BunnyPost _post({
   String? fileExt,
   String? fileUrl,
@@ -1768,6 +1785,62 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.byIcon(Icons.download_done), findsOneWidget);
+    });
+
+    testWidgets('checks the pool folder, not the regular per-artist one, when opened with pool context (M82)', (WidgetTester tester) async {
+      final repository = FakeBunnyRepository();
+      final post = _post(fileExt: 'jpg');
+      final calls = <(int, String?, int)>[];
+
+      await tester.pumpWidget(
+        wrapWithLocalization(
+          PostDetailScreen(
+            post: post,
+            repository: repository,
+            displaySettingsStore: const DisplaySettingsStore(),
+            downloadSettingsStore: const DownloadSettingsStore(),
+            downloadQueueService: _downloadQueueService(),
+            downloadManager: _RecordingAlreadyDownloadedManager(calls),
+            poolId: 42,
+            poolName: 'My Comic',
+            pageByPostId: {post.id: 7},
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.byIcon(Icons.download_done), findsOneWidget);
+      expect(calls, [(42, 'My Comic', 7)]);
+    });
+
+    testWidgets('a single-post download from within a pool browse still lands in that pool\'s folder (M82)', (WidgetTester tester) async {
+      final repository = FakeBunnyRepository();
+      final post = _post(fileExt: 'jpg');
+      final downloadQueueService = DownloadQueueService(downloadManager: const DownloadManager(), downloadSettingsStore: const DownloadSettingsStore());
+
+      await tester.pumpWidget(
+        wrapWithLocalization(
+          PostDetailScreen(
+            post: post,
+            repository: repository,
+            displaySettingsStore: const DisplaySettingsStore(),
+            downloadSettingsStore: const DownloadSettingsStore(),
+            downloadQueueService: downloadQueueService,
+            poolId: 42,
+            poolName: 'My Comic',
+            pageByPostId: {post.id: 7},
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.ancestor(of: find.byTooltip('Download'), matching: find.byType(IconButton)));
+      await tester.pump();
+
+      final item = downloadQueueService.items.single;
+      expect(item.poolId, 42);
+      expect(item.poolName, 'My Comic');
+      expect(item.poolPage, 7);
     });
   });
 

@@ -210,11 +210,17 @@ class DownloadManager {
   /// subfolders -- one per artist -- even when there are thousands of
   /// posts), then checks filename membership in that listing purely in
   /// Dart, with no further platform-channel round trip per post.
-  Future<Map<int, bool>> batchIsDownloaded(List<BunnyPost> posts, String destinationFolder, {int poolId = 0, String? poolName, int poolPage = 0}) async {
+  ///
+  /// [pageByPostId] (M83), not a single [poolPage] -- a real pool batch has
+  /// a *different* page per post (same convention [DownloadQueueService.
+  /// enqueuePool] already uses); a post missing from it falls back to page 0
+  /// ("not a pool download"), same as every other pool-aware call in this
+  /// class.
+  Future<Map<int, bool>> batchIsDownloaded(List<BunnyPost> posts, String destinationFolder, {int poolId = 0, String? poolName, Map<int, int> pageByPostId = const {}}) async {
     if (!destinationFolder.startsWith('content://')) {
       final result = <int, bool>{};
       for (final post in posts) {
-        result[post.id] = await isDownloaded(post, destinationFolder, poolId: poolId, poolName: poolName, poolPage: poolPage);
+        result[post.id] = await isDownloaded(post, destinationFolder, poolId: poolId, poolName: poolName, poolPage: pageByPostId[post.id] ?? 0);
       }
       return result;
     }
@@ -223,7 +229,7 @@ class DownloadManager {
     final filenameByPostId = <int, String>{};
     for (final post in posts) {
       final ext = post.fileExt ?? 'bin';
-      final (folder, filename) = _destinationFor(post, ext, poolId: poolId, poolName: poolName, poolPage: poolPage);
+      final (folder, filename) = _destinationFor(post, ext, poolId: poolId, poolName: poolName, poolPage: pageByPostId[post.id] ?? 0);
       postsByFolder.putIfAbsent(folder, () => []).add(post);
       filenameByPostId[post.id] = filename;
     }
@@ -275,11 +281,14 @@ class DownloadManager {
   /// sheer number of sequential awaited calls) while [SlideshowPrepareService.
   /// prepare] itself was already fast after already getting this same
   /// treatment.
-  Future<Map<int, String>> batchLocalFilePathFor(List<BunnyPost> posts, String destinationFolder, {int poolId = 0, String? poolName, int poolPage = 0}) async {
+  ///
+  /// [pageByPostId] (M83) -- see [batchIsDownloaded]'s own doc comment for
+  /// why this takes a per-post map rather than one [poolPage] for every post.
+  Future<Map<int, String>> batchLocalFilePathFor(List<BunnyPost> posts, String destinationFolder, {int poolId = 0, String? poolName, Map<int, int> pageByPostId = const {}}) async {
     if (!destinationFolder.startsWith('content://')) {
       final result = <int, String>{};
       for (final post in posts) {
-        final path = await localFilePathFor(post, destinationFolder, poolId: poolId, poolName: poolName, poolPage: poolPage);
+        final path = await localFilePathFor(post, destinationFolder, poolId: poolId, poolName: poolName, poolPage: pageByPostId[post.id] ?? 0);
         if (path != null) {
           result[post.id] = path;
         }
@@ -291,7 +300,7 @@ class DownloadManager {
     final filenameByPostId = <int, String>{};
     for (final post in posts) {
       final ext = post.fileExt ?? 'bin';
-      final (folder, filename) = _destinationFor(post, ext, poolId: poolId, poolName: poolName, poolPage: poolPage);
+      final (folder, filename) = _destinationFor(post, ext, poolId: poolId, poolName: poolName, poolPage: pageByPostId[post.id] ?? 0);
       postsByFolder.putIfAbsent(folder, () => []).add(post);
       filenameByPostId[post.id] = filename;
     }

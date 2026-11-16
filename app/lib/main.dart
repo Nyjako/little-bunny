@@ -1,5 +1,6 @@
 import 'dart:async';
-import 'dart:io' show Platform;
+import 'dart:convert';
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
@@ -7,6 +8,7 @@ import 'package:fvp/fvp.dart' as fvp;
 import 'package:just_audio_media_kit/just_audio_media_kit.dart';
 
 import 'bunny_repository_scope.dart';
+import 'cli_handshake.dart';
 import 'l10n/app_localizations.dart';
 import 'native_dependency_licenses.dart';
 import 'repository/bunny_repository.dart';
@@ -28,8 +30,15 @@ import 'settings/secret_store.dart';
 import 'settings/theme_settings_store.dart';
 import 'settings/update_settings_store.dart';
 
-Future<void> main() async {
+Future<void> main(List<String> args) async {
   WidgetsFlutterBinding.ensureInitialized();
+  // Checked before anything else below -- a CLI handshake needs none of the
+  // following (notifications, video/audio backend registration, the real
+  // widget tree) and must never show any UI at all.
+  if (args.contains('--cli-handshake')) {
+    await _runCliHandshake();
+    return;
+  }
   registerNativeDependencyLicenses();
   // video_player has no official Linux/Windows implementation; fvp fills the
   // gap for exactly those platforms via its own bundled decoder, leaving
@@ -83,6 +92,28 @@ Future<void> main() async {
       updateSettingsStore: const UpdateSettingsStore(),
     ),
   );
+}
+
+/// What `--cli-handshake` (M84) actually does once launched: read exactly
+/// one line from stdin (the app-lock secret `bunny_cli` wants to try, or an
+/// empty line if it didn't supply one), hand it to
+/// [buildCliHandshakeResponse] (the actual, independently-testable logic),
+/// write exactly one JSON line with the result to stdout, then terminate the
+/// process immediately via [exit] -- the same idiom [UpdateApplyService]
+/// already uses to finish a side task without ever reaching [runApp]. Exit
+/// code mirrors the response's own `ok` field so a shell script driving this
+/// (rather than `bunny_cli` itself) can check it without parsing JSON.
+Future<void> _runCliHandshake() async {
+  final secretStore = FlutterSecureStorageSecretStore();
+  final suppliedSecret = stdin.readLineSync() ?? '';
+  final response = await buildCliHandshakeResponse(
+    lockService: AppLockService(secretStore),
+    settingsStore: RepositorySettingsStore(secretStore),
+    downloadSettingsStore: const DownloadSettingsStore(),
+    suppliedSecret: suppliedSecret,
+  );
+  stdout.writeln(jsonEncode(response));
+  exit(response['ok'] == true ? 0 : 1);
 }
 
 /// The currently-active repository, if any -- kept outside the widget tree

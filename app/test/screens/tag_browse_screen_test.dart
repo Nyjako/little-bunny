@@ -501,6 +501,44 @@ void main() {
       expect(downloadQueueService.totalCount, 2);
     });
 
+    testWidgets('a post opened from a pool browse carries its own pool/page into PostDetailScreen, so its single-post download lands in the same pool folder (M82)', (WidgetTester tester) async {
+      final repository = FakeBunnyRepository();
+      repository.previewSearchResults['e621:pool:123 order:id:1'] = [
+        _post(1, fileUrl: 'https://example.invalid/1.jpg', fileExt: 'jpg'),
+        _post(2, fileUrl: 'https://example.invalid/2.jpg', fileExt: 'jpg'),
+        _post(3, fileUrl: 'https://example.invalid/3.jpg', fileExt: 'jpg'),
+      ];
+      repository.poolInfoById[123] = const BunnyPoolInfo(id: 123, name: 'My Comic', postCount: 3);
+      final downloadQueueService = DownloadQueueService(downloadManager: const DownloadManager(), downloadSettingsStore: const DownloadSettingsStore());
+
+      await tester.pumpWidget(
+        wrapWithLocalization(
+          TagBrowseScreen(
+            site: BunnySite.e621,
+            query: 'pool:123',
+            repository: repository,
+            displaySettingsStore: const DisplaySettingsStore(),
+            downloadSettingsStore: const DownloadSettingsStore(),
+            downloadQueueService: downloadQueueService,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // Post 3, its real pool page -- opening it directly (not via a mass
+      // selection) must still resolve to page 3, not page 1.
+      tester.widget<PostGridTile>(find.byKey(const ValueKey(3))).onTap();
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.ancestor(of: find.byTooltip('Download'), matching: find.byType(IconButton)));
+      await tester.pump();
+
+      final item = downloadQueueService.items.single;
+      expect(item.poolId, 123);
+      expect(item.poolName, 'My Comic');
+      expect(item.poolPage, 3);
+    });
+
     testWidgets('tapping a selected post while in selection mode deselects it instead of opening it', (WidgetTester tester) async {
       final repository = FakeBunnyRepository();
       repository.previewSearchResults['e621:someartist:1'] = [_post(1), _post(2)];

@@ -549,6 +549,31 @@ void main() {
 
       expect(result, {42: '${tempDir.path}/wolf/42.png'});
     });
+
+    // M83: batchIsDownloaded/batchLocalFilePathFor take a pageByPostId map
+    // rather than one poolPage applied to every post -- a real pool batch
+    // (e.g. the fullscreen viewer paging through a whole pool) has a
+    // *different* page per post, so a single shared poolPage would check
+    // every post against the same, mostly-wrong filename.
+    test('batchIsDownloaded/batchLocalFilePathFor use each post\'s own page from pageByPostId, not one page for all of them', () async {
+      final manager = const DownloadManager();
+      final repository = FakeBunnyRepository()..downloadFileFetchImpl = (_) async => http.Response.bytes([1, 2, 3], 200);
+      final post1 = _post(id: 1, externalId: 100);
+      final post2 = _post(id: 2, externalId: 200);
+      await manager.downloadPost(post1, repository, tempDir.path, poolId: 5, poolName: 'Comic', poolPage: 1);
+      await manager.downloadPost(post2, repository, tempDir.path, poolId: 5, poolName: 'Comic', poolPage: 2);
+
+      final isDownloaded = await manager.batchIsDownloaded([post1, post2], tempDir.path, poolId: 5, poolName: 'Comic', pageByPostId: {1: 1, 2: 2});
+      expect(isDownloaded, {1: true, 2: true});
+
+      // Swapped pages -- each post's real file sits under the *other*
+      // page's filename, so both must now resolve to false/missing.
+      final swapped = await manager.batchIsDownloaded([post1, post2], tempDir.path, poolId: 5, poolName: 'Comic', pageByPostId: {1: 2, 2: 1});
+      expect(swapped, {1: false, 2: false});
+
+      final paths = await manager.batchLocalFilePathFor([post1, post2], tempDir.path, poolId: 5, poolName: 'Comic', pageByPostId: {1: 1, 2: 2});
+      expect(paths, {1: '${tempDir.path}/pool_5 - Comic/5 - p0001 [100].png', 2: '${tempDir.path}/pool_5 - Comic/5 - p0002 [200].png'});
+    });
   });
 
   group('autoFavorite (M10.1)', () {

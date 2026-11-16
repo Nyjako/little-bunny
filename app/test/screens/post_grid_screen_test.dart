@@ -710,5 +710,43 @@ void main() {
       expect(byPostId[1]!.poolPage, 1);
       expect(byPostId[3]!.poolPage, 3);
     });
+
+    testWidgets('a post opened from a pool browse carries its own pool/page into PostDetailScreen, so its single-post download lands in the same pool folder (M82)', (WidgetTester tester) async {
+      final repository = FakeBunnyRepository();
+      final poolSearch = const BunnySearch(id: 3, site: BunnySite.e621, label: 'A pool', query: 'pool:123', intervalHours: 24, createdAt: '2026-01-01T00:00:00Z');
+      repository.postsBySearchId[3] = [
+        _post(id: 1, isSeen: false, fileUrl: 'https://example.invalid/1.jpg', fileExt: 'jpg'),
+        _post(id: 2, isSeen: false, fileUrl: 'https://example.invalid/2.jpg', fileExt: 'jpg'),
+        _post(id: 3, isSeen: false, fileUrl: 'https://example.invalid/3.jpg', fileExt: 'jpg'),
+      ];
+      repository.poolInfoById[123] = const BunnyPoolInfo(id: 123, name: 'My Comic', postCount: 3);
+      final downloadQueueService = DownloadQueueService(downloadManager: const DownloadManager(), downloadSettingsStore: const DownloadSettingsStore());
+
+      await tester.pumpWidget(
+        wrapWithLocalization(
+          PostGridScreen(
+            search: poolSearch,
+            repository: repository,
+            displaySettingsStore: const DisplaySettingsStore(),
+            downloadSettingsStore: const DownloadSettingsStore(),
+            downloadQueueService: downloadQueueService,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // Post 3, its real pool page -- opening it directly (not via a mass
+      // selection) must still resolve to page 3, not page 1 or 2.
+      await tester.tap(find.byKey(const ValueKey(3)));
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.ancestor(of: find.byTooltip('Download'), matching: find.byType(IconButton)));
+      await tester.pump();
+
+      final item = downloadQueueService.items.single;
+      expect(item.poolId, 123);
+      expect(item.poolName, 'My Comic');
+      expect(item.poolPage, 3);
+    });
   });
 }

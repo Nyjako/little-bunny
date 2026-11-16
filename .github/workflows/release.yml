@@ -54,8 +54,26 @@ jobs:
           name: bunny-server-linux-x64-ubuntu22
           path: bunny-server-linux-x64-ubuntu22.tar.gz
 
-  build-app-linux:
+  # bunny_cli ships packaged inside the APP's own zip (not the server's) --
+  # a separate job so it builds in parallel with the Flutter side, then
+  # build-app-linux below downloads this artifact and drops it straight
+  # into the bundle directory before compressing. Windows packaging is
+  # deliberately not done yet (Linux-first per the user's own call) -- see
+  # cli/README.md.
+  build-cli-linux:
     needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: sudo apt-get update -qq && sudo apt-get install -y --no-install-recommends build-essential cmake libssl-dev
+      - run: make release BUNNY_BUILD_NUMBER=${{ github.run_number }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: bunny-cli-linux-x64
+          path: build-release/cli/bunny_cli
+
+  build-app-linux:
+    needs: [test, build-cli-linux]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -68,6 +86,15 @@ jobs:
         run: |
           flutter pub get
           flutter build linux --release --dart-define=BUNNY_BUILD_NUMBER=${{ github.run_number }}
+      # bunny_cli must sit next to little_bunny in the SAME directory
+      # (bunny_cli_find_app_executable, cli/src/handshake.c) -- the bundle
+      # root is exactly where Flutter's own linux build installs the
+      # little_bunny binary itself (app/linux/CMakeLists.txt).
+      - uses: actions/download-artifact@v4
+        with:
+          name: bunny-cli-linux-x64
+          path: app/build/linux/x64/release/bundle
+      - run: chmod +x app/build/linux/x64/release/bundle/bunny_cli
       - working-directory: app/build/linux/x64/release
         run: tar -czf "${{ github.workspace }}/little-bunny-app-linux-x64.tar.gz" bundle
       - uses: actions/upload-artifact@v4
@@ -188,6 +215,11 @@ jobs:
           path: little-bunny-app-macos-arm64.zip
 
   release:
+    # build-cli-linux isn't listed here directly -- build-app-linux already
+    # depends on it (needs its artifact to bundle into the app zip), which
+    # forces the same ordering. Its own raw-binary artifact is deleted
+    # below before uploading release assets -- bunny_cli isn't meant to be
+    # a standalone download, only something bundled inside the app's zip.
     needs:
       [
         build-server-linux,
@@ -203,6 +235,12 @@ jobs:
         with:
           path: artifacts
           merge-multiple: true
+      # bunny-cli-linux-x64's raw binary is only an intermediate artifact
+      # for build-app-linux to bundle into little-bunny-app-linux-x64.tar.gz
+      # -- never a standalone release asset (bunny_cli needs the app sitting
+      # next to it to be useful at all), so it's removed here rather than
+      # published alongside everything else.
+      - run: rm -f artifacts/bunny_cli
       # Lets both the server (server/src/updater.c) and the app
       # (UpdateApplyService) verify a downloaded asset wasn't corrupted or
       # truncated in transit before extracting/applying it.
