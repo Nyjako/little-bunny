@@ -21,13 +21,22 @@ HOST_GID := $(shell id -g)
 # bindings or the Dart/platform side). Was never actually defined before
 # (format/format-check ran clang-format with zero file arguments, a silent
 # no-op -- discovered 2026-11-08 while adding new C under libs/common/).
-SOURCES := $(shell find libs server tools bunny_core_ffi/src -name '*.c' -o -name '*.h')
+SOURCES := $(shell find libs server cli tools bunny_core_ffi/src -name '*.c' -o -name '*.h')
 
-.PHONY: build test test-c test-flutter release release-portable clean dockcross windows tools format format-check app-linux app-android
+.PHONY: build cli test test-c test-flutter release release-portable clean dockcross windows tools format format-check app-linux app-android
 
 build:
 	cmake -S . -B $(BUILD_DIR) -DCMAKE_BUILD_TYPE=Debug -DBUNNY_BUILD_TESTS=ON
 	cmake --build $(BUILD_DIR) -j
+
+# Just bunny_cli (BUNNY_BUILD_CLI defaults ON, so `build`/`release` already
+# produce it too) -- the same $(BUILD_DIR)/config `build` uses, so the two
+# share one CMake cache instead of needing a separate configure, but only
+# builds the one target for a faster loop when it's the only thing that
+# changed. Output lands at $(BUILD_DIR)/cli/bunny_cli.
+cli:
+	cmake -S . -B $(BUILD_DIR) -DCMAKE_BUILD_TYPE=Debug -DBUNNY_BUILD_TESTS=ON
+	cmake --build $(BUILD_DIR) -j --target bunny_cli
 
 # Everything: the C side (libs/server) plus bunny_core_ffi's and the Flutter
 # app's own test suites, same split test.yml runs in CI. `test-c`/
