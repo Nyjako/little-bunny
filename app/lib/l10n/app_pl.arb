@@ -323,6 +323,11 @@
   "@tagBrowseRelatedPoolChip": {
     "placeholders": {"poolId": {"type": "int"}}
   },
+  "tagBrowseSelectEntireSearch": "Wybierz wszystko",
+  "tagBrowseSelectEntireSearchProgress": "Wczytano {count}",
+  "@tagBrowseSelectEntireSearchProgress": {
+    "placeholders": {"count": {"type": "int"}}
+  },
 
   "postGridPoolInfoTooltip": "Informacje o zbiorze",
   "postGridPoolInfoTitle": "Informacje o zbiorze",
