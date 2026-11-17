@@ -18,10 +18,16 @@
 #include <string.h>
 
 #ifdef _WIN32
+#include <direct.h>
 #include <windows.h>
+#define bunny_cli_mkdir(path) _mkdir(path)
 #else
+#include <sys/stat.h>
 #include <unistd.h>
+#define bunny_cli_mkdir(path) mkdir(path, 0755)
 #endif
+
+#include <errno.h>
 
 static void sleep_ms(unsigned int ms)
 {
@@ -30,6 +36,41 @@ static void sleep_ms(unsigned int ms)
 #else
     usleep(ms * 1000);
 #endif
+}
+
+static int make_directory(const char *path)
+{
+    if (bunny_cli_mkdir(path) == 0) {
+        return 0;
+    }
+    return errno == EEXIST ? 0 : -1;
+}
+
+/* mkdir -p -- mirrors libs/core/src/download.c's own
+ * make_directories_recursive (that one is static/private to its own
+ * translation unit, so not directly reusable here): bunny_core_download_start
+ * creates its own destination directory internally, but
+ * bunny_core_build_writing_epub does not (it's a pure fopen, no
+ * mkdir-of-its-own -- same as DownloadManager.downloadWritingEpub's own
+ * Dart counterpart explicitly creating the folder first on that side). */
+static int make_directories_recursive(const char *path)
+{
+    size_t len = strlen(path);
+    if (len == 0 || len >= 1024) {
+        return -1;
+    }
+    char buf[1024];
+    memcpy(buf, path, len + 1);
+    for (size_t i = 1; i < len; i++) {
+        if (buf[i] == '/') {
+            buf[i] = '\0';
+            if (make_directory(buf) != 0) {
+                return -1;
+            }
+            buf[i] = '/';
+        }
+    }
+    return make_directory(buf);
 }
 
 /* --stats is the only command with no networked implementation at all
@@ -239,6 +280,13 @@ typedef struct
     char *file_ext;
     char *file_url;
     char *file_md5;
+    /* An Inkbunny "Writing - Document" post's story text (bunny_db_post_t.
+     * writing) -- non-NULL/non-empty is exactly the same "download as a
+     * .epub instead of the plain cover image" gate DownloadManager.
+     * downloadWritingEpub's own Dart counterpart uses. NULL for every e621
+     * post, and for an Inkbunny post never fetched via a single-submission
+     * call. */
+    char *writing;
     int64_t external_id;
     bunny_db_site_t site;
 } resolved_post_t;
@@ -249,7 +297,13 @@ static void resolved_post_free(resolved_post_t *post)
     free(post->file_ext);
     free(post->file_url);
     free(post->file_md5);
+    free(post->writing);
     memset(post, 0, sizeof(*post));
+}
+
+static bool is_writing_document(const resolved_post_t *post)
+{
+    return post->site == BUNNY_DB_SITE_INKBUNNY && post->writing && post->writing[0] != '\0';
 }
 
 static bool resolve_post_standalone(bunny_core_t *core, int64_t post_id, resolved_post_t *out)
@@ -263,6 +317,7 @@ static bool resolve_post_standalone(bunny_core_t *core, int64_t post_id, resolve
     out->file_ext = goblin_copy_cstr(post.file_ext);
     out->file_url = goblin_copy_cstr(post.file_url);
     out->file_md5 = goblin_copy_cstr(post.file_md5);
+    out->writing = goblin_copy_cstr(post.writing);
     out->external_id = post.external_id;
     out->site = post.site;
     bunny_db_post_free(&post);
@@ -291,10 +346,12 @@ static bool resolve_post_networked(bunny_cli_rest_client_t *rest, int64_t post_i
     const char *file_url = bunny_json_get_string_or(json, "file_url", NULL);
     const char *file_md5 = bunny_json_get_string_or(json, "file_md5", NULL);
     const char *site_text = bunny_json_get_string_or(json, "site", "");
+    const char *writing = bunny_json_get_string_or(json, "writing", NULL);
     out->artist = goblin_copy_cstr(artist);
     out->file_ext = goblin_copy_cstr(file_ext);
     out->file_url = goblin_copy_cstr(file_url);
     out->file_md5 = goblin_copy_cstr(file_md5);
+    out->writing = goblin_copy_cstr(writing);
     bunny_json_get_int64(json, "external_id", &out->external_id);
     out->site = strcmp(site_text, "inkbunny") == 0 ? BUNNY_DB_SITE_INKBUNNY : BUNNY_DB_SITE_E621;
 
@@ -405,6 +462,46 @@ static void process_claimed_item(download_shared_state_t *state, const char *dow
 
     if (!have_post) {
         snprintf(error_message, sizeof(error_message), "post %lld could not be resolved", (long long)item->post_id);
+    } else if (is_writing_document(&post)) {
+        /* An Inkbunny Writing-Document post downloads as a complete .epub
+         * (cover + parsed story text already embedded inside it) instead of
+         * its plain cover image file -- same deterministic artist/pool
+         * subfolder path, just a fixed .epub extension, mirroring
+         * DownloadManager.downloadWritingEpub's own Dart counterpart
+         * exactly. Never a checksum-mismatch state (there's no published
+         * checksum for a locally-built/server-built file), only
+         * succeeded or failed. */
+        char folder[BUNNY_CLI_DESTINATION_MAX];
+        char filename[BUNNY_CLI_DESTINATION_MAX];
+        bunny_cli_destination_for(post.artist, "epub", post.external_id, item->pool_id, item->pool_name, item->pool_page, folder, filename);
+
+        char dest_dir[BUNNY_CLI_DESTINATION_MAX * 2];
+        snprintf(dest_dir, sizeof(dest_dir), "%s/%s", download_folder, folder);
+
+        if (make_directories_recursive(dest_dir) != 0) {
+            snprintf(error_message, sizeof(error_message), "failed to create destination directory %s", dest_dir);
+        } else {
+            char dest_path[BUNNY_CLI_DESTINATION_MAX * 3];
+            snprintf(dest_path, sizeof(dest_path), "%s/%s", dest_dir, filename);
+
+            if (state->rest) {
+                char path[64];
+                snprintf(path, sizeof(path), "/posts/%lld/writing_epub", (long long)item->post_id);
+                bunny_cli_rest_result_t result = bunny_cli_rest_download(state->rest, path, dest_path);
+                if (result == BUNNY_CLI_REST_OK) {
+                    new_status = BUNNY_DB_DOWNLOAD_QUEUE_SUCCEEDED;
+                } else {
+                    snprintf(error_message, sizeof(error_message), "failed to download epub: %s", bunny_cli_rest_result_to_string(result));
+                }
+            } else {
+                bunny_core_result_t build_result = bunny_core_build_writing_epub(state->core, item->post_id, dest_path);
+                if (build_result == BUNNY_CORE_OK) {
+                    new_status = BUNNY_DB_DOWNLOAD_QUEUE_SUCCEEDED;
+                } else {
+                    snprintf(error_message, sizeof(error_message), "failed to build epub: %s", bunny_core_result_to_string(build_result));
+                }
+            }
+        }
     } else if (!post.file_url) {
         snprintf(error_message, sizeof(error_message), "post %lld has no file to download", (long long)item->post_id);
     } else {

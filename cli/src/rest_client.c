@@ -374,6 +374,51 @@ char *bunny_cli_rest_url_encode(const char *value)
     return goblin_url_encode(value);
 }
 
+bunny_cli_rest_result_t bunny_cli_rest_download(bunny_cli_rest_client_t *client, const char *path, const char *dest_path)
+{
+    if (!client || !path || !dest_path) {
+        return BUNNY_CLI_REST_ERR_INVALID_ARG;
+    }
+
+    char url[2048];
+    snprintf(url, sizeof(url), "%s%s", client->base_url, path);
+
+    char auth_header_value[600];
+    snprintf(auth_header_value, sizeof(auth_header_value), "Bearer %s", client->bearer_token);
+    bunny_http_header_t headers[1];
+    headers[0].name = "Authorization";
+    headers[0].value = auth_header_value;
+
+    bunny_http_request_t request;
+    memset(&request, 0, sizeof(request));
+    request.method = BUNNY_HTTP_GET;
+    request.url = url;
+    request.headers = headers;
+    request.header_count = 1;
+
+    bunny_http_response_t response;
+    bunny_http_result_t send_result = bunny_http_send(&client->transport, &request, &response);
+    if (send_result != BUNNY_HTTP_OK) {
+        return BUNNY_CLI_REST_ERR_NETWORK;
+    }
+
+    bunny_cli_rest_result_t result = result_for_status(response.status);
+    if (result == BUNNY_CLI_REST_OK) {
+        FILE *f = fopen(dest_path, "wb");
+        if (!f) {
+            result = BUNNY_CLI_REST_ERR_IO;
+        } else {
+            size_t written = response.body_len > 0 ? fwrite(response.body, 1, response.body_len, f) : 0;
+            if (written != response.body_len) {
+                result = BUNNY_CLI_REST_ERR_IO;
+            }
+            fclose(f);
+        }
+    }
+    bunny_http_response_free(&response);
+    return result;
+}
+
 const char *bunny_cli_rest_result_to_string(bunny_cli_rest_result_t result)
 {
     switch (result) {
@@ -393,6 +438,8 @@ const char *bunny_cli_rest_result_to_string(bunny_cli_rest_result_t result)
             return "server error";
         case BUNNY_CLI_REST_ERR_NETWORK:
             return "could not reach the server (network error or certificate mismatch)";
+        case BUNNY_CLI_REST_ERR_IO:
+            return "could not write the downloaded file to disk";
     }
     return "unknown error";
 }
