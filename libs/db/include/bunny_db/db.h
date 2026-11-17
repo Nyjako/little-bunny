@@ -151,6 +151,7 @@ typedef struct
     const char *artist;      /* may be NULL */
     const char *title;       /* may be NULL */
     const char *description; /* may be NULL */
+    const char *writing;     /* may be NULL; Inkbunny "Writing - Document" story text (M88) */
     const char *rating;      /* may be NULL */
     int score;
     int score_up;   /* 0 for Inkbunny -- no vote concept there */

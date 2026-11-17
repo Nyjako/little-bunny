@@ -29,6 +29,7 @@ static cJSON *post_to_json(const bunny_db_post_t *post)
     add_optional_string(json, "artist", post->artist);
     add_optional_string(json, "title", post->title);
     add_optional_string(json, "description", post->description);
+    add_optional_string(json, "writing", post->writing);
     add_optional_string(json, "rating", post->rating);
     cJSON_AddNumberToObject(json, "score", post->score);
     cJSON_AddNumberToObject(json, "score_up", post->score_up);

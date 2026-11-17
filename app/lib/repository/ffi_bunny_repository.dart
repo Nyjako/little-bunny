@@ -60,6 +60,7 @@ BunnyPost _postFromMap(Map<String, Object?> m) => BunnyPost(
   artist: m['artist'] as String?,
   title: m['title'] as String?,
   description: m['description'] as String?,
+  writing: m['writing'] as String?,
   rating: m['rating'] as String?,
   score: m['score'] as int,
   scoreUp: m['scoreUp'] as int,

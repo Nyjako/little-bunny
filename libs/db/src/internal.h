@@ -131,11 +131,12 @@ static inline void bunny_db_bind_text_or_null(sqlite3_stmt *stmt, int idx, const
 /* Shared SELECT fragment for anything that returns a full bunny_db_post_t
  * (post_get, search_list_posts, favorite_list) so they stay in the same
  * column order that bunny_db_fill_post_from_row() expects. */
-#define BUNNY_DB_POST_SELECT_COLUMNS                                                                  \
-    "p.id, p.site, p.external_id, p.artist, p.title, p.description, p.rating, p.score, p.fav_count, " \
-    "p.comment_count, p.file_url, p.file_ext, p.file_md5, p.preview_url, p.width, p.height, "         \
-    "p.created_at_site, p.cached_at, (seen.post_id IS NOT NULL) AS is_seen, "                         \
-    "(fav.post_id IS NOT NULL) AS is_favorited, p.score_up, p.score_down, pmv.sample_url, "           \
+#define BUNNY_DB_POST_SELECT_COLUMNS                                                                \
+    "p.id, p.site, p.external_id, p.artist, p.title, p.description, p.writing, p.rating, p.score, " \
+    "p.fav_count, "                                                                                 \
+    "p.comment_count, p.file_url, p.file_ext, p.file_md5, p.preview_url, p.width, p.height, "       \
+    "p.created_at_site, p.cached_at, (seen.post_id IS NOT NULL) AS is_seen, "                       \
+    "(fav.post_id IS NOT NULL) AS is_favorited, p.score_up, p.score_down, pmv.sample_url, "         \
     "COALESCE(vt.score, 0) AS user_vote, COALESCE(fav.stars, 0) AS favorite_stars "
 
 /* How many columns BUNNY_DB_POST_SELECT_COLUMNS actually selects -- for a
@@ -144,7 +145,7 @@ static inline void bunny_db_bind_text_or_null(sqlite3_stmt *stmt, int idx, const
  * index after bunny_db_fill_post_from_row has already consumed columns
  * 0..(count-1). Keep in sync with the column list above by hand -- there's
  * no way to derive this from the macro text itself at compile time. */
-#define BUNNY_DB_POST_SELECT_COLUMNS_COUNT 25
+#define BUNNY_DB_POST_SELECT_COLUMNS_COUNT 26
 
 /* Posts per page for bunny_db_search_list_posts/bunny_db_pool_search_list_posts
  * (see their own doc comments in db.h) -- a local DB listing, not a site API

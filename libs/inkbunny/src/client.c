@@ -422,8 +422,14 @@ inkbunny_result_t inkbunny_get_submissions(inkbunny_client_t *client, const int6
         offset += (size_t)written;
     }
 
+    /* show_writing (the full story text for "Writing - Document" submissions,
+     * under api_submissions.php's own "Submission Details" docs) is only
+     * requested for a single-submission fetch -- per Inkbunny's own docs, the
+     * writing can be very long, so asking for it across a whole batch of up
+     * to 100 ids would be wasteful/slow for the common multi-id backfill
+     * case, which never needs the full text anyway. */
     char query[1700];
-    snprintf(query, sizeof(query), "sid=%s&submission_ids=%s&show_description=yes&show_pools=yes", client->sid, ids_buf);
+    snprintf(query, sizeof(query), "sid=%s&submission_ids=%s&show_description=yes&show_pools=yes%s", client->sid, ids_buf, submission_id_count == 1 ? "&show_writing=yes" : "");
 
     cJSON *json = NULL;
     inkbunny_result_t result = perform_request(client, "/api_submissions.php", query, &json);

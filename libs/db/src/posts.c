@@ -50,12 +50,13 @@ bunny_db_result_t bunny_db_post_upsert(bunny_db_t *db, const bunny_db_post_upser
         return BUNNY_DB_ERR_INVALID_ARG;
     }
 
-    const char *sql = "INSERT INTO posts (site, external_id, artist, title, description, rating, score, fav_count, "
+    const char *sql = "INSERT INTO posts (site, external_id, artist, title, description, writing, rating, score, fav_count, "
                       "comment_count, file_url, file_ext, file_md5, preview_url, width, height, created_at_site, "
                       "score_up, score_down) "
-                      "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) "
+                      "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) "
                       "ON CONFLICT(site, external_id) DO UPDATE SET "
                       "  artist = excluded.artist, title = excluded.title, description = excluded.description, "
+                      "  writing = excluded.writing, "
                       "  rating = excluded.rating, score = excluded.score, fav_count = excluded.fav_count, "
                       "  comment_count = excluded.comment_count, file_url = excluded.file_url, file_ext = excluded.file_ext, "
                       "  file_md5 = excluded.file_md5, preview_url = excluded.preview_url, width = excluded.width, "
@@ -74,19 +75,20 @@ bunny_db_result_t bunny_db_post_upsert(bunny_db_t *db, const bunny_db_post_upser
     bunny_db_bind_text_or_null(stmt, 3, post->artist);
     bunny_db_bind_text_or_null(stmt, 4, post->title);
     bunny_db_bind_text_or_null(stmt, 5, post->description);
-    bunny_db_bind_text_or_null(stmt, 6, post->rating);
-    sqlite3_bind_int(stmt, 7, post->score);
-    sqlite3_bind_int(stmt, 8, post->fav_count);
-    sqlite3_bind_int(stmt, 9, post->comment_count);
-    bunny_db_bind_text_or_null(stmt, 10, post->file_url);
-    bunny_db_bind_text_or_null(stmt, 11, post->file_ext);
-    bunny_db_bind_text_or_null(stmt, 12, post->file_md5);
-    bunny_db_bind_text_or_null(stmt, 13, post->preview_url);
-    sqlite3_bind_int(stmt, 14, post->width);
-    sqlite3_bind_int(stmt, 15, post->height);
-    bunny_db_bind_text_or_null(stmt, 16, post->created_at_site);
-    sqlite3_bind_int(stmt, 17, post->score_up);
-    sqlite3_bind_int(stmt, 18, post->score_down);
+    bunny_db_bind_text_or_null(stmt, 6, post->writing);
+    bunny_db_bind_text_or_null(stmt, 7, post->rating);
+    sqlite3_bind_int(stmt, 8, post->score);
+    sqlite3_bind_int(stmt, 9, post->fav_count);
+    sqlite3_bind_int(stmt, 10, post->comment_count);
+    bunny_db_bind_text_or_null(stmt, 11, post->file_url);
+    bunny_db_bind_text_or_null(stmt, 12, post->file_ext);
+    bunny_db_bind_text_or_null(stmt, 13, post->file_md5);
+    bunny_db_bind_text_or_null(stmt, 14, post->preview_url);
+    sqlite3_bind_int(stmt, 15, post->width);
+    sqlite3_bind_int(stmt, 16, post->height);
+    bunny_db_bind_text_or_null(stmt, 17, post->created_at_site);
+    sqlite3_bind_int(stmt, 18, post->score_up);
+    sqlite3_bind_int(stmt, 19, post->score_down);
 
     int rc = sqlite3_step(stmt);
     int64_t post_id = 0;
@@ -537,25 +539,26 @@ void bunny_db_fill_post_from_row(sqlite3_stmt *stmt, bunny_db_post_t *out)
     out->artist = bunny_db_column_text_dup(stmt, 3);
     out->title = bunny_db_column_text_dup(stmt, 4);
     out->description = bunny_db_column_text_dup(stmt, 5);
-    out->rating = bunny_db_column_text_dup(stmt, 6);
-    out->score = sqlite3_column_int(stmt, 7);
-    out->fav_count = sqlite3_column_int(stmt, 8);
-    out->comment_count = sqlite3_column_int(stmt, 9);
-    out->file_url = bunny_db_column_text_dup(stmt, 10);
-    out->file_ext = bunny_db_column_text_dup(stmt, 11);
-    out->file_md5 = bunny_db_column_text_dup(stmt, 12);
-    out->preview_url = bunny_db_column_text_dup(stmt, 13);
-    out->width = sqlite3_column_int(stmt, 14);
-    out->height = sqlite3_column_int(stmt, 15);
-    out->created_at_site = bunny_db_column_text_dup(stmt, 16);
-    out->cached_at = bunny_db_column_text_dup(stmt, 17);
-    out->is_seen = sqlite3_column_int(stmt, 18) != 0;
-    out->is_favorited = sqlite3_column_int(stmt, 19) != 0;
-    out->score_up = sqlite3_column_int(stmt, 20);
-    out->score_down = sqlite3_column_int(stmt, 21);
-    out->sample_url = bunny_db_column_text_dup(stmt, 22);
-    out->user_vote = sqlite3_column_int(stmt, 23);
-    out->favorite_stars = sqlite3_column_int(stmt, 24);
+    out->writing = bunny_db_column_text_dup(stmt, 6);
+    out->rating = bunny_db_column_text_dup(stmt, 7);
+    out->score = sqlite3_column_int(stmt, 8);
+    out->fav_count = sqlite3_column_int(stmt, 9);
+    out->comment_count = sqlite3_column_int(stmt, 10);
+    out->file_url = bunny_db_column_text_dup(stmt, 11);
+    out->file_ext = bunny_db_column_text_dup(stmt, 12);
+    out->file_md5 = bunny_db_column_text_dup(stmt, 13);
+    out->preview_url = bunny_db_column_text_dup(stmt, 14);
+    out->width = sqlite3_column_int(stmt, 15);
+    out->height = sqlite3_column_int(stmt, 16);
+    out->created_at_site = bunny_db_column_text_dup(stmt, 17);
+    out->cached_at = bunny_db_column_text_dup(stmt, 18);
+    out->is_seen = sqlite3_column_int(stmt, 19) != 0;
+    out->is_favorited = sqlite3_column_int(stmt, 20) != 0;
+    out->score_up = sqlite3_column_int(stmt, 21);
+    out->score_down = sqlite3_column_int(stmt, 22);
+    out->sample_url = bunny_db_column_text_dup(stmt, 23);
+    out->user_vote = sqlite3_column_int(stmt, 24);
+    out->favorite_stars = sqlite3_column_int(stmt, 25);
 }
 
 bunny_db_result_t bunny_db_post_get(bunny_db_t *db, bunny_db_site_t site, int64_t external_id, bunny_db_post_t *out_post)

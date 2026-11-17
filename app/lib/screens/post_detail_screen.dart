@@ -134,6 +134,7 @@ BunnyPost _applyOptimisticUpdate(BunnyPost post, {bool? isFavorited, int favCoun
   artist: post.artist,
   title: post.title,
   description: post.description,
+  writing: post.writing,
   rating: post.rating,
   score: post.score + scoreDelta,
   scoreUp: post.scoreUp + scoreUpDelta,
@@ -1781,6 +1782,21 @@ class _PostDetailPageState extends State<_PostDetailPage> {
                   const Divider(),
                   RichMarkupText(
                     text: post.description!,
+                    onOpenAuthor: _openTagBrowse,
+                    onOpenWiki: _openTagWiki,
+                    onOpenPost: (site, postId) => _openPostLink(l10n, site, postId),
+                    onOpenPool: (poolId) => _openPool(l10n, poolId),
+                  ),
+                ],
+                if (post.writing != null && post.writing!.isNotEmpty) ...[
+                  const Divider(),
+                  // Raw BBCode, not parsed -- this app has no BBCode/HTML renderer
+                  // anywhere, so a literal tag (e.g. "[b]") shows as-is. Independent
+                  // of _buildMedia's own file-based mechanism above (a submission
+                  // whose story text comes back as a separate file instead) -- both
+                  // can apply to the same post.
+                  RichMarkupText(
+                    text: post.writing!,
                     onOpenAuthor: _openTagBrowse,
                     onOpenWiki: _openTagWiki,
                     onOpenPost: (site, postId) => _openPostLink(l10n, site, postId),

@@ -397,6 +397,7 @@ static bunny_core_result_t upsert_inkbunny_submission(bunny_db_t *db, const inkb
     upsert.artist = submission->username;
     upsert.title = submission->title;
     upsert.description = submission->description;
+    upsert.writing = submission->writing;
     upsert.rating = submission->rating_name;
     upsert.fav_count = submission->favorites_count;
     upsert.comment_count = submission->comments_count;

@@ -374,9 +374,67 @@ void test_get_submission_success(void)
     TEST_ASSERT_TRUE(submission.keywords.count > 0);
     TEST_ASSERT_NOT_NULL(strstr(g_state.last_url, "api_submissions.php"));
     TEST_ASSERT_NOT_NULL(strstr(g_state.last_url, "submission_ids=3955918"));
+    /* A single-submission fetch (the post-detail path) always asks for the
+     * full story text too -- cheap for the common case of a non-Writing
+     * submission, which simply comes back with no `writing` field. */
+    TEST_ASSERT_NOT_NULL(strstr(g_state.last_url, "show_writing=yes"));
 
     inkbunny_submission_free(&submission);
     free(fixture);
+    inkbunny_client_destroy(client);
+}
+
+void test_get_submission_writing_document_includes_story_text(void)
+{
+    inkbunny_client_t *client = make_test_client();
+    char *login_fixture = NULL;
+    login_test_client(client, &login_fixture);
+    free(login_fixture);
+
+    char *fixture = read_fixture("submission_writing.json");
+    TEST_ASSERT_NOT_NULL(fixture);
+    g_state.response_status = 200;
+    g_state.response_body = fixture;
+    g_state.response_body_len = strlen(fixture);
+
+    inkbunny_submission_t submission;
+    inkbunny_result_t result = inkbunny_get_submission(client, 373335, &submission);
+
+    TEST_ASSERT_EQUAL(INKBUNNY_OK, result);
+    TEST_ASSERT_NOT_NULL(submission.writing);
+    TEST_ASSERT_NOT_NULL(strstr(submission.writing, "Once upon a time"));
+
+    inkbunny_submission_free(&submission);
+    free(fixture);
+    inkbunny_client_destroy(client);
+}
+
+void test_get_submissions_batch_omits_show_writing(void)
+{
+    inkbunny_client_t *client = make_test_client();
+    char *login_fixture = NULL;
+    login_test_client(client, &login_fixture);
+    free(login_fixture);
+
+    char *body = strdup("{\"sid\": \"x\", \"results_count\": 0, \"submissions\": []}");
+    g_state.response_status = 200;
+    g_state.response_body = body;
+    g_state.response_body_len = strlen(body);
+
+    int64_t ids[2] = {1, 2};
+    inkbunny_submission_list_t list;
+    inkbunny_result_t result = inkbunny_get_submissions(client, ids, 2, &list);
+
+    TEST_ASSERT_EQUAL(INKBUNNY_OK, result);
+    /* Never requested for a multi-id batch -- per Inkbunny's own docs the
+     * writing can be very long, so asking for it across up to 100 ids at
+     * once (the backfill's own call pattern) would be wasteful. */
+    TEST_ASSERT_NULL(strstr(g_state.last_url, "show_writing"));
+    TEST_ASSERT_NOT_NULL(strstr(g_state.last_url, "show_description=yes"));
+    TEST_ASSERT_NOT_NULL(strstr(g_state.last_url, "show_pools=yes"));
+
+    inkbunny_submission_list_free(&list);
+    free(body);
     inkbunny_client_destroy(client);
 }
 
@@ -612,6 +670,8 @@ int main(void)
     RUN_TEST(test_search_advanced_filters_send_every_param);
     RUN_TEST(test_search_defaults_send_keywords_only_and_omit_unset_filters);
     RUN_TEST(test_get_submission_success);
+    RUN_TEST(test_get_submission_writing_document_includes_story_text);
+    RUN_TEST(test_get_submissions_batch_omits_show_writing);
     RUN_TEST(test_get_submission_not_found);
     RUN_TEST(test_get_submissions_too_many_ids);
     RUN_TEST(test_search_network_error);
