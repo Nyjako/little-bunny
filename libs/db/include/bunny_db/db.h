@@ -548,6 +548,15 @@ bunny_db_result_t bunny_db_download_queue_set_status(bunny_db_t *db, int64_t id,
 bunny_db_result_t bunny_db_download_queue_list(bunny_db_t *db, bunny_db_download_queue_list_t *out_list);
 bunny_db_result_t bunny_db_download_queue_clear_finished(bunny_db_t *db);
 
+/* Atomically finds the oldest BUNNY_DB_DOWNLOAD_QUEUE_QUEUED row and marks
+ * it DOWNLOADING in one call -- a single-row SELECT + UPDATE instead of
+ * bunny_db_download_queue_list's full-table SELECT, so a worker pool
+ * draining a queue of N items doesn't pay an O(N) table scan per claim
+ * (O(N^2) overall). *out_found is false (and *out_item left zeroed) once
+ * nothing is left to claim; that's not an error. */
+bunny_db_result_t bunny_db_download_queue_claim_next(bunny_db_t *db, bunny_db_download_queue_item_t *out_item, bool *out_found);
+bunny_db_result_t bunny_db_download_queue_count_queued(bunny_db_t *db, int *out_count);
+
 /* --- Slideshows (M51 v2) ---------------------------------------------------
  * A persisted, download-backed slideshow -- see schema.h's own comment on
  * the three tables backing this. bunny_db itself never touches a file or

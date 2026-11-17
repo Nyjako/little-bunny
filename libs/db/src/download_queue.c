@@ -115,6 +115,62 @@ bunny_db_result_t bunny_db_download_queue_list(bunny_db_t *db, bunny_db_download
     return BUNNY_DB_OK;
 }
 
+bunny_db_result_t bunny_db_download_queue_claim_next(bunny_db_t *db, bunny_db_download_queue_item_t *out_item, bool *out_found)
+{
+    if (!db || !out_item || !out_found) {
+        return BUNNY_DB_ERR_INVALID_ARG;
+    }
+    memset(out_item, 0, sizeof(*out_item));
+    *out_found = false;
+
+    const char *select_sql = "SELECT id, post_id, status, failure_reason, created_at, pool_id, pool_name, pool_page FROM download_queue WHERE status = 'queued' ORDER BY id LIMIT 1;";
+    sqlite3_stmt *stmt = NULL;
+    if (sqlite3_prepare_v2(db->handle, select_sql, -1, &stmt, NULL) != SQLITE_OK) {
+        return BUNNY_DB_ERR_QUERY_FAILED;
+    }
+
+    int rc = sqlite3_step(stmt);
+    if (rc == SQLITE_ROW) {
+        fill_download_queue_item_from_row(stmt, out_item);
+        *out_found = true;
+    }
+    sqlite3_finalize(stmt);
+
+    if (!*out_found) {
+        return rc == SQLITE_DONE ? BUNNY_DB_OK : bunny_db_sqlite_rc_to_result(rc);
+    }
+
+    bunny_db_result_t set_result = bunny_db_download_queue_set_status(db, out_item->id, BUNNY_DB_DOWNLOAD_QUEUE_DOWNLOADING, NULL);
+    if (set_result != BUNNY_DB_OK) {
+        bunny_db_download_queue_item_free(out_item);
+        *out_found = false;
+        return set_result;
+    }
+    return BUNNY_DB_OK;
+}
+
+bunny_db_result_t bunny_db_download_queue_count_queued(bunny_db_t *db, int *out_count)
+{
+    if (!db || !out_count) {
+        return BUNNY_DB_ERR_INVALID_ARG;
+    }
+    *out_count = 0;
+
+    const char *sql = "SELECT COUNT(*) FROM download_queue WHERE status = 'queued';";
+    sqlite3_stmt *stmt = NULL;
+    if (sqlite3_prepare_v2(db->handle, sql, -1, &stmt, NULL) != SQLITE_OK) {
+        return BUNNY_DB_ERR_QUERY_FAILED;
+    }
+
+    int rc = sqlite3_step(stmt);
+    if (rc == SQLITE_ROW) {
+        *out_count = sqlite3_column_int(stmt, 0);
+    }
+    sqlite3_finalize(stmt);
+
+    return rc == SQLITE_ROW ? BUNNY_DB_OK : bunny_db_sqlite_rc_to_result(rc);
+}
+
 bunny_db_result_t bunny_db_download_queue_clear_finished(bunny_db_t *db)
 {
     if (!db) {

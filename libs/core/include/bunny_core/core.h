@@ -659,6 +659,11 @@ bunny_core_result_t bunny_core_download_queue_set_status(bunny_core_t *core, int
 bunny_core_result_t bunny_core_download_queue_list(bunny_core_t *core, bunny_db_download_queue_list_t *out_list);
 bunny_core_result_t bunny_core_download_queue_clear_finished(bunny_core_t *core);
 
+/* See bunny_db_download_queue_claim_next's own doc comment -- an O(1)-ish
+ * single-row claim instead of listing the whole table per claim. */
+bunny_core_result_t bunny_core_download_queue_claim_next(bunny_core_t *core, bunny_db_download_queue_item_t *out_item, bool *out_found);
+bunny_core_result_t bunny_core_download_queue_count_queued(bunny_core_t *core, int *out_count);
+
 /* --- Downloading a file (M66) ----------------------------------------------
  * The actual fetch + checksum verification + atomic write for one post's
  * file -- used to live entirely on the Dart side (app/lib/services/

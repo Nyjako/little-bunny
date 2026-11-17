@@ -2112,6 +2112,63 @@ void test_download_queue_clear_finished_drops_terminal_rows_only(void)
     bunny_db_download_queue_list_free(&list);
 }
 
+void test_download_queue_claim_next_returns_oldest_queued_and_marks_downloading(void)
+{
+    int64_t first_id = 0, second_id = 0;
+    bunny_db_download_queue_add(g_db, 10, 5, "My Pool", 2, &first_id);
+    bunny_db_download_queue_add(g_db, 11, 0, NULL, 0, &second_id);
+
+    bunny_db_download_queue_item_t item;
+    bool found = false;
+    bunny_db_result_t result = bunny_db_download_queue_claim_next(g_db, &item, &found);
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, result);
+    TEST_ASSERT_TRUE(found);
+    TEST_ASSERT_EQUAL(first_id, item.id);
+    TEST_ASSERT_EQUAL(10, item.post_id);
+    TEST_ASSERT_EQUAL(5, item.pool_id);
+    TEST_ASSERT_EQUAL_STRING("My Pool", item.pool_name);
+    bunny_db_download_queue_item_free(&item);
+
+    bunny_db_download_queue_list_t list;
+    bunny_db_download_queue_list(g_db, &list);
+    TEST_ASSERT_EQUAL(BUNNY_DB_DOWNLOAD_QUEUE_DOWNLOADING, list.items[0].status);
+    TEST_ASSERT_EQUAL(BUNNY_DB_DOWNLOAD_QUEUE_QUEUED, list.items[1].status);
+    bunny_db_download_queue_list_free(&list);
+
+    /* Second call skips the now-DOWNLOADING row and claims the other one. */
+    result = bunny_db_download_queue_claim_next(g_db, &item, &found);
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, result);
+    TEST_ASSERT_TRUE(found);
+    TEST_ASSERT_EQUAL(second_id, item.id);
+    bunny_db_download_queue_item_free(&item);
+}
+
+void test_download_queue_claim_next_reports_not_found_when_nothing_queued(void)
+{
+    int64_t id = 0;
+    bunny_db_download_queue_add(g_db, 20, 0, NULL, 0, &id);
+    bunny_db_download_queue_set_status(g_db, id, BUNNY_DB_DOWNLOAD_QUEUE_SUCCEEDED, NULL);
+
+    bunny_db_download_queue_item_t item;
+    bool found = true;
+    bunny_db_result_t result = bunny_db_download_queue_claim_next(g_db, &item, &found);
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, result);
+    TEST_ASSERT_FALSE(found);
+}
+
+void test_download_queue_count_queued_counts_only_queued_rows(void)
+{
+    int64_t queued_id = 0, downloading_id = 0;
+    bunny_db_download_queue_add(g_db, 30, 0, NULL, 0, &queued_id);
+    bunny_db_download_queue_add(g_db, 31, 0, NULL, 0, &downloading_id);
+    bunny_db_download_queue_set_status(g_db, downloading_id, BUNNY_DB_DOWNLOAD_QUEUE_DOWNLOADING, NULL);
+
+    int count = -1;
+    bunny_db_result_t result = bunny_db_download_queue_count_queued(g_db, &count);
+    TEST_ASSERT_EQUAL(BUNNY_DB_OK, result);
+    TEST_ASSERT_EQUAL(1, count);
+}
+
 void test_top_favorited_tags(void)
 {
     const char *tags1[] = {"wolf", "forest"};
@@ -3938,6 +3995,9 @@ int main(void)
     RUN_TEST(test_download_queue_set_status_updates_status_and_failure_reason);
     RUN_TEST(test_download_queue_set_status_clears_a_previous_failure_reason);
     RUN_TEST(test_download_queue_clear_finished_drops_terminal_rows_only);
+    RUN_TEST(test_download_queue_claim_next_returns_oldest_queued_and_marks_downloading);
+    RUN_TEST(test_download_queue_claim_next_reports_not_found_when_nothing_queued);
+    RUN_TEST(test_download_queue_count_queued_counts_only_queued_rows);
     RUN_TEST(test_top_favorited_tags);
     RUN_TEST(test_top_favorited_tags_is_scoped_per_site);
     RUN_TEST(test_top_favorited_tag_pairs_ranks_co_occurring_tags);
