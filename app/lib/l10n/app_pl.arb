@@ -365,6 +365,7 @@
   "postDetailSourcesLabel": "Źródła",
   "postDetailRefreshFailedMessage": "Nie udało się wczytać pełnych szczegółów",
   "postDetailRefreshFailedRetry": "Spróbuj ponownie",
+  "postDetailOpenWritingReader": "Czytaj całą historię",
   "postDetailParentLabel": "Rodzic",
   "postDetailChildrenLabel": "Dzieci",
   "postDetailPoolsLabel": "Zbiory",

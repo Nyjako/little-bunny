@@ -32,6 +32,7 @@ import '../widgets/text_document_viewer.dart';
 import 'create_search_screen.dart';
 import 'full_screen_post_viewer_screen.dart';
 import 'tag_browse_screen.dart';
+import 'writing_reader_screen.dart';
 import 'wiki_page_screen.dart';
 
 /// Tags are grouped by category (M8.5.3) and then sorted into this fixed
@@ -1568,6 +1569,27 @@ class _PostDetailPageState extends State<_PostDetailPage> {
     );
   }
 
+  /// Fetches the post's `writing` BBCode already-parsed into [BunnyDocBlock]s
+  /// (no local-download check yet -- that's `DownloadManager`'s own
+  /// follow-up wiring, a separate PR) and opens [WritingReaderScreen] on
+  /// it. Shows a failure snackbar rather than navigating to an empty/broken
+  /// reader if the parse call itself throws.
+  Future<void> _openWritingReader(AppLocalizations l10n) async {
+    List<BunnyDocBlock> blocks;
+    try {
+      blocks = await widget.repository.getWritingDoc(_post.id);
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(l10n.postDetailActionFailed)));
+      }
+      return;
+    }
+    if (!mounted) {
+      return;
+    }
+    await Navigator.push(context, MaterialPageRoute(builder: (context) => WritingReaderScreen(postId: _post.id, title: _post.title ?? l10n.postDetailUnknownValue, blocks: blocks)));
+  }
+
   Widget _poolsSection(AppLocalizations l10n) {
     final poolIdsFuture = _poolIdsFuture;
     if (poolIdsFuture != null) {
@@ -1791,10 +1813,12 @@ class _PostDetailPageState extends State<_PostDetailPage> {
                 if (post.writing != null && post.writing!.isNotEmpty) ...[
                   const Divider(),
                   // Raw BBCode, not parsed -- this app has no BBCode/HTML renderer
-                  // anywhere, so a literal tag (e.g. "[b]") shows as-is. Independent
-                  // of _buildMedia's own file-based mechanism above (a submission
-                  // whose story text comes back as a separate file instead) -- both
-                  // can apply to the same post.
+                  // anywhere, so a literal tag (e.g. "[b]") shows as-is. A quick
+                  // preview only -- _openWritingReader below is the real, parsed
+                  // reading experience. Independent of _buildMedia's own
+                  // file-based mechanism above (a submission whose story text
+                  // comes back as a separate file instead) -- both can apply to
+                  // the same post.
                   RichMarkupText(
                     text: post.writing!,
                     onOpenAuthor: _openTagBrowse,
@@ -1802,6 +1826,7 @@ class _PostDetailPageState extends State<_PostDetailPage> {
                     onOpenPost: (site, postId) => _openPostLink(l10n, site, postId),
                     onOpenPool: (poolId) => _openPool(l10n, poolId),
                   ),
+                  Align(alignment: Alignment.centerLeft, child: TextButton.icon(onPressed: () => _openWritingReader(l10n), icon: const Icon(Icons.menu_book), label: Text(l10n.postDetailOpenWritingReader))),
                 ],
                 const Divider(),
                 _tagsDetailsSourcesRegion(l10n),
