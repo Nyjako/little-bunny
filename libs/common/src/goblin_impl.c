@@ -45,3 +45,15 @@
 
 #define GOBLIN_SANITIZE_FILENAME_IMPLEMENTATION
 #include <goblin/sanitize_filename.h>
+
+#define GOBLIN_ARGV_IMPLEMENTATION
+#include <goblin/argv.h>
+
+#define GOBLIN_LOG_IMPLEMENTATION
+#include <goblin/log.h>
+
+#define GOBLIN_SECRET_PROMPT_IMPLEMENTATION
+#include <goblin/secret_prompt.h>
+
+#define GOBLIN_ZIP_IMPLEMENTATION
+#include <goblin/zip.h>

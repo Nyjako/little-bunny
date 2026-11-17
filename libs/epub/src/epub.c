@@ -1,6 +1,7 @@
 #include "bunny_epub/epub.h"
 
-#include "zip.h"
+#include <goblin/cstr.h>
+#include <goblin/zip.h>
 
 #include <ctype.h>
 #include <stdbool.h>
@@ -69,20 +70,6 @@ static void eb_buf_append_cstr(eb_buf_t *b, const char *s)
 static const char *eb_buf_cstr(const eb_buf_t *b)
 {
     return b->data ? b->data : "";
-}
-
-static char *dup_cstr(const char *s)
-{
-    if (!s) {
-        return NULL;
-    }
-    size_t len = strlen(s);
-    char *out = malloc(len + 1);
-    if (!out) {
-        return NULL;
-    }
-    memcpy(out, s, len + 1);
-    return out;
 }
 
 /* ---- XML escaping ---- */
@@ -345,7 +332,7 @@ bunny_epub_result_t bunny_epub_build(const bunny_epub_build_params_t *params, co
         return BUNNY_EPUB_ERR_INVALID_ARG;
     }
 
-    bunny_zip_writer_t *zip = bunny_zip_writer_open(dest_path);
+    goblin_zip_writer_t *zip = goblin_zip_writer_open(dest_path);
     if (!zip) {
         return BUNNY_EPUB_ERR_IO;
     }
@@ -353,40 +340,40 @@ bunny_epub_result_t bunny_epub_build(const bunny_epub_build_params_t *params, co
     bool ok = true;
     /* "mimetype" must be the very first entry, stored uncompressed -- the
      * one hard requirement EPUB's OCF spec has on the ZIP container
-     * itself. bunny_zip_writer_add always stores uncompressed, so only
+     * itself. goblin_zip_writer_add always stores uncompressed, so only
      * the ordering matters here. */
-    ok = ok && bunny_zip_writer_add(zip, "mimetype", (const unsigned char *)"application/epub+zip", strlen("application/epub+zip"));
-    ok = ok && bunny_zip_writer_add(zip, "META-INF/container.xml", (const unsigned char *)BUNNY_EPUB_CONTAINER_XML, strlen(BUNNY_EPUB_CONTAINER_XML));
-    ok = ok && bunny_zip_writer_add(zip, "OEBPS/style.css", (const unsigned char *)BUNNY_EPUB_STYLE_CSS, strlen(BUNNY_EPUB_STYLE_CSS));
+    ok = ok && goblin_zip_writer_add(zip, "mimetype", (const unsigned char *)"application/epub+zip", strlen("application/epub+zip"));
+    ok = ok && goblin_zip_writer_add(zip, "META-INF/container.xml", (const unsigned char *)BUNNY_EPUB_CONTAINER_XML, strlen(BUNNY_EPUB_CONTAINER_XML));
+    ok = ok && goblin_zip_writer_add(zip, "OEBPS/style.css", (const unsigned char *)BUNNY_EPUB_STYLE_CSS, strlen(BUNNY_EPUB_STYLE_CSS));
 
     eb_buf_t opf;
     eb_buf_init(&opf);
     build_content_opf(params, &opf);
-    ok = ok && bunny_zip_writer_add(zip, "OEBPS/content.opf", (const unsigned char *)eb_buf_cstr(&opf), opf.len);
+    ok = ok && goblin_zip_writer_add(zip, "OEBPS/content.opf", (const unsigned char *)eb_buf_cstr(&opf), opf.len);
     eb_buf_free(&opf);
 
     eb_buf_t ncx;
     eb_buf_init(&ncx);
     build_toc_ncx(params, &ncx);
-    ok = ok && bunny_zip_writer_add(zip, "OEBPS/toc.ncx", (const unsigned char *)eb_buf_cstr(&ncx), ncx.len);
+    ok = ok && goblin_zip_writer_add(zip, "OEBPS/toc.ncx", (const unsigned char *)eb_buf_cstr(&ncx), ncx.len);
     eb_buf_free(&ncx);
 
     if (params->cover_image) {
         eb_buf_t cover_xhtml;
         eb_buf_init(&cover_xhtml);
         build_cover_xhtml(params, &cover_xhtml);
-        ok = ok && bunny_zip_writer_add(zip, "OEBPS/cover.xhtml", (const unsigned char *)eb_buf_cstr(&cover_xhtml), cover_xhtml.len);
+        ok = ok && goblin_zip_writer_add(zip, "OEBPS/cover.xhtml", (const unsigned char *)eb_buf_cstr(&cover_xhtml), cover_xhtml.len);
         eb_buf_free(&cover_xhtml);
-        ok = ok && bunny_zip_writer_add(zip, "OEBPS/cover-image.img", params->cover_image, params->cover_image_len);
+        ok = ok && goblin_zip_writer_add(zip, "OEBPS/cover-image.img", params->cover_image, params->cover_image_len);
     }
 
     eb_buf_t text_xhtml;
     eb_buf_init(&text_xhtml);
     build_text_xhtml(params, &text_xhtml);
-    ok = ok && bunny_zip_writer_add(zip, "OEBPS/text.xhtml", (const unsigned char *)eb_buf_cstr(&text_xhtml), text_xhtml.len);
+    ok = ok && goblin_zip_writer_add(zip, "OEBPS/text.xhtml", (const unsigned char *)eb_buf_cstr(&text_xhtml), text_xhtml.len);
     eb_buf_free(&text_xhtml);
 
-    bool closed_ok = bunny_zip_writer_close(zip);
+    bool closed_ok = goblin_zip_writer_close(zip);
     return (ok && closed_ok) ? BUNNY_EPUB_OK : BUNNY_EPUB_ERR_IO;
 }
 
@@ -492,7 +479,7 @@ static void parse_inline_runs(const char *s, size_t start, size_t end, bunny_doc
                 free(unescaped);
             }
             if (pending.len > 0) {
-                bunny_doc_run_t run = {.kind = current, .text = eb_buf_cstr(&pending)[0] ? dup_cstr(eb_buf_cstr(&pending)) : NULL};
+                bunny_doc_run_t run = {.kind = current, .text = eb_buf_cstr(&pending)[0] ? goblin_copy_cstr(eb_buf_cstr(&pending)) : NULL};
                 if (run.text) {
                     if (runs.count == runs.cap) {
                         runs.cap = runs.cap ? runs.cap * 2 : 4;
@@ -515,7 +502,7 @@ static void parse_inline_runs(const char *s, size_t start, size_t end, bunny_doc
                 free(unescaped);
             }
             if (pending.len > 0) {
-                bunny_doc_run_t run = {.kind = current, .text = dup_cstr(eb_buf_cstr(&pending))};
+                bunny_doc_run_t run = {.kind = current, .text = goblin_copy_cstr(eb_buf_cstr(&pending))};
                 if (runs.count == runs.cap) {
                     runs.cap = runs.cap ? runs.cap * 2 : 4;
                     runs.items = realloc(runs.items, runs.cap * sizeof(*runs.items));
@@ -565,7 +552,7 @@ static void parse_inline_runs(const char *s, size_t start, size_t end, bunny_doc
         free(unescaped);
     }
     if (pending.len > 0) {
-        bunny_doc_run_t run = {.kind = current, .text = dup_cstr(eb_buf_cstr(&pending))};
+        bunny_doc_run_t run = {.kind = current, .text = goblin_copy_cstr(eb_buf_cstr(&pending))};
         if (runs.count == runs.cap) {
             runs.cap = runs.cap ? runs.cap * 2 : 4;
             runs.items = realloc(runs.items, runs.cap * sizeof(*runs.items));
@@ -688,15 +675,15 @@ bunny_epub_result_t bunny_epub_read(const char *path, bunny_doc_t *out_doc, char
         *out_title = NULL;
     }
 
-    bunny_zip_reader_t *zip = bunny_zip_reader_open(path);
+    goblin_zip_reader_t *zip = goblin_zip_reader_open(path);
     if (!zip) {
         return BUNNY_EPUB_ERR_IO;
     }
 
     size_t text_len = 0;
-    const unsigned char *text = bunny_zip_reader_get(zip, "OEBPS/text.xhtml", &text_len);
+    const unsigned char *text = goblin_zip_reader_get(zip, "OEBPS/text.xhtml", &text_len);
     if (!text) {
-        bunny_zip_reader_close(zip);
+        goblin_zip_reader_close(zip);
         return BUNNY_EPUB_ERR_IO;
     }
 
@@ -709,12 +696,12 @@ bunny_epub_result_t bunny_epub_read(const char *path, bunny_doc_t *out_doc, char
         }
     }
     if (body_tag_start == (size_t)-1) {
-        bunny_zip_reader_close(zip);
+        goblin_zip_reader_close(zip);
         return BUNNY_EPUB_ERR_IO;
     }
     size_t body_open_end = find_close_gt((const char *)text, body_tag_start, text_len);
     if (body_open_end == (size_t)-1) {
-        bunny_zip_reader_close(zip);
+        goblin_zip_reader_close(zip);
         return BUNNY_EPUB_ERR_IO;
     }
     size_t body_close_open = text_len;
@@ -730,6 +717,6 @@ bunny_epub_result_t bunny_epub_read(const char *path, bunny_doc_t *out_doc, char
         *out_title = extract_title((const char *)text, text_len);
     }
 
-    bunny_zip_reader_close(zip);
+    goblin_zip_reader_close(zip);
     return BUNNY_EPUB_OK;
 }

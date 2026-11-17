@@ -3,6 +3,7 @@
 #include <bunny_core/core.h>
 #include <goblin/appdirs.h>
 #include <goblin/env.h>
+#include <goblin/log.h>
 
 #include <signal.h>
 #include <stdio.h>
@@ -90,6 +91,8 @@ static bool run_systemctl(const char *action)
 
 int main(int argc, char **argv)
 {
+    goblin_log_init();
+
     /* Used by the updater (updater.c, M23) after extracting a staged
      * release to confirm the new binary is actually the version it claims
      * to be, before the systemd ExecStartPre=+ helper installs it over the
@@ -114,7 +117,7 @@ int main(int argc, char **argv)
         default_data_dir_if_unset();
         server_config_t *qr_config = server_config_load();
         if (!qr_config) {
-            fprintf(stderr, "failed to load server config\n");
+            goblin_log(GOBLIN_LOG_ERROR, "failed to load server config");
             return 1;
         }
         bool ok = server_print_connection_qr(qr_config);
@@ -129,7 +132,7 @@ int main(int argc, char **argv)
         default_data_dir_if_unset();
         server_config_t *status_config = server_config_load();
         if (!status_config) {
-            fprintf(stderr, "failed to load server config\n");
+            goblin_log(GOBLIN_LOG_ERROR, "failed to load server config");
             return 1;
         }
         bool ok = server_print_status(status_config);
@@ -143,7 +146,7 @@ int main(int argc, char **argv)
         default_data_dir_if_unset();
         server_config_t *health_config = server_config_load();
         if (!health_config) {
-            fprintf(stderr, "failed to load server config\n");
+            goblin_log(GOBLIN_LOG_ERROR, "failed to load server config");
             return 1;
         }
         bool ok = server_run_health_check(health_config);
@@ -157,7 +160,7 @@ int main(int argc, char **argv)
         default_data_dir_if_unset();
         server_config_t *stats_config = server_config_load();
         if (!stats_config) {
-            fprintf(stderr, "failed to load server config\n");
+            goblin_log(GOBLIN_LOG_ERROR, "failed to load server config");
             return 1;
         }
 
@@ -169,7 +172,7 @@ int main(int argc, char **argv)
 
         bunny_core_t *stats_core = NULL;
         if (!stats_db_path || bunny_core_open(&stats_core_config, &stats_core) != BUNNY_CORE_OK) {
-            fprintf(stderr, "db-stats: failed to open the database\n");
+            goblin_log(GOBLIN_LOG_ERROR, "db-stats: failed to open the database");
             free(stats_db_path);
             server_config_free(stats_config);
             return 1;
@@ -181,7 +184,7 @@ int main(int argc, char **argv)
         bunny_core_close(stats_core);
         server_config_free(stats_config);
         if (result != BUNNY_CORE_OK) {
-            fprintf(stderr, "db-stats: failed to query table row counts\n");
+            goblin_log(GOBLIN_LOG_ERROR, "db-stats: failed to query table row counts");
             return 1;
         }
         for (size_t i = 0; i < table_stats.count; i++) {
@@ -202,23 +205,23 @@ int main(int argc, char **argv)
      * and there's no equivalent Windows service to stop/start anyway. */
     if (argc > 1 && strcmp(argv[1], "--update") == 0) {
 #ifdef _WIN32
-        fprintf(stderr, "--update is not supported on Windows (no self-update story for a Windows service yet)\n");
+        goblin_log(GOBLIN_LOG_ERROR, "--update is not supported on Windows (no self-update story for a Windows service yet)");
         return 1;
 #else
         if (geteuid() != 0) {
-            fprintf(stderr, "--update needs root to stop/restart the bunny-server service and read its data directory -- re-run with sudo\n");
+            goblin_log(GOBLIN_LOG_ERROR, "--update needs root to stop/restart the bunny-server service and read its data directory -- re-run with sudo");
             return 1;
         }
         default_data_dir_if_unset();
         server_config_t *update_config = server_config_load();
         if (!update_config) {
-            fprintf(stderr, "failed to load server config\n");
+            goblin_log(GOBLIN_LOG_ERROR, "failed to load server config");
             return 1;
         }
 
         printf("Stopping bunny-server service...\n");
         if (!run_systemctl("stop")) {
-            fprintf(stderr, "failed to stop the bunny-server service -- aborting without touching anything\n");
+            goblin_log(GOBLIN_LOG_ERROR, "failed to stop the bunny-server service -- aborting without touching anything");
             server_config_free(update_config);
             return 1;
         }
@@ -232,7 +235,7 @@ int main(int argc, char **argv)
         bool restarted = run_systemctl("start");
         server_config_free(update_config);
         if (!restarted) {
-            fprintf(stderr, "bunny-server FAILED to restart -- it is currently STOPPED, start it manually: sudo systemctl start bunny-server\n");
+            goblin_log(GOBLIN_LOG_ERROR, "bunny-server FAILED to restart -- it is currently STOPPED, start it manually: sudo systemctl start bunny-server");
             return 1;
         }
         return 0;
@@ -241,13 +244,13 @@ int main(int argc, char **argv)
 
     server_config_t *config = server_config_load();
     if (!config) {
-        fprintf(stderr, "failed to load server config\n");
+        goblin_log(GOBLIN_LOG_ERROR, "failed to load server config");
         return 1;
     }
 
     char *db_path = goblin_appdir_join(config->data_dir, "bunny.db");
     if (!db_path) {
-        fprintf(stderr, "failed to build database path\n");
+        goblin_log(GOBLIN_LOG_ERROR, "failed to build database path");
         server_config_free(config);
         return 1;
     }
@@ -260,7 +263,7 @@ int main(int argc, char **argv)
     server_app_t *app = server_app_start(&core_config, config->data_dir, config->port, config->poll_interval_sec);
     free(db_path);
     if (!app) {
-        fprintf(stderr, "failed to start server\n");
+        goblin_log(GOBLIN_LOG_ERROR, "failed to start server");
         server_config_free(config);
         return 1;
     }

@@ -2,6 +2,8 @@
 
 #include <cJSON.h>
 
+#include <goblin/cstr.h>
+
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -24,19 +26,6 @@
  * until it exits and closes the pipe (bounded below), then scans every line
  * for the one that actually parses as a valid response, ignoring the rest. */
 #define BUNNY_CLI_HANDSHAKE_MAX_TOTAL_OUTPUT (256 * 1024)
-
-static char *dup_string(const char *s)
-{
-    if (!s) {
-        return NULL;
-    }
-    size_t len = strlen(s) + 1;
-    char *copy = malloc(len);
-    if (copy) {
-        memcpy(copy, s, len);
-    }
-    return copy;
-}
 
 void bunny_cli_handshake_payload_free(bunny_cli_handshake_payload_t *payload)
 {
@@ -79,7 +68,7 @@ const char *bunny_cli_handshake_result_to_string(bunny_cli_handshake_result_t re
 static char *dup_optional_string_field(cJSON *json, const char *key)
 {
     cJSON *field = cJSON_GetObjectItemCaseSensitive(json, key);
-    return cJSON_IsString(field) ? dup_string(field->valuestring) : NULL;
+    return cJSON_IsString(field) ? goblin_copy_cstr(field->valuestring) : NULL;
 }
 
 /* Same "absent/wrong type = a safe default, not a protocol error" leniency
@@ -134,8 +123,8 @@ static bunny_cli_handshake_result_t parse_response_line(const char *line, bunny_
             result = BUNNY_CLI_HANDSHAKE_PROTOCOL_ERROR;
         } else {
             out->mode = BUNNY_CLI_MODE_STANDALONE;
-            out->db_path = dup_string(db_path->valuestring);
-            out->user_agent = dup_string(user_agent->valuestring);
+            out->db_path = goblin_copy_cstr(db_path->valuestring);
+            out->user_agent = goblin_copy_cstr(user_agent->valuestring);
             out->download_destination_folder = dup_optional_string_field(json, "downloadDestinationFolder");
             out->auto_favorite_on_download = bool_field_or_false(json, "autoFavoriteOnDownload");
             out->auto_upvote_on_download = bool_field_or_false(json, "autoUpvoteOnDownload");
@@ -148,9 +137,9 @@ static bunny_cli_handshake_result_t parse_response_line(const char *line, bunny_
             result = BUNNY_CLI_HANDSHAKE_PROTOCOL_ERROR;
         } else {
             out->mode = BUNNY_CLI_MODE_NETWORKED;
-            out->server_base_url = dup_string(server_base_url->valuestring);
-            out->bearer_token = dup_string(bearer_token->valuestring);
-            out->cert_fingerprint = dup_string(cert_fingerprint->valuestring);
+            out->server_base_url = goblin_copy_cstr(server_base_url->valuestring);
+            out->bearer_token = goblin_copy_cstr(bearer_token->valuestring);
+            out->cert_fingerprint = goblin_copy_cstr(cert_fingerprint->valuestring);
             out->download_queue_db_path = dup_optional_string_field(json, "downloadQueueDbPath");
             out->download_queue_user_agent = dup_optional_string_field(json, "downloadQueueUserAgent");
             out->download_destination_folder = dup_optional_string_field(json, "downloadDestinationFolder");

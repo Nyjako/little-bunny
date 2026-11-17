@@ -9,6 +9,7 @@
 
 #include "json_helpers.h"
 
+#include <goblin/appdirs.h>
 #include <goblin/cstr.h>
 #include <goblin/dyn_array.h>
 
@@ -18,16 +19,10 @@
 #include <string.h>
 
 #ifdef _WIN32
-#include <direct.h>
 #include <windows.h>
-#define bunny_cli_mkdir(path) _mkdir(path)
 #else
-#include <sys/stat.h>
 #include <unistd.h>
-#define bunny_cli_mkdir(path) mkdir(path, 0755)
 #endif
-
-#include <errno.h>
 
 static void sleep_ms(unsigned int ms)
 {
@@ -36,41 +31,6 @@ static void sleep_ms(unsigned int ms)
 #else
     usleep(ms * 1000);
 #endif
-}
-
-static int make_directory(const char *path)
-{
-    if (bunny_cli_mkdir(path) == 0) {
-        return 0;
-    }
-    return errno == EEXIST ? 0 : -1;
-}
-
-/* mkdir -p -- mirrors libs/core/src/download.c's own
- * make_directories_recursive (that one is static/private to its own
- * translation unit, so not directly reusable here): bunny_core_download_start
- * creates its own destination directory internally, but
- * bunny_core_build_writing_epub does not (it's a pure fopen, no
- * mkdir-of-its-own -- same as DownloadManager.downloadWritingEpub's own
- * Dart counterpart explicitly creating the folder first on that side). */
-static int make_directories_recursive(const char *path)
-{
-    size_t len = strlen(path);
-    if (len == 0 || len >= 1024) {
-        return -1;
-    }
-    char buf[1024];
-    memcpy(buf, path, len + 1);
-    for (size_t i = 1; i < len; i++) {
-        if (buf[i] == '/') {
-            buf[i] = '\0';
-            if (make_directory(buf) != 0) {
-                return -1;
-            }
-            buf[i] = '/';
-        }
-    }
-    return make_directory(buf);
 }
 
 /* --stats is the only command with no networked implementation at all
@@ -478,7 +438,13 @@ static void process_claimed_item(download_shared_state_t *state, const char *dow
         char dest_dir[BUNNY_CLI_DESTINATION_MAX * 2];
         snprintf(dest_dir, sizeof(dest_dir), "%s/%s", download_folder, folder);
 
-        if (make_directories_recursive(dest_dir) != 0) {
+        /* bunny_core_download_start creates its own destination directory
+         * internally, but bunny_core_build_writing_epub does not (it's a
+         * pure fopen, no mkdir-of-its-own -- same as
+         * DownloadManager.downloadWritingEpub's own Dart counterpart
+         * explicitly creating the folder first on that side), so this path
+         * needs its own mkdir -p. */
+        if (goblin_appdir_mkdir_p(dest_dir) != 0) {
             snprintf(error_message, sizeof(error_message), "failed to create destination directory %s", dest_dir);
         } else {
             char dest_path[BUNNY_CLI_DESTINATION_MAX * 3];
