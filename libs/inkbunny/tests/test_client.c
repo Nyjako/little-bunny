@@ -15,6 +15,18 @@ typedef struct
 
     bunny_http_method_t last_method;
     char last_url[1024];
+    int send_count;
+
+    /* When queue_count > 0, fake_send serves responses from here in order,
+     * one per call, instead of the single response_* fields above --
+     * used by tests exercising perform_request's own multi-request
+     * transparent-relogin-and-retry path (a single client call can make up
+     * to three real HTTP sends: the original request, a relogin, and the
+     * retried original request). Not owned; caller manages lifecycle. */
+    const char *queued_bodies[4];
+    long queued_statuses[4];
+    size_t queue_count;
+    size_t queue_index;
 } fake_transport_state_t;
 
 static fake_transport_state_t g_state;
@@ -27,9 +39,19 @@ static bunny_http_result_t fake_send(void *user_data, const bunny_http_request_t
     state->last_method = request->method;
     strncpy(state->last_url, request->url, sizeof(state->last_url) - 1);
     state->last_url[sizeof(state->last_url) - 1] = '\0';
+    state->send_count++;
 
     if (state->forced_result != BUNNY_HTTP_OK) {
         return state->forced_result;
+    }
+
+    if (state->queue_count > 0 && state->queue_index < state->queue_count) {
+        const char *body = state->queued_bodies[state->queue_index];
+        out_response->status = state->queued_statuses[state->queue_index];
+        state->queue_index++;
+        out_response->body = strdup(body ? body : "");
+        out_response->body_len = strlen(body ? body : "");
+        return BUNNY_HTTP_OK;
     }
 
     out_response->status = state->response_status;
@@ -479,6 +501,104 @@ void test_logout_clears_session(void)
     inkbunny_client_destroy(client);
 }
 
+/* inkbunny_client_restore_session lets a caller skip the login round trip
+ * entirely on a cache hit (bunny_core's own session-caching, M88) -- no
+ * network call at all, and the restored user_id is immediately visible. */
+void test_restore_session_skips_the_login_round_trip(void)
+{
+    inkbunny_client_t *client = make_test_client();
+
+    inkbunny_client_restore_session(client, "cached-sid-123", 42, "someuser", "some-pw");
+    TEST_ASSERT_EQUAL(42, inkbunny_client_get_user_id(client));
+    TEST_ASSERT_EQUAL(0, g_state.send_count);
+
+    char *fixture = read_fixture("search_response.json");
+    TEST_ASSERT_NOT_NULL(fixture);
+    g_state.response_status = 200;
+    g_state.response_body = fixture;
+    g_state.response_body_len = strlen(fixture);
+
+    inkbunny_submission_list_t list;
+    inkbunny_result_t result = inkbunny_search(client, NULL, &list);
+
+    TEST_ASSERT_EQUAL(INKBUNNY_OK, result);
+    TEST_ASSERT_EQUAL(1, g_state.send_count); /* only the search itself -- no login call at all */
+    TEST_ASSERT_NOT_NULL(strstr(g_state.last_url, "sid=cached-sid-123"));
+
+    free(fixture);
+    inkbunny_client_destroy(client);
+}
+
+/* perform_request's own transparent-relogin fallback: a restored session
+ * that turns out to be expired/invalid (api_search.php's own error_code
+ * response) triggers exactly one relogin using the credentials
+ * inkbunny_client_restore_session was given, then retries the original
+ * request once -- all inside this single inkbunny_search call, with the
+ * caller never seeing the failed first attempt at all. */
+void test_expired_restored_session_triggers_one_transparent_relogin_and_retry(void)
+{
+    inkbunny_client_t *client = make_test_client();
+    inkbunny_client_restore_session(client, "stale-sid", 0, "someuser", "some-pw");
+
+    char *auth_error = read_fixture("login_failure.json"); /* any error_code response -- not login-specific */
+    char *login_ok = read_fixture("login_success.json");
+    char *search_ok = read_fixture("search_response.json");
+    TEST_ASSERT_NOT_NULL(auth_error);
+    TEST_ASSERT_NOT_NULL(login_ok);
+    TEST_ASSERT_NOT_NULL(search_ok);
+
+    g_state.queued_bodies[0] = auth_error; /* the original search, with the stale sid */
+    g_state.queued_statuses[0] = 200;
+    g_state.queued_bodies[1] = login_ok; /* the transparent relogin */
+    g_state.queued_statuses[1] = 200;
+    g_state.queued_bodies[2] = search_ok; /* the retried search, with the fresh sid */
+    g_state.queued_statuses[2] = 200;
+    g_state.queue_count = 3;
+
+    inkbunny_submission_list_t list;
+    inkbunny_result_t result = inkbunny_search(client, NULL, &list);
+
+    TEST_ASSERT_EQUAL(INKBUNNY_OK, result);
+    TEST_ASSERT_EQUAL(2, (int)list.count); /* search_response.json's real count -- proves the retry's response was actually used */
+    TEST_ASSERT_EQUAL(3, g_state.send_count);
+    TEST_ASSERT_NOT_NULL(strstr(g_state.last_url, "api_search.php")); /* the retry, not the relogin, was the last call made */
+
+    free(auth_error);
+    free(login_ok);
+    free(search_ok);
+    inkbunny_client_destroy(client);
+}
+
+/* If the relogin attempt *itself* also fails (bad/revoked credentials, not
+ * just a stale sid), perform_request must give up and return the original
+ * error -- never loop, never retry a third time. */
+void test_relogin_failure_gives_up_without_looping(void)
+{
+    inkbunny_client_t *client = make_test_client();
+    inkbunny_client_restore_session(client, "stale-sid", 0, "someuser", "wrong-pw");
+
+    char *auth_error_1 = read_fixture("login_failure.json");
+    char *auth_error_2 = read_fixture("login_failure.json");
+    TEST_ASSERT_NOT_NULL(auth_error_1);
+    TEST_ASSERT_NOT_NULL(auth_error_2);
+
+    g_state.queued_bodies[0] = auth_error_1; /* the original search */
+    g_state.queued_statuses[0] = 200;
+    g_state.queued_bodies[1] = auth_error_2; /* the relogin attempt, also rejected */
+    g_state.queued_statuses[1] = 200;
+    g_state.queue_count = 2;
+
+    inkbunny_submission_list_t list;
+    inkbunny_result_t result = inkbunny_search(client, NULL, &list);
+
+    TEST_ASSERT_EQUAL(INKBUNNY_ERR_AUTH, result);
+    TEST_ASSERT_EQUAL(2, g_state.send_count); /* the original attempt + the one relogin attempt -- never a third send */
+
+    free(auth_error_1);
+    free(auth_error_2);
+    inkbunny_client_destroy(client);
+}
+
 int main(void)
 {
     UNITY_BEGIN();
@@ -498,5 +618,8 @@ int main(void)
     RUN_TEST(test_search_server_error);
     RUN_TEST(test_search_malformed_json);
     RUN_TEST(test_logout_clears_session);
+    RUN_TEST(test_restore_session_skips_the_login_round_trip);
+    RUN_TEST(test_expired_restored_session_triggers_one_transparent_relogin_and_retry);
+    RUN_TEST(test_relogin_failure_gives_up_without_looping);
     return UNITY_END();
 }

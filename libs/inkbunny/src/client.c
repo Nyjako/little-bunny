@@ -13,7 +13,7 @@
  * (5xx, rate limiting). query_or_null is appended to the URL as "?...",
  * already encoded by the caller. out_json, if non-NULL, receives the parsed
  * response body on INKBUNNY_OK (caller owns it). */
-static inkbunny_result_t perform_request(inkbunny_client_t *client, const char *path, const char *query_or_null, cJSON **out_json)
+static inkbunny_result_t perform_request_once(inkbunny_client_t *client, const char *path, const char *query_or_null, cJSON **out_json)
 {
     if (!client) {
         return INKBUNNY_ERR_INVALID_ARG;
@@ -82,6 +82,40 @@ static inkbunny_result_t perform_request(inkbunny_client_t *client, const char *
     return INKBUNNY_OK;
 }
 
+/* Wraps perform_request_once with exactly one transparent re-login-and-
+ * retry when the session turns out to be expired/invalid -- made possible
+ * by struct inkbunny_client's own cached username/password (see its doc
+ * comment). Never retries for /api_login.php itself (would loop forever on
+ * genuinely bad credentials instead of failing), and never retries more
+ * than once -- an auth failure right after a successful relogin means the
+ * credentials themselves are no good, not a merely-stale sid. `username`
+ * being NULL means this client was never logged in at all (only
+ * theoretically reachable -- every real caller logs in or restores a
+ * session before making any other call), so there's nothing to relogin
+ * with and the original failure is returned as-is. */
+static inkbunny_result_t perform_request(inkbunny_client_t *client, const char *path, const char *query_or_null, cJSON **out_json)
+{
+    inkbunny_result_t result = perform_request_once(client, path, query_or_null, out_json);
+    if (result != INKBUNNY_ERR_AUTH || !client->username || strcmp(path, "/api_login.php") == 0) {
+        return result;
+    }
+
+    char *username = goblin_copy_cstr(client->username);
+    char *password = goblin_copy_cstr(client->password ? client->password : "");
+    if (!username || !password) {
+        free(username);
+        free(password);
+        return result;
+    }
+    inkbunny_result_t relogin_result = inkbunny_login(client, username, password);
+    free(username);
+    free(password);
+    if (relogin_result != INKBUNNY_OK) {
+        return result;
+    }
+    return perform_request_once(client, path, query_or_null, out_json);
+}
+
 inkbunny_client_t *inkbunny_client_create(const inkbunny_config_t *config)
 {
     inkbunny_client_t *client = calloc(1, sizeof(inkbunny_client_t));
@@ -109,6 +143,8 @@ void inkbunny_client_destroy(inkbunny_client_t *client)
     }
     free(client->base_url);
     free(client->sid);
+    free(client->username);
+    free(client->password);
     if (client->website_curl) {
         curl_easy_cleanup(client->website_curl);
     }
@@ -156,8 +192,49 @@ inkbunny_result_t inkbunny_login(inkbunny_client_t *client, const char *username
     client->sid = sid_copy;
     client->user_id = inkbunny_field_int64(json, "user_id", 0);
 
+    /* Remembered for perform_request's own transparent-relogin fallback --
+     * see struct inkbunny_client's doc comment. Copied rather than taking
+     * ownership of the caller's pointers, same convention as `sid` above. */
+    char *username_copy = goblin_copy_cstr(username);
+    char *password_copy = goblin_copy_cstr(password ? password : "");
+    if (username_copy) {
+        free(client->username);
+        client->username = username_copy;
+    }
+    if (password_copy) {
+        free(client->password);
+        client->password = password_copy;
+    }
+
     cJSON_Delete(json);
     return INKBUNNY_OK;
+}
+
+/* See this function's own doc comment in inkbunny/client.h. */
+void inkbunny_client_restore_session(inkbunny_client_t *client, const char *sid, int64_t user_id, const char *username, const char *password)
+{
+    if (!client || !sid || !username) {
+        return;
+    }
+
+    char *sid_copy = goblin_copy_cstr(sid);
+    if (!sid_copy) {
+        return;
+    }
+    free(client->sid);
+    client->sid = sid_copy;
+    client->user_id = user_id;
+
+    char *username_copy = goblin_copy_cstr(username);
+    char *password_copy = goblin_copy_cstr(password ? password : "");
+    if (username_copy) {
+        free(client->username);
+        client->username = username_copy;
+    }
+    if (password_copy) {
+        free(client->password);
+        client->password = password_copy;
+    }
 }
 
 inkbunny_result_t inkbunny_logout(inkbunny_client_t *client)
@@ -184,6 +261,11 @@ inkbunny_result_t inkbunny_logout(inkbunny_client_t *client)
 int64_t inkbunny_client_get_user_id(const inkbunny_client_t *client)
 {
     return client ? client->user_id : 0;
+}
+
+const char *inkbunny_client_get_sid(const inkbunny_client_t *client)
+{
+    return client ? client->sid : NULL;
 }
 
 /* Comma-separated submission_type_id list from a INKBUNNY_SUBMISSION_TYPE_BIT
