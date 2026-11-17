@@ -865,7 +865,7 @@ class _PostDetailPageState extends State<_PostDetailPage> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           InkWell(
-            onTap: hasArtist ? () => _openTagBrowse(post.artist!) : null,
+            onTap: hasArtist ? () => _openArtistSearch(post) : null,
             child: Text(hasArtist ? post.artist! : l10n.postDetailUnknownValue, style: Theme.of(context).textTheme.titleMedium),
           ),
           const SizedBox(height: 8),
@@ -1149,7 +1149,7 @@ class _PostDetailPageState extends State<_PostDetailPage> {
 
   static String _titleCase(String s) => s.isEmpty ? s : '${s[0].toUpperCase()}${s.substring(1)}';
 
-  void _openTagBrowse(String query) {
+  void _openTagBrowse(String query, {InkbunnySearchFilters? inkbunnyFilters}) {
     Navigator.push(
       context,
       MaterialPageRoute(
@@ -1160,9 +1160,26 @@ class _PostDetailPageState extends State<_PostDetailPage> {
           displaySettingsStore: widget.displaySettingsStore,
           downloadSettingsStore: widget.downloadSettingsStore,
           downloadQueueService: widget.downloadQueueService,
+          inkbunnyFilters: inkbunnyFilters,
         ),
       ),
     );
+  }
+
+  /// Artist-tap search, site-aware: e621's own `post.artist` already *is*
+  /// a real e621 tag, so a plain query works. Inkbunny has no such tag --
+  /// putting the name in the plain query instead matched it against every
+  /// post whose *description/keywords* happen to mention it (confirmed
+  /// live: a post tagged with another artist's name in its keywords was
+  /// pulled into "camotli"'s own results) -- [InkbunnySearchFilters
+  /// .username] is the real "uploaded by this exact user" filter, already
+  /// wired end-to-end but never populated by any caller until now.
+  void _openArtistSearch(BunnyPost post) {
+    if (post.site == BunnySite.inkbunny) {
+      _openTagBrowse('', inkbunnyFilters: InkbunnySearchFilters(username: post.artist!));
+    } else {
+      _openTagBrowse(post.artist!);
+    }
   }
 
   void _openAddToSearches(String tagName) {
