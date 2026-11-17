@@ -2,6 +2,7 @@
 
 #include <bunny_common/http.h>
 #include <goblin/appdirs.h>
+#include <goblin/log.h>
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -29,7 +30,7 @@ bool server_print_status(const server_config_t *config)
 
     server_auth_t *auth = server_auth_load(config->data_dir);
     if (!auth) {
-        fprintf(stderr, "status: failed to load/generate the auth token\n");
+        goblin_log(GOBLIN_LOG_ERROR, "status: failed to load/generate the auth token");
         return false;
     }
     printf("bearer_token: %s\n", auth->token);
@@ -45,7 +46,7 @@ bool server_print_status(const server_config_t *config)
 
     char *cert_sha256 = compute_cert_sha256(config->data_dir);
     if (!cert_sha256) {
-        fprintf(stderr, "status: failed to read server.pem for its fingerprint\n");
+        goblin_log(GOBLIN_LOG_ERROR, "status: failed to read server.pem for its fingerprint");
         return false;
     }
     printf("cert_sha256: %s\n", cert_sha256);

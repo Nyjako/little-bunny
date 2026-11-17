@@ -3,8 +3,8 @@
 #include <goblin/appdirs.h>
 #include <goblin/cstr.h>
 #include <goblin/env.h>
+#include <goblin/log.h>
 
-#include <stdio.h>
 #include <stdlib.h>
 
 #define SERVER_DEFAULT_PORT 8443
@@ -42,7 +42,7 @@ server_config_t *server_config_load(void)
     }
 
     if (goblin_appdir_mkdir_p(config->data_dir) != 0) {
-        fprintf(stderr, "failed to create data directory: %s\n", config->data_dir);
+        goblin_log(GOBLIN_LOG_ERROR, "failed to create data directory: %s", config->data_dir);
         server_config_free(config);
         return NULL;
     }

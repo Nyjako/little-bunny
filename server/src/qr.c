@@ -5,6 +5,7 @@
 #include <goblin/appdirs.h>
 #include <goblin/cstr.h>
 #include <goblin/hex.h>
+#include <goblin/log.h>
 #include <openssl/evp.h>
 #include <openssl/pem.h>
 #include <openssl/x509.h>
@@ -209,18 +210,18 @@ bool server_print_connection_qr(const server_config_t *config)
     char *cert_path = server_tls_ensure_cert(config->data_dir);
     free(cert_path);
     if (!auth) {
-        fprintf(stderr, "qr: failed to load/generate the auth token\n");
+        goblin_log(GOBLIN_LOG_ERROR, "qr: failed to load/generate the auth token");
         return false;
     }
     if (!cert_path) {
-        fprintf(stderr, "qr: failed to generate/locate the TLS certificate\n");
+        goblin_log(GOBLIN_LOG_ERROR, "qr: failed to generate/locate the TLS certificate");
         server_auth_free(auth);
         return false;
     }
 
     char *cert_sha256 = compute_cert_sha256(config->data_dir);
     if (!cert_sha256) {
-        fprintf(stderr, "qr: failed to read server.pem for its fingerprint\n");
+        goblin_log(GOBLIN_LOG_ERROR, "qr: failed to read server.pem for its fingerprint");
         server_auth_free(auth);
         return false;
     }
@@ -228,7 +229,7 @@ bool server_print_connection_qr(const server_config_t *config)
     bunny_http_transport_t transport = bunny_http_curl_transport();
     char *public_ip = fetch_public_ip(&transport, config->user_agent);
     if (!public_ip) {
-        fprintf(stderr, "qr: failed to determine this server's public IP (no internet access?)\n");
+        goblin_log(GOBLIN_LOG_ERROR, "qr: failed to determine this server's public IP (no internet access?)");
         free(cert_sha256);
         server_auth_free(auth);
         return false;
@@ -242,7 +243,7 @@ bool server_print_connection_qr(const server_config_t *config)
     free(cert_sha256);
     server_auth_free(auth);
     if (!payload) {
-        fprintf(stderr, "qr: failed to build the connection JSON payload\n");
+        goblin_log(GOBLIN_LOG_ERROR, "qr: failed to build the connection JSON payload");
         return false;
     }
 
@@ -250,7 +251,7 @@ bool server_print_connection_qr(const server_config_t *config)
     uint8_t temp_buffer[qrcodegen_BUFFER_LEN_MAX];
     bool encoded = qrcodegen_encodeText(payload, temp_buffer, qrcode, qrcodegen_Ecc_LOW, qrcodegen_VERSION_MIN, qrcodegen_VERSION_MAX, qrcodegen_Mask_AUTO, true);
     if (!encoded) {
-        fprintf(stderr, "qr: connection info is too large to encode as a QR code\n");
+        goblin_log(GOBLIN_LOG_ERROR, "qr: connection info is too large to encode as a QR code");
         free(payload);
         return false;
     }
