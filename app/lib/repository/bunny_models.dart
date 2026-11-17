@@ -546,6 +546,19 @@ class BunnyDocBlock {
   const BunnyDocBlock({required this.kind, this.headingLevel = 0, required this.runs});
 }
 
+BunnyDocRun _docRunFromMap(Map<String, Object?> m) => BunnyDocRun(kind: BunnyDocRunKind.values[m['kind'] as int], text: m['text'] as String? ?? '', url: m['url'] as String?);
+
+BunnyDocBlock _docBlockFromMap(Map<String, Object?> m) =>
+    BunnyDocBlock(kind: BunnyDocBlockKind.values[m['kind'] as int], headingLevel: m['headingLevel'] as int, runs: (m['runs'] as List).cast<Map<String, Object?>>().map(_docRunFromMap).toList());
+
+/// Converts the raw block/run maps `bunny_core_ffi`'s isolate dispatch (or
+/// its standalone top-level `readWritingEpub`) returns into [BunnyDocBlock]s
+/// -- shared by [FfiBunnyRepository] (for `getWritingDoc`/the isolate
+/// result) and any direct `readWritingEpub` caller (e.g. `PostDetailScreen`,
+/// which needs it outside a `BunnyRepository` method -- see that function's
+/// own doc comment for why it isn't one).
+List<BunnyDocBlock> bunnyDocBlocksFromMaps(Object? list) => (list as List).cast<Map<String, Object?>>().map(_docBlockFromMap).toList();
+
 /// One Inkbunny pool a post belongs to -- unlike [BunnyPoolInfo] (e621), the
 /// name is already known from the same full-submission fetch that surfaces
 /// the pool at all (api_submissions.php's `show_pools=yes`), so there's no

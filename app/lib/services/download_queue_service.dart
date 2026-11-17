@@ -661,21 +661,37 @@ class DownloadQueueService extends ChangeNotifier {
     // what the user's global settings say.
     final autoFavorite = !item.suppressAutoActions && await downloadSettingsStore.loadAutoFavoriteOnDownload();
     final autoUpvote = !item.suppressAutoActions && await downloadSettingsStore.loadAutoUpvoteOnDownload();
-    final result = await downloadManager.downloadPost(
-      item.post,
-      item.repository,
-      folder,
-      autoFavorite: autoFavorite,
-      autoUpvote: autoUpvote,
-      onProgress: (received, total) {
-        item.bytesReceived = received;
-        item.bytesTotal = total;
-        notifyListeners();
-      },
-      poolId: item.poolId,
-      poolName: item.poolName,
-      poolPage: item.poolPage,
-    );
+    // An Inkbunny Writing-Document post downloads as a complete .epub
+    // (cover + parsed story text already embedded inside it) instead of
+    // its plain cover image file -- see DownloadManager.downloadWritingEpub's
+    // own doc comment.
+    final isWritingDocument = item.post.site == BunnySite.inkbunny && item.post.writing != null && item.post.writing!.isNotEmpty;
+    final result = isWritingDocument
+        ? await downloadManager.downloadWritingEpub(
+            item.post,
+            item.repository,
+            folder,
+            autoFavorite: autoFavorite,
+            autoUpvote: autoUpvote,
+            poolId: item.poolId,
+            poolName: item.poolName,
+            poolPage: item.poolPage,
+          )
+        : await downloadManager.downloadPost(
+            item.post,
+            item.repository,
+            folder,
+            autoFavorite: autoFavorite,
+            autoUpvote: autoUpvote,
+            onProgress: (received, total) {
+              item.bytesReceived = received;
+              item.bytesTotal = total;
+              notifyListeners();
+            },
+            poolId: item.poolId,
+            poolName: item.poolName,
+            poolPage: item.poolPage,
+          );
     switch (result.outcome) {
       case DownloadOutcome.verified:
         _succeeded++;

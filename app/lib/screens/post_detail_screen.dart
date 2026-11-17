@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:bunny_core_ffi/bunny_core_ffi.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:chewie/chewie.dart';
 import 'package:flutter/material.dart';
@@ -1569,25 +1570,49 @@ class _PostDetailPageState extends State<_PostDetailPage> {
     );
   }
 
-  /// Fetches the post's `writing` BBCode already-parsed into [BunnyDocBlock]s
-  /// (no local-download check yet -- that's `DownloadManager`'s own
-  /// follow-up wiring, a separate PR) and opens [WritingReaderScreen] on
-  /// it. Shows a failure snackbar rather than navigating to an empty/broken
-  /// reader if the parse call itself throws.
-  Future<void> _openWritingReader(AppLocalizations l10n) async {
-    List<BunnyDocBlock> blocks;
+  /// If this post's `.epub` is already sitting on disk (same local-vs-
+  /// network precedent `PostMediaPage` already uses for video),
+  /// `readWritingEpub`'s pure local parse is used instead of a live fetch
+  /// -- same reasoning as every other "don't re-fetch what's already
+  /// downloaded" check in this app. Falls back to the network path if
+  /// nothing's there or the local parse itself fails (e.g. a corrupt/
+  /// partial file), rather than giving up.
+  Future<List<BunnyDocBlock>?> _tryReadLocalWritingEpub() async {
     try {
-      blocks = await widget.repository.getWritingDoc(_post.id);
-    } catch (_) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(l10n.postDetailActionFailed)));
+      final folder = await widget.downloadSettingsStore.loadDestinationFolder();
+      if (folder == null) {
+        return null;
       }
-      return;
+      final path = await widget.downloadManager.writingLocalFilePathFor(_post, folder, poolId: widget.poolId ?? 0, poolName: widget.poolName, poolPage: _poolPage);
+      if (path == null) {
+        return null;
+      }
+      return bunnyDocBlocksFromMaps(readWritingEpub(path));
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Opens [WritingReaderScreen] on this post's story, preferring an
+  /// already-downloaded `.epub` over a live fetch. Shows a failure
+  /// snackbar rather than navigating to an empty/broken reader if both the
+  /// local read and the live parse fail.
+  Future<void> _openWritingReader(AppLocalizations l10n) async {
+    List<BunnyDocBlock>? blocks = await _tryReadLocalWritingEpub();
+    if (blocks == null) {
+      try {
+        blocks = await widget.repository.getWritingDoc(_post.id);
+      } catch (_) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(l10n.postDetailActionFailed)));
+        }
+        return;
+      }
     }
     if (!mounted) {
       return;
     }
-    await Navigator.push(context, MaterialPageRoute(builder: (context) => WritingReaderScreen(postId: _post.id, title: _post.title ?? l10n.postDetailUnknownValue, blocks: blocks)));
+    await Navigator.push(context, MaterialPageRoute(builder: (context) => WritingReaderScreen(postId: _post.id, title: _post.title ?? l10n.postDetailUnknownValue, blocks: blocks!)));
   }
 
   Widget _poolsSection(AppLocalizations l10n) {
