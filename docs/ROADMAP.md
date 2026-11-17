@@ -3617,3 +3617,17 @@ this file is the single source of truth for "what's done" across sessions.
   already-downloaded `.epub` first, parsing it locally instead of re-fetching live --
   same "don't re-fetch what's already downloaded" precedent `PostMediaPage`'s own
   local-vs-network video branch already set.
+
+- [x] **M88 — `bunny_cli --download` saves a Writing-Document post as a `.epub` too**
+  Mirrors M87's `DownloadManager.downloadWritingEpub` in `bunny_cli`, in both of its
+  modes. `resolved_post_t` (`cli/src/commands.c`) gains a `writing` field -- populated
+  from the already-cached `bunny_db_post_t` in standalone mode, and from the server's
+  existing `"writing"` JSON field (no server change needed) in networked mode.
+  `process_claimed_item` branches on it before the normal download-start/poll/release
+  flow: standalone mode calls `bunny_core_build_writing_epub` directly, creating the
+  destination directory first (unlike `bunny_core_download_start`, it doesn't do this
+  itself); networked mode adds a new `bunny_cli_rest_download` (`cli/src/rest_client.c`)
+  that streams a raw binary response straight to a file instead of parsing it as JSON,
+  used against the `GET /posts/{id}/writing_epub` route M87 already added server-side.
+  No destination-path changes needed -- `bunny_cli_destination_for` already takes the
+  file extension as a plain parameter.
