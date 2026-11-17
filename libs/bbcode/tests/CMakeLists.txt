@@ -1,0 +1,3 @@
+add_executable(bunny_bbcode_test_bbcode test_bbcode.c)
+target_link_libraries(bunny_bbcode_test_bbcode PRIVATE bunny_bbcode unity::framework)
+add_test(NAME bunny_bbcode_test_bbcode COMMAND bunny_bbcode_test_bbcode)
