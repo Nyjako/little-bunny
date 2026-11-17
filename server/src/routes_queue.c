@@ -5,6 +5,8 @@
 #include <cJSON.h>
 
 #include <stdbool.h>
+#include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include "auth.h"
@@ -357,6 +359,82 @@ static int handle_get_post_by_id(struct mg_connection *conn, server_context_t *c
     return status;
 }
 
+/* "kind" is the raw C enum ordinal, same convention as e.g. bunny_db_tag_t's
+ * own "category" field on the wire -- HttpBunnyRepository reads it back
+ * with the exact same BunnyDocRunKind.values[...]/BunnyDocBlockKind.values[...]
+ * indexing FfiBunnyRepository already uses, so both repository
+ * implementations share one Dart-side deserializer. */
+static cJSON *doc_to_json(const bunny_doc_t *doc)
+{
+    cJSON *blocks = cJSON_CreateArray();
+    for (size_t i = 0; i < doc->count; i++) {
+        const bunny_doc_block_t *block = &doc->items[i];
+        cJSON *block_json = cJSON_CreateObject();
+        cJSON_AddNumberToObject(block_json, "kind", block->kind);
+        cJSON_AddNumberToObject(block_json, "heading_level", block->heading_level);
+        cJSON *runs = cJSON_CreateArray();
+        for (size_t j = 0; j < block->runs.count; j++) {
+            const bunny_doc_run_t *run = &block->runs.items[j];
+            cJSON *run_json = cJSON_CreateObject();
+            cJSON_AddNumberToObject(run_json, "kind", run->kind);
+            cJSON_AddStringToObject(run_json, "text", run->text ? run->text : "");
+            add_optional_string(run_json, "url", run->url);
+            cJSON_AddItemToArray(runs, run_json);
+        }
+        cJSON_AddItemToObject(block_json, "runs", runs);
+        cJSON_AddItemToArray(blocks, block_json);
+    }
+    return blocks;
+}
+
+static int handle_get_writing_doc(struct mg_connection *conn, server_context_t *ctx, int64_t post_id)
+{
+    bunny_doc_t doc;
+    bunny_core_result_t result = bunny_core_get_writing_doc(ctx->core, post_id, &doc);
+    if (result != BUNNY_CORE_OK) {
+        return server_json_respond_error(conn, result);
+    }
+
+    cJSON *response = doc_to_json(&doc);
+    bunny_doc_free(&doc);
+    int status = server_json_respond(conn, 200, response);
+    cJSON_Delete(response);
+    return status;
+}
+
+static int handle_get_writing_epub(struct mg_connection *conn, server_context_t *ctx, int64_t post_id)
+{
+    char tmp_path[256];
+    snprintf(tmp_path, sizeof(tmp_path), "/tmp/bunny_server_writing_epub_%lld_%d.epub", (long long)post_id, rand());
+
+    bunny_core_result_t result = bunny_core_build_writing_epub(ctx->core, post_id, tmp_path);
+    if (result != BUNNY_CORE_OK) {
+        return server_json_respond_error(conn, result);
+    }
+
+    FILE *f = fopen(tmp_path, "rb");
+    if (!f) {
+        return server_json_respond_error(conn, BUNNY_CORE_ERR_UNKNOWN);
+    }
+    fseek(f, 0, SEEK_END);
+    long size = ftell(f);
+    fseek(f, 0, SEEK_SET);
+    unsigned char *data = size > 0 ? malloc((size_t)size) : NULL;
+    size_t read = data ? fread(data, 1, (size_t)size, f) : 0;
+    fclose(f);
+    remove(tmp_path);
+
+    if (!data || read != (size_t)size) {
+        free(data);
+        return server_json_respond_error(conn, BUNNY_CORE_ERR_UNKNOWN);
+    }
+
+    mg_printf(conn, "HTTP/1.1 200 OK\r\nContent-Type: application/epub+zip\r\nContent-Length: %zu\r\nConnection: close\r\n\r\n", read);
+    mg_write(conn, data, read);
+    free(data);
+    return 200;
+}
+
 static int handle_mark_seen(struct mg_connection *conn, server_context_t *ctx, int64_t post_id)
 {
     bunny_core_result_t result = bunny_core_post_mark_seen(ctx->core, post_id);
@@ -422,6 +500,12 @@ static int posts_handler(struct mg_connection *conn, void *cbdata)
     }
     if (strcmp(method, "GET") == 0 && server_route_parse_id_with_suffix(sub_path, "inkbunny_pools", &post_id)) {
         return handle_get_inkbunny_post_pools(conn, ctx, post_id);
+    }
+    if (strcmp(method, "GET") == 0 && server_route_parse_id_with_suffix(sub_path, "writing", &post_id)) {
+        return handle_get_writing_doc(conn, ctx, post_id);
+    }
+    if (strcmp(method, "GET") == 0 && server_route_parse_id_with_suffix(sub_path, "writing_epub", &post_id)) {
+        return handle_get_writing_epub(conn, ctx, post_id);
     }
     if (strcmp(method, "POST") == 0 && strcmp(sub_path, "fetch") == 0) {
         return handle_fetch_post(conn, ctx, info->query_string);

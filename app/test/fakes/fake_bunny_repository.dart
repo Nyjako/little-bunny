@@ -40,6 +40,8 @@ class FakeBunnyRepository implements BunnyRepository {
   /// [fetchPost] returns for that (site, externalId) pair.
   final Map<String, int> fetchPostResults = {};
   final Map<int, BunnyPoolInfo> poolInfoById = {};
+  final Map<int, List<BunnyDocBlock>> writingDocByPostId = {};
+  final List<({int postId, String destPath})> buildWritingEpubCalls = [];
 
   /// Extra posts [getPost] can resolve by id, for ones that aren't already
   /// sitting in [postsBySearchId] (e.g. a parent/child/pool-mate post that
@@ -536,6 +538,20 @@ class FakeBunnyRepository implements BunnyRepository {
       throw BunnyRepositoryException('no fake pool registered for $poolId');
     }
     return info;
+  }
+
+  @override
+  Future<List<BunnyDocBlock>> getWritingDoc(int postId) async {
+    final doc = writingDocByPostId[postId];
+    if (doc == null) {
+      throw BunnyRepositoryException('no fake writing doc registered for $postId');
+    }
+    return doc;
+  }
+
+  @override
+  Future<void> buildWritingEpub(int postId, String destPath) async {
+    buildWritingEpubCalls.add((postId: postId, destPath: destPath));
   }
 
   @override

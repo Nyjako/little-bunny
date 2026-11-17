@@ -16,6 +16,7 @@ add_library(bunny_core STATIC
     src/diagnostics.c
     src/wiki.c
     src/sanitize.c
+    src/writing.c
 )
 
 target_include_directories(bunny_core
@@ -36,6 +37,9 @@ target_link_libraries(bunny_core
         # blacklist.c. bunny_db already links this too (PRIVATE, for its
         # own matching), but that doesn't propagate transitively.
         bunny_tag_query
+        # writing.c -- Inkbunny Writing-Document story parsing/export.
+        bunny_bbcode
+        bunny_epub
 )
 
 # bunny_db links sqlite3 PRIVATE, so pthread doesn't propagate transitively

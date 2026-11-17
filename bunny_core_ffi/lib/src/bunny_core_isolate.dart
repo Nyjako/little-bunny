@@ -647,6 +647,19 @@ class _FetchPoolRequest extends _Request {
   const _FetchPoolRequest(this.poolId);
 }
 
+class _GetWritingDocRequest extends _Request {
+  final int postId;
+
+  const _GetWritingDocRequest(this.postId);
+}
+
+class _BuildWritingEpubRequest extends _Request {
+  final int postId;
+  final String destPath;
+
+  const _BuildWritingEpubRequest(this.postId, this.destPath);
+}
+
 class _PreviewSearchRequest extends _Request {
   final String site;
   final String query;
@@ -1148,6 +1161,40 @@ Map<String, Object?> _handleFetchPool(Pointer<bunny_core_t> core, _FetchPoolRequ
     };
     _bindings.bunny_core_pool_info_free(out);
     return map;
+  });
+}
+
+/// Converts a bunny_doc_t (freed via bunny_doc_free before returning) into
+/// the same flat block/run map shape every writing-doc-returning call uses
+/// -- see BunnyDocBlock/BunnyDocRun on the Dart repository side for the
+/// corresponding model classes.
+List<Map<String, Object?>> _docToList(bunny_doc_t doc) {
+  final blocks = <Map<String, Object?>>[];
+  for (var i = 0; i < doc.count; i++) {
+    final block = doc.items[i];
+    final runs = <Map<String, Object?>>[];
+    for (var j = 0; j < block.runs.count; j++) {
+      final run = block.runs.items[j];
+      runs.add({'kind': run.kindAsInt, 'text': _readNullableString(run.text), 'url': _readNullableString(run.url)});
+    }
+    blocks.add({'kind': block.kindAsInt, 'headingLevel': block.heading_level, 'runs': runs});
+  }
+  return blocks;
+}
+
+List<Map<String, Object?>> _handleGetWritingDoc(Pointer<bunny_core_t> core, _GetWritingDocRequest r) {
+  return using((arena) {
+    final out = arena<bunny_doc_t>();
+    _check(_bindings.bunny_core_get_writing_doc(core, r.postId, out));
+    final list = _docToList(out.ref);
+    _bindings.bunny_doc_free(out);
+    return list;
+  });
+}
+
+void _handleBuildWritingEpub(Pointer<bunny_core_t> core, _BuildWritingEpubRequest r) {
+  using((arena) {
+    _check(_bindings.bunny_core_build_writing_epub(core, r.postId, r.destPath.toNativeUtf8(allocator: arena).cast()));
   });
 }
 
@@ -1675,6 +1722,11 @@ Object? _dispatch(Pointer<bunny_core_t>? core, _Request request, void Function(P
         return _handleFetchAndCachePost(c, r);
       case _FetchPoolRequest r:
         return _handleFetchPool(c, r);
+      case _GetWritingDocRequest r:
+        return _handleGetWritingDoc(c, r);
+      case _BuildWritingEpubRequest r:
+        _handleBuildWritingEpub(c, r);
+        return null;
       case _PreviewSearchRequest r:
         return _handlePreviewSearch(c, r);
       case _ListMyInkbunnyFavoritesRequest r:
@@ -2022,6 +2074,10 @@ class BunnyCoreNative {
 
   Future<Map<String, Object?>> fetchPool(int poolId) => _send<Map<String, Object?>>(_FetchPoolRequest(poolId));
 
+  Future<List<Map<String, Object?>>> getWritingDoc(int postId) => _send<List<Map<String, Object?>>>(_GetWritingDocRequest(postId));
+
+  Future<void> buildWritingEpub(int postId, String destPath) => _send<void>(_BuildWritingEpubRequest(postId, destPath));
+
   Future<List<Map<String, Object?>>> previewSearch(
     String site,
     String query, {
@@ -2162,3 +2218,20 @@ String bunnySanitizeFilenameSegment(String input, {bool asciiOnly = false, int? 
 /// [bunnySanitizeFilenameSegment] call is implicitly capped at by default --
 /// see `BUNNY_FILENAME_MAX_LEN`'s own doc comment in core.h.
 int bunnyFilenameMaxLen() => _bindings.bunny_filename_max_len();
+
+/// Reads a previously [BunnyCoreNative.buildWritingEpub]'d `.epub` back off
+/// disk into the same block/run map shape [BunnyCoreNative.getWritingDoc]
+/// returns. Pure, synchronous local file I/O -- no `core` handle needed
+/// (see `bunny_core_read_writing_epub`'s own doc comment in core.h) -- so,
+/// same reasoning as [bunnySanitizeFilenameSegment] above, this is called
+/// directly rather than routed through [BunnyCoreNative]'s isolate: it has
+/// to work in networked mode too, which never opens a core/isolate at all.
+List<Map<String, Object?>> readWritingEpub(String path) {
+  return using((arena) {
+    final out = arena<bunny_doc_t>();
+    _check(_bindings.bunny_core_read_writing_epub(path.toNativeUtf8(allocator: arena).cast(), out));
+    final list = _docToList(out.ref);
+    _bindings.bunny_doc_free(out);
+    return list;
+  });
+}
