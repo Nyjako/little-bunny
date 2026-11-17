@@ -102,10 +102,14 @@ class _TagBrowseScreenState extends State<TagBrowseScreen> {
 
   bool get _selectionMode => _selectedPostIds.isNotEmpty;
 
-  /// Unlike [PostGridScreen], there's no "select entire search" here -- this
-  /// screen has no [BunnySearch.totalCount] to page against, only whatever
-  /// infinite scroll has loaded into [_posts] so far.
-  List<BunnyPost> get _selectedPosts => _posts.where((post) => _selectedPostIds.contains(post.id)).toList();
+  /// Set only by [_selectEntireSearch] -- the full fetched result of paging
+  /// every page until empty, same role as [PostGridScreen]'s own field of
+  /// the same name. `null` the rest of the time, when [_selectedPosts]/
+  /// [_poolPageByPostId] fall back to whatever infinite scroll has loaded
+  /// into [_posts] so far.
+  List<BunnyPost>? _entireSearchSelection;
+
+  List<BunnyPost> get _selectedPosts => (_entireSearchSelection ?? _posts).where((post) => _selectedPostIds.contains(post.id)).toList();
 
   /// Non-null only when [TagBrowseScreen.query] is itself a pool browse
   /// ("pool:`<id>`") -- the id this screen is showing, parsed once up front
@@ -223,20 +227,101 @@ class _TagBrowseScreenState extends State<TagBrowseScreen> {
   }
 
   void _exitSelectionMode() {
-    setState(() => _selectedPostIds.clear());
+    setState(() {
+      _selectedPostIds.clear();
+      _entireSearchSelection = null;
+    });
   }
 
   void _selectAll() {
-    setState(() => _selectedPostIds..clear()..addAll(_posts.map((post) => post.id)));
+    setState(() {
+      _entireSearchSelection = null;
+      _selectedPostIds
+        ..clear()
+        ..addAll(_posts.map((post) => post.id));
+    });
+  }
+
+  /// Pages [_fetchPage] until an empty page comes back, same exhaustive
+  /// "select literally everything this browse matches" behavior as
+  /// [PostGridScreen._selectEntireSearch] -- the one difference is the
+  /// progress dialog: there's no [BunnySearch.totalCount] to size it
+  /// against here (an ad-hoc browse, or Favorites via [TagBrowseScreen
+  /// .customFetch], never a saved search), so it just shows a running count
+  /// with an indeterminate bar instead of "N of total".
+  Future<void> _selectEntireSearch(AppLocalizations l10n) async {
+    var cancelled = false;
+    final fetchedCount = ValueNotifier<int>(0);
+    final all = <BunnyPost>[];
+
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        title: Text(l10n.postGridSelectEntireSearchDialogTitle),
+        content: ValueListenableBuilder<int>(
+          valueListenable: fetchedCount,
+          builder: (context, count, child) => Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const LinearProgressIndicator(),
+              const SizedBox(height: 8),
+              Text(l10n.tagBrowseSelectEntireSearchProgress(count)),
+            ],
+          ),
+        ),
+        // Only flips the flag -- the fetch loop below is the single place
+        // that pops this dialog (whether it exits via cancellation or an
+        // empty page), so a cancel landing right as the fetch would have
+        // finished normally can never double-pop.
+        actions: [TextButton(onPressed: () => cancelled = true, child: Text(l10n.commonCancel))],
+      ),
+    );
+
+    try {
+      var page = 1;
+      while (!cancelled) {
+        final pageItems = await _fetchPage(page);
+        if (pageItems.isEmpty) {
+          break;
+        }
+        all.addAll(pageItems);
+        fetchedCount.value = all.length;
+        page++;
+      }
+      if (!mounted) {
+        return;
+      }
+      Navigator.pop(context);
+      if (!cancelled && all.isNotEmpty) {
+        setState(() {
+          _entireSearchSelection = all;
+          _selectedPostIds
+            ..clear()
+            ..addAll(all.map((post) => post.id));
+        });
+      }
+    } catch (_) {
+      if (!mounted) {
+        return;
+      }
+      Navigator.pop(context);
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(l10n.postGridSelectEntireSearchError)));
+    }
   }
 
   /// Same pool-page-numbering convention as [PostGridScreen._massDownload] --
-  /// a post's page is its position in the full, currently-loaded [_posts]
-  /// list (not its position within just a selection), so selecting only
-  /// some of a pool's posts doesn't renumber them. Also used by [_openPost]
-  /// (M82) so [PostDetailScreen]'s own "already downloaded" check looks in
-  /// the exact folder [_massDownload] actually wrote this pool's posts to.
-  Map<int, int> get _poolPageByPostId => {for (final (index, post) in _posts.indexed) post.id: index + 1};
+  /// a post's page is its position in the full order ([_entireSearchSelection]
+  /// when a "select entire search" is active, otherwise whatever [_posts]
+  /// infinite scroll has loaded so far), not its position within just a
+  /// selection, so selecting only some of a pool's posts doesn't renumber
+  /// them. Also used by [_openPost] (M82) so [PostDetailScreen]'s own
+  /// "already downloaded" check looks in the exact folder [_massDownload]
+  /// actually wrote this pool's posts to.
+  Map<int, int> get _poolPageByPostId {
+    final fullOrder = _entireSearchSelection ?? _posts;
+    return {for (final (index, post) in fullOrder.indexed) post.id: index + 1};
+  }
 
   Future<void> _massDownload(AppLocalizations l10n) async {
     final selected = _selectedPosts;
@@ -252,7 +337,10 @@ class _TagBrowseScreenState extends State<TagBrowseScreen> {
     if (!mounted) {
       return;
     }
-    setState(() => _selectedPostIds.clear());
+    setState(() {
+      _selectedPostIds.clear();
+      _entireSearchSelection = null;
+    });
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(l10n.postGridMassDownloadQueued(selected.length))));
   }
 
@@ -515,6 +603,7 @@ class _TagBrowseScreenState extends State<TagBrowseScreen> {
         title: Text(l10n.postGridSelectionCount(_selectedPostIds.length)),
         actions: [
           IconButton(icon: const Icon(Icons.select_all), tooltip: l10n.postGridSelectAll, onPressed: _selectAll),
+          IconButton(icon: const Icon(Icons.done_all), tooltip: l10n.tagBrowseSelectEntireSearch, onPressed: () => _selectEntireSearch(l10n)),
           IconButton(icon: const Icon(Icons.download), tooltip: l10n.postGridMassDownloadTooltip, onPressed: () => _massDownload(l10n)),
         ],
       );

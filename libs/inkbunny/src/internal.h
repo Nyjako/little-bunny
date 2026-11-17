@@ -27,6 +27,14 @@ struct inkbunny_client
     bunny_http_transport_t transport;
     bunny_rate_limiter_t rate_limiter;
 
+    /* Set by inkbunny_login (or inkbunny_client_restore_session, given the
+     * same values a prior login used) -- kept around so perform_request can
+     * transparently re-login once if `sid` turns out to be expired/invalid,
+     * without the caller ever knowing it happened. `username` NULL means
+     * "never logged in on this client" (no auto-relogin attempted). */
+    char *username;
+    char *password;
+
     /* NULL until inkbunny_website_login() succeeds. Kept alive for the
      * client's lifetime so its cookie jar persists across favorite/unfavorite
      * calls; not related to `sid`, which is the official API's session. */

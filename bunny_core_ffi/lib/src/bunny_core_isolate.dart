@@ -106,6 +106,7 @@ Map<String, Object?> _postToMap(bunny_db_post_t post) => {
   'artist': _readNullableString(post.artist),
   'title': _readNullableString(post.title),
   'description': _readNullableString(post.description),
+  'writing': _readNullableString(post.writing),
   'rating': _readNullableString(post.rating),
   'score': post.score,
   'scoreUp': post.score_up,

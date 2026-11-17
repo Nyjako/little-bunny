@@ -79,6 +79,13 @@ static bunny_http_result_t curl_send(void *user_data, const bunny_http_request_t
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &buf);
     curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
     curl_easy_setopt(curl, CURLOPT_TIMEOUT, 30L);
+    /* Without this, a stalled DNS/connect phase can eat the full 30s above
+     * before curl ever gets to the request itself -- on the app side, every
+     * call goes through one single-threaded dispatch isolate
+     * (bunny_core_isolate.dart), so a single stuck connection attempt blocks
+     * every other queued call (another post's metadata, a background sync)
+     * for that whole time, not just this one request's own caller. */
+    curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, 10L);
 
     switch (request->method) {
         case BUNNY_HTTP_GET:

@@ -45,9 +45,26 @@ inkbunny_client_t *inkbunny_client_create(const inkbunny_config_t *config);
 void inkbunny_client_destroy(inkbunny_client_t *client);
 
 /* Logs in and stores the session id on the client for subsequent calls.
- * Use username "guest" with an empty/NULL password for anonymous, public-only access. */
+ * Use username "guest" with an empty/NULL password for anonymous, public-only access.
+ * Also remembers username/password on the client (freed by
+ * inkbunny_client_destroy) so a later call can transparently re-login once
+ * if the server reports the session as expired/invalid -- see
+ * inkbunny_client_restore_session's own doc comment for the other half of
+ * that story. */
 inkbunny_result_t inkbunny_login(inkbunny_client_t *client, const char *username, const char *password);
 inkbunny_result_t inkbunny_logout(inkbunny_client_t *client);
+
+/* Injects a session id obtained from an *earlier* inkbunny_login call on a
+ * different (since-destroyed) client, with no network call -- lets a
+ * caller that caches a session across many short-lived clients (one per
+ * logical operation, bunny_core's own convention) skip the login round
+ * trip entirely on a cache hit. username/password must still be supplied
+ * (not re-sent over the network here) so this client can transparently
+ * re-login later if the restored session turns out to have expired --
+ * same mechanism and same reasoning as inkbunny_login's own doc comment.
+ * Pass the exact same username/password the cached sid was originally
+ * logged in with. */
+void inkbunny_client_restore_session(inkbunny_client_t *client, const char *sid, int64_t user_id, const char *username, const char *password);
 
 /* The numeric Inkbunny user id of the account currently logged in via
  * inkbunny_login() -- 0 before any login, or for a guest login (the same
@@ -55,6 +72,13 @@ inkbunny_result_t inkbunny_logout(inkbunny_client_t *client);
  * inkbunny_search_params_t.favorited_by_user_id for a "my own favorites"
  * search, since that field needs the numeric id, not a username. */
 int64_t inkbunny_client_get_user_id(const inkbunny_client_t *client);
+
+/* The session id a successful inkbunny_login/inkbunny_client_restore_session
+ * set on this client -- NULL before either has ever succeeded. Owned by
+ * the client; copy it (goblin_copy_cstr or similar) before the client is
+ * destroyed if a caller needs it to outlive this client (M88 -- bunny_core's
+ * own session cache across many short-lived clients does exactly this). */
+const char *inkbunny_client_get_sid(const inkbunny_client_t *client);
 
 /* Bits for inkbunny_search_params_t.search_in_mask -- which of api_search.php's
  * text-matching fields `text` is searched against. At least one of

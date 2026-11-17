@@ -404,6 +404,7 @@ class FakeBunnyRepository implements BunnyRepository {
     artist: post.artist,
     title: post.title,
     description: post.description,
+    writing: post.writing,
     rating: post.rating,
     score: post.score,
     favCount: post.favCount,
