@@ -365,6 +365,7 @@
   "postDetailSourcesLabel": "Sources",
   "postDetailRefreshFailedMessage": "Couldn't load full details",
   "postDetailRefreshFailedRetry": "Retry",
+  "postDetailOpenWritingReader": "Read full story",
   "postDetailParentLabel": "Parent",
   "postDetailChildrenLabel": "Children",
   "postDetailPoolsLabel": "Pools",
