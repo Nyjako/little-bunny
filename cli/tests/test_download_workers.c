@@ -30,7 +30,9 @@ typedef struct
 } fake_transport_state_t;
 
 static fake_transport_state_t g_e621_state;
+static fake_transport_state_t g_inkbunny_state;
 static bunny_http_transport_t g_e621_transport;
+static bunny_http_transport_t g_inkbunny_transport;
 static bunny_core_t *g_core;
 static bunny_cli_context_t g_ctx;
 static char g_dest_dir[256];
@@ -67,17 +69,48 @@ static char *make_post_json(int64_t external_id, const char *file_url)
     return buf;
 }
 
+/* A minimal valid Inkbunny login response -- sid is all this test needs,
+ * since bunny_core caches the session per bunny_core_t instance (M88) and
+ * every post fetched in one test only ever needs it once. */
+static const char *const INKBUNNY_LOGIN_JSON = "{\"sid\": \"77N2zxwuZFvRduEQzvE15zGkiR\", \"user_id\": \"0\", \"ratingsmask\": \"101\"}";
+
+/* A minimal valid single-submission api_submissions.php response for a
+ * "Writing - Document" post (submission_type_id 12) with a non-empty
+ * `writing` field -- everything resolve_post_standalone/_networked and
+ * is_writing_document actually look at, plus the handful of fields
+ * inkbunny_parse_submission requires to succeed at all. */
+static char *make_inkbunny_writing_submission_json(int64_t submission_id, const char *file_url, const char *writing)
+{
+    char *buf = malloc(2048);
+    snprintf(buf, 2048,
+             "{\"sid\": \"x\", \"results_count\": 1, \"submissions\": [{"
+             "\"submission_id\": \"%lld\", \"username\": \"someartist\", \"user_id\": \"1\","
+             "\"file_name\": \"%lld.jpg\", \"file_url_full\": \"%s\", \"file_url_screen\": \"%s\", \"file_url_preview\": \"%s\","
+             "\"thumbnail_url_large_noncustom\": \"%s\", \"files\": [], \"pools\": [],"
+             "\"description\": \"\", \"writing\": \"%s\", \"title\": \"A Story\","
+             "\"rating_id\": \"1\", \"rating_name\": \"General\", \"ratings\": [], \"keywords\": [],"
+             "\"submission_type_id\": \"12\", \"type_name\": \"Writing - Document\","
+             "\"favorite\": \"f\", \"favorites_count\": \"0\", \"comments_count\": \"0\", \"views\": \"0\","
+             "\"create_datetime\": \"2024-01-01 00:00:00.000000+00\"}]}",
+             (long long)submission_id, (long long)submission_id, file_url, file_url, file_url, file_url, writing);
+    return buf;
+}
+
 void setUp(void)
 {
     memset(&g_e621_state, 0, sizeof(g_e621_state));
+    memset(&g_inkbunny_state, 0, sizeof(g_inkbunny_state));
     g_e621_transport.send = fake_send;
     g_e621_transport.user_data = &g_e621_state;
+    g_inkbunny_transport.send = fake_send;
+    g_inkbunny_transport.user_data = &g_inkbunny_state;
 
     bunny_core_config_t config;
     memset(&config, 0, sizeof(config));
     config.db_path = ":memory:";
     config.user_agent = "bunny-cli-tests/1.0 (unit tests)";
     config.e621_transport = &g_e621_transport;
+    config.inkbunny_transport = &g_inkbunny_transport;
     config.min_request_interval_sec = 0.001;
 
     bunny_core_result_t result = bunny_core_open(&config, &g_core);
@@ -116,6 +149,22 @@ static int64_t fetch_fake_post(int64_t external_id, const char *file_url)
     return post_id;
 }
 
+/* A fresh bunny_core_t (one per test, see setUp) has never logged into
+ * Inkbunny before, so this is always a genuine cache miss -- queues both
+ * the login and the submission fixture, in that order (M88's own session
+ * caching). */
+static int64_t fetch_fake_inkbunny_writing_post(int64_t submission_id, const char *file_url, const char *writing)
+{
+    g_inkbunny_state.bodies[g_inkbunny_state.body_count++] = strdup(INKBUNNY_LOGIN_JSON);
+    g_inkbunny_state.bodies[g_inkbunny_state.body_count++] = make_inkbunny_writing_submission_json(submission_id, file_url, writing);
+
+    int64_t post_id = 0;
+    bunny_core_result_t result = bunny_core_fetch_and_cache_post(g_core, BUNNY_DB_SITE_INKBUNNY, submission_id, &post_id);
+    TEST_ASSERT_EQUAL(BUNNY_CORE_OK, result);
+    TEST_ASSERT_TRUE(post_id > 0);
+    return post_id;
+}
+
 void test_multiple_workers_each_claim_a_distinct_item_and_all_succeed(void)
 {
     bunny_test_http_server_t *server = bunny_test_http_server_start("200 OK", "hello world", strlen("hello world"), 4);
@@ -148,6 +197,39 @@ void test_multiple_workers_each_claim_a_distinct_item_and_all_succeed(void)
         snprintf(path, sizeof(path), "%s/someartist/%d.png", g_dest_dir, 100 + i);
         TEST_ASSERT_EQUAL(0, access(path, F_OK));
     }
+}
+
+void test_inkbunny_writing_document_downloads_as_an_epub_instead_of_its_cover_image(void)
+{
+    const char *cover_bytes = "fake-cover-bytes";
+    bunny_test_http_server_t *server = bunny_test_http_server_start("200 OK", cover_bytes, strlen(cover_bytes), 1);
+    TEST_ASSERT_NOT_NULL(server);
+    char *url = bunny_test_http_server_url(server);
+
+    int64_t post_id = fetch_fake_inkbunny_writing_post(373335, url, "Once upon a time, [b]the end.[/b]");
+    int64_t queue_id = 0;
+    TEST_ASSERT_EQUAL(BUNNY_CORE_OK, bunny_core_download_queue_add(g_core, post_id, 0, NULL, 0, &queue_id));
+
+    int exit_code = bunny_cli_cmd_download(&g_ctx, g_dest_dir, 1, BUNNY_DB_SITE_INKBUNNY, NULL, 0);
+    TEST_ASSERT_EQUAL(0, exit_code);
+
+    bunny_test_http_server_join(server); /* confirms the cover fetch actually happened */
+    free(url);
+
+    bunny_db_download_queue_list_t list;
+    bunny_core_download_queue_list(g_core, &list);
+    TEST_ASSERT_EQUAL(1, (int)list.count);
+    TEST_ASSERT_EQUAL(BUNNY_DB_DOWNLOAD_QUEUE_SUCCEEDED, list.items[0].status);
+    bunny_db_download_queue_list_free(&list);
+
+    char path[512];
+    snprintf(path, sizeof(path), "%s/someartist/373335.epub", g_dest_dir);
+    TEST_ASSERT_EQUAL(0, access(path, F_OK));
+
+    bunny_doc_t doc;
+    TEST_ASSERT_EQUAL(BUNNY_CORE_OK, bunny_core_read_writing_epub(path, &doc));
+    TEST_ASSERT_TRUE(doc.count > 0);
+    bunny_doc_free(&doc);
 }
 
 void test_posts_missing_locally_fail_gracefully_with_no_hang_and_no_duplicate_claims(void)
@@ -198,6 +280,7 @@ int main(void)
 {
     UNITY_BEGIN();
     RUN_TEST(test_multiple_workers_each_claim_a_distinct_item_and_all_succeed);
+    RUN_TEST(test_inkbunny_writing_document_downloads_as_an_epub_instead_of_its_cover_image);
     RUN_TEST(test_posts_missing_locally_fail_gracefully_with_no_hang_and_no_duplicate_claims);
     RUN_TEST(test_an_empty_queue_succeeds_immediately_with_nothing_to_do);
     RUN_TEST(test_a_null_download_folder_fails_immediately_without_touching_the_queue);

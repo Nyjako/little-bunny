@@ -323,6 +323,11 @@
   "@tagBrowseRelatedPoolChip": {
     "placeholders": {"poolId": {"type": "int"}}
   },
+  "tagBrowseSelectEntireSearch": "Wybierz wszystko",
+  "tagBrowseSelectEntireSearchProgress": "Wczytano {count}",
+  "@tagBrowseSelectEntireSearchProgress": {
+    "placeholders": {"count": {"type": "int"}}
+  },
 
   "postGridPoolInfoTooltip": "Informacje o zbiorze",
   "postGridPoolInfoTitle": "Informacje o zbiorze",
@@ -358,6 +363,9 @@
   "postDetailIdCopied": "ID posta skopiowane do schowka",
   "postDetailTagsLabel": "Tagi",
   "postDetailSourcesLabel": "Źródła",
+  "postDetailRefreshFailedMessage": "Nie udało się wczytać pełnych szczegółów",
+  "postDetailRefreshFailedRetry": "Spróbuj ponownie",
+  "postDetailOpenWritingReader": "Czytaj całą historię",
   "postDetailParentLabel": "Rodzic",
   "postDetailChildrenLabel": "Dzieci",
   "postDetailPoolsLabel": "Zbiory",

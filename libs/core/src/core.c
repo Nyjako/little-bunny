@@ -101,9 +101,17 @@ bunny_core_result_t bunny_core_open(const bunny_core_config_t *config, bunny_cor
         free(core);
         return BUNNY_CORE_ERR_UNKNOWN;
     }
+    if (bunny_mutex_init(&core->inkbunny_session_mutex) != 0) {
+        bunny_mutex_destroy(&core->sync_mutex);
+        bunny_mutex_destroy(&core->db_mutex);
+        bunny_db_close(core->db);
+        free(core);
+        return BUNNY_CORE_ERR_UNKNOWN;
+    }
 
     bunny_core_result_t read_pool_result = open_read_pool(core, config->db_path);
     if (read_pool_result != BUNNY_CORE_OK) {
+        bunny_mutex_destroy(&core->inkbunny_session_mutex);
         bunny_mutex_destroy(&core->sync_mutex);
         bunny_mutex_destroy(&core->db_mutex);
         bunny_db_close(core->db);
@@ -133,6 +141,9 @@ void bunny_core_close(bunny_core_t *core)
     }
     bunny_mutex_destroy(&core->sync_mutex);
     bunny_mutex_destroy(&core->db_mutex);
+    bunny_mutex_destroy(&core->inkbunny_session_mutex);
+    free(core->cached_inkbunny_sid);
+    free(core->cached_inkbunny_username);
     bunny_db_close(core->db);
     free(core->user_agent);
     free(core);

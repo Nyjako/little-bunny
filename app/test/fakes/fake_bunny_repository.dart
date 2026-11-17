@@ -40,6 +40,8 @@ class FakeBunnyRepository implements BunnyRepository {
   /// [fetchPost] returns for that (site, externalId) pair.
   final Map<String, int> fetchPostResults = {};
   final Map<int, BunnyPoolInfo> poolInfoById = {};
+  final Map<int, List<BunnyDocBlock>> writingDocByPostId = {};
+  final List<({int postId, String destPath})> buildWritingEpubCalls = [];
 
   /// Extra posts [getPost] can resolve by id, for ones that aren't already
   /// sitting in [postsBySearchId] (e.g. a parent/child/pool-mate post that
@@ -404,6 +406,7 @@ class FakeBunnyRepository implements BunnyRepository {
     artist: post.artist,
     title: post.title,
     description: post.description,
+    writing: post.writing,
     rating: post.rating,
     score: post.score,
     favCount: post.favCount,
@@ -535,6 +538,31 @@ class FakeBunnyRepository implements BunnyRepository {
       throw BunnyRepositoryException('no fake pool registered for $poolId');
     }
     return info;
+  }
+
+  @override
+  Future<List<BunnyDocBlock>> getWritingDoc(int postId) async {
+    final doc = writingDocByPostId[postId];
+    if (doc == null) {
+      throw BunnyRepositoryException('no fake writing doc registered for $postId');
+    }
+    return doc;
+  }
+
+  /// Bytes [buildWritingEpub] writes to `destPath` by default (a real file
+  /// write, same realism `downloadFileFetchImpl` gives the plain-image
+  /// download path) -- override per-test via [buildWritingEpubBytes], or
+  /// throw from [buildWritingEpubImpl] to simulate a failed build.
+  List<int> buildWritingEpubBytes = const [1, 2, 3];
+  Future<void> Function(int postId, String destPath)? buildWritingEpubImpl;
+
+  @override
+  Future<void> buildWritingEpub(int postId, String destPath) async {
+    buildWritingEpubCalls.add((postId: postId, destPath: destPath));
+    if (buildWritingEpubImpl != null) {
+      return buildWritingEpubImpl!(postId, destPath);
+    }
+    await File(destPath).writeAsBytes(buildWritingEpubBytes);
   }
 
   @override

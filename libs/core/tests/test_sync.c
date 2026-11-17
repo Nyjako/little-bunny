@@ -646,13 +646,12 @@ void test_backfill_inkbunny_details_upserts_and_marks_fetched_posts(void)
     free(empty_fixture);
 
     memset(&g_inkbunny_state, 0, sizeof(g_inkbunny_state));
-    char *backfill_login_fixture = read_fixture("inkbunny_login_success.json");
+    /* M88: the backfill reuses the session cached by the sync above, so no
+     * login fixture is needed here. */
     char *submission_fixture = read_fixture("inkbunny_submission_full.json");
-    TEST_ASSERT_NOT_NULL(backfill_login_fixture);
     TEST_ASSERT_NOT_NULL(submission_fixture);
-    g_inkbunny_state.bodies[0] = backfill_login_fixture;
-    g_inkbunny_state.bodies[1] = submission_fixture;
-    g_inkbunny_state.body_count = 2;
+    g_inkbunny_state.bodies[0] = submission_fixture;
+    g_inkbunny_state.body_count = 1;
 
     bunny_core_backfill_stats_t stats;
     bunny_core_result_t result = bunny_core_backfill_inkbunny_details(g_core, &stats);
@@ -673,7 +672,6 @@ void test_backfill_inkbunny_details_upserts_and_marks_fetched_posts(void)
     TEST_ASSERT_EQUAL(BUNNY_CORE_OK, bunny_core_backfill_inkbunny_details(g_core, &second_stats));
     TEST_ASSERT_EQUAL(0, second_stats.attempted);
 
-    free(backfill_login_fixture);
     free(submission_fixture);
 }
 
@@ -700,30 +698,27 @@ void test_backfill_inkbunny_details_marks_a_missing_submission_backfilled_anyway
     free(empty_fixture);
 
     memset(&g_inkbunny_state, 0, sizeof(g_inkbunny_state));
-    char *login_fixture_2 = read_fixture("inkbunny_login_success.json");
+    /* M88: this second sync reuses the session cached by the first sync
+     * above, so no login fixture is needed here. */
     char *search_fixture_2 = read_fixture("inkbunny_search_response_second.json");
     char *empty_fixture_2 = read_fixture("inkbunny_search_response_empty.json");
-    g_inkbunny_state.bodies[0] = login_fixture_2;
-    g_inkbunny_state.bodies[1] = search_fixture_2;
-    g_inkbunny_state.bodies[2] = empty_fixture_2;
-    g_inkbunny_state.body_count = 3;
+    g_inkbunny_state.bodies[0] = search_fixture_2;
+    g_inkbunny_state.bodies[1] = empty_fixture_2;
+    g_inkbunny_state.body_count = 2;
     int64_t search_id_2 = 0;
     TEST_ASSERT_EQUAL(BUNNY_CORE_OK, bunny_core_search_create(g_core, BUNNY_DB_SITE_INKBUNNY, "other", "other", 24, NULL, &search_id_2));
     bunny_core_sync_stats_t sync_stats_2;
     TEST_ASSERT_EQUAL(BUNNY_CORE_OK, bunny_core_sync_due_searches(g_core, &sync_stats_2));
     TEST_ASSERT_EQUAL(1, sync_stats_2.posts_upserted);
-    free(login_fixture_2);
     free(search_fixture_2);
     free(empty_fixture_2);
 
     memset(&g_inkbunny_state, 0, sizeof(g_inkbunny_state));
-    char *backfill_login_fixture = read_fixture("inkbunny_login_success.json");
+    /* Same cached session, so again no login fixture is needed. */
     char *partial_fixture = read_fixture("inkbunny_submissions_batch_partial.json");
-    TEST_ASSERT_NOT_NULL(backfill_login_fixture);
     TEST_ASSERT_NOT_NULL(partial_fixture);
-    g_inkbunny_state.bodies[0] = backfill_login_fixture;
-    g_inkbunny_state.bodies[1] = partial_fixture;
-    g_inkbunny_state.body_count = 2;
+    g_inkbunny_state.bodies[0] = partial_fixture;
+    g_inkbunny_state.body_count = 1;
 
     bunny_core_backfill_stats_t stats;
     bunny_core_result_t result = bunny_core_backfill_inkbunny_details(g_core, &stats);
@@ -738,7 +733,6 @@ void test_backfill_inkbunny_details_marks_a_missing_submission_backfilled_anyway
     TEST_ASSERT_EQUAL(BUNNY_CORE_OK, bunny_core_backfill_inkbunny_details(g_core, &second_stats));
     TEST_ASSERT_EQUAL(0, second_stats.attempted);
 
-    free(backfill_login_fixture);
     free(partial_fixture);
 }
 
@@ -767,13 +761,12 @@ void test_backfill_inkbunny_details_marks_a_flash_submission_backfilled_without_
     free(empty_fixture);
 
     memset(&g_inkbunny_state, 0, sizeof(g_inkbunny_state));
-    char *backfill_login_fixture = read_fixture("inkbunny_login_success.json");
+    /* M88: reuses the session cached by the sync above, so no login fixture
+     * is needed here. */
     char *flash_batch_fixture = read_fixture("inkbunny_submissions_batch_flash.json");
-    TEST_ASSERT_NOT_NULL(backfill_login_fixture);
     TEST_ASSERT_NOT_NULL(flash_batch_fixture);
-    g_inkbunny_state.bodies[0] = backfill_login_fixture;
-    g_inkbunny_state.bodies[1] = flash_batch_fixture;
-    g_inkbunny_state.body_count = 2;
+    g_inkbunny_state.bodies[0] = flash_batch_fixture;
+    g_inkbunny_state.body_count = 1;
 
     bunny_core_backfill_stats_t stats;
     bunny_core_result_t result = bunny_core_backfill_inkbunny_details(g_core, &stats);
@@ -788,7 +781,6 @@ void test_backfill_inkbunny_details_marks_a_flash_submission_backfilled_without_
     TEST_ASSERT_EQUAL(BUNNY_CORE_OK, bunny_core_backfill_inkbunny_details(g_core, &second_stats));
     TEST_ASSERT_EQUAL(0, second_stats.attempted);
 
-    free(backfill_login_fixture);
     free(flash_batch_fixture);
 }
 
@@ -812,11 +804,10 @@ void test_backfill_inkbunny_details_leaves_posts_thin_on_api_failure(void)
 
     /* No fixture queued for the backfill's own submissions request --
      * fake_send returns an empty 200 body, which fails JSON parsing, same
-     * pattern test_verify_e621_rejects_when_site_call_fails already uses. */
+     * pattern test_verify_e621_rejects_when_site_call_fails already uses.
+     * M88: the backfill reuses the session cached by the sync above, so
+     * there's no login call here to queue a fixture for either. */
     memset(&g_inkbunny_state, 0, sizeof(g_inkbunny_state));
-    char *backfill_login_fixture = read_fixture("inkbunny_login_success.json");
-    g_inkbunny_state.bodies[0] = backfill_login_fixture;
-    g_inkbunny_state.body_count = 1;
 
     bunny_core_backfill_stats_t stats;
     bunny_core_result_t result = bunny_core_backfill_inkbunny_details(g_core, &stats);
@@ -825,20 +816,17 @@ void test_backfill_inkbunny_details_leaves_posts_thin_on_api_failure(void)
     TEST_ASSERT_EQUAL(0, stats.found);
     TEST_ASSERT_EQUAL(1, stats.failed);
 
-    /* The post is still thin -- a later call would retry it. */
+    /* The post is still thin -- a later call would retry it. Same cached
+     * session, so again just the submission fixture, no login. */
     memset(&g_inkbunny_state, 0, sizeof(g_inkbunny_state));
-    char *retry_login_fixture = read_fixture("inkbunny_login_success.json");
     char *submission_fixture = read_fixture("inkbunny_submission_full.json");
-    g_inkbunny_state.bodies[0] = retry_login_fixture;
-    g_inkbunny_state.bodies[1] = submission_fixture;
-    g_inkbunny_state.body_count = 2;
+    g_inkbunny_state.bodies[0] = submission_fixture;
+    g_inkbunny_state.body_count = 1;
     bunny_core_backfill_stats_t retry_stats;
     TEST_ASSERT_EQUAL(BUNNY_CORE_OK, bunny_core_backfill_inkbunny_details(g_core, &retry_stats));
     TEST_ASSERT_EQUAL(1, retry_stats.attempted);
     TEST_ASSERT_EQUAL(1, retry_stats.found);
 
-    free(backfill_login_fixture);
-    free(retry_login_fixture);
     free(submission_fixture);
 }
 
@@ -2320,15 +2308,16 @@ void test_sync_inkbunny_search_second_sync_stops_at_already_synced_submission(vo
     TEST_ASSERT_NOT_NULL(search_fixture);
     TEST_ASSERT_NOT_NULL(empty_fixture);
     /* First sync: login + page 1 (1 result) + page 2 (empty). Second sync
-     * (forced): login + page 1 -- the *same* submission, already linked
-     * from the first sync, so the early-stop must fire immediately with no
-     * page-2 probe at all. */
+     * (forced): M88's session cache means bunny_core_build_inkbunny_client
+     * reuses the first sync's still-valid sid instead of logging in again
+     * -- just page 1, the *same* submission already linked from the first
+     * sync, so the early-stop must fire immediately with no page-2 probe
+     * (and no login call) at all. */
     g_inkbunny_state.bodies[0] = login_fixture;
     g_inkbunny_state.bodies[1] = search_fixture;
     g_inkbunny_state.bodies[2] = empty_fixture;
-    g_inkbunny_state.bodies[3] = login_fixture;
-    g_inkbunny_state.bodies[4] = search_fixture;
-    g_inkbunny_state.body_count = 5;
+    g_inkbunny_state.bodies[3] = search_fixture;
+    g_inkbunny_state.body_count = 4;
 
     int64_t search_id = 0;
     bunny_core_search_create(g_core, BUNNY_DB_SITE_INKBUNNY, "tribute", "tribute", 24, NULL, &search_id);
@@ -2341,7 +2330,7 @@ void test_sync_inkbunny_search_second_sync_stops_at_already_synced_submission(vo
     bunny_core_result_t result = bunny_core_sync_search(g_core, search_id, &stats);
     TEST_ASSERT_EQUAL(BUNNY_CORE_OK, result);
     TEST_ASSERT_EQUAL(0, stats.posts_upserted);
-    TEST_ASSERT_EQUAL(5, (int)g_inkbunny_state.next_index);
+    TEST_ASSERT_EQUAL(4, (int)g_inkbunny_state.next_index);
 
     free(login_fixture);
     free(search_fixture);
@@ -2359,11 +2348,11 @@ void test_sync_inkbunny_search_second_sync_upserts_only_the_new_submission(void)
     g_inkbunny_state.bodies[0] = login_fixture;
     g_inkbunny_state.bodies[1] = search_fixture;
     g_inkbunny_state.bodies[2] = empty_fixture;
-    g_inkbunny_state.bodies[3] = login_fixture;
     /* Second sync's page 1: a genuinely new submission (id 9999999) ahead of
      * the previously-synced one (id 3955918, still present further down the
      * newest-first feed) -- only the new one should be upserted before the
-     * early-stop fires on the old one. */
+     * early-stop fires on the old one. No login fixture needed here: M88's
+     * session cache reuses the first sync's still-valid sid. */
     const char *two_submissions = "{\"sid\":\"x\",\"submissions\":["
                                   "{\"submission_id\":\"9999999\",\"hidden\":\"f\",\"username\":\"someoneelse\",\"user_id\":\"1\","
                                   "\"create_datetime\":\"2026-09-28 00:00:00+00\",\"thumbnail_url_large_noncustom\":\"https://example.invalid/9999999.jpg\","
@@ -2374,8 +2363,8 @@ void test_sync_inkbunny_search_second_sync_upserts_only_the_new_submission(void)
                                   "\"title\":\"Thank you, Digimon Beatbreak\",\"deleted\":\"f\",\"public\":\"t\",\"rating_id\":\"0\",\"rating_name\":\"General\","
                                   "\"submission_type_id\":\"1\",\"friends_only\":\"f\",\"guest_block\":\"f\",\"scraps\":\"f\",\"keywords\":[]}"
                                   "]}";
-    g_inkbunny_state.bodies[4] = two_submissions;
-    g_inkbunny_state.body_count = 5;
+    g_inkbunny_state.bodies[3] = two_submissions;
+    g_inkbunny_state.body_count = 4;
 
     int64_t search_id = 0;
     bunny_core_search_create(g_core, BUNNY_DB_SITE_INKBUNNY, "tribute", "tribute", 24, NULL, &search_id);

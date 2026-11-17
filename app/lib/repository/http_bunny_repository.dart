@@ -72,6 +72,7 @@ BunnyPost _postFromJson(Map<String, Object?> j) => BunnyPost(
   artist: j['artist'] as String?,
   title: j['title'] as String?,
   description: j['description'] as String?,
+  writing: j['writing'] as String?,
   rating: j['rating'] as String?,
   score: (j['score'] as num).toInt(),
   scoreUp: (j['score_up'] as num?)?.toInt() ?? 0,
@@ -145,6 +146,16 @@ BunnyPoolInfo _poolInfoFromJson(Map<String, Object?> j) => BunnyPoolInfo(
 
 BunnyComment _commentFromJson(Map<String, Object?> j) =>
     BunnyComment(id: (j['id'] as num).toInt(), creatorName: j['creator_name'] as String?, body: j['body'] as String?, createdAt: j['created_at'] as String?);
+
+BunnyDocRun _docRunFromJson(Map<String, Object?> j) => BunnyDocRun(kind: BunnyDocRunKind.values[(j['kind'] as num).toInt()], text: j['text'] as String? ?? '', url: j['url'] as String?);
+
+BunnyDocBlock _docBlockFromJson(Map<String, Object?> j) => BunnyDocBlock(
+  kind: BunnyDocBlockKind.values[(j['kind'] as num).toInt()],
+  headingLevel: (j['heading_level'] as num).toInt(),
+  runs: (j['runs'] as List).cast<Map<String, Object?>>().map(_docRunFromJson).toList(),
+);
+
+List<BunnyDocBlock> _docBlockListFromJson(Object? list) => (list as List).cast<Map<String, Object?>>().map(_docBlockFromJson).toList();
 
 BunnyTag _tagFromJson(Map<String, Object?> j) => BunnyTag(
   id: (j['id'] as num).toInt(),
@@ -704,6 +715,24 @@ class HttpBunnyRepository implements BunnyRepository {
       _throwError(response);
     }
     return _poolInfoFromJson(_decodeObject(response));
+  }
+
+  @override
+  Future<List<BunnyDocBlock>> getWritingDoc(int postId) async {
+    final response = await _client.get(_uri('/posts/$postId/writing'), headers: _headers);
+    if (response.statusCode != 200) {
+      _throwError(response);
+    }
+    return _docBlockListFromJson(jsonDecode(response.body));
+  }
+
+  @override
+  Future<void> buildWritingEpub(int postId, String destPath) async {
+    final response = await _client.get(_uri('/posts/$postId/writing_epub'), headers: _headers);
+    if (response.statusCode != 200) {
+      _throwError(response);
+    }
+    await File(destPath).writeAsBytes(response.bodyBytes);
   }
 
   @override

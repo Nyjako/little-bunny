@@ -281,6 +281,10 @@ class BunnyPost {
   final String? artist;
   final String? title;
   final String? description;
+  /// The full story text for an Inkbunny "Writing - Document" submission,
+  /// raw BBCode -- null for every e621 post and for an Inkbunny post never
+  /// fetched via a single-submission call (a thin search-synced row).
+  final String? writing;
   final String? rating;
   final int score;
   final int scoreUp;
@@ -314,6 +318,7 @@ class BunnyPost {
     this.artist,
     this.title,
     this.description,
+    this.writing,
     this.rating,
     required this.score,
     this.scoreUp = 0,
@@ -509,6 +514,50 @@ class BunnyPoolInfo {
 
   const BunnyPoolInfo({required this.id, this.name, this.description, required this.postCount, this.referencedPoolIds = const []});
 }
+
+/// A rich-text run within one [BunnyDocBlock] -- mirrors `bunny_doc_run_kind_t`.
+/// [url] is only set for [BunnyDocRunKind.url].
+enum BunnyDocRunKind { plain, bold, italic, underline, url }
+
+/// Mirrors `bunny_doc_run_t` (libs/common/include/bunny_common/doc.h) --
+/// one styled span of text inside a [BunnyDocBlock].
+class BunnyDocRun {
+  final BunnyDocRunKind kind;
+  final String text;
+  final String? url;
+
+  const BunnyDocRun({required this.kind, required this.text, this.url});
+}
+
+/// A block kind within a parsed/read-back writing document -- mirrors
+/// `bunny_doc_block_kind_t`.
+enum BunnyDocBlockKind { paragraph, heading, listItem }
+
+/// One block of a Writing-Document post's story text, already parsed from
+/// its raw BBCode (`BunnyRepository.getWritingDoc`) or read back from a
+/// previously-downloaded `.epub` (`BunnyRepository.readWritingEpub`) --
+/// mirrors `bunny_doc_block_t`. [headingLevel] (1-6) is only meaningful
+/// when [kind] is [BunnyDocBlockKind.heading].
+class BunnyDocBlock {
+  final BunnyDocBlockKind kind;
+  final int headingLevel;
+  final List<BunnyDocRun> runs;
+
+  const BunnyDocBlock({required this.kind, this.headingLevel = 0, required this.runs});
+}
+
+BunnyDocRun _docRunFromMap(Map<String, Object?> m) => BunnyDocRun(kind: BunnyDocRunKind.values[m['kind'] as int], text: m['text'] as String? ?? '', url: m['url'] as String?);
+
+BunnyDocBlock _docBlockFromMap(Map<String, Object?> m) =>
+    BunnyDocBlock(kind: BunnyDocBlockKind.values[m['kind'] as int], headingLevel: m['headingLevel'] as int, runs: (m['runs'] as List).cast<Map<String, Object?>>().map(_docRunFromMap).toList());
+
+/// Converts the raw block/run maps `bunny_core_ffi`'s isolate dispatch (or
+/// its standalone top-level `readWritingEpub`) returns into [BunnyDocBlock]s
+/// -- shared by [FfiBunnyRepository] (for `getWritingDoc`/the isolate
+/// result) and any direct `readWritingEpub` caller (e.g. `PostDetailScreen`,
+/// which needs it outside a `BunnyRepository` method -- see that function's
+/// own doc comment for why it isn't one).
+List<BunnyDocBlock> bunnyDocBlocksFromMaps(Object? list) => (list as List).cast<Map<String, Object?>>().map(_docBlockFromMap).toList();
 
 /// One Inkbunny pool a post belongs to -- unlike [BunnyPoolInfo] (e621), the
 /// name is already known from the same full-submission fetch that surfaces

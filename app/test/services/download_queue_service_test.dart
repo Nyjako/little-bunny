@@ -19,9 +19,9 @@ import '../fakes/fake_download_queue_notifier.dart';
 import '../fakes/fake_path_provider.dart';
 import '../fakes/fake_wakelock_plus_platform.dart';
 
-BunnyPost _post({required int id, String? fileUrl = 'https://static1.e621.net/data/1.png', String? fileMd5}) => BunnyPost(
+BunnyPost _post({required int id, BunnySite site = BunnySite.e621, String? fileUrl = 'https://static1.e621.net/data/1.png', String? fileMd5, String? writing}) => BunnyPost(
   id: id,
-  site: BunnySite.e621,
+  site: site,
   externalId: id,
   artist: 'someartist',
   score: 0,
@@ -30,6 +30,7 @@ BunnyPost _post({required int id, String? fileUrl = 'https://static1.e621.net/da
   fileUrl: fileUrl,
   fileExt: 'png',
   fileMd5: fileMd5,
+  writing: writing,
   width: 100,
   height: 100,
   cachedAt: '2026-01-01T00:00:00Z',
@@ -119,6 +120,21 @@ void main() {
     expect(notifier.progressCalls, [(1, 1, 0, null)]);
     expect(notifier.summaryCalls, [(1, 0, 0)]);
     expect(await File('${destinationDir.path}/someartist/1.png').exists(), isTrue);
+  });
+
+  test('an Inkbunny Writing-Document post downloads as a .epub via the repository, not its plain cover image', () async {
+    final service = buildService();
+    final post = _post(id: 1, site: BunnySite.inkbunny, writing: 'a story');
+    repository.postsById[1] = post;
+    repository.buildWritingEpubBytes = [9, 8, 7];
+
+    service.enqueue(post, repository);
+    await waitUntilIdle(service);
+
+    expect(notifier.summaryCalls, [(1, 0, 0)]);
+    expect(repository.buildWritingEpubCalls, hasLength(1));
+    expect(repository.buildWritingEpubCalls.single.postId, 1);
+    expect(await File('${destinationDir.path}/someartist/1.epub').readAsBytes(), [9, 8, 7]);
   });
 
   test('enqueue with poolId/poolName/poolPage (M82) tags the item and downloads into the pool folder, not the regular per-artist one', () async {

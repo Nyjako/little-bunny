@@ -1,0 +1,59 @@
+{
+  "sid": "77N2zxwuZFvRduEQzvE15zGkiR",
+  "results_count": 1,
+  "user_location": "",
+  "submissions": [
+    {
+      "submission_id": "373335",
+      "keywords": [
+        {"keyword_id": "1", "keyword_name": "story", "contributed": "f", "submissions_count": "100"}
+      ],
+      "hidden": "f",
+      "scraps": "f",
+      "favorite": "f",
+      "favorites_count": "0",
+      "create_datetime": "2020-01-01 00:00:00.000000+00",
+      "username": "someauthor",
+      "user_id": "1234",
+      "file_name": "373335_someauthor_cover.jpg",
+      "file_url_full": "__FILE_URL__",
+      "file_url_screen": "__FILE_URL__",
+      "file_url_preview": "__FILE_URL__",
+      "thumbnail_url_large_noncustom": "__FILE_URL__",
+      "files": [
+        {
+          "file_id": "373335",
+          "file_name": "373335_someauthor_cover.jpg",
+          "file_url_full": "__FILE_URL__",
+          "file_url_screen": "__FILE_URL__",
+          "file_url_preview": "__FILE_URL__",
+          "mimetype": "image/jpeg",
+          "submission_id": "373335",
+          "user_id": "1234",
+          "submission_file_order": "0",
+          "full_size_x": "600",
+          "full_size_y": "800",
+          "full_file_md5": "deadbeefdeadbeefdeadbeefdeadbeef"
+        }
+      ],
+      "pools": [],
+      "description": "A short story.",
+      "writing": "Once upon a time, in a den far away, two foxes shared a story.\n\n[b]The end.[/b]",
+      "pools_count": 0,
+      "title": "A Short Story",
+      "deleted": "f",
+      "public": "t",
+      "mimetype": "image/jpeg",
+      "pagecount": "1",
+      "rating_id": "1",
+      "rating_name": "General",
+      "ratings": [],
+      "submission_type_id": "12",
+      "type_name": "Writing - Document",
+      "guest_block": "f",
+      "friends_only": "f",
+      "comments_count": "0",
+      "views": "0"
+    }
+  ]
+}

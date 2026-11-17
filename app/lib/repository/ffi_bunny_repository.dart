@@ -60,6 +60,7 @@ BunnyPost _postFromMap(Map<String, Object?> m) => BunnyPost(
   artist: m['artist'] as String?,
   title: m['title'] as String?,
   description: m['description'] as String?,
+  writing: m['writing'] as String?,
   rating: m['rating'] as String?,
   score: m['score'] as int,
   scoreUp: m['scoreUp'] as int,
@@ -439,6 +440,15 @@ class FfiBunnyRepository implements BunnyRepository {
     final map = await _wrapped(() => _native.fetchPool(poolId));
     return _poolInfoFromMap(map);
   }
+
+  @override
+  Future<List<BunnyDocBlock>> getWritingDoc(int postId) async {
+    final list = await _wrapped(() => _native.getWritingDoc(postId));
+    return bunnyDocBlocksFromMaps(list);
+  }
+
+  @override
+  Future<void> buildWritingEpub(int postId, String destPath) => _wrapped(() => _native.buildWritingEpub(postId, destPath));
 
   @override
   Future<BunnyPost> getPost(int postId) async {

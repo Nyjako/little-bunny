@@ -3508,3 +3508,126 @@ this file is the single source of truth for "what's done" across sessions.
   quotes and raw path included. Now renders just the quoted label as the clickable pool
   chip, matching what dtext actually intends -- unlike every other marker there, which
   renders its own matched text verbatim.
+
+- [x] **M82 — Select-entire for Favorites, matching tag/pool searches**
+  Favorites (both sites) are browsed through `TagBrowseScreen`, not `PostGridScreen` --
+  the only place the exhaustive select-everything-then-download mechanism
+  (`_selectEntireSearch`) existed. Ported it over nearly verbatim: `TagBrowseScreen` gains
+  its own `_entireSearchSelection`/`_selectEntireSearch`, with `_selectedPosts`/
+  `_poolPageByPostId` reading `_entireSearchSelection ?? _posts` the same way
+  `PostGridScreen`'s own `fullOrder` pattern already does. No `BunnySearch.totalCount`
+  exists on this screen, so the progress dialog is an indeterminate
+  `LinearProgressIndicator` showing just a running count instead of "`N` of `total`". Lets
+  a user select and mass-download their *entire* favorites list the same way they already
+  could for a saved search.
+
+- [x] **M83 — Fix Inkbunny artist tap to filter by uploader username, not keyword text**
+  Tapping an artist's name on an Inkbunny post searched that name as plain keyword text
+  via `_openTagBrowse`, matching any post whose *description/keywords* happened to mention
+  it rather than posts actually uploaded by them -- confirmed live: tapping "camotli"
+  pulled in posts by a different artist whose keywords mentioned camotli's name.
+  `InkbunnySearchFilters.username` (`inkbunny_search_params_t`'s real "uploaded by this
+  exact user" filter) was already wired end-to-end from `TagBrowseScreen` down into the
+  live API, but had zero call sites anywhere in `app/lib/` until now. `_openTagBrowse`
+  gains an optional `inkbunnyFilters` param; the artist-tap call site now branches on
+  site: e621 unchanged (`post.artist` already *is* a real e621 tag), Inkbunny uses an
+  empty query plus `InkbunnySearchFilters(username: post.artist!)`.
+
+- [x] **M84 — Cache the Inkbunny login session instead of re-logging in on every call**
+  `bunny_core_build_inkbunny_client` logged in fresh (two blocking HTTP calls) on *every*
+  call -- once per post-detail fetch, per sync pass, per favorite/vote, etc., across 10+
+  call sites, each building/using/destroying its own client for one logical operation.
+  Combined with the app's single FFI dispatch isolate (processes one call at a time,
+  synchronously), a slow/stalled Inkbunny login blocked everything else queued behind it.
+  `bunny_core_t` now caches the resulting sid/user_id/identity behind a dedicated
+  `inkbunny_session_mutex` (deliberately separate from `db_mutex`/`sync_mutex` -- this is
+  unrelated state, and interactive one-off calls don't serialize against a sync in
+  progress, so two threads can genuinely race here); a cache hit calls the new
+  `inkbunny_client_restore_session` (no network call) instead of `inkbunny_login`. The
+  Inkbunny client itself now remembers its own username/password and transparently
+  re-logs-in-and-retries *once* inside `perform_request` if a restored session turns out
+  to be expired (`INKBUNNY_ERR_AUTH`), so an expired cache entry self-heals within the
+  current operation with no caller changes needed. Accepted gap, documented rather than
+  solved: a mid-operation relogin refreshes that one client's own sid but not `core`'s
+  cache until the next genuine cache-miss login -- costs one extra relogin round trip
+  right after true expiry, self-correcting on the next call. Also added a ~10s
+  `CURLOPT_CONNECTTIMEOUT` (`bunny_common`'s curl transport had only a blanket 30s
+  `CURLOPT_TIMEOUT`) so a stalled DNS/connect phase can't hold the single isolate for the
+  full 30s either, benefiting e621 and Inkbunny alike.
+
+- [x] **M85 — Surface Inkbunny post-detail refresh failures instead of hiding them**
+  `PostDetailScreen._refreshPost`'s live refetch silently fell back to the cached post on
+  any failure, with the dependent tags/sources/files/pools futures chained regardless --
+  for a thin, search-synced Inkbunny row (no tags at all until a full per-submission
+  fetch lands), a failed refresh was indistinguishable from "this post genuinely has no
+  tags." Now tracks the failure (`_refreshFailed`) and shows a retry banner near the tags
+  section instead of silently showing stale/empty data, while keeping the existing
+  fall-back-to-cached behavior itself (still the right call offline) -- just no longer
+  hiding that it happened. `_loadDetails` is its own method (extracted out of `initState`)
+  so `_retryRefresh` can re-run the exact same future chain after a failure.
+
+- [x] **M86 — Fetch and show Inkbunny Writing-Document story text via `show_writing`**
+  A "Writing - Document" submission (e.g. #373335) only ever showed its cover image --
+  the existing M28-era fix only covers a submission whose story text happens to also come
+  back as a *separate file* alongside the cover; one with a single file (just the cover)
+  had no text at all. `api_submissions.php`'s own `show_writing` param (under its
+  "Submission Details" docs) returns the full raw-BBCode story text directly; confirmed
+  live for #373335. Only requested on the single-submission detail fetch, never a
+  multi-id batch backfill, since per Inkbunny's own docs the text can be very long. New
+  nullable `writing` column threaded end-to-end exactly the way `description` already
+  flows: `inkbunny_submission_t` → db schema (migration) → `bunny_core` → FFI bindings →
+  `BunnyPost.writing` → server JSON → `PostDetailScreen` (rendered via the existing
+  `RichMarkupText` widget, raw BBCode as-is, alongside -- not replacing -- the older
+  file-based mechanism).
+
+- [x] **M87 — Parsed BBCode rendering, EPUB export, and reading-position memory for
+  Inkbunny writings**
+  Builds on M86: `post.writing`'s raw BBCode is now actually parsed and rendered, not
+  just shown verbatim, and a Writing-Document post can be downloaded as a real `.epub`
+  readable in any e-reader. Two new standalone C libraries: `libs/bbcode` parses BBCode
+  (`[b]`/`[i]`/`[u]`, `[url]`/bare URLs, `[img]` as a link -- inline images aren't
+  fetched/embedded, out of scope for now, `[list]`/`[*]`, `[h1]`-`[h6]`; any
+  unrecognized tag degrades to plain text rather than erroring) into a small, shared,
+  site-agnostic document model (`bunny_doc_t`, `libs/common/include/bunny_common/
+  doc.h`); `libs/epub` writes a complete, standards-compliant `.epub` from that same
+  model (cover page, a built-in readable stylesheet, the body as XHTML) and reads one of
+  its own back -- via a hand-rolled, STORE-only (uncompressed) ZIP reader/writer with a
+  self-contained CRC32, no new vendored dependency, since EPUB's own spec already
+  requires its `mimetype` entry stored uncompressed anyway. Verified independently of
+  its own test suite: the generated file passes `unzip -t`'s CRC check, is identified as
+  "EPUB document" by `file`, and converts cleanly via Calibre's `ebook-convert` with the
+  original text intact.
+  Three new `bunny_core` calls (`get_writing_doc`/`build_writing_epub`/
+  `read_writing_epub`) expose this through `bunny_core_ffi` and both `BunnyRepository`
+  implementations (`HttpBunnyRepository` adds `GET /posts/<id>/writing` + `GET
+  /posts/<id>/writing_epub` server routes); `readWritingEpub` is a plain top-level
+  `bunny_core_ffi` function rather than a repository method, since it's pure local file
+  I/O needing neither a server nor a standalone-mode core, and networked mode never
+  opens either.
+  A new `WritingReaderScreen` renders the parsed blocks with real paragraph/heading/
+  list structure and bold/italic/underline/link styling (distinct from the short inline
+  `RichMarkupText` preview M86 added, which stays as a quick peek), reachable via a
+  "Read full story" button. `WritingPositionStore` remembers how far the user scrolled
+  (a 0-1 fraction of total scroll extent, not a raw pixel offset, so it survives a
+  screen-size/font-scale change) per post, scoped to this reader screen only.
+  `DownloadQueueService` downloads a Writing-Document post's `.epub` instead of its
+  plain cover image (same deterministic artist/pool-folder path, just a fixed `.epub`
+  extension); the SAF (Android `content://`) case builds to a local temp file first
+  since the native writer only knows plain filesystem paths. The reader checks for an
+  already-downloaded `.epub` first, parsing it locally instead of re-fetching live --
+  same "don't re-fetch what's already downloaded" precedent `PostMediaPage`'s own
+  local-vs-network video branch already set.
+
+- [x] **M88 — `bunny_cli --download` saves a Writing-Document post as a `.epub` too**
+  Mirrors M87's `DownloadManager.downloadWritingEpub` in `bunny_cli`, in both of its
+  modes. `resolved_post_t` (`cli/src/commands.c`) gains a `writing` field -- populated
+  from the already-cached `bunny_db_post_t` in standalone mode, and from the server's
+  existing `"writing"` JSON field (no server change needed) in networked mode.
+  `process_claimed_item` branches on it before the normal download-start/poll/release
+  flow: standalone mode calls `bunny_core_build_writing_epub` directly, creating the
+  destination directory first (unlike `bunny_core_download_start`, it doesn't do this
+  itself); networked mode adds a new `bunny_cli_rest_download` (`cli/src/rest_client.c`)
+  that streams a raw binary response straight to a file instead of parsing it as JSON,
+  used against the `GET /posts/{id}/writing_epub` route M87 already added server-side.
+  No destination-path changes needed -- `bunny_cli_destination_for` already takes the
+  file extension as a plain parameter.

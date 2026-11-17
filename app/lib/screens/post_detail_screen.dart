@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:bunny_core_ffi/bunny_core_ffi.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:chewie/chewie.dart';
 import 'package:flutter/material.dart';
@@ -32,6 +33,7 @@ import '../widgets/text_document_viewer.dart';
 import 'create_search_screen.dart';
 import 'full_screen_post_viewer_screen.dart';
 import 'tag_browse_screen.dart';
+import 'writing_reader_screen.dart';
 import 'wiki_page_screen.dart';
 
 /// Tags are grouped by category (M8.5.3) and then sorted into this fixed
@@ -134,6 +136,7 @@ BunnyPost _applyOptimisticUpdate(BunnyPost post, {bool? isFavorited, int favCoun
   artist: post.artist,
   title: post.title,
   description: post.description,
+  writing: post.writing,
   rating: post.rating,
   score: post.score + scoreDelta,
   scoreUp: post.scoreUp + scoreUpDelta,
@@ -459,11 +462,19 @@ class _PostDetailPageState extends State<_PostDetailPage> {
   ChewieController? _chewieController;
   Future<void>? _videoInitFuture;
 
-  late final Future<List<BunnyPostTag>> _tagsFuture;
-  late final Future<List<String>> _sourcesFuture;
+  late Future<List<BunnyPostTag>> _tagsFuture;
+  late Future<List<String>> _sourcesFuture;
   Future<BunnyPostRelationships>? _relationshipsFuture;
   Future<List<int>>? _poolIdsFuture;
   Future<List<BunnyInkbunnyPoolRef>>? _inkbunnyPoolsFuture;
+
+  /// Set when [_refreshPost] fails and cleared on success -- without this,
+  /// a failed refresh is indistinguishable from "this post genuinely has no
+  /// tags" (the thin, search-synced Inkbunny row [_refreshPost]'s own doc
+  /// comment describes has none at all until a refresh actually lands), so
+  /// [_tagsDetailsSourcesRegion] shows a retry banner instead of silently
+  /// falling through to an empty section.
+  bool _refreshFailed = false;
 
   /// Resolved contents of a multi-file Inkbunny submission (M28 Phase 3,
   /// Picture Series/Comic/Portfolio) -- null until the live refresh below
@@ -526,19 +537,7 @@ class _PostDetailPageState extends State<_PostDetailPage> {
     // here, since PageView can build this widget for a page it's only
     // pre-rendering ahead of time, before the user actually swipes to it.
 
-    // _refreshedPost gates tags/sources (not downloads/relationships/pools/
-    // comments -- those are either user-owned or e621-only, where sync
-    // already returns full data) behind a fresh live fetch: a sync pass only
-    // ever stores what the *search/listing* endpoint returned, which for
-    // Inkbunny specifically omits tags, full file dimensions, and comment
-    // count entirely (only present on a full per-submission fetch) -- the
-    // detail page otherwise showed literally nothing for a Inkbunny post,
-    // tags included. For e621 (whose search endpoint already returns
-    // everything) this just keeps vote/favorite counts current, matching the
-    // "update counts on view" ask directly.
-    final refreshedPost = _refreshPost();
-    _tagsFuture = refreshedPost.then((_) => widget.repository.getPostTagsByCategory(widget.post.id));
-    _sourcesFuture = refreshedPost.then((_) => widget.repository.getPostSources(widget.post.id));
+    _loadDetails();
     _isDownloadedFuture = _checkIsDownloaded();
     _localFilePathFuture = _resolveLocalFilePath();
     if (widget.post.site == BunnySite.e621) {
@@ -546,6 +545,28 @@ class _PostDetailPageState extends State<_PostDetailPage> {
       _poolIdsFuture = widget.repository.getPostPoolIds(widget.post.id);
       _commentsFuture = widget.repository.getPostComments(widget.post.id);
     }
+
+    _maybeInitVideo(widget.post);
+  }
+
+  /// _refreshedPost gates tags/sources (not downloads/relationships/pools/
+  /// comments -- those are either user-owned or e621-only, where sync
+  /// already returns full data) behind a fresh live fetch: a sync pass only
+  /// ever stores what the *search/listing* endpoint returned, which for
+  /// Inkbunny specifically omits tags, full file dimensions, and comment
+  /// count entirely (only present on a full per-submission fetch) -- the
+  /// detail page otherwise showed literally nothing for a Inkbunny post,
+  /// tags included. For e621 (whose search endpoint already returns
+  /// everything) this just keeps vote/favorite counts current, matching the
+  /// "update counts on view" ask directly.
+  ///
+  /// Its own method (not inlined into [initState]) so [_retryRefresh] can
+  /// re-run exactly the same chain after a failed refresh, instead of only
+  /// [initState] ever being able to kick it off.
+  void _loadDetails() {
+    final refreshedPost = _refreshPost();
+    _tagsFuture = refreshedPost.then((_) => widget.repository.getPostTagsByCategory(widget.post.id));
+    _sourcesFuture = refreshedPost.then((_) => widget.repository.getPostSources(widget.post.id));
     if (widget.post.site == BunnySite.inkbunny) {
       refreshedPost.then((_) => widget.repository.getPostFiles(widget.post.id)).then((files) {
         if (mounted) {
@@ -557,26 +578,42 @@ class _PostDetailPageState extends State<_PostDetailPage> {
       // never from a search sync alone.
       _inkbunnyPoolsFuture = refreshedPost.then((_) => widget.repository.getInkbunnyPostPools(widget.post.id));
     }
+  }
 
-    _maybeInitVideo(widget.post);
+  /// Re-runs [_loadDetails] after a failed refresh -- reassigning
+  /// [_tagsFuture]/[_sourcesFuture]/[_inkbunnyPoolsFuture] inside [setState]
+  /// so their [FutureBuilder]s pick up the new futures.
+  void _retryRefresh() {
+    setState(() {
+      _refreshFailed = false;
+      _loadDetails();
+    });
   }
 
   /// Refetches this post live from its site and updates [_post] before
   /// [_tagsFuture]/[_sourcesFuture] (and, via [_maybeInitVideo], a
-  /// not-yet-known-to-be-a-video post) load -- see the call site's doc
+  /// not-yet-known-to-be-a-video post) load -- see [_loadDetails]'s own doc
   /// comment for why. Best-effort: falls back to showing whatever was
   /// already cached if this fails (e.g. offline), same as every other
-  /// network call on this page.
+  /// network call on this page -- but unlike a plain swallow, [_refreshFailed]
+  /// is set so [_tagsDetailsSourcesRegion] can tell "failed, showing stale
+  /// data" apart from "this post genuinely has none", and offer a retry.
   Future<BunnyPost> _refreshPost() async {
     try {
       await widget.repository.fetchPost(widget.post.site, widget.post.externalId);
       final fresh = await widget.repository.getPost(widget.post.id);
       if (mounted) {
-        setState(() => _post = fresh);
+        setState(() {
+          _post = fresh;
+          _refreshFailed = false;
+        });
         _maybeInitVideo(fresh);
       }
       return fresh;
     } catch (_) {
+      if (mounted) {
+        setState(() => _refreshFailed = true);
+      }
       return widget.post;
     }
   }
@@ -865,7 +902,7 @@ class _PostDetailPageState extends State<_PostDetailPage> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           InkWell(
-            onTap: hasArtist ? () => _openTagBrowse(post.artist!) : null,
+            onTap: hasArtist ? () => _openArtistSearch(post) : null,
             child: Text(hasArtist ? post.artist! : l10n.postDetailUnknownValue, style: Theme.of(context).textTheme.titleMedium),
           ),
           const SizedBox(height: 8),
@@ -1149,7 +1186,7 @@ class _PostDetailPageState extends State<_PostDetailPage> {
 
   static String _titleCase(String s) => s.isEmpty ? s : '${s[0].toUpperCase()}${s.substring(1)}';
 
-  void _openTagBrowse(String query) {
+  void _openTagBrowse(String query, {InkbunnySearchFilters? inkbunnyFilters}) {
     Navigator.push(
       context,
       MaterialPageRoute(
@@ -1160,9 +1197,26 @@ class _PostDetailPageState extends State<_PostDetailPage> {
           displaySettingsStore: widget.displaySettingsStore,
           downloadSettingsStore: widget.downloadSettingsStore,
           downloadQueueService: widget.downloadQueueService,
+          inkbunnyFilters: inkbunnyFilters,
         ),
       ),
     );
+  }
+
+  /// Artist-tap search, site-aware: e621's own `post.artist` already *is*
+  /// a real e621 tag, so a plain query works. Inkbunny has no such tag --
+  /// putting the name in the plain query instead matched it against every
+  /// post whose *description/keywords* happen to mention it (confirmed
+  /// live: a post tagged with another artist's name in its keywords was
+  /// pulled into "camotli"'s own results) -- [InkbunnySearchFilters
+  /// .username] is the real "uploaded by this exact user" filter, already
+  /// wired end-to-end but never populated by any caller until now.
+  void _openArtistSearch(BunnyPost post) {
+    if (post.site == BunnySite.inkbunny) {
+      _openTagBrowse('', inkbunnyFilters: InkbunnySearchFilters(username: post.artist!));
+    } else {
+      _openTagBrowse(post.artist!);
+    }
   }
 
   void _openAddToSearches(String tagName) {
@@ -1516,6 +1570,51 @@ class _PostDetailPageState extends State<_PostDetailPage> {
     );
   }
 
+  /// If this post's `.epub` is already sitting on disk (same local-vs-
+  /// network precedent `PostMediaPage` already uses for video),
+  /// `readWritingEpub`'s pure local parse is used instead of a live fetch
+  /// -- same reasoning as every other "don't re-fetch what's already
+  /// downloaded" check in this app. Falls back to the network path if
+  /// nothing's there or the local parse itself fails (e.g. a corrupt/
+  /// partial file), rather than giving up.
+  Future<List<BunnyDocBlock>?> _tryReadLocalWritingEpub() async {
+    try {
+      final folder = await widget.downloadSettingsStore.loadDestinationFolder();
+      if (folder == null) {
+        return null;
+      }
+      final path = await widget.downloadManager.writingLocalFilePathFor(_post, folder, poolId: widget.poolId ?? 0, poolName: widget.poolName, poolPage: _poolPage);
+      if (path == null) {
+        return null;
+      }
+      return bunnyDocBlocksFromMaps(readWritingEpub(path));
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Opens [WritingReaderScreen] on this post's story, preferring an
+  /// already-downloaded `.epub` over a live fetch. Shows a failure
+  /// snackbar rather than navigating to an empty/broken reader if both the
+  /// local read and the live parse fail.
+  Future<void> _openWritingReader(AppLocalizations l10n) async {
+    List<BunnyDocBlock>? blocks = await _tryReadLocalWritingEpub();
+    if (blocks == null) {
+      try {
+        blocks = await widget.repository.getWritingDoc(_post.id);
+      } catch (_) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(l10n.postDetailActionFailed)));
+        }
+        return;
+      }
+    }
+    if (!mounted) {
+      return;
+    }
+    await Navigator.push(context, MaterialPageRoute(builder: (context) => WritingReaderScreen(postId: _post.id, title: _post.title ?? l10n.postDetailUnknownValue, blocks: blocks!)));
+  }
+
   Widget _poolsSection(AppLocalizations l10n) {
     final poolIdsFuture = _poolIdsFuture;
     if (poolIdsFuture != null) {
@@ -1661,6 +1760,21 @@ class _PostDetailPageState extends State<_PostDetailPage> {
     );
   }
 
+  /// Shown instead of silently falling through to an empty tags section
+  /// when [_refreshPost] failed -- see [_refreshFailed]'s own doc comment
+  /// for why that distinction matters, especially for a thin Inkbunny row.
+  Widget _refreshFailedBanner(AppLocalizations l10n) => Padding(
+    padding: const EdgeInsets.only(bottom: 8),
+    child: Row(
+      children: [
+        Icon(Icons.warning_amber, size: 20, color: Theme.of(context).colorScheme.error),
+        const SizedBox(width: 8),
+        Expanded(child: Text(l10n.postDetailRefreshFailedMessage)),
+        TextButton(onPressed: _retryRefresh, child: Text(l10n.postDetailRefreshFailedRetry)),
+      ],
+    ),
+  );
+
   /// Tags + post details + sources (M9.6.5): on wide windows, tags sit in
   /// their own column on the left with post details and sources stacked on
   /// the right; on narrow windows the same three pieces just stack top to
@@ -1670,18 +1784,25 @@ class _PostDetailPageState extends State<_PostDetailPage> {
     final tags = _tagsSection(l10n);
     final details = _postDetailsColumn(l10n);
     final sources = _sourcesSection(l10n);
+    final banner = _refreshFailed ? _refreshFailedBanner(l10n) : null;
     if (isWideScreen(context)) {
-      return Row(
-        key: const Key('wideTagsDetailsSourcesRow'),
+      return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Expanded(child: tags),
-          const SizedBox(width: 24),
-          Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [details, sources])),
+          ?banner,
+          Row(
+            key: const Key('wideTagsDetailsSourcesRow'),
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(child: tags),
+              const SizedBox(width: 24),
+              Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [details, sources])),
+            ],
+          ),
         ],
       );
     }
-    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [tags, details, sources]);
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [?banner, tags, details, sources]);
   }
 
   @override
@@ -1713,6 +1834,24 @@ class _PostDetailPageState extends State<_PostDetailPage> {
                     onOpenPost: (site, postId) => _openPostLink(l10n, site, postId),
                     onOpenPool: (poolId) => _openPool(l10n, poolId),
                   ),
+                ],
+                if (post.writing != null && post.writing!.isNotEmpty) ...[
+                  const Divider(),
+                  // Raw BBCode, not parsed -- this app has no BBCode/HTML renderer
+                  // anywhere, so a literal tag (e.g. "[b]") shows as-is. A quick
+                  // preview only -- _openWritingReader below is the real, parsed
+                  // reading experience. Independent of _buildMedia's own
+                  // file-based mechanism above (a submission whose story text
+                  // comes back as a separate file instead) -- both can apply to
+                  // the same post.
+                  RichMarkupText(
+                    text: post.writing!,
+                    onOpenAuthor: _openTagBrowse,
+                    onOpenWiki: _openTagWiki,
+                    onOpenPost: (site, postId) => _openPostLink(l10n, site, postId),
+                    onOpenPool: (poolId) => _openPool(l10n, poolId),
+                  ),
+                  Align(alignment: Alignment.centerLeft, child: TextButton.icon(onPressed: () => _openWritingReader(l10n), icon: const Icon(Icons.menu_book), label: Text(l10n.postDetailOpenWritingReader))),
                 ],
                 const Divider(),
                 _tagsDetailsSourcesRegion(l10n),

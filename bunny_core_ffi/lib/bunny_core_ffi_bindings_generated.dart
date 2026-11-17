@@ -4,9 +4,11 @@
 // ignore_for_file: type=lint, unused_import
 import 'dart:ffi' as ffi;
 
-/// Bindings for bunny_core's public API (libs/core/include/bunny_core/*.h)
-/// and the bunny_db types it exposes (libs/db/include/bunny_db/types.h).
-/// These headers are already plain, simple C -- no hand-written glue needed.
+/// Bindings for bunny_core's public API (libs/core/include/bunny_core/*.h),
+/// the bunny_db types it exposes (libs/db/include/bunny_db/types.h), and the
+/// shared bunny_doc_t document model (libs/common/include/bunny_common/doc.h)
+/// a few bunny_core calls return/consume. These headers are already plain,
+/// simple C -- no hand-written glue needed.
 ///
 /// Regenerate bindings with `dart run ffigen --config ffigen.yaml`.
 ///
@@ -23,6 +25,19 @@ class BunnyCoreFfiBindings {
   BunnyCoreFfiBindings.fromLookup(
     ffi.Pointer<T> Function<T extends ffi.NativeType>(String symbolName) lookup,
   ) : _lookup = lookup;
+
+  /// Frees every block/run and their owned strings, then zeroes *doc. Safe to
+  /// call on an already-zeroed (memset(0)) bunny_doc_t, and safe on NULL.
+  void bunny_doc_free(ffi.Pointer<bunny_doc_t> doc) {
+    return _bunny_doc_free(doc);
+  }
+
+  late final _bunny_doc_freePtr =
+      _lookup<ffi.NativeFunction<ffi.Void Function(ffi.Pointer<bunny_doc_t>)>>(
+        'bunny_doc_free',
+      );
+  late final _bunny_doc_free = _bunny_doc_freePtr
+      .asFunction<void Function(ffi.Pointer<bunny_doc_t>)>();
 
   ffi.Pointer<ffi.Char> bunny_core_result_to_string(
     bunny_core_result_t result,
@@ -2405,6 +2420,97 @@ class BunnyCoreFfiBindings {
             )
           >();
 
+  /// Parses the post's already-cached `writing` field (bunny_db_post_t.writing,
+  /// the Inkbunny "Writing - Document" story text fetched via api_submissions.php's
+  /// show_writing param) into the shared bunny_doc_t model (libs/bbcode parses
+  /// the raw BBCode) -- no network call. BUNNY_CORE_ERR_NOT_FOUND if the post
+  /// has no writing at all (every e621 post, or an Inkbunny post never fetched
+  /// via a single-submission call). Caller frees *out_doc with bunny_doc_free.
+  bunny_core_result_t bunny_core_get_writing_doc(
+    ffi.Pointer<bunny_core_t> core,
+    int post_id,
+    ffi.Pointer<bunny_doc_t> out_doc,
+  ) {
+    return bunny_core_result_t.fromValue(
+      _bunny_core_get_writing_doc(core, post_id, out_doc),
+    );
+  }
+
+  late final _bunny_core_get_writing_docPtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.UnsignedInt Function(
+            ffi.Pointer<bunny_core_t>,
+            ffi.Int64,
+            ffi.Pointer<bunny_doc_t>,
+          )
+        >
+      >('bunny_core_get_writing_doc');
+  late final _bunny_core_get_writing_doc = _bunny_core_get_writing_docPtr
+      .asFunction<
+        int Function(ffi.Pointer<bunny_core_t>, int, ffi.Pointer<bunny_doc_t>)
+      >();
+
+  /// Builds a complete .epub at dest_path for an Inkbunny Writing-Document
+  /// post: its own primary file as the book's cover (fetched fresh over HTTP
+  /// -- this function doesn't know about any app-side download-folder
+  /// convention, so it never assumes a local copy already exists), and its
+  /// parsed `writing` BBCode as the body, via libs/epub. BUNNY_CORE_ERR_NOT_FOUND
+  /// if the post has no writing; BUNNY_CORE_ERR_SITE if fetching the cover
+  /// fails; BUNNY_CORE_ERR_UNKNOWN on a local I/O failure writing dest_path.
+  bunny_core_result_t bunny_core_build_writing_epub(
+    ffi.Pointer<bunny_core_t> core,
+    int post_id,
+    ffi.Pointer<ffi.Char> dest_path,
+  ) {
+    return bunny_core_result_t.fromValue(
+      _bunny_core_build_writing_epub(core, post_id, dest_path),
+    );
+  }
+
+  late final _bunny_core_build_writing_epubPtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.UnsignedInt Function(
+            ffi.Pointer<bunny_core_t>,
+            ffi.Int64,
+            ffi.Pointer<ffi.Char>,
+          )
+        >
+      >('bunny_core_build_writing_epub');
+  late final _bunny_core_build_writing_epub = _bunny_core_build_writing_epubPtr
+      .asFunction<
+        int Function(ffi.Pointer<bunny_core_t>, int, ffi.Pointer<ffi.Char>)
+      >();
+
+  /// Reads back a .epub bunny_core_build_writing_epub produced -- pure local
+  /// file I/O via libs/epub, no bunny_core_t needed (mirrors
+  /// bunny_core_read_writing_epub's own doc comment in libs/epub/include/
+  /// bunny_epub/epub.h: deliberately not a general-purpose EPUB reader).
+  /// Caller frees *out_doc with bunny_doc_free.
+  bunny_core_result_t bunny_core_read_writing_epub(
+    ffi.Pointer<ffi.Char> path,
+    ffi.Pointer<bunny_doc_t> out_doc,
+  ) {
+    return bunny_core_result_t.fromValue(
+      _bunny_core_read_writing_epub(path, out_doc),
+    );
+  }
+
+  late final _bunny_core_read_writing_epubPtr =
+      _lookup<
+        ffi.NativeFunction<
+          ffi.UnsignedInt Function(
+            ffi.Pointer<ffi.Char>,
+            ffi.Pointer<bunny_doc_t>,
+          )
+        >
+      >('bunny_core_read_writing_epub');
+  late final _bunny_core_read_writing_epub = _bunny_core_read_writing_epubPtr
+      .asFunction<
+        int Function(ffi.Pointer<ffi.Char>, ffi.Pointer<bunny_doc_t>)
+      >();
+
   bunny_core_result_t bunny_core_backfill_inkbunny_details(
     ffi.Pointer<bunny_core_t> core,
     ffi.Pointer<bunny_core_backfill_stats_t> out_stats,
@@ -2446,7 +2552,8 @@ class BunnyCoreFfiBindings {
       .asFunction<void Function(ffi.Pointer<bunny_core_pool_info_t>)>();
 
   /// referenced_pool_ids (above) is populated by scanning the fetched
-  /// description for e621's own "pool #<N>" dtext convention -- callers don't
+  /// description for both of e621's own cross-reference conventions -- the
+  /// "pool #<N>" marker and a dtext link's "/pools/<N>" path -- callers don't
   /// need to parse it themselves.
   bunny_core_result_t bunny_core_fetch_pool(
     ffi.Pointer<bunny_core_t> core,
@@ -3245,6 +3352,14 @@ class BunnyCoreFfiBindings {
   late final _bunny_filename_max_len = _bunny_filename_max_lenPtr
       .asFunction<int Function()>();
 
+  /// A thin wrapper over GOBLIN's goblin_sanitize_filename_segment
+  /// (goblin/sanitize_filename.h) -- this used to be hand-rolled here (naive
+  /// UTF-8 continuation-byte counting, no Windows reserved-device-name check),
+  /// now upstreamed into GOBLIN with proper UTF-8 validation (rejects overlong
+  /// encodings/encoded surrogates/out-of-range codepoints as a single bad
+  /// byte, never swallows an unbounded malformed run) and a check against
+  /// Windows' reserved device names (CON, PRN, NUL, COM1-9, LPT1-9).
+  ///
   /// Allowed bytes: every printable ASCII byte (0x20-0x7E) except the nine
   /// Windows reserves for path syntax (< > : " / \ | ? *) -- Linux/macOS only
   /// additionally forbid '/' (macOS also ':'), already covered by that same
@@ -3254,15 +3369,21 @@ class BunnyCoreFfiBindings {
   /// built from free-text site data (pool/post titles); artist/author names
   /// are deliberately not routed through this at all (kept verbatim, non-ASCII
   /// included, by the Dart side) since they're expected to carry non-ASCII
-  /// text as-is.
+  /// text as-is. When ascii_only is true, this ALSO runs the input through
+  /// GOBLIN's goblin_transliterate_to_ascii (goblin/ascii_transliterate.h)
+  /// first, so a known Latin diacritic folds to its plain-ASCII base letter
+  /// (e.g. "e" for a pool title) instead of collapsing straight to '_' --
+  /// composing GOBLIN's two headers exactly as their own doc comments
+  /// recommend. Not done when ascii_only is false, since transliteration
+  /// would replace every non-Latin codepoint too, defeating the point of
+  /// keeping non-ASCII text verbatim.
   ///
-  /// Every disallowed byte is replaced with '_' -- a run of disallowed
-  /// continuation bytes belonging to the same non-ASCII codepoint (ascii_only
-  /// case) collapses to exactly one '_', not one per byte. A trailing run of
-  /// '.'/' ' is trimmed afterward (Windows can't create a name ending in
-  /// either); an empty result (nothing left after trimming, or empty/NULL
-  /// input) falls back to "_" rather than ever producing an unusable empty
-  /// name.
+  /// Every byte this still can't make sense of is replaced with '_' -- a run
+  /// of bytes belonging to the same disallowed codepoint collapses to exactly
+  /// one '_', not one per byte. A trailing run of '.'/' ' is trimmed
+  /// afterward (Windows can't create a name ending in either); an empty
+  /// result (nothing left after trimming, or empty/NULL input) falls back to
+  /// "_" rather than ever producing an unusable empty name.
   ///
   /// Writes at most out_buf_size - 1 bytes plus a NUL terminator into out_buf,
   /// truncating the input if it doesn't fit -- safe at any byte boundary when
@@ -3554,6 +3675,94 @@ class BunnyCoreFfiBindings {
           >();
 }
 
+/// A small, site/format-agnostic rich-text document model -- the shared
+/// shape both `libs/bbcode` (parses Inkbunny's raw `writing` BBCode into
+/// this) and `libs/epub` (renders this to/from an .epub's XHTML) produce
+/// and consume, so every reader on the Dart side works off one JSON shape
+/// regardless of whether the content was just parsed live or read back from
+/// a previously-downloaded .epub. Deliberately small: only the handful of
+/// constructs Inkbunny's story BBCode actually uses (plain/bold/italic/
+/// underline/link runs inside a paragraph/heading/list-item block) -- not a
+/// general-purpose rich-text or HTML model.
+enum bunny_doc_block_kind_t {
+  BUNNY_DOC_BLOCK_PARAGRAPH(0),
+  BUNNY_DOC_BLOCK_HEADING(1),
+  BUNNY_DOC_BLOCK_LIST_ITEM(2);
+
+  final int value;
+  const bunny_doc_block_kind_t(this.value);
+
+  static bunny_doc_block_kind_t fromValue(int value) => switch (value) {
+    0 => BUNNY_DOC_BLOCK_PARAGRAPH,
+    1 => BUNNY_DOC_BLOCK_HEADING,
+    2 => BUNNY_DOC_BLOCK_LIST_ITEM,
+    _ => throw ArgumentError(
+      'Unknown value for bunny_doc_block_kind_t: $value',
+    ),
+  };
+}
+
+enum bunny_doc_run_kind_t {
+  BUNNY_DOC_RUN_PLAIN(0),
+  BUNNY_DOC_RUN_BOLD(1),
+  BUNNY_DOC_RUN_ITALIC(2),
+  BUNNY_DOC_RUN_UNDERLINE(3),
+  BUNNY_DOC_RUN_URL(4);
+
+  final int value;
+  const bunny_doc_run_kind_t(this.value);
+
+  static bunny_doc_run_kind_t fromValue(int value) => switch (value) {
+    0 => BUNNY_DOC_RUN_PLAIN,
+    1 => BUNNY_DOC_RUN_BOLD,
+    2 => BUNNY_DOC_RUN_ITALIC,
+    3 => BUNNY_DOC_RUN_UNDERLINE,
+    4 => BUNNY_DOC_RUN_URL,
+    _ => throw ArgumentError('Unknown value for bunny_doc_run_kind_t: $value'),
+  };
+}
+
+final class bunny_doc_run_t extends ffi.Struct {
+  @ffi.UnsignedInt()
+  external int kindAsInt;
+
+  bunny_doc_run_kind_t get kind => bunny_doc_run_kind_t.fromValue(kindAsInt);
+
+  /// always set -- the run's visible text
+  external ffi.Pointer<ffi.Char> text;
+
+  /// only set (non-NULL) for BUNNY_DOC_RUN_URL
+  external ffi.Pointer<ffi.Char> url;
+}
+
+final class bunny_doc_run_list_t extends ffi.Struct {
+  external ffi.Pointer<bunny_doc_run_t> items;
+
+  @ffi.Size()
+  external int count;
+}
+
+final class bunny_doc_block_t extends ffi.Struct {
+  @ffi.UnsignedInt()
+  external int kindAsInt;
+
+  bunny_doc_block_kind_t get kind =>
+      bunny_doc_block_kind_t.fromValue(kindAsInt);
+
+  /// 1-6; only meaningful when kind == BUNNY_DOC_BLOCK_HEADING
+  @ffi.Int()
+  external int heading_level;
+
+  external bunny_doc_run_list_t runs;
+}
+
+final class bunny_doc_t extends ffi.Struct {
+  external ffi.Pointer<bunny_doc_block_t> items;
+
+  @ffi.Size()
+  external int count;
+}
+
 enum bunny_core_result_t {
   BUNNY_CORE_OK(0),
   BUNNY_CORE_ERR_INVALID_ARG(1),
@@ -3821,6 +4030,10 @@ final class bunny_db_post_t extends ffi.Struct {
   external ffi.Pointer<ffi.Char> title;
 
   external ffi.Pointer<ffi.Char> description;
+
+  /// Inkbunny "Writing - Document" story text; NULL for every e621 post
+  /// and for an Inkbunny post never fetched via a single-submission call
+  external ffi.Pointer<ffi.Char> writing;
 
   external ffi.Pointer<ffi.Char> rating;
 
@@ -4464,11 +4677,12 @@ final class bunny_core_pool_info_t extends ffi.Struct {
   @ffi.Int64()
   external int post_count;
 
-  /// Every "pool #<N>" mention found in `description` (M26) -- e621 pool
-  /// descriptions routinely cross-reference related/continuation pools
-  /// this way (see bunny_core_fetch_pool's doc comment). In first-seen
-  /// order, duplicates included. Empty when description has none or is
-  /// NULL.
+  /// Every "pool #<N>" mention, or dtext link ("/pools/<N>", however it's
+  /// wrapped -- a bare dtext link, a full https://e621.net/pools/<N> URL,
+  /// ...), found in `description` (M26/M81) -- e621 pool descriptions
+  /// routinely cross-reference related/continuation pools either way (see
+  /// bunny_core_fetch_pool's doc comment). In first-seen order, duplicates
+  /// included. Empty when description has none or is NULL.
   external ffi.Pointer<ffi.Int64> referenced_pool_ids;
 
   @ffi.Size()

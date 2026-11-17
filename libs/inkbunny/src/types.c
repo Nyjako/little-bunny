@@ -219,6 +219,7 @@ inkbunny_result_t inkbunny_parse_submission(const cJSON *json, inkbunny_submissi
     out->user_id = inkbunny_field_int64(json, "user_id", 0);
     out->title = dup_or_null(bunny_json_get_string_or(json, "title", NULL));
     out->description = dup_or_null(bunny_json_get_string_or(json, "description", NULL));
+    out->writing = dup_or_null(bunny_json_get_string_or(json, "writing", NULL));
     out->rating_id = inkbunny_field_int(json, "rating_id", 0);
     out->rating_name = dup_or_null(bunny_json_get_string_or(json, "rating_name", NULL));
 
@@ -403,6 +404,7 @@ void inkbunny_submission_free(inkbunny_submission_t *submission)
     free(submission->username);
     free(submission->title);
     free(submission->description);
+    free(submission->writing);
     free(submission->rating_name);
     inkbunny_content_rating_list_free(&submission->content_ratings);
     inkbunny_keyword_list_free(&submission->keywords);

@@ -496,4 +496,98 @@ class DownloadManager {
       return DownloadResult(DownloadOutcome.failed, errorMessage: e.toString());
     }
   }
+
+  /// Same question as [isDownloaded], for an Inkbunny Writing-Document
+  /// post's `.epub` instead of its plain cover image -- same deterministic
+  /// path (artist/pool subfolder convention unchanged), just a fixed
+  /// `.epub` extension instead of [BunnyPost.fileExt], since
+  /// [downloadWritingEpub] always writes one regardless of the post's own
+  /// primary-file type.
+  Future<bool> isWritingDownloaded(BunnyPost post, String destinationFolder, {int poolId = 0, String? poolName, int poolPage = 0}) async {
+    final (folder, filename) = _destinationFor(post, 'epub', poolId: poolId, poolName: poolName, poolPage: poolPage);
+    if (destinationFolder.startsWith('content://')) {
+      final child = await SafUtil().child(destinationFolder, [folder, filename]);
+      return child != null;
+    }
+    return File('$destinationFolder/$folder/$filename').exists();
+  }
+
+  /// Same as [localFilePathFor], for the `.epub` [isWritingDownloaded] checks.
+  Future<String?> writingLocalFilePathFor(BunnyPost post, String destinationFolder, {int poolId = 0, String? poolName, int poolPage = 0}) async {
+    final (folder, filename) = _destinationFor(post, 'epub', poolId: poolId, poolName: poolName, poolPage: poolPage);
+    if (destinationFolder.startsWith('content://')) {
+      final child = await SafUtil().child(destinationFolder, [folder, filename]);
+      return child?.uri;
+    }
+    final file = File('$destinationFolder/$folder/$filename');
+    return await file.exists() ? file.path : null;
+  }
+
+  /// The Writing-Document counterpart to [downloadPost] -- builds a
+  /// complete `.epub` (cover image + parsed story text, via
+  /// [BunnyRepository.buildWritingEpub]) instead of fetching the post's
+  /// plain cover image file, at the same deterministic artist/pool
+  /// subfolder path [isWritingDownloaded] checks. There's no published
+  /// checksum to verify an epub build against (it's generated locally by
+  /// `bunny_core`, not fetched as a fixed byte stream), so the only
+  /// outcomes are [DownloadOutcome.verified] or [DownloadOutcome.failed] --
+  /// never [DownloadOutcome.noFileUrl]/[DownloadOutcome.checksumMismatch].
+  ///
+  /// `bunny_core_build_writing_epub` writes via a plain `fopen`, with no
+  /// SAF support and no directory-creation of its own (unlike the native
+  /// image-download path, M66) -- for a `content://` destination, this
+  /// builds to a local temp file first and copies those bytes in via the
+  /// same `saf_stream` write [_downloadViaSaf] already uses; for a plain
+  /// path, the destination folder is created first (the pre-M66 Dart
+  /// convention [_downloadViaSaf]'s own doc comment mentions, since
+  /// `bunny_core_build_writing_epub` doesn't do this itself the way
+  /// `bunny_core_download_start` does).
+  Future<DownloadResult> downloadWritingEpub(
+    BunnyPost post,
+    BunnyRepository repository,
+    String destinationFolder, {
+    bool autoFavorite = false,
+    bool autoUpvote = false,
+    int poolId = 0,
+    String? poolName,
+    int poolPage = 0,
+  }) async {
+    final (folder, filename) = _destinationFor(post, 'epub', poolId: poolId, poolName: poolName, poolPage: poolPage);
+
+    try {
+      String filePath;
+      if (destinationFolder.startsWith('content://')) {
+        final tempPath = '${Directory.systemTemp.path}/bunny_writing_epub_${post.id}_${DateTime.now().microsecondsSinceEpoch}.epub';
+        await repository.buildWritingEpub(post.id, tempPath);
+        final tempFile = File(tempPath);
+        final bytes = await tempFile.readAsBytes();
+        await tempFile.delete();
+
+        var folderDir = await _resolveSafFolder(destinationFolder, folder);
+        SafNewFile newFile;
+        try {
+          newFile = await SafStream().writeFileBytes(folderDir.uri, filename, 'application/epub+zip', bytes, overwrite: true);
+        } catch (_) {
+          _safFolderCache.remove('$destinationFolder/$folder');
+          folderDir = await _resolveSafFolder(destinationFolder, folder);
+          newFile = await SafStream().writeFileBytes(folderDir.uri, filename, 'application/epub+zip', bytes, overwrite: true);
+        }
+        filePath = newFile.uri.toString();
+      } else {
+        await Directory('$destinationFolder/$folder').create(recursive: true);
+        filePath = '$destinationFolder/$folder/$filename';
+        await repository.buildWritingEpub(post.id, filePath);
+      }
+
+      if (autoFavorite) {
+        await repository.queueFavoriteAdd(post.id);
+      }
+      if (autoUpvote && post.site == BunnySite.e621) {
+        await repository.queueVote(post.id, 1);
+      }
+      return DownloadResult(DownloadOutcome.verified, filePath: filePath);
+    } catch (e) {
+      return DownloadResult(DownloadOutcome.failed, errorMessage: e.toString());
+    }
+  }
 }
