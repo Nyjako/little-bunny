@@ -5,6 +5,7 @@ add_library(bunny_common STATIC
     src/goblin_impl.c
     src/md5.c
     src/download.c
+    src/doc.c
 )
 
 target_include_directories(bunny_common
