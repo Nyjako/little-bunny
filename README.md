@@ -23,6 +23,7 @@ progress.
 - `libs/inkbunny` — standalone, reusable Inkbunny API client library.
 - `server/` — the C server that owns sync state for networked mode.
 - `app/` — the Flutter GUI (desktop + mobile).
+- `cli/` — `bunny_cli`, a command-line tool for driving LittleBunny without the app's UI.
 - `deploy/` — systemd service + install script for running `bunny_server` on a VM.
 
 ## Building
@@ -62,6 +63,36 @@ Requires Docker. Uses [dockcross](https://github.com/dockcross/dockcross)'s
 
 ```sh
 make windows
+```
+
+## bunny_cli
+
+`bunny_cli` drives LittleBunny from a terminal instead of the app's own UI -- continuing a
+stalled download queue, running ad-hoc searches/pool lookups, and general debugging. It must
+sit next to the app's own executable (no `--db`/`--server` flag -- it reads whichever
+repository, standalone or networked, the app next to it is configured for). See
+[`cli/README.md`](cli/README.md) for the full details (app-lock, networked-mode caveats, how
+it stays in sync with app updates). Every flag:
+
+```
+bunny_cli --help                                       # usage and this flag list
+bunny_cli --version                                     # print the build number and exit
+bunny_cli --whoami                                      # show which repository (db/server) bunny_cli resolved
+bunny_cli --unlock <pin-or-password>                    # supply your app-lock PIN/password up front (else prompted)
+bunny_cli --search <e621|inkbunny> <query> [--page N]   # run a live tag search, dump matching posts as JSON
+bunny_cli --pool <pool_id>                              # fetch an e621 pool's metadata as JSON (e621 only)
+bunny_cli --stats                                       # row counts per table + an integrity check (standalone only)
+bunny_cli --download [--jobs N] [--site <e621|inkbunny>] [<spec> ...]
+                                                         # drain the download queue, optionally queuing pool:<id>/
+                                                         # search:<id>/tag-query specs first (N workers, default 3, max 8)
+bunny_cli --favorite <post_id> [--stars N]              # favorite a post (stars is Inkbunny's 1-3 tier; ignored on e621)
+bunny_cli --unfavorite <post_id>                        # unfavorite a post
+bunny_cli --vote <post_id> <score>                      # vote -1/0/1 on a post (e621 only)
+bunny_cli --sync [search_id]                            # sync every currently-due saved search, or force one by id
+bunny_cli --blacklist-list <e621|inkbunny>              # dump a site's tag blacklist as a JSON array
+bunny_cli --blacklist-add <e621|inkbunny> <tag>         # add a blacklist rule (validated against that site's tag grammar)
+bunny_cli --blacklist-remove <e621|inkbunny> <tag>      # remove a blacklist rule
+bunny_cli --queue-list                                  # dump the whole download queue (any status) as JSON
 ```
 
 ## Deploying the server
