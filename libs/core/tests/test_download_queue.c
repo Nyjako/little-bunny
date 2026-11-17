@@ -72,11 +72,51 @@ void test_download_queue_clear_finished_drops_terminal_rows_only(void)
     bunny_db_download_queue_list_free(&list);
 }
 
+void test_download_queue_claim_next_marks_downloading_and_skips_claimed_rows(void)
+{
+    int64_t first_id = 0, second_id = 0;
+    bunny_core_download_queue_add(g_core, 10, 0, NULL, 0, &first_id);
+    bunny_core_download_queue_add(g_core, 11, 0, NULL, 0, &second_id);
+
+    bunny_db_download_queue_item_t item;
+    bool found = false;
+    bunny_core_result_t result = bunny_core_download_queue_claim_next(g_core, &item, &found);
+    TEST_ASSERT_EQUAL(BUNNY_CORE_OK, result);
+    TEST_ASSERT_TRUE(found);
+    TEST_ASSERT_EQUAL(first_id, item.id);
+    bunny_db_download_queue_item_free(&item);
+
+    result = bunny_core_download_queue_claim_next(g_core, &item, &found);
+    TEST_ASSERT_EQUAL(BUNNY_CORE_OK, result);
+    TEST_ASSERT_TRUE(found);
+    TEST_ASSERT_EQUAL(second_id, item.id);
+    bunny_db_download_queue_item_free(&item);
+
+    result = bunny_core_download_queue_claim_next(g_core, &item, &found);
+    TEST_ASSERT_EQUAL(BUNNY_CORE_OK, result);
+    TEST_ASSERT_FALSE(found);
+}
+
+void test_download_queue_count_queued(void)
+{
+    int64_t queued_id = 0, downloading_id = 0;
+    bunny_core_download_queue_add(g_core, 20, 0, NULL, 0, &queued_id);
+    bunny_core_download_queue_add(g_core, 21, 0, NULL, 0, &downloading_id);
+    bunny_core_download_queue_set_status(g_core, downloading_id, BUNNY_DB_DOWNLOAD_QUEUE_DOWNLOADING, NULL);
+
+    int count = -1;
+    bunny_core_result_t result = bunny_core_download_queue_count_queued(g_core, &count);
+    TEST_ASSERT_EQUAL(BUNNY_CORE_OK, result);
+    TEST_ASSERT_EQUAL(1, count);
+}
+
 int main(void)
 {
     UNITY_BEGIN();
     RUN_TEST(test_download_queue_add_and_list);
     RUN_TEST(test_download_queue_set_status);
     RUN_TEST(test_download_queue_clear_finished_drops_terminal_rows_only);
+    RUN_TEST(test_download_queue_claim_next_marks_downloading_and_skips_claimed_rows);
+    RUN_TEST(test_download_queue_count_queued);
     return UNITY_END();
 }

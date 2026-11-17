@@ -4,19 +4,14 @@
 #include <bunny_common/md5.h>
 #include <bunny_common/thread.h>
 
+#include <goblin/appdirs.h>
+#include <goblin/cstr.h>
+
 #include <ctype.h>
 #include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-
-#ifdef _WIN32
-#include <direct.h>
-#define bunny_mkdir(path) _mkdir(path)
-#else
-#include <sys/stat.h>
-#define bunny_mkdir(path) mkdir(path, 0755)
-#endif
 
 /* bunny_core_download_start/_poll/_release (M66) are deliberately stateless
  * with respect to bunny_core_t -- a pure network+filesystem operation with
@@ -82,65 +77,6 @@ static bool md5_hex_equal_ci(const char *a, const char *b)
         b++;
     }
     return *a == *b;
-}
-
-static char *dup_string(const char *s)
-{
-    if (!s) {
-        return NULL;
-    }
-    size_t len = strlen(s) + 1;
-    char *copy = malloc(len);
-    if (copy) {
-        memcpy(copy, s, len);
-    }
-    return copy;
-}
-
-static char *join_path(const char *dir, const char *filename)
-{
-    size_t dir_len = strlen(dir);
-    size_t filename_len = strlen(filename);
-    char *result = malloc(dir_len + 1 + filename_len + 1);
-    if (!result) {
-        return NULL;
-    }
-    memcpy(result, dir, dir_len);
-    result[dir_len] = '/';
-    memcpy(result + dir_len + 1, filename, filename_len);
-    result[dir_len + 1 + filename_len] = '\0';
-    return result;
-}
-
-static int make_directory(const char *path)
-{
-    if (bunny_mkdir(path) == 0) {
-        return 0;
-    }
-    return errno == EEXIST ? 0 : -1;
-}
-
-/* mkdir -p -- dest_dir may be several levels deep and none of it may exist
- * yet (e.g. a fresh install's first-ever download), matching what the Dart
- * code this replaces used to do via Directory(...).create(recursive: true). */
-static int make_directories_recursive(const char *path)
-{
-    size_t len = strlen(path);
-    if (len == 0 || len >= 1024) {
-        return -1;
-    }
-    char buf[1024];
-    memcpy(buf, path, len + 1);
-    for (size_t i = 1; i < len; i++) {
-        if (buf[i] == '/') {
-            buf[i] = '\0';
-            if (make_directory(buf) != 0) {
-                return -1;
-            }
-            buf[i] = '/';
-        }
-    }
-    return make_directory(buf);
 }
 
 /* True if a file already sits at path and either expected_md5 is NULL/empty
@@ -244,7 +180,7 @@ static void finish_slot(download_slot_t *slot, bunny_core_download_outcome_t out
 static void *download_thread_main(void *arg)
 {
     download_slot_t *slot = (download_slot_t *)arg;
-    char *final_path = join_path(slot->dest_dir, slot->filename);
+    char *final_path = goblin_appdir_join(slot->dest_dir, slot->filename);
     char *tmp_path = NULL;
 
     if (!final_path) {
@@ -263,7 +199,7 @@ static void *download_thread_main(void *arg)
         return NULL;
     }
 
-    if (make_directories_recursive(slot->dest_dir) != 0) {
+    if (goblin_appdir_mkdir_p(slot->dest_dir) != 0) {
         finish_slot(slot, BUNNY_CORE_DOWNLOAD_FAILED, "failed to create destination directory");
         free(final_path);
         return NULL;
@@ -276,7 +212,7 @@ static void *download_thread_main(void *arg)
      * same scenario. */
     char tmp_filename[300];
     snprintf(tmp_filename, sizeof(tmp_filename), "%s.part%d", slot->filename, (int)(slot - g_slots));
-    tmp_path = join_path(slot->dest_dir, tmp_filename);
+    tmp_path = goblin_appdir_join(slot->dest_dir, tmp_filename);
     if (!tmp_path) {
         finish_slot(slot, BUNNY_CORE_DOWNLOAD_FAILED, "out of memory");
         free(final_path);
@@ -387,16 +323,16 @@ bunny_core_result_t bunny_core_download_start(const char *file_url, const bunny_
     slot->total = -1;
     bunny_mutex_unlock(&g_slots_lock);
 
-    slot->file_url = dup_string(file_url);
-    slot->dest_dir = dup_string(dest_dir);
-    slot->filename = dup_string(filename);
-    slot->expected_md5 = (expected_md5_or_null && expected_md5_or_null[0]) ? dup_string(expected_md5_or_null) : NULL;
+    slot->file_url = goblin_copy_cstr(file_url);
+    slot->dest_dir = goblin_copy_cstr(dest_dir);
+    slot->filename = goblin_copy_cstr(filename);
+    slot->expected_md5 = (expected_md5_or_null && expected_md5_or_null[0]) ? goblin_copy_cstr(expected_md5_or_null) : NULL;
     if (extra_header_count > 0) {
         slot->headers = calloc(extra_header_count, sizeof(bunny_http_header_t));
         if (slot->headers) {
             for (size_t i = 0; i < extra_header_count; i++) {
-                slot->headers[i].name = dup_string(extra_headers[i].name);
-                slot->headers[i].value = dup_string(extra_headers[i].value);
+                slot->headers[i].name = goblin_copy_cstr(extra_headers[i].name);
+                slot->headers[i].value = goblin_copy_cstr(extra_headers[i].value);
             }
             slot->header_count = extra_header_count;
         }

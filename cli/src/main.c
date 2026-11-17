@@ -5,6 +5,8 @@
 
 #include <bunny_core/core.h>
 
+#include <goblin/argv.h>
+
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -53,40 +55,6 @@ static void print_usage(const char *argv0)
     printf("local download-queue database path, see cli/README.md.\n");
 }
 
-static bool has_flag(int argc, char **argv, const char *flag)
-{
-    for (int i = 1; i < argc; i++) {
-        if (strcmp(argv[i], flag) == 0) {
-            return true;
-        }
-    }
-    return false;
-}
-
-static const char *find_flag_value(int argc, char **argv, const char *flag)
-{
-    for (int i = 1; i < argc - 1; i++) {
-        if (strcmp(argv[i], flag) == 0) {
-            return argv[i + 1];
-        }
-    }
-    return NULL;
-}
-
-/* Index of `flag` in argv, or -1 if not present -- for a command needing
- * its own positional arguments right after it (--search/--pool), unlike
- * every other flag here which is a bare switch or a single --flag value
- * pair findable via find_flag_value. */
-static int find_flag_index(int argc, char **argv, const char *flag)
-{
-    for (int i = 1; i < argc; i++) {
-        if (strcmp(argv[i], flag) == 0) {
-            return i;
-        }
-    }
-    return -1;
-}
-
 static bool parse_site(const char *s, bunny_db_site_t *out)
 {
     if (strcmp(s, "e621") == 0) {
@@ -103,7 +71,7 @@ static bool parse_site(const char *s, bunny_db_site_t *out)
 /* Collects every argv token after --download's own index as a spec string
  * (see commands.h's own doc comment on bunny_cli_cmd_download for what a
  * spec is), skipping --jobs/--site/--unlock and their own value token --
- * both are global flags findable from anywhere in argv via find_flag_value,
+ * both are global flags findable from anywhere in argv via goblin_argv_find_value,
  * not just after --download, so they must never be mistaken for a spec
  * themselves. `out_specs` must have room for at least argc entries (always
  * enough). Returns how many specs it found. */
@@ -166,11 +134,11 @@ int main(int argc, char **argv)
 {
     bunny_cli_log_init();
 
-    if (has_flag(argc, argv, "--help")) {
+    if (goblin_argv_has_flag(argc, argv, "--help")) {
         print_usage(argv[0]);
         return 0;
     }
-    if (has_flag(argc, argv, "--version")) {
+    if (goblin_argv_has_flag(argc, argv, "--version")) {
         printf("bunny_cli %s\n", BUNNY_CLI_VERSION);
         return 0;
     }
@@ -185,7 +153,7 @@ int main(int argc, char **argv)
         return 1;
     }
 
-    const char *supplied_secret = find_flag_value(argc, argv, "--unlock");
+    const char *supplied_secret = goblin_argv_find_value(argc, argv, "--unlock");
     bunny_cli_handshake_payload_t payload;
     bunny_cli_handshake_result_t result = run_handshake_with_retry(app_exe_path, supplied_secret, &payload);
     free(app_exe_path);
@@ -201,25 +169,25 @@ int main(int argc, char **argv)
         return 1;
     }
 
-    if (has_flag(argc, argv, "--whoami")) {
+    if (goblin_argv_has_flag(argc, argv, "--whoami")) {
         print_whoami(&payload);
         bunny_cli_handshake_payload_free(&payload);
         return 0;
     }
 
-    int search_index = find_flag_index(argc, argv, "--search");
-    int pool_index = find_flag_index(argc, argv, "--pool");
-    int favorite_index = find_flag_index(argc, argv, "--favorite");
-    int unfavorite_index = find_flag_index(argc, argv, "--unfavorite");
-    int vote_index = find_flag_index(argc, argv, "--vote");
-    bool wants_sync = has_flag(argc, argv, "--sync");
-    int blacklist_list_index = find_flag_index(argc, argv, "--blacklist-list");
-    int blacklist_add_index = find_flag_index(argc, argv, "--blacklist-add");
-    int blacklist_remove_index = find_flag_index(argc, argv, "--blacklist-remove");
-    bool wants_queue_list = has_flag(argc, argv, "--queue-list");
-    int download_index = find_flag_index(argc, argv, "--download");
+    int search_index = goblin_argv_find_index(argc, argv, "--search");
+    int pool_index = goblin_argv_find_index(argc, argv, "--pool");
+    int favorite_index = goblin_argv_find_index(argc, argv, "--favorite");
+    int unfavorite_index = goblin_argv_find_index(argc, argv, "--unfavorite");
+    int vote_index = goblin_argv_find_index(argc, argv, "--vote");
+    bool wants_sync = goblin_argv_has_flag(argc, argv, "--sync");
+    int blacklist_list_index = goblin_argv_find_index(argc, argv, "--blacklist-list");
+    int blacklist_add_index = goblin_argv_find_index(argc, argv, "--blacklist-add");
+    int blacklist_remove_index = goblin_argv_find_index(argc, argv, "--blacklist-remove");
+    bool wants_queue_list = goblin_argv_has_flag(argc, argv, "--queue-list");
+    int download_index = goblin_argv_find_index(argc, argv, "--download");
     bool wants_download = download_index >= 0;
-    bool wants_stats = has_flag(argc, argv, "--stats");
+    bool wants_stats = goblin_argv_has_flag(argc, argv, "--stats");
 
     bool has_command = search_index >= 0 || pool_index >= 0 || favorite_index >= 0 || unfavorite_index >= 0 || vote_index >= 0 || wants_sync || blacklist_list_index >= 0 || blacklist_add_index >= 0 || blacklist_remove_index >= 0 || wants_queue_list || wants_download || wants_stats;
     if (!has_command) {
@@ -298,7 +266,7 @@ int main(int argc, char **argv)
             if (!parse_site(argv[search_index + 1], &site)) {
                 bunny_cli_log(BUNNY_CLI_LOG_ERROR, "unknown site \"%s\", expected e621 or inkbunny", argv[search_index + 1]);
             } else {
-                const char *page_str = find_flag_value(argc, argv, "--page");
+                const char *page_str = goblin_argv_find_value(argc, argv, "--page");
                 int page = page_str ? (int)strtol(page_str, NULL, 10) : 1;
                 exit_code = bunny_cli_cmd_search(&ctx, site, argv[search_index + 2], page);
             }
@@ -311,10 +279,10 @@ int main(int argc, char **argv)
             exit_code = bunny_cli_cmd_pool(&ctx, pool_id);
         }
     } else if (wants_download) {
-        const char *jobs_str = find_flag_value(argc, argv, "--jobs");
+        const char *jobs_str = goblin_argv_find_value(argc, argv, "--jobs");
         int jobs = jobs_str ? (int)strtol(jobs_str, NULL, 10) : 3;
 
-        const char *site_str = find_flag_value(argc, argv, "--site");
+        const char *site_str = goblin_argv_find_value(argc, argv, "--site");
         bunny_db_site_t spec_site = BUNNY_DB_SITE_E621;
         if (site_str && !parse_site(site_str, &spec_site)) {
             bunny_cli_log(BUNNY_CLI_LOG_ERROR, "unknown site \"%s\", expected e621 or inkbunny", site_str);
@@ -329,7 +297,7 @@ int main(int argc, char **argv)
             bunny_cli_log(BUNNY_CLI_LOG_ERROR, "--favorite needs <post_id>");
         } else {
             int64_t post_id = strtoll(argv[favorite_index + 1], NULL, 10);
-            const char *stars_str = find_flag_value(argc, argv, "--stars");
+            const char *stars_str = goblin_argv_find_value(argc, argv, "--stars");
             int stars = stars_str ? (int)strtol(stars_str, NULL, 10) : -1;
             exit_code = bunny_cli_cmd_favorite_add(&ctx, post_id, stars);
         }
@@ -349,7 +317,7 @@ int main(int argc, char **argv)
             exit_code = bunny_cli_cmd_vote(&ctx, post_id, score);
         }
     } else if (wants_sync) {
-        const char *search_id_str = find_flag_value(argc, argv, "--sync");
+        const char *search_id_str = goblin_argv_find_value(argc, argv, "--sync");
         int64_t search_id = search_id_str ? strtoll(search_id_str, NULL, 10) : 0;
         exit_code = bunny_cli_cmd_sync(&ctx, search_id);
     } else if (blacklist_list_index >= 0) {
