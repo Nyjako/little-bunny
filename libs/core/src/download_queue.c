@@ -35,6 +35,28 @@ bunny_core_result_t bunny_core_download_queue_list(bunny_core_t *core, bunny_db_
     return bunny_core_map_db_result(result);
 }
 
+bunny_core_result_t bunny_core_download_queue_claim_next(bunny_core_t *core, bunny_db_download_queue_item_t *out_item, bool *out_found)
+{
+    if (!core) {
+        return BUNNY_CORE_ERR_INVALID_ARG;
+    }
+    bunny_core_db_lock(core);
+    bunny_db_result_t result = bunny_db_download_queue_claim_next(core->db, out_item, out_found);
+    bunny_core_db_unlock(core);
+    return bunny_core_map_db_result(result);
+}
+
+bunny_core_result_t bunny_core_download_queue_count_queued(bunny_core_t *core, int *out_count)
+{
+    if (!core) {
+        return BUNNY_CORE_ERR_INVALID_ARG;
+    }
+    bunny_core_db_lock(core);
+    bunny_db_result_t result = bunny_db_download_queue_count_queued(core->db, out_count);
+    bunny_core_db_unlock(core);
+    return bunny_core_map_db_result(result);
+}
+
 bunny_core_result_t bunny_core_download_queue_clear_finished(bunny_core_t *core)
 {
     if (!core) {
