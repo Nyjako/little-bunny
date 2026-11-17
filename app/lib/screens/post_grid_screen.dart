@@ -530,12 +530,25 @@ class _PostGridScreenState extends State<PostGridScreen> {
 
     try {
       var page = 1;
+      final seenIds = <int>{};
       while (!cancelled) {
         final pageItems = await _fetchPage(page);
         if (pageItems.isEmpty) {
           break;
         }
-        all.addAll(pageItems);
+        // Guards against a page provider that doesn't reliably signal "end
+        // of results" with an empty page (e.g. a live site search that
+        // re-runs with current data on every call and can keep re-returning
+        // the same last page instead of an empty one once `page` goes past
+        // the real end -- see TagBrowseScreen._selectEntireSearch's own
+        // copy of this same loop, which is where this was actually
+        // observed against Inkbunny's favorites search). Once a "page"
+        // contributes nothing new, there's nothing left to find.
+        final newItems = pageItems.where((post) => seenIds.add(post.id)).toList();
+        if (newItems.isEmpty) {
+          break;
+        }
+        all.addAll(newItems);
         fetchedCount.value = all.length;
         page++;
       }

@@ -280,12 +280,26 @@ class _TagBrowseScreenState extends State<TagBrowseScreen> {
 
     try {
       var page = 1;
+      final seenIds = <int>{};
       while (!cancelled) {
         final pageItems = await _fetchPage(page);
         if (pageItems.isEmpty) {
           break;
         }
-        all.addAll(pageItems);
+        // Inkbunny's favorites listing (via customFetch -> myInkbunnyFavorites)
+        // is a live "Mode 1" search with no "rid" (Inkbunny's own API docs:
+        // https://wiki.inkbunny.net/wiki/API) -- it re-runs against current
+        // data on every call and its behavior once `page` goes past the
+        // real last page is undocumented. Observed in practice: it can keep
+        // re-returning the same last page's content forever instead of an
+        // empty one, which made this loop never terminate for an account
+        // with as few as ~40 real favorites. Once a "page" contributes
+        // nothing new, treat that as the real end instead.
+        final newItems = pageItems.where((post) => seenIds.add(post.id)).toList();
+        if (newItems.isEmpty) {
+          break;
+        }
+        all.addAll(newItems);
         fetchedCount.value = all.length;
         page++;
       }
