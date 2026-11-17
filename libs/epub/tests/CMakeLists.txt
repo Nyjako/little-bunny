@@ -1,0 +1,3 @@
+add_executable(bunny_epub_test_epub test_epub.c)
+target_link_libraries(bunny_epub_test_epub PRIVATE bunny_epub unity::framework)
+add_test(NAME bunny_epub_test_epub COMMAND bunny_epub_test_epub)
