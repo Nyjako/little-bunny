@@ -363,6 +363,8 @@
   "postDetailIdCopied": "Post ID copied to clipboard",
   "postDetailTagsLabel": "Tags",
   "postDetailSourcesLabel": "Sources",
+  "postDetailRefreshFailedMessage": "Couldn't load full details",
+  "postDetailRefreshFailedRetry": "Retry",
   "postDetailParentLabel": "Parent",
   "postDetailChildrenLabel": "Children",
   "postDetailPoolsLabel": "Pools",

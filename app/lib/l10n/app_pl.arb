@@ -363,6 +363,8 @@
   "postDetailIdCopied": "ID posta skopiowane do schowka",
   "postDetailTagsLabel": "Tagi",
   "postDetailSourcesLabel": "Źródła",
+  "postDetailRefreshFailedMessage": "Nie udało się wczytać pełnych szczegółów",
+  "postDetailRefreshFailedRetry": "Spróbuj ponownie",
   "postDetailParentLabel": "Rodzic",
   "postDetailChildrenLabel": "Dzieci",
   "postDetailPoolsLabel": "Zbiory",
