@@ -12,6 +12,7 @@
 #include <goblin/appdirs.h>
 #include <goblin/cstr.h>
 #include <goblin/dyn_array.h>
+#include <goblin/high_res_timer.h>
 
 #include <stdbool.h>
 #include <stdio.h>
@@ -222,13 +223,59 @@ typedef struct
 {
     bunny_core_t *core;            /* the local download-queue db, both modes -- see bunny_cli_context_t's own doc comment */
     bunny_cli_rest_client_t *rest; /* non-NULL in networked mode only, used to resolve each post's own metadata */
-    bunny_mutex_t claim_mutex;     /* guards both claiming a row and the counters below */
+    bunny_mutex_t claim_mutex;     /* guards the counters below (claiming a row is now its own atomic db call, see claim_next_item) */
     int succeeded;
     int failed;
     bool auto_favorite;      /* ctx->auto_favorite_on_download, read once up front */
     bool auto_upvote;        /* ctx->auto_upvote_on_download, read once up front */
     int auto_actions_queued; /* guarded by claim_mutex too -- drained once, after every worker finishes */
+    int total;               /* items queued at drain start, for progress reporting -- <= 0 means unknown (the count query failed) */
+    goblin_timer timer;      /* started right before the worker threads, read (never written) by every worker for its ETA estimate */
 } download_shared_state_t;
+
+/* Renders `seconds` as a short human duration -- "45s", "3m12s", "1h05m" --
+ * for --download's per-item ETA and its final elapsed-time summary. */
+static void format_duration(double seconds, char *buf, size_t buf_size)
+{
+    if (seconds < 0) {
+        seconds = 0;
+    }
+    long total_seconds = (long)(seconds + 0.5);
+    long h = total_seconds / 3600;
+    long m = (total_seconds % 3600) / 60;
+    long s = total_seconds % 60;
+    if (h > 0) {
+        snprintf(buf, buf_size, "%ldh%02ldm", h, m);
+    } else if (m > 0) {
+        snprintf(buf, buf_size, "%ldm%02lds", m, s);
+    } else {
+        snprintf(buf, buf_size, "%lds", s);
+    }
+}
+
+/* "(23/1000, ETA 5m12s)" -- appended to each --download per-item log line.
+ * state->total <= 0 means the upfront count query failed, so there's
+ * nothing to show a fraction or ETA against -- just the running count. The
+ * ETA itself is a simple average-time-per-completed-item projection, which
+ * is a fine approximation given file sizes/network speed are the real
+ * variance here, not anything this estimate could model better. */
+static void format_progress(const download_shared_state_t *state, int completed, char *buf, size_t buf_size)
+{
+    if (state->total <= 0) {
+        snprintf(buf, buf_size, "(%d done)", completed);
+        return;
+    }
+    int remaining = state->total - completed;
+    if (remaining <= 0 || completed <= 0) {
+        snprintf(buf, buf_size, "(%d/%d)", completed, state->total);
+        return;
+    }
+    double elapsed = goblin_timer_elapsed_seconds(&state->timer);
+    double avg_per_item = elapsed / completed;
+    char eta[32];
+    format_duration(avg_per_item * remaining, eta, sizeof(eta));
+    snprintf(buf, buf_size, "(%d/%d, ETA %s)", completed, state->total, eta);
+}
 
 /* A post's metadata, however it was resolved (bunny_core_post_get_by_id
  * locally, or GET /posts/{id} over REST) -- just the handful of fields
@@ -320,40 +367,28 @@ static bool resolve_post_networked(bunny_cli_rest_client_t *rest, int64_t post_i
 }
 
 /* Finds the next BUNNY_DB_DOWNLOAD_QUEUE_QUEUED row, marks it DOWNLOADING,
- * and copies its data into *out -- the whole find+mark step happens under
- * one lock so two worker threads can never claim the same row. Returns
- * false once nothing is left to claim (every worker's own loop exit). */
+ * and copies its data into *out -- bunny_core_download_queue_claim_next
+ * does the find+mark atomically as a single-row query (see its own doc
+ * comment for why that matters at a large queue size), so no explicit lock
+ * is needed here. Returns false once nothing is left to claim (every
+ * worker's own loop exit). */
 static bool claim_next_item(download_shared_state_t *state, claimed_item_t *out)
 {
-    bunny_mutex_lock(&state->claim_mutex);
-
-    bunny_db_download_queue_list_t list;
-    bunny_core_result_t result = bunny_core_download_queue_list(state->core, &list);
-    if (result != BUNNY_CORE_OK) {
-        bunny_mutex_unlock(&state->claim_mutex);
+    bunny_db_download_queue_item_t item;
+    bool found = false;
+    bunny_core_result_t result = bunny_core_download_queue_claim_next(state->core, &item, &found);
+    if (result != BUNNY_CORE_OK || !found) {
         return false;
     }
 
-    bool found = false;
-    for (size_t i = 0; i < list.count; i++) {
-        if (list.items[i].status == BUNNY_DB_DOWNLOAD_QUEUE_QUEUED) {
-            out->queue_id = list.items[i].id;
-            out->post_id = list.items[i].post_id;
-            out->pool_id = list.items[i].pool_id;
-            out->pool_name = list.items[i].pool_name ? strdup(list.items[i].pool_name) : NULL;
-            out->pool_page = list.items[i].pool_page;
-            found = true;
-            break;
-        }
-    }
-    bunny_db_download_queue_list_free(&list);
+    out->queue_id = item.id;
+    out->post_id = item.post_id;
+    out->pool_id = item.pool_id;
+    out->pool_name = item.pool_name ? strdup(item.pool_name) : NULL;
+    out->pool_page = item.pool_page;
 
-    if (found) {
-        bunny_core_download_queue_set_status(state->core, out->queue_id, BUNNY_DB_DOWNLOAD_QUEUE_DOWNLOADING, NULL);
-    }
-
-    bunny_mutex_unlock(&state->claim_mutex);
-    return found;
+    bunny_db_download_queue_item_free(&item);
+    return true;
 }
 
 /* Inkbunny's CDN rejects a bare request with no User-Agent/Referer with a
@@ -530,12 +565,15 @@ static void process_claimed_item(download_shared_state_t *state, const char *dow
 
     bunny_mutex_lock(&state->claim_mutex);
     bunny_core_download_queue_set_status(state->core, item->queue_id, new_status, error_message[0] ? error_message : NULL);
+    char progress[64];
     if (new_status == BUNNY_DB_DOWNLOAD_QUEUE_SUCCEEDED) {
         state->succeeded++;
-        bunny_cli_log(BUNNY_CLI_LOG_SUCCESS, "post %lld downloaded", (long long)item->post_id);
+        format_progress(state, state->succeeded + state->failed, progress, sizeof(progress));
+        bunny_cli_log(BUNNY_CLI_LOG_SUCCESS, "post %lld downloaded %s", (long long)item->post_id, progress);
     } else {
         state->failed++;
-        bunny_cli_log(BUNNY_CLI_LOG_ERROR, "post %lld: %s", (long long)item->post_id, error_message[0] ? error_message : bunny_db_download_queue_status_to_string(new_status));
+        format_progress(state, state->succeeded + state->failed, progress, sizeof(progress));
+        bunny_cli_log(BUNNY_CLI_LOG_ERROR, "post %lld: %s %s", (long long)item->post_id, error_message[0] ? error_message : bunny_db_download_queue_status_to_string(new_status), progress);
     }
     state->auto_actions_queued += queued_auto_actions;
     bunny_mutex_unlock(&state->claim_mutex);
@@ -987,11 +1025,19 @@ int bunny_cli_cmd_download(bunny_cli_context_t *ctx, const char *download_folder
     state.auto_actions_queued = 0;
     bunny_mutex_init(&state.claim_mutex);
 
+    int total_queued = 0;
+    state.total = bunny_core_download_queue_count_queued(ctx->core, &total_queued) == BUNNY_CORE_OK ? total_queued : 0;
+
     worker_arg_t arg;
     arg.state = &state;
     arg.download_folder = download_folder;
 
-    bunny_cli_log(BUNNY_CLI_LOG_INFO, "draining the download queue with %d worker(s)...", jobs);
+    if (state.total > 0) {
+        bunny_cli_log(BUNNY_CLI_LOG_INFO, "draining %d queued item(s) with %d worker(s)...", state.total, jobs);
+    } else {
+        bunny_cli_log(BUNNY_CLI_LOG_INFO, "draining the download queue with %d worker(s)...", jobs);
+    }
+    goblin_timer_start(&state.timer);
 
     bunny_thread_t threads[BUNNY_CLI_MAX_DOWNLOAD_JOBS];
     int thread_count = 0;
@@ -1008,7 +1054,9 @@ int bunny_cli_cmd_download(bunny_cli_context_t *ctx, const char *download_folder
 
     drain_auto_actions(ctx, state.auto_actions_queued);
 
-    bunny_cli_log(state.failed == 0 ? BUNNY_CLI_LOG_SUCCESS : BUNNY_CLI_LOG_WARN, "done: %d succeeded, %d failed", state.succeeded, state.failed);
+    char elapsed_str[32];
+    format_duration(goblin_timer_elapsed_seconds(&state.timer), elapsed_str, sizeof(elapsed_str));
+    bunny_cli_log(state.failed == 0 ? BUNNY_CLI_LOG_SUCCESS : BUNNY_CLI_LOG_WARN, "done: %d succeeded, %d failed in %s", state.succeeded, state.failed, elapsed_str);
     return state.failed == 0 ? 0 : 1;
 }
 

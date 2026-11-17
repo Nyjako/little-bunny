@@ -64,6 +64,15 @@ prompt.
   "auto favorite on download"/"auto upvote on download" turned on
   (Settings), every post this command downloads -- found via a spec or
   already queued -- gets that applied too, exactly like the app itself.
+
+  Each line logs a running `(done/total, ETA <duration>)` -- e.g. `[OK] post
+  68741 downloaded (1/1000, ETA 5m12s)` -- so a large queue (thousands of
+  posts) shows real progress instead of just a stream of "downloaded"
+  lines. The ETA is a simple average-time-per-completed-item projection,
+  recalculated after every item; it's only an estimate, not a countdown
+  timer. `total` is a one-time count taken when the command starts, so
+  anything queued by a concurrently-running `--download`/the app itself
+  isn't reflected in it.
 - `--favorite <post_id> [--stars N]` -- favorites a post and drains the
   action queue immediately (`N` is Inkbunny's 1-3 tier; ignored on e621).
 - `--unfavorite <post_id>` -- unfavorites a post, same immediate-drain
