@@ -14,7 +14,7 @@ import 'package:saf_util/saf_util_platform_interface.dart';
 import '../fakes/fake_bunny_repository.dart';
 import '../fakes/fake_saf_platform.dart';
 
-BunnyPost _post({int id = 1, int externalId = 42, BunnySite site = BunnySite.e621, String? artist, String? fileUrl = 'https://static1.e621.net/data/1.png', String? fileExt = 'png', String? fileMd5}) => BunnyPost(
+BunnyPost _post({int id = 1, int externalId = 42, BunnySite site = BunnySite.e621, String? artist, String? fileUrl = 'https://static1.e621.net/data/1.png', String? fileExt = 'png', String? fileMd5, String? writing}) => BunnyPost(
   id: id,
   site: site,
   externalId: externalId,
@@ -25,6 +25,7 @@ BunnyPost _post({int id = 1, int externalId = 42, BunnySite site = BunnySite.e62
   fileUrl: fileUrl,
   fileExt: fileExt,
   fileMd5: fileMd5,
+  writing: writing,
   width: 100,
   height: 100,
   cachedAt: '2026-01-01T00:00:00Z',
@@ -691,6 +692,95 @@ void main() {
       await manager.downloadPost(_post(), repository, tempDir.path, autoUpvote: true);
 
       expect(repository.voteCalls, isEmpty);
+    });
+  });
+
+  group('downloadWritingEpub (an Inkbunny Writing-Document post\'s .epub instead of its cover image)', () {
+    test('builds via the repository at the deterministic artist-folder path, sanitizing the artist same as downloadPost', () async {
+      const manager = DownloadManager();
+      final repository = FakeBunnyRepository();
+      repository.buildWritingEpubBytes = [1, 2, 3, 4];
+
+      final result = await manager.downloadWritingEpub(_post(artist: 'some/bad:artist', writing: 'a story'), repository, tempDir.path);
+
+      expect(result.outcome, DownloadOutcome.verified);
+      expect(result.filePath, '${tempDir.path}/some_bad_artist/42.epub');
+      expect(await File(result.filePath!).readAsBytes(), [1, 2, 3, 4]);
+      expect(repository.buildWritingEpubCalls, hasLength(1));
+      expect(repository.buildWritingEpubCalls.single.postId, 1);
+    });
+
+    test('creates the destination directory recursively when it does not already exist', () async {
+      const manager = DownloadManager();
+      final repository = FakeBunnyRepository();
+      final destinationFolder = '${tempDir.path}/does/not/exist/yet';
+
+      final result = await manager.downloadWritingEpub(_post(), repository, destinationFolder);
+
+      expect(result.outcome, DownloadOutcome.verified);
+      expect(await File(result.filePath!).exists(), isTrue);
+    });
+
+    test('reports failed with the thrown error\'s message when the repository build call throws', () async {
+      const manager = DownloadManager();
+      final repository = FakeBunnyRepository();
+      repository.buildWritingEpubImpl = (postId, destPath) async => throw Exception('no writing');
+
+      final result = await manager.downloadWritingEpub(_post(), repository, tempDir.path);
+
+      expect(result.outcome, DownloadOutcome.failed);
+      expect(result.errorMessage, contains('no writing'));
+    });
+
+    test('queues autoFavorite/autoUpvote on success, same as downloadPost', () async {
+      const manager = DownloadManager();
+      final repository = FakeBunnyRepository();
+
+      await manager.downloadWritingEpub(_post(site: BunnySite.inkbunny), repository, tempDir.path, autoFavorite: true, autoUpvote: true);
+
+      expect(repository.favoriteAddCalls, [1]);
+      // Inkbunny has no vote API -- autoUpvote only ever applies to e621,
+      // same guard downloadPost itself already has.
+      expect(repository.voteCalls, isEmpty);
+    });
+
+    test('a pool download uses the same pool-named folder/page-numbered filename scheme as downloadPost', () async {
+      const manager = DownloadManager();
+      final repository = FakeBunnyRepository();
+
+      final result = await manager.downloadWritingEpub(_post(), repository, tempDir.path, poolId: 7, poolName: 'My Pool', poolPage: 3);
+
+      expect(result.filePath, '${tempDir.path}/pool_7 - My Pool/7 - p0003 [42].epub');
+    });
+  });
+
+  group('isWritingDownloaded / writingLocalFilePathFor (same local-existence check as isDownloaded, for the .epub path)', () {
+    test('isWritingDownloaded is false and writingLocalFilePathFor is null when nothing has been downloaded yet', () async {
+      const manager = DownloadManager();
+
+      expect(await manager.isWritingDownloaded(_post(), tempDir.path), isFalse);
+      expect(await manager.writingLocalFilePathFor(_post(), tempDir.path), isNull);
+    });
+
+    test('both reflect the deterministic path once downloadWritingEpub has written the file', () async {
+      const manager = DownloadManager();
+      final repository = FakeBunnyRepository();
+
+      final result = await manager.downloadWritingEpub(_post(), repository, tempDir.path);
+
+      expect(await manager.isWritingDownloaded(_post(), tempDir.path), isTrue);
+      expect(await manager.writingLocalFilePathFor(_post(), tempDir.path), result.filePath);
+    });
+
+    test('is independent of isDownloaded -- a downloaded cover image does not count as a downloaded writing epub', () async {
+      const manager = DownloadManager();
+      final repository = FakeBunnyRepository();
+      repository.downloadFileFetchImpl = (_) async => http.Response.bytes([1, 2, 3], 200);
+
+      await manager.downloadPost(_post(), repository, tempDir.path);
+
+      expect(await manager.isDownloaded(_post(), tempDir.path), isTrue);
+      expect(await manager.isWritingDownloaded(_post(), tempDir.path), isFalse);
     });
   });
 }

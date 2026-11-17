@@ -549,9 +549,20 @@ class FakeBunnyRepository implements BunnyRepository {
     return doc;
   }
 
+  /// Bytes [buildWritingEpub] writes to `destPath` by default (a real file
+  /// write, same realism `downloadFileFetchImpl` gives the plain-image
+  /// download path) -- override per-test via [buildWritingEpubBytes], or
+  /// throw from [buildWritingEpubImpl] to simulate a failed build.
+  List<int> buildWritingEpubBytes = const [1, 2, 3];
+  Future<void> Function(int postId, String destPath)? buildWritingEpubImpl;
+
   @override
   Future<void> buildWritingEpub(int postId, String destPath) async {
     buildWritingEpubCalls.add((postId: postId, destPath: destPath));
+    if (buildWritingEpubImpl != null) {
+      return buildWritingEpubImpl!(postId, destPath);
+    }
+    await File(destPath).writeAsBytes(buildWritingEpubBytes);
   }
 
   @override

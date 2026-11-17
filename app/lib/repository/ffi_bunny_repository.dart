@@ -127,13 +127,6 @@ BunnyPoolInfo _poolInfoFromMap(Map<String, Object?> m) => BunnyPoolInfo(
 
 BunnyComment _commentFromMap(Map<String, Object?> m) => BunnyComment(id: m['id'] as int, creatorName: m['creatorName'] as String?, body: m['body'] as String?, createdAt: m['createdAt'] as String?);
 
-BunnyDocRun _docRunFromMap(Map<String, Object?> m) => BunnyDocRun(kind: BunnyDocRunKind.values[m['kind'] as int], text: m['text'] as String? ?? '', url: m['url'] as String?);
-
-BunnyDocBlock _docBlockFromMap(Map<String, Object?> m) =>
-    BunnyDocBlock(kind: BunnyDocBlockKind.values[m['kind'] as int], headingLevel: m['headingLevel'] as int, runs: (m['runs'] as List).cast<Map<String, Object?>>().map(_docRunFromMap).toList());
-
-List<BunnyDocBlock> _docBlockListFromMaps(Object? list) => (list as List).cast<Map<String, Object?>>().map(_docBlockFromMap).toList();
-
 BunnyTag _tagFromMap(Map<String, Object?> m) => BunnyTag(
   id: m['id'] as int,
   name: m['name'] as String?,
@@ -451,7 +444,7 @@ class FfiBunnyRepository implements BunnyRepository {
   @override
   Future<List<BunnyDocBlock>> getWritingDoc(int postId) async {
     final list = await _wrapped(() => _native.getWritingDoc(postId));
-    return _docBlockListFromMaps(list);
+    return bunnyDocBlocksFromMaps(list);
   }
 
   @override
