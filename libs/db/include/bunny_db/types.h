@@ -147,6 +147,8 @@ typedef struct
     char *artist;
     char *title;
     char *description;
+    char *writing; /* Inkbunny "Writing - Document" story text; NULL for every e621 post
+                    * and for an Inkbunny post never fetched via a single-submission call */
     char *rating;
     int score;
     int score_up;   /* 0 for Inkbunny -- no vote concept there */

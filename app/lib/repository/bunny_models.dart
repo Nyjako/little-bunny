@@ -281,6 +281,10 @@ class BunnyPost {
   final String? artist;
   final String? title;
   final String? description;
+  /// The full story text for an Inkbunny "Writing - Document" submission,
+  /// raw BBCode -- null for every e621 post and for an Inkbunny post never
+  /// fetched via a single-submission call (a thin search-synced row).
+  final String? writing;
   final String? rating;
   final int score;
   final int scoreUp;
@@ -314,6 +318,7 @@ class BunnyPost {
     this.artist,
     this.title,
     this.description,
+    this.writing,
     this.rating,
     required this.score,
     this.scoreUp = 0,

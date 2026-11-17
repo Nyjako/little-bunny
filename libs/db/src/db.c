@@ -142,6 +142,14 @@ static const bunny_db_migration_t BUNNY_DB_MIGRATIONS[] = {
          "ALTER TABLE searches ADD COLUMN inkbunny_order_by TEXT;"
          "ALTER TABLE searches ADD COLUMN inkbunny_random INTEGER NOT NULL DEFAULT 0;"
          "ALTER TABLE searches ADD COLUMN inkbunny_scraps INTEGER NOT NULL DEFAULT 0;"},
+    /* The full story text for an Inkbunny "Writing - Document" submission
+     * (api_submissions.php's own show_writing param, under "Submission
+     * Details") -- mirrors `description`'s own column exactly. Only ever
+     * populated via a single-submission fetch (see show_writing's own doc
+     * comment in inkbunny/src/client.c for why), so this stays NULL for
+     * every e621 post and for an Inkbunny post that's only ever been seen
+     * through a search/listing sync. */
+    {21, "ALTER TABLE posts ADD COLUMN writing TEXT;"},
 };
 // clang-format on
 

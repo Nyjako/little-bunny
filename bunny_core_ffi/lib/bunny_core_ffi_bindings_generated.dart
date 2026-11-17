@@ -2446,7 +2446,8 @@ class BunnyCoreFfiBindings {
       .asFunction<void Function(ffi.Pointer<bunny_core_pool_info_t>)>();
 
   /// referenced_pool_ids (above) is populated by scanning the fetched
-  /// description for e621's own "pool #<N>" dtext convention -- callers don't
+  /// description for both of e621's own cross-reference conventions -- the
+  /// "pool #<N>" marker and a dtext link's "/pools/<N>" path -- callers don't
   /// need to parse it themselves.
   bunny_core_result_t bunny_core_fetch_pool(
     ffi.Pointer<bunny_core_t> core,
@@ -3245,6 +3246,14 @@ class BunnyCoreFfiBindings {
   late final _bunny_filename_max_len = _bunny_filename_max_lenPtr
       .asFunction<int Function()>();
 
+  /// A thin wrapper over GOBLIN's goblin_sanitize_filename_segment
+  /// (goblin/sanitize_filename.h) -- this used to be hand-rolled here (naive
+  /// UTF-8 continuation-byte counting, no Windows reserved-device-name check),
+  /// now upstreamed into GOBLIN with proper UTF-8 validation (rejects overlong
+  /// encodings/encoded surrogates/out-of-range codepoints as a single bad
+  /// byte, never swallows an unbounded malformed run) and a check against
+  /// Windows' reserved device names (CON, PRN, NUL, COM1-9, LPT1-9).
+  ///
   /// Allowed bytes: every printable ASCII byte (0x20-0x7E) except the nine
   /// Windows reserves for path syntax (< > : " / \ | ? *) -- Linux/macOS only
   /// additionally forbid '/' (macOS also ':'), already covered by that same
@@ -3254,15 +3263,21 @@ class BunnyCoreFfiBindings {
   /// built from free-text site data (pool/post titles); artist/author names
   /// are deliberately not routed through this at all (kept verbatim, non-ASCII
   /// included, by the Dart side) since they're expected to carry non-ASCII
-  /// text as-is.
+  /// text as-is. When ascii_only is true, this ALSO runs the input through
+  /// GOBLIN's goblin_transliterate_to_ascii (goblin/ascii_transliterate.h)
+  /// first, so a known Latin diacritic folds to its plain-ASCII base letter
+  /// (e.g. "e" for a pool title) instead of collapsing straight to '_' --
+  /// composing GOBLIN's two headers exactly as their own doc comments
+  /// recommend. Not done when ascii_only is false, since transliteration
+  /// would replace every non-Latin codepoint too, defeating the point of
+  /// keeping non-ASCII text verbatim.
   ///
-  /// Every disallowed byte is replaced with '_' -- a run of disallowed
-  /// continuation bytes belonging to the same non-ASCII codepoint (ascii_only
-  /// case) collapses to exactly one '_', not one per byte. A trailing run of
-  /// '.'/' ' is trimmed afterward (Windows can't create a name ending in
-  /// either); an empty result (nothing left after trimming, or empty/NULL
-  /// input) falls back to "_" rather than ever producing an unusable empty
-  /// name.
+  /// Every byte this still can't make sense of is replaced with '_' -- a run
+  /// of bytes belonging to the same disallowed codepoint collapses to exactly
+  /// one '_', not one per byte. A trailing run of '.'/' ' is trimmed
+  /// afterward (Windows can't create a name ending in either); an empty
+  /// result (nothing left after trimming, or empty/NULL input) falls back to
+  /// "_" rather than ever producing an unusable empty name.
   ///
   /// Writes at most out_buf_size - 1 bytes plus a NUL terminator into out_buf,
   /// truncating the input if it doesn't fit -- safe at any byte boundary when
@@ -3821,6 +3836,10 @@ final class bunny_db_post_t extends ffi.Struct {
   external ffi.Pointer<ffi.Char> title;
 
   external ffi.Pointer<ffi.Char> description;
+
+  /// Inkbunny "Writing - Document" story text; NULL for every e621 post
+  /// and for an Inkbunny post never fetched via a single-submission call
+  external ffi.Pointer<ffi.Char> writing;
 
   external ffi.Pointer<ffi.Char> rating;
 
@@ -4464,11 +4483,12 @@ final class bunny_core_pool_info_t extends ffi.Struct {
   @ffi.Int64()
   external int post_count;
 
-  /// Every "pool #<N>" mention found in `description` (M26) -- e621 pool
-  /// descriptions routinely cross-reference related/continuation pools
-  /// this way (see bunny_core_fetch_pool's doc comment). In first-seen
-  /// order, duplicates included. Empty when description has none or is
-  /// NULL.
+  /// Every "pool #<N>" mention, or dtext link ("/pools/<N>", however it's
+  /// wrapped -- a bare dtext link, a full https://e621.net/pools/<N> URL,
+  /// ...), found in `description` (M26/M81) -- e621 pool descriptions
+  /// routinely cross-reference related/continuation pools either way (see
+  /// bunny_core_fetch_pool's doc comment). In first-seen order, duplicates
+  /// included. Empty when description has none or is NULL.
   external ffi.Pointer<ffi.Int64> referenced_pool_ids;
 
   @ffi.Size()

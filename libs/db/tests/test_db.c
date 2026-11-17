@@ -691,6 +691,7 @@ void test_post_upsert_and_get(void)
     make_test_post(&post, 111, 10);
     post.tags = tags;
     post.tag_count = 2;
+    post.writing = "Once upon a time.";
 
     int64_t id = 0;
     bunny_db_result_t result = bunny_db_post_upsert(g_db, &post, &id);
@@ -703,6 +704,8 @@ void test_post_upsert_and_get(void)
     TEST_ASSERT_EQUAL(id, fetched.id);
     TEST_ASSERT_EQUAL_STRING("someartist", fetched.artist);
     TEST_ASSERT_NULL(fetched.title);
+    TEST_ASSERT_EQUAL_STRING("a test post", fetched.description);
+    TEST_ASSERT_EQUAL_STRING("Once upon a time.", fetched.writing);
     TEST_ASSERT_EQUAL_STRING("abc123", fetched.file_md5);
     TEST_ASSERT_EQUAL(10, fetched.score);
     TEST_ASSERT_EQUAL(12, fetched.score_up);

@@ -86,6 +86,7 @@ void bunny_db_post_free(bunny_db_post_t *post)
     free(post->artist);
     free(post->title);
     free(post->description);
+    free(post->writing);
     free(post->rating);
     free(post->file_url);
     free(post->file_ext);

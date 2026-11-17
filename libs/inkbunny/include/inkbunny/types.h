@@ -87,6 +87,10 @@ typedef struct
     int64_t user_id;
     char *title;
     char *description; /* only populated when fetched via inkbunny_get_submission(s) */
+    char *writing;     /* raw BBCode story text for "Writing - Document" submissions; only
+                        * populated when fetched via inkbunny_get_submission(s) AND that call
+                        * was for exactly one submission id (see show_writing's own doc
+                        * comment in client.c -- too long to request for a whole batch) */
     int rating_id;
     char *rating_name;
     inkbunny_content_rating_list_t content_ratings;

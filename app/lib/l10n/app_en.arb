@@ -323,6 +323,11 @@
   "@tagBrowseRelatedPoolChip": {
     "placeholders": {"poolId": {"type": "int"}}
   },
+  "tagBrowseSelectEntireSearch": "Select everything",
+  "tagBrowseSelectEntireSearchProgress": "{count} loaded",
+  "@tagBrowseSelectEntireSearchProgress": {
+    "placeholders": {"count": {"type": "int"}}
+  },
 
   "postGridPoolInfoTooltip": "Pool info",
   "postGridPoolInfoTitle": "Pool information",
@@ -358,6 +363,8 @@
   "postDetailIdCopied": "Post ID copied to clipboard",
   "postDetailTagsLabel": "Tags",
   "postDetailSourcesLabel": "Sources",
+  "postDetailRefreshFailedMessage": "Couldn't load full details",
+  "postDetailRefreshFailedRetry": "Retry",
   "postDetailParentLabel": "Parent",
   "postDetailChildrenLabel": "Children",
   "postDetailPoolsLabel": "Pools",

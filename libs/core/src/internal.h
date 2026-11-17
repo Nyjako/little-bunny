@@ -78,6 +78,26 @@ struct bunny_core
     double min_request_interval_sec;
     bunny_core_log_fn log_callback;
     void *log_user_data;
+
+    /* M88: bunny_core_build_inkbunny_client's own session cache -- lets it
+     * skip inkbunny_login's network round trip on a cache hit instead of
+     * logging in fresh on every single call (10+ call sites across
+     * sync.c/queue.c/verify.c, each building/using/destroying its own
+     * client for one logical operation -- a post-detail fetch, a sync
+     * pass, a vote, ...). A dedicated mutex rather than reusing db_mutex/
+     * sync_mutex: this is unrelated state, and (per sync_mutex's own doc
+     * comment above) interactive one-off calls deliberately do NOT
+     * serialize against a sync in progress, so two threads can genuinely
+     * race to read/update this cache. cached_inkbunny_username is compared
+     * against the *current* account lookup inside
+     * bunny_core_build_inkbunny_client itself on every call (NULL means
+     * "cached for a guest session") -- a changed Inkbunny account is
+     * detected and treated as a cache miss that way, with no separate
+     * invalidation hook needed in accounts.c. */
+    bunny_mutex_t inkbunny_session_mutex;
+    char *cached_inkbunny_sid;
+    int64_t cached_inkbunny_user_id;
+    char *cached_inkbunny_username;
 };
 
 /* Every bunny_core_* function that touches core->db locks/unlocks through

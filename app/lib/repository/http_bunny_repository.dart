@@ -72,6 +72,7 @@ BunnyPost _postFromJson(Map<String, Object?> j) => BunnyPost(
   artist: j['artist'] as String?,
   title: j['title'] as String?,
   description: j['description'] as String?,
+  writing: j['writing'] as String?,
   rating: j['rating'] as String?,
   score: (j['score'] as num).toInt(),
   scoreUp: (j['score_up'] as num?)?.toInt() ?? 0,
