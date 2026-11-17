@@ -1,5 +1,4 @@
 add_library(bunny_epub STATIC
-    src/zip.c
     src/epub.c
 )
 

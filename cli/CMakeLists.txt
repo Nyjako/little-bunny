@@ -2,9 +2,7 @@
 # code directly instead of spawning the built bunny_cli executable -- same
 # split server/CMakeLists.txt already uses for bunny_server_lib.
 add_library(bunny_cli_lib STATIC
-    src/log.c
     src/handshake.c
-    src/secret_prompt.c
     src/destination.c
     src/json_helpers.c
     src/rest_client.c
