@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:bunny_core_ffi/bunny_core_ffi.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:little_bunny/repository/bunny_models.dart';
 import 'package:little_bunny/repository/bunny_repository.dart';
@@ -45,6 +46,18 @@ void main() {
 
   test('markPostSeen rejects a post id with no cached post', () async {
     await expectLater(repository.markPostSeen(1), throwsA(isA<BunnyRepositoryException>()));
+  });
+
+  test('getWritingDoc rejects a post id with no cached post', () async {
+    await expectLater(repository.getWritingDoc(1), throwsA(isA<BunnyRepositoryException>()));
+  });
+
+  test('buildWritingEpub rejects a post id with no cached post', () async {
+    await expectLater(repository.buildWritingEpub(1, '${Directory.systemTemp.path}/does_not_matter.epub'), throwsA(isA<BunnyRepositoryException>()));
+  });
+
+  test('readWritingEpub (top-level, mode-independent) rejects a nonexistent file', () {
+    expect(() => readWritingEpub('${Directory.systemTemp.path}/bunny_test_nonexistent.epub'), throwsA(isA<BunnyCoreNativeException>()));
   });
 
   test('markAllSeen is a no-op for a nonexistent search', () async {

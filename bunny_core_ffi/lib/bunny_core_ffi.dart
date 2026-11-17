@@ -5,4 +5,4 @@
 /// never block the UI thread.
 library;
 
-export 'src/bunny_core_isolate.dart' show BunnyCoreNative, BunnyCoreNativeException, bunnySanitizeFilenameSegment, bunnyFilenameMaxLen;
+export 'src/bunny_core_isolate.dart' show BunnyCoreNative, BunnyCoreNativeException, bunnySanitizeFilenameSegment, bunnyFilenameMaxLen, readWritingEpub;

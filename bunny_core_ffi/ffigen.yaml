@@ -1,9 +1,11 @@
 # Run with `dart run ffigen --config ffigen.yaml`.
 name: BunnyCoreFfiBindings
 description: |
-  Bindings for bunny_core's public API (libs/core/include/bunny_core/*.h)
-  and the bunny_db types it exposes (libs/db/include/bunny_db/types.h).
-  These headers are already plain, simple C -- no hand-written glue needed.
+  Bindings for bunny_core's public API (libs/core/include/bunny_core/*.h),
+  the bunny_db types it exposes (libs/db/include/bunny_db/types.h), and the
+  shared bunny_doc_t document model (libs/common/include/bunny_common/doc.h)
+  a few bunny_core calls return/consume. These headers are already plain,
+  simple C -- no hand-written glue needed.
 
   Regenerate bindings with `dart run ffigen --config ffigen.yaml`.
 output: 'lib/bunny_core_ffi_bindings_generated.dart'
@@ -12,9 +14,11 @@ headers:
     - '../libs/core/include/bunny_core/core.h'
     - '../libs/core/include/bunny_core/error.h'
     - '../libs/db/include/bunny_db/types.h'
+    - '../libs/common/include/bunny_common/doc.h'
   include-directives:
     - '**/bunny_core/**'
     - '**/bunny_db/**'
+    - '**/bunny_common/doc.h'
 compiler-opts:
   - '-I../libs/core/include'
   - '-I../libs/db/include'

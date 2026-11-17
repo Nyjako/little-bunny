@@ -1,6 +1,7 @@
 #ifndef BUNNY_CORE_CORE_H
 #define BUNNY_CORE_CORE_H
 
+#include <bunny_common/doc.h>
 #include <bunny_common/http.h>
 
 #include "bunny_core/error.h"
@@ -384,6 +385,30 @@ bunny_core_result_t bunny_core_tag_query_validate(bunny_core_t *core, bunny_db_s
  * parent/child/pool chip on the detail page points at a post that was never
  * independently synced. Returns the (possibly pre-existing) local post id. */
 bunny_core_result_t bunny_core_fetch_and_cache_post(bunny_core_t *core, bunny_db_site_t site, int64_t external_id, int64_t *out_post_id);
+
+/* Parses the post's already-cached `writing` field (bunny_db_post_t.writing,
+ * the Inkbunny "Writing - Document" story text fetched via api_submissions.php's
+ * show_writing param) into the shared bunny_doc_t model (libs/bbcode parses
+ * the raw BBCode) -- no network call. BUNNY_CORE_ERR_NOT_FOUND if the post
+ * has no writing at all (every e621 post, or an Inkbunny post never fetched
+ * via a single-submission call). Caller frees *out_doc with bunny_doc_free. */
+bunny_core_result_t bunny_core_get_writing_doc(bunny_core_t *core, int64_t post_id, bunny_doc_t *out_doc);
+
+/* Builds a complete .epub at dest_path for an Inkbunny Writing-Document
+ * post: its own primary file as the book's cover (fetched fresh over HTTP
+ * -- this function doesn't know about any app-side download-folder
+ * convention, so it never assumes a local copy already exists), and its
+ * parsed `writing` BBCode as the body, via libs/epub. BUNNY_CORE_ERR_NOT_FOUND
+ * if the post has no writing; BUNNY_CORE_ERR_SITE if fetching the cover
+ * fails; BUNNY_CORE_ERR_UNKNOWN on a local I/O failure writing dest_path. */
+bunny_core_result_t bunny_core_build_writing_epub(bunny_core_t *core, int64_t post_id, const char *dest_path);
+
+/* Reads back a .epub bunny_core_build_writing_epub produced -- pure local
+ * file I/O via libs/epub, no bunny_core_t needed (mirrors
+ * bunny_core_read_writing_epub's own doc comment in libs/epub/include/
+ * bunny_epub/epub.h: deliberately not a general-purpose EPUB reader).
+ * Caller frees *out_doc with bunny_doc_free. */
+bunny_core_result_t bunny_core_read_writing_epub(const char *path, bunny_doc_t *out_doc);
 
 /* M28: a search-synced Inkbunny post only ever gets the partial field
  * subset search results return (upsert_inkbunny_submission, sync.c) -- no

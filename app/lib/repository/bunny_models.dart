@@ -515,6 +515,37 @@ class BunnyPoolInfo {
   const BunnyPoolInfo({required this.id, this.name, this.description, required this.postCount, this.referencedPoolIds = const []});
 }
 
+/// A rich-text run within one [BunnyDocBlock] -- mirrors `bunny_doc_run_kind_t`.
+/// [url] is only set for [BunnyDocRunKind.url].
+enum BunnyDocRunKind { plain, bold, italic, underline, url }
+
+/// Mirrors `bunny_doc_run_t` (libs/common/include/bunny_common/doc.h) --
+/// one styled span of text inside a [BunnyDocBlock].
+class BunnyDocRun {
+  final BunnyDocRunKind kind;
+  final String text;
+  final String? url;
+
+  const BunnyDocRun({required this.kind, required this.text, this.url});
+}
+
+/// A block kind within a parsed/read-back writing document -- mirrors
+/// `bunny_doc_block_kind_t`.
+enum BunnyDocBlockKind { paragraph, heading, listItem }
+
+/// One block of a Writing-Document post's story text, already parsed from
+/// its raw BBCode (`BunnyRepository.getWritingDoc`) or read back from a
+/// previously-downloaded `.epub` (`BunnyRepository.readWritingEpub`) --
+/// mirrors `bunny_doc_block_t`. [headingLevel] (1-6) is only meaningful
+/// when [kind] is [BunnyDocBlockKind.heading].
+class BunnyDocBlock {
+  final BunnyDocBlockKind kind;
+  final int headingLevel;
+  final List<BunnyDocRun> runs;
+
+  const BunnyDocBlock({required this.kind, this.headingLevel = 0, required this.runs});
+}
+
 /// One Inkbunny pool a post belongs to -- unlike [BunnyPoolInfo] (e621), the
 /// name is already known from the same full-submission fetch that surfaces
 /// the pool at all (api_submissions.php's `show_pools=yes`), so there's no

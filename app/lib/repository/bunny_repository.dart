@@ -284,6 +284,25 @@ abstract interface class BunnyRepository {
   /// auto-fill a pool search's label at creation time.
   Future<BunnyPoolInfo> fetchPool(int poolId);
 
+  /// Parses an Inkbunny Writing-Document post's already-cached `writing`
+  /// BBCode (`BunnyPost.writing`, PR #271's `show_writing` fetch) into a
+  /// list of [BunnyDocBlock] -- no network call. Throws
+  /// [BunnyRepositoryException] if the post has no writing at all (every
+  /// e621 post, or an Inkbunny post never fetched via a single-submission
+  /// call).
+  Future<List<BunnyDocBlock>> getWritingDoc(int postId);
+
+  /// Builds a complete `.epub` for an Inkbunny Writing-Document post at
+  /// [destPath] on this device's own filesystem -- its own cover image as
+  /// the book's cover, its parsed `writing` BBCode as the body. Throws
+  /// [BunnyRepositoryException] if the post has no writing.
+  ///
+  /// Reading a previously-built `.epub` back is deliberately NOT a method
+  /// here -- it's pure local file I/O needing neither a server nor
+  /// standalone-mode core, so callers use the top-level `readWritingEpub`
+  /// from `package:bunny_core_ffi` directly, identically in both modes.
+  Future<void> buildWritingEpub(int postId, String destPath);
+
   /// A single cached post by its local id -- used to open a *different*
   /// post's detail view (e.g. after [fetchPost] caches a parent/child/
   /// pool-mate post, this is how its full data gets loaded for display).
