@@ -36,6 +36,7 @@ typedef enum
     BUNNY_CLI_REST_ERR_UNSUPPORTED,  /* HTTP 415 */
     BUNNY_CLI_REST_ERR_SERVER,       /* any other non-2xx status */
     BUNNY_CLI_REST_ERR_NETWORK,      /* couldn't even reach the server, or its TLS cert didn't match */
+    BUNNY_CLI_REST_ERR_IO,           /* bunny_cli_rest_download only -- the response came back fine, but couldn't be written to dest_path */
 } bunny_cli_rest_result_t;
 
 /* Builds the real production client: a curl-backed transport that pins
@@ -76,6 +77,13 @@ bunny_cli_rest_result_t bunny_cli_rest_request(bunny_cli_rest_client_t *client, 
  * search queries can contain spaces/punctuation the server's own
  * mg_get_var parsing expects properly escaped. */
 char *bunny_cli_rest_url_encode(const char *value);
+
+/* Like bunny_cli_rest_request, but for a route that returns a raw binary
+ * body (e.g. GET /posts/{id}/writing_epub, application/epub+zip) instead
+ * of JSON -- the response is streamed straight to dest_path rather than
+ * parsed. Always a GET, no request body. Overwrites dest_path if it
+ * already exists. */
+bunny_cli_rest_result_t bunny_cli_rest_download(bunny_cli_rest_client_t *client, const char *path, const char *dest_path);
 
 const char *bunny_cli_rest_result_to_string(bunny_cli_rest_result_t result);
 

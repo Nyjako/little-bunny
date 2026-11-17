@@ -2,6 +2,7 @@
 
 #include "rest_client.h"
 
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -184,6 +185,76 @@ void test_a_transport_failure_reports_network_error(void)
     TEST_ASSERT_NULL(out);
 }
 
+static char *read_whole_file(const char *path, size_t *out_len)
+{
+    FILE *f = fopen(path, "rb");
+    if (!f) {
+        return NULL;
+    }
+    fseek(f, 0, SEEK_END);
+    long size = ftell(f);
+    fseek(f, 0, SEEK_SET);
+    char *buf = malloc((size_t)size + 1);
+    size_t read = fread(buf, 1, (size_t)size, f);
+    fclose(f);
+    buf[read] = '\0';
+    if (out_len) {
+        *out_len = read;
+    }
+    return buf;
+}
+
+void test_rest_download_writes_a_2xx_binary_body_to_dest_path(void)
+{
+    g_state.canned_status = 200;
+    g_state.canned_body = "not-actually-json-raw-epub-bytes";
+
+    char dest_path[256];
+    snprintf(dest_path, sizeof(dest_path), "/tmp/bunny_cli_test_rest_download_%d.bin", rand());
+
+    bunny_cli_rest_result_t result = bunny_cli_rest_download(&g_client, "/posts/1/writing_epub", dest_path);
+
+    TEST_ASSERT_EQUAL(BUNNY_CLI_REST_OK, result);
+    TEST_ASSERT_EQUAL(BUNNY_HTTP_GET, g_state.last_method);
+    TEST_ASSERT_EQUAL_STRING("https://example.test:8443/posts/1/writing_epub", g_state.last_url);
+    TEST_ASSERT_EQUAL_STRING("Bearer the-token", header_value("Authorization"));
+
+    size_t len = 0;
+    char *contents = read_whole_file(dest_path, &len);
+    TEST_ASSERT_NOT_NULL(contents);
+    TEST_ASSERT_EQUAL_STRING(g_state.canned_body, contents);
+    free(contents);
+    remove(dest_path);
+}
+
+void test_rest_download_reports_the_real_status_and_writes_nothing_on_a_non_2xx_response(void)
+{
+    g_state.canned_status = 404;
+    g_state.canned_body = "{\"error\":\"not found\"}";
+
+    char dest_path[256];
+    snprintf(dest_path, sizeof(dest_path), "/tmp/bunny_cli_test_rest_download_%d.bin", rand());
+    remove(dest_path); /* make sure a stale file from a previous run can't false-pass the exists() check below */
+
+    bunny_cli_rest_result_t result = bunny_cli_rest_download(&g_client, "/posts/1/writing_epub", dest_path);
+
+    TEST_ASSERT_EQUAL(BUNNY_CLI_REST_ERR_NOT_FOUND, result);
+    FILE *f = fopen(dest_path, "rb");
+    TEST_ASSERT_NULL(f);
+}
+
+void test_rest_download_reports_network_error_when_the_transport_fails(void)
+{
+    g_state.canned_status = 0; /* fake_send's own sentinel for BUNNY_HTTP_ERR_NETWORK */
+
+    char dest_path[256];
+    snprintf(dest_path, sizeof(dest_path), "/tmp/bunny_cli_test_rest_download_%d.bin", rand());
+
+    bunny_cli_rest_result_t result = bunny_cli_rest_download(&g_client, "/posts/1/writing_epub", dest_path);
+
+    TEST_ASSERT_EQUAL(BUNNY_CLI_REST_ERR_NETWORK, result);
+}
+
 void test_url_encode_passes_unreserved_characters_through_unchanged(void)
 {
     char *encoded = bunny_cli_rest_url_encode("abcXYZ019-._~");
@@ -236,6 +307,9 @@ int main(void)
     RUN_TEST(test_status_codes_map_to_the_right_result);
     RUN_TEST(test_an_error_response_body_is_still_handed_back_for_logging);
     RUN_TEST(test_a_transport_failure_reports_network_error);
+    RUN_TEST(test_rest_download_writes_a_2xx_binary_body_to_dest_path);
+    RUN_TEST(test_rest_download_reports_the_real_status_and_writes_nothing_on_a_non_2xx_response);
+    RUN_TEST(test_rest_download_reports_network_error_when_the_transport_fails);
     RUN_TEST(test_url_encode_passes_unreserved_characters_through_unchanged);
     RUN_TEST(test_url_encode_escapes_spaces_and_punctuation);
     RUN_TEST(test_fingerprint_matches_lowercase_hex_with_no_colons);
